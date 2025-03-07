@@ -1,0 +1,12 @@
+.app {
+  max-width: 800px;
+  min-height: 100vh;
+  margin: 0 auto;
+  background-color: var(--initial-background, var(--background, #000000));
+  color: var(--initial-foreground, var(--foreground, #ffffff));
+  overflow-y: auto;
+  position: relative;
+  /* 添加过渡效果 */
+  transition: background-color var(--transition-speed, 0.3s) var(--transition-timing, ease),
+              color var(--transition-speed, 0.3s) var(--transition-timing, ease);
+}

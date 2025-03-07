@@ -1,0 +1,354 @@
+.configContainer {
+  background: var(--initial-background, var(--background, #000000));
+  position: relative;
+  min-height: 100vh;
+
+  .configHeader {
+    backdrop-filter: blur(10px);
+    box-shadow: 0 2px 10px var(--shadow-color);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: none;
+    background-color: color-mix(in srgb, var(--initial-background, var(--background, #000000)) 80%, transparent);
+
+    .headerLeft {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+
+      .backButton {
+        backdrop-filter: blur(5px);
+        box-shadow: 0 2px 8px var(--shadow-color);
+        transition: all var(--transition-speed) var(--transition-timing);
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--card-background);
+        border: 1px solid var(--card-border);
+        cursor: pointer;
+        border-radius: 50%;
+        color: var(--primary);
+        padding: 0;
+        
+        .backIcon {
+          width: 24px;
+          height: 24px;
+          stroke: currentColor;
+        }
+        
+        &:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px var(--shadow-color);
+          background-color: var(--hoverBackground);
+        }
+      }
+    }
+
+    h1 {
+      -webkit-text-fill-color: #0000;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light, #dcdcdc));
+      background-clip: text;
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0;
+    }
+  }
+
+  .configForm {
+    width: 100%;
+    background: var(--initial-background, var(--background, #000000));
+    box-shadow: none;
+    box-sizing: border-box;
+    margin-top: 72px;
+    margin-bottom: calc(66px + env(safe-area-inset-bottom));
+    padding: 16px;
+    border-radius: 0;
+
+    .configSection {
+      backdrop-filter: blur(var(--blur-radius));
+      box-shadow: 0 8px 16px var(--shadow-color);
+      transition: all var(--transition-speed) var(--transition-timing);
+      margin-bottom: 20px;
+      padding: 19px;
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      background-color: var(--card-background);
+      &:first-child {
+        margin-top: 0;
+      }
+      h3 {
+        margin: 0 0 16px;
+        color: var(--foreground);
+        font-size: 19px;
+        font-weight: 600;
+        position: relative;
+        padding-bottom: 8px;
+        &::after {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          width: 40px;
+          height: 3px;
+          background: var(--primary);
+          border-radius: 24px;
+        }
+      }
+    }
+
+    .inputGroup {
+      margin-bottom: 19px;
+      &:last-child {
+        margin-bottom: 0;
+      }
+      label {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--secondary);
+        font-weight: 500;
+        font-size: 14px;
+      }
+      input,
+      select {
+        backdrop-filter: blur(5px);
+        transition: all var(--transition-speed) var(--transition-timing);
+        width: 100%;
+        padding: 13px 16px;
+        border: 1px solid var(--card-border);
+        border-radius: 12px;
+        font-size: 16px;
+        background-color: color-mix(in srgb, var(--inputBackground) 80%, transparent);
+        color: var(--foreground);
+      }
+      input:focus,
+      select:focus {
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 30%, transparent);
+        border-color: var(--primary);
+        outline: none;
+        background-color: var(--inputBackground);
+      }
+      select {
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 16px center;
+        background-size: 16px;
+        padding-right: 40px;
+      }
+    }
+
+    .providerOptions {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 19px;
+      .providerOption {
+        backdrop-filter: blur(5px);
+        box-shadow: 0 2px 8px var(--shadow-color);
+        transition: all var(--transition-speed) var(--transition-timing);
+        flex: 1;
+        padding: 16px;
+        border: 1px solid var(--card-border);
+        border-radius: 12px;
+        background-color: color-mix(in srgb, var(--inputBackground) 80%, transparent);
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--foreground);
+        &:hover:not(.selected) {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px var(--shadow-color);
+          background-color: var(--hoverBackground);
+        }
+        &.selected {
+          background-color: var(--primary);
+          border-color: var(--primary);
+          color: white;
+          box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 50%, transparent);
+        }
+      }
+    }
+
+    .voiceGroup {
+      margin-bottom: 24px;
+      &:last-child {
+        margin-bottom: 0;
+      }
+      .voiceGroupTitle {
+        margin: 16px 0;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--card-border);
+        color: var(--secondary);
+        font-size: 16px;
+        font-weight: 600;
+        position: relative;
+        &::after {
+          content: '';
+          position: absolute;
+          bottom: -1px;
+          left: 0;
+          width: 40px;
+          height: 2px;
+          background: var(--primary);
+          border-radius: 1px;
+        }
+      }
+      .voiceOptions {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        .voiceOption {
+          backdrop-filter: blur(5px);
+          box-shadow: 0 2px 8px var(--shadow-color);
+          transition: all var(--transition-speed) var(--transition-timing);
+          display: flex;
+          align-items: center;
+          padding: 16px;
+          border: 1px solid var(--card-border);
+          border-radius: 12px;
+          background-color: color-mix(in srgb, var(--inputBackground) 80%, transparent);
+          color: var(--foreground);
+          position: relative;
+          &:hover:not(.selected) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px var(--shadow-color);
+            background-color: var(--hoverBackground);
+          }
+          &.selected {
+            background-color: var(--primary);
+            border-color: var(--primary);
+            color: white;
+            box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 50%, transparent);
+            p,
+            small {
+              color: rgba(255, 255, 255, 0.8);
+            }
+          }
+          .voiceContent {
+            flex: 1;
+            min-width: 0;
+            padding-right: 2.5rem;
+          }
+          .previewButton {
+            backdrop-filter: blur(5px);
+            transition: all var(--transition-speed) var(--transition-timing);
+            position: absolute;
+            right: 13px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 35px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            border: none;
+            border-radius: 50%;
+            background: var(--card-background);
+            box-shadow: 0 4px 12px var(--shadow-color);
+            color: var(--primary);
+            opacity: 0.9;
+            font-size: 19px;
+
+            .icon {
+              width: 28px;
+              height: 28px;
+              stroke: currentColor;
+            }
+
+            &:hover:not(:disabled) {
+              opacity: 1;
+              transform: translateY(-50%) scale(1.1);
+              box-shadow: 0 4px 12px var(--shadow-color);
+            }
+            &.loading {
+              animation: pulse 1s infinite;
+              opacity: 1;
+              color: var(--primary);
+            }
+          }
+          h3 {
+            margin: 0 0 5px;
+            font-size: 16px;
+            font-weight: 600;
+          }
+          p {
+            color: var(--secondary);
+            font-size: 12px;
+          }
+          small {
+            color: var(--secondary);
+            font-size: 12px;
+          }
+        }
+      }
+    }
+  }
+
+  .submitContainer {
+    backdrop-filter: blur(var(--blur-radius));
+    box-shadow: 0 -2px 10px var(--shadow-color);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--card-border);
+    background-color: color-mix(in srgb, var(--initial-background, var(--background, #000000)) 90%, transparent);
+    box-sizing: border-box;
+    z-index: 5;
+    button {
+      box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 50%, transparent);
+      width: 100%;
+      padding: 16px;
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-speed) var(--transition-timing);
+      margin: 0;
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 60%, transparent);
+        background-color: var(--primary);
+        opacity: 0.9;
+      }
+      &:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 40%, transparent);
+      }
+    }
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: translateY(-50%) scale(1);
+    box-shadow: 0 2px 8px var(--shadow-color);
+  }
+  50% {
+    transform: translateY(-50%) scale(1.1);
+    box-shadow: 0 4px 12px var(--shadow-color);
+  }
+  100% {
+    transform: translateY(-50%) scale(1);
+    box-shadow: 0 2px 8px var(--shadow-color);
+  }
+}

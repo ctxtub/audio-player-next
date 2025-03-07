@@ -1,0 +1,34 @@
+<svg width="196" height="196" viewBox="0 0 196 196" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 定义径向渐变，浅蓝白之间流转 -->
+    <radialGradient id="grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6699CC">
+        <animate attributeName="stop-color"
+                 values="#6699CC;#FFFFFF;#6699CC" 
+                 dur="10s" repeatCount="indefinite" />
+      </stop>
+      <stop offset="100%" stop-color="#FFFFFF">
+        <animate attributeName="stop-color"
+                 values="#FFFFFF;#6699CC;#FFFFFF" 
+                 dur="10s" repeatCount="indefinite" />
+      </stop>
+    </radialGradient>
+    
+    <!-- 定义水波纹/毛玻璃效果滤镜 -->
+    <filter id="ripple" x="0" y="0" width="100%" height="100%">
+      <!-- 使用噪波制造干扰 -->
+      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" result="noise">
+        <animate attributeName="baseFrequency" values="0.02;0.05;0.02" dur="8s" repeatCount="indefinite" />
+      </feTurbulence>
+      <!-- 根据噪波产生位移 -->
+      <feDisplacementMap in="SourceGraphic" in2="noise" scale="15" xChannelSelector="R" yChannelSelector="G"/>
+      <!-- 模糊处理，模拟毛玻璃效果 -->
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+    </filter>
+  </defs>
+  
+  <!-- 主圆形，显示流转的蓝白渐变 -->
+  <circle cx="98" cy="98" r="98" fill="url(#grad)" />
+  <!-- 内部叠加水波纹效果层，透明度控制细腻效果 -->
+  <circle cx="98" cy="98" r="98" fill="url(#grad)" filter="url(#ripple)" opacity="0.5" />
+</svg>

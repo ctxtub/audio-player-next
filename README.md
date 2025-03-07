@@ -1,36 +1,201 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Audio Player Next
 
-## Getting Started
+一个基于 Next.js 15 的智能音频故事生成应用，集成了 AI 故事生成、多语音合成服务和现代化的用户界面。
 
-First, run the development server:
+## 📋 项目概览
+
+**项目名称**: Audio Player Next  
+**项目类型**: 基于 Next.js 15 的音频播放器应用  
+**技术栈**: Next.js 15 + React 19 + TypeScript + SCSS  
+**主要功能**: AI故事生成、音频播放、语音合成、用户管理
+
+## 🚀 快速开始
+
+### 安装依赖
+
+```bash
+npm install
+```
+
+### 启动开发服务器
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+在浏览器中打开 [http://localhost:3000](http://localhost:3000) 查看应用。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 其他命令
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+# 构建生产版本
+npm run build
 
-## Learn More
+# 启动生产服务器
+npm start
 
-To learn more about Next.js, take a look at the following resources:
+# 代码检查
+npm run lint
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🏗️ 技术架构
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 前端技术栈
+- **框架**: Next.js 15.2.1 (App Router)
+- **UI库**: React 19.0.0
+- **语言**: TypeScript 5
+- **样式**: SCSS + CSS Variables (iOS风格设计)
+- **图标**: SVG组件 (@svgr/webpack)
+- **构建**: Turbopack (开发模式)
 
-## Deploy on Vercel
+### 核心依赖
+```json
+{
+  "next": "15.2.1",
+  "react": "^19.0.0", 
+  "react-dom": "^19.0.0",
+  "sass": "^1.85.1",
+  "@svgr/webpack": "^8.1.0"
+}
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📁 项目结构
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+├── app/                    # Next.js App Router
+│   ├── api/               # API路由
+│   │   ├── auth/          # 认证相关API (登录/注册/登出)
+│   │   ├── user/          # 用户相关API (信息/偏好设置)
+│   │   ├── chat.ts        # 聊天/故事生成API
+│   │   └── user.ts        # 用户接口定义
+│   ├── config/            # 配置文件
+│   │   ├── home.ts        # 主页配置
+│   │   ├── regions.ts     # Azure区域配置
+│   │   └── voices.ts      # 语音配置
+│   ├── pages/             # 页面组件
+│   │   ├── Home/          # 主页面
+│   │   └── Config/        # 配置页面
+│   ├── server/            # 服务端逻辑
+│   │   ├── index.ts       # 服务端入口
+│   │   └── mock.ts        # 模拟数据
+│   └── utils/             # 工具函数
+│       └── analytics.ts   # 分析工具
+├── components/            # 可复用组件
+│   ├── AudioPlayer/       # 音频播放器
+│   ├── StoryViewer/       # 故事查看器
+│   ├── InputStatusSection/ # 输入状态区域
+│   ├── ThemeProvider/     # 主题提供者
+│   ├── Toast/             # 消息提示
+│   └── Modal/             # 模态框
+├── public/icons/          # SVG图标资源
+├── styles/               # 全局样式
+│   ├── index.css         # 主样式文件 (iOS风格)
+│   └── app.module.scss   # 应用样式模块
+└── types/                # TypeScript类型定义
+    └── types.ts          # 全局类型定义
+```
+
+## 🔧 核心功能
+
+### 1. 故事生成系统
+- **AI模型集成**: 支持多种故事生成模型
+- **故事续写**: 可以继续已有故事
+- **故事摘要**: 可选的故事摘要功能
+- **实时生成**: 流式故事生成体验
+
+### 2. 语音合成系统
+- **Azure TTS**: 微软Azure语音服务集成
+- **Free TTS**: 免费语音服务支持
+- **多语音选择**: 支持多种中文语音角色
+- **区域配置**: 支持多个Azure服务区域
+- **实时预览**: 语音配置实时试听
+
+### 3. 音频播放系统
+- **自定义播放器**: 完整的音频播放控制
+- **播放状态管理**: 播放、暂停、结束事件处理
+- **进度控制**: 音频进度条和时间显示
+- **近结束检测**: 支持无缝续播功能
+- **音量控制**: 音频音量调节
+
+### 4. 用户管理系统
+- **身份认证**: 完整的登录、注册、登出流程
+- **用户信息**: 个人资料管理和编辑
+- **偏好设置**: 主题、语言、播放时长等个性化配置
+- **会话管理**: 安全的用户会话处理
+
+### 5. 主题系统
+- **双主题支持**: 明暗主题无缝切换
+- **iOS风格设计**: 采用iOS设计语言和交互模式
+- **CSS Variables**: 动态主题变量系统
+- **系统跟随**: 自动跟随系统主题设置
+- **毛玻璃效果**: iOS风格的视觉效果
+
+## 🔐 安全与认证
+
+### 中间件保护
+- **路径保护**: 保护特定路径的访问权限
+- **认证中间件**: 统一的身份验证处理
+- **自动重定向**: 未认证用户自动跳转到登录页
+
+### API安全
+- **统一响应格式**: 标准化的API响应结构
+- **完善错误处理**: 全面的错误处理和用户反馈
+- **Token验证**: JWT令牌验证机制
+- **请求验证**: 输入参数验证和清理
+
+## 📱 用户体验
+
+### 响应式设计
+- **移动优先**: 优先适配移动设备体验
+- **触摸优化**: 针对触摸设备的交互优化
+- **自适应布局**: 最大宽度800px的居中响应式布局
+
+### 交互体验
+- **iOS风格界面**: 圆角设计、毛玻璃效果
+- **平滑动画**: CSS过渡动画和微交互
+- **触觉反馈**: 按钮点击和状态变化反馈
+- **加载状态**: 完善的加载和状态指示
+
+## 🛠️ 开发配置
+
+### 构建配置
+- **Turbopack**: 开发模式使用Turbopack加速构建
+- **SVG处理**: 自动转换SVG文件为React组件
+- **TypeScript**: 严格模式TypeScript配置
+- **ESLint**: Next.js推荐的代码规范配置
+
+### 环境要求
+- Node.js 18.0+
+- npm 8.0+ 或 yarn 1.22+
+
+## 📊 数据流架构
+
+### 状态管理
+- **React Hooks**: 使用现代React Hooks进行状态管理
+- **LocalStorage**: 用户配置和偏好的本地持久化
+- **Context API**: 全局主题状态管理
+- **组件状态**: 局部状态的合理封装
+
+### API交互
+- **RESTful API**: 遵循REST规范的API设计
+- **统一请求封装**: 标准化的API请求处理
+- **错误处理**: 统一的错误处理和用户提示
+- **类型安全**: 完整的TypeScript类型定义
+
+## 🎯 特色亮点
+
+- **🤖 AI驱动**: 集成先进的AI故事生成能力
+- **🎵 多语音支持**: 支持Azure TTS和免费TTS服务
+- **📱 iOS风格**: 精美的iOS风格用户界面
+- **🌓 主题切换**: 智能的明暗主题系统
+- **⚡ 性能优化**: 使用Next.js 15和Turbopack优化性能
+- **🔒 安全可靠**: 完善的身份认证和数据保护
+- **📱 移动友好**: 优秀的移动设备适配体验
+
+## 🤝 贡献指南
+
+欢迎提交Issue和Pull Request来帮助改进项目！
+
+## 📄 许可证
+
+本项目采用 MIT 许可证。

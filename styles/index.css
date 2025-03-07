@@ -1,0 +1,161 @@
+/* 主题变量定义 - iOS风格 */
+/* 预设系统首帧的主题，避免在脚本执行前闪烁 */
+:root {
+  --background: #f2f2f7;
+  --foreground: #666666;
+  --initial-background: #f2f2f7;
+  --initial-foreground: #666666;
+  /* 过渡动画 */
+  --transition-speed: 0.3s;
+  --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+  --blur-radius: 20px;
+  --hover-opacity: 0.9;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #000000;
+    --foreground: #ffffff;
+    --initial-background: #000000;
+    --initial-foreground: #ffffff;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme-transition="off"] body {
+  transition: none !important;
+}
+
+/* 暗色主题 */
+:root[data-theme="dark"] {
+  --background: #000000;
+  --foreground: #ffffff;
+  --primary: #0a84ff;
+  --primary-light: #e3ecf4;
+  --secondary: #98989f;
+  --border: #38383a;
+  --inputBackground: #1c1c1e;
+  --hoverBackground: #2c2c2e;
+  --process: #0a84ff;
+  --error: #ff453a;
+  --success: #30d158;
+  
+  /* iOS风格特有变量 */
+  --card-background: rgba(28, 28, 30, 0.8);
+  --card-border: rgba(84, 84, 88, 0.65);
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --initial-background: #000000;
+  --initial-foreground: #ffffff;
+  color-scheme: dark;
+}
+
+/* 亮色主题 */
+:root[data-theme="light"] {
+  --background: #f2f2f7;
+  --foreground: #666666;
+  --primary: #007aff;
+  --primary-light: #e3ecf4;
+  --secondary: #8e8e93;
+  --border: #d1d1d6;
+  --inputBackground: #ffffff;
+  --hoverBackground: #f2f2f7;
+  --process: #007aff;
+  --error: #ff3b30;
+  --success: #34c759;
+  
+  /* iOS风格特有变量 - 亮色 */
+  --card-background: rgba(255, 255, 255, 0.8);
+  --card-border: rgba(209, 209, 214, 0.65);
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --initial-background: #f2f2f7;
+  --initial-foreground: #666666;
+  color-scheme: light;
+}
+
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 
+    'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 使用初始变量或回退到主题变量 */
+  background-color: var(--initial-background, var(--background, #000000));
+  color: var(--initial-foreground, var(--foreground, #ffffff));
+  line-height: 1.6;
+  touch-action: manipulation;
+  /* 添加过渡效果，使主题切换更平滑 */
+  transition: background-color var(--transition-speed, 0.3s) var(--transition-timing, ease),
+              color var(--transition-speed, 0.3s) var(--transition-timing, ease);
+}
+
+/* 禁用默认的触摸行为 */
+html {
+  touch-action: manipulation;
+}
+
+/* 确保html和body占满整个视口高度 */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+/* iOS风格的毛玻璃效果 */
+.glass-effect {
+  backdrop-filter: blur(var(--blur-radius));
+  -webkit-backdrop-filter: blur(var(--blur-radius));
+  background-color: var(--card-background);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  transition: all var(--transition-speed) var(--transition-timing);
+}
+
+/* iOS风格的卡片 */
+.ios-card {
+  background-color: var(--card-background);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 16px var(--shadow-color);
+  transition: all var(--transition-speed) var(--transition-timing);
+}
+
+/* iOS风格的按钮 */
+.ios-button {
+  background-color: var(--primary);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-weight: 600;
+  font-size: 16px;
+  transition: all var(--transition-speed) var(--transition-timing);
+}
+
+.ios-button:active {
+  transform: scale(0.98);
+  opacity: 0.9;
+}
+
+/* iOS风格的输入框 */
+.ios-input {
+  background-color: var(--inputBackground);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: var(--foreground);
+  font-size: 16px;
+  transition: all var(--transition-speed) var(--transition-timing);
+}
+
+.ios-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent);
+}

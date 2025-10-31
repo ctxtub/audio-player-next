@@ -3,7 +3,14 @@ import { createSuccessResponse, createErrorResponse } from '@/app/server';
 import { mockUserInfo } from '@/app/server/mock';
 
 // 模拟用户数据库
-const usersDB = {
+type UserRecord = {
+  id: string;
+  username: string;
+  password: string;
+  userInfo: typeof mockUserInfo;
+};
+
+const usersDB: Record<string, UserRecord> = {
   'test_user': {
     id: 'user-001',
     username: 'test_user',
@@ -15,7 +22,9 @@ const usersDB = {
 // POST 请求处理 - 用户登录
 export async function POST(request: NextRequest) {
   try {
-    const { username, password } = await request.json();
+    const body = (await request.json()) as Partial<{ username: string; password: string }>;
+    const username = body.username ?? '';
+    const password = body.password ?? '';
     
     if (!username || !password) {
       return createErrorResponse('用户名和密码不能为空', 400);

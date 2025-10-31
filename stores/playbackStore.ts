@@ -113,6 +113,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
      * 标记新的播放会话：记录 sessionId、重置段落索引并初始化倒计时。
      * @param sessionId 当前故事会话标识
      * @param playDurationMinutes 允许播放时长（分钟）
+     * @returns void
      */
     markSessionStart: (sessionId, playDurationMinutes) => {
       clearCountdown();
@@ -130,6 +131,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     },
     /**
      * 开始播放：设置播放状态并启动倒计时。
+     * @returns void
      */
     start: () => {
       if (get().remainingMs === null) {
@@ -143,6 +145,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     },
     /**
      * 暂停播放并保持剩余时长，组件可继续显示倒计时。
+     * @returns void
      */
     pause: () => {
       set({ isPlaying: false });
@@ -151,6 +154,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
      * 更新播放器的当前进度，用于展示或后续逻辑计算。
      * @param payload.currentTime 当前时间（秒）
      * @param payload.duration 当前音频总时长（秒）
+     * @returns void
      */
     updateProgress: ({ currentTime, duration }) => {
       set({
@@ -158,6 +162,11 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         duration,
       });
     },
+    /**
+     * 调整播放速率，供播放器组件响应倍速切换。
+     * @param rate number 目标倍速值
+     * @returns void
+     */
     setPlaybackRate: (rate) => {
       set({
         playbackRate: rate,
@@ -173,6 +182,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     },
     /**
      * 恢复初始状态并清除定时器。
+     * @returns void
      */
     reset: () => {
       clearCountdown();

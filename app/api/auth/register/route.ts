@@ -3,7 +3,14 @@ import { createSuccessResponse, createErrorResponse } from '@/app/server';
 import { mockUserInfo } from '@/app/server/mock';
 
 // 模拟用户数据库
-const usersDB = {
+type UserRecord = {
+  id: string;
+  username: string;
+  password: string;
+  userInfo: typeof mockUserInfo;
+};
+
+const usersDB: Record<string, UserRecord> = {
   'test_user': {
     id: 'user-001',
     username: 'test_user',
@@ -15,7 +22,14 @@ const usersDB = {
 // POST 请求处理 - 用户注册
 export async function POST(request: NextRequest) {
   try {
-    const { username, password, email } = await request.json();
+    const body = (await request.json()) as Partial<{
+      username: string;
+      password: string;
+      email: string;
+    }>;
+    const username = body.username ?? '';
+    const password = body.password ?? '';
+    const email = body.email ?? '';
     
     if (!username || !password || !email) {
       return createErrorResponse('用户名、密码和邮箱不能为空', 400);
@@ -38,11 +52,7 @@ export async function POST(request: NextRequest) {
       role: 'user' as const,
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString(),
-      preferences: {
-        theme: 'light' as const,
-        language: 'zh-CN',
-        playDuration: 30
-      }
+      language: 'zh-CN'
     };
     
     // 保存到数据库

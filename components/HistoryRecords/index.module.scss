@@ -15,7 +15,7 @@
   cursor: pointer;
   padding: 5px 10px;
   border-radius: 15px;
-  transition: all var(--transition-speed) var(--transition-timing);
+  transition: transform var(--transition-speed) var(--transition-timing);
   background-color: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
@@ -27,7 +27,7 @@
   border-radius: 12px;
   background-color: color-mix(in srgb, var(--card-background) 80%, transparent);
   border: 1px solid var(--card-border);
-  transition: all var(--transition-speed) var(--transition-timing);
+  transition: transform var(--transition-speed) var(--transition-timing);
   position: relative;
 
   &:hover {
@@ -92,7 +92,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition-speed) var(--transition-timing);
+  transition: transform var(--transition-speed) var(--transition-timing);
   flex-shrink: 0;
   
   svg {
@@ -117,7 +117,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition-speed) var(--transition-timing);
+  transition: transform var(--transition-speed) var(--transition-timing);
   flex-shrink: 0;
   color: white;
   

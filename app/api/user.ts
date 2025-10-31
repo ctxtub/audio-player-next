@@ -8,11 +8,7 @@ export interface UserInfo {
   role: 'user' | 'admin';
   createdAt: string;
   lastLoginAt: string;
-  preferences?: {
-    theme?: 'light' | 'dark';
-    language?: string;
-    playDuration?: number;
-  };
+  language?: string;
 }
 
 // API响应接口
@@ -61,11 +57,6 @@ export const fetchUserInfo = async (): Promise<UserInfo> => {
 // 更新用户信息
 export const updateUserInfo = async (userInfo: Partial<UserInfo>): Promise<UserInfo> => {
   return apiRequest<UserInfo>('/user/info', 'PUT', userInfo);
-};
-
-// 更新用户偏好设置
-export const updateUserPreferences = async (preferences: UserInfo['preferences']): Promise<UserInfo> => {
-  return apiRequest<UserInfo>('/user/preferences', 'PUT', { preferences });
 };
 
 // 用户登录

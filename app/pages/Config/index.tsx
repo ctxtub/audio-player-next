@@ -47,7 +47,7 @@ const ConfigPage: React.FC = () => {
   }, []);
 
   if (!isConfigLoaded) {
-    return <PageLoading message="配置加载中..." />;
+    return <PageLoading message="页面加载中..." />;
   }
 
   const handleProviderChange = (provider: VoiceProvider) => {

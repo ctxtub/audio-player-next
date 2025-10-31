@@ -5,6 +5,7 @@ import InputStatusSection from '../../../components/InputStatusSection';
 import StoryViewer from '../../../components/StoryViewer';
 import { Toast } from '../../../components/Toast';
 import { useTheme } from '../../../components/ThemeProvider';
+import { ThemeMode } from '@/types/types';
 import { trackEvent } from '../../utils/analytics';
 import styles from './index.module.scss';
 // 只导入用户信息相关接口
@@ -24,8 +25,20 @@ import {
 } from '@/app/services/storyFlow';
 import { PageLoading } from '@/components/PageLoading';
 
+const THEME_MODE_ICONS: Record<ThemeMode, string> = {
+  light: '🌙',
+  dark: '🌞',
+  system: '🌓',
+};
+
+const THEME_MODE_LABELS: Record<ThemeMode, string> = {
+  light: '亮色模式',
+  dark: '暗色模式',
+  system: '跟随系统',
+};
+
 const HomePage: React.FC = () => {
-  const { theme, toggleTheme } = useTheme();
+  const { themeMode, toggleTheme } = useTheme();
   const router = useRouter();
 
   // 添加用户信息状态
@@ -45,7 +58,6 @@ const HomePage: React.FC = () => {
   const isConfigLoaded = useConfigStore(state => state.isLoaded);
   const configIsValid = useConfigStore(state => state.isConfigValid());
   const configLoadError = useConfigStore(state => state.loadError);
-  const applyUserPreferences = useConfigStore(state => state.applyUserPreferences);
 
   useEffect(() => {
     hydrateConfig();
@@ -91,19 +103,6 @@ const HomePage: React.FC = () => {
       const userInfo = await fetchUserInfo();
       
       setUserState(prev => ({ ...prev, userInfo, isLoading: false }));
-      
-      // 如果用户有偏好设置，更新应用配置
-      if (userInfo.preferences) {
-        // 更新主题
-        if (userInfo.preferences.theme && theme !== userInfo.preferences.theme) {
-          toggleTheme();
-        }
-        
-        // 更新播放时长
-        if (userInfo.preferences.playDuration && userInfo.preferences.playDuration !== apiConfig.playDuration) {
-          applyUserPreferences({ playDuration: userInfo.preferences.playDuration });
-        }
-      }
       
       trackEvent('user_info_loaded', 'user', userInfo.username);
     } catch (error) {
@@ -211,7 +210,7 @@ const HomePage: React.FC = () => {
   };
 
   if (!isConfigLoaded) {
-    return <PageLoading message="加载配置中..." />;
+    return <PageLoading message="页面加载中..." />;
   }
 
   return (
@@ -237,9 +236,11 @@ const HomePage: React.FC = () => {
           <button
             className={styles.themeButton}
             onClick={toggleTheme}
-            aria-label="切换主题"
+            type="button"
+            aria-label={`${THEME_MODE_LABELS[themeMode]}，点击切换`}
           >
-            {theme === 'dark' ? '🌞' : '🌙'}
+            <span className={styles.themeIcon}>{THEME_MODE_ICONS[themeMode]}</span>
+            <span className={styles.themeLabel}>{THEME_MODE_LABELS[themeMode]}</span>
           </button>
           <button
             className={styles.settingsButton}

@@ -10,13 +10,6 @@ declare global {
         [key: string]: any;
       }
     ) => void;
-    __INITIAL_THEME__?: {
-      theme: Theme;
-      systemTheme: Theme;
-      useSystemTheme: boolean;
-      appliedTheme: Theme;
-    };
-    __THEME_INITIALIZED__?: boolean;
   }
 }
 
@@ -107,4 +100,4 @@ export interface AvailableModels {
   SUMMARY_MODELS: ModelOption[];
 }
 
-export type Theme = 'dark' | 'light';
+export type ThemeMode = 'dark' | 'light' | 'system';

@@ -12,23 +12,43 @@ import styles from './index.module.scss';
 import { trackEvent } from '../../utils/analytics';
 import { AVAILABLE_MODELS } from '@/types/types';
 import type { APIConfig, VoiceProvider, AzureRegion } from '@/types/types';
+import { useConfigStore } from '@/stores/configStore';
+import { PageLoading } from '@/components/PageLoading';
 
 const ConfigPage: React.FC = () => {
   const router = useRouter();
-  const [apiConfig, setApiConfig] = useState<APIConfig>(() => {
-    try {
-      const savedConfig = localStorage.getItem('apiConfig');
-      if (savedConfig) {
-        return JSON.parse(savedConfig);
-      }
-    } catch (error) {
-      console.error('Error loading config:', error);
-    }
-    return {} as APIConfig;
-  });
-  
+  const apiConfig = useConfigStore(state => state.apiConfig);
+  const updateConfig = useConfigStore(state => state.update);
+  const hydrateConfig = useConfigStore(state => state.hydrateFromStorage);
+  const isConfigLoaded = useConfigStore(state => state.isLoaded);
+  const loadError = useConfigStore(state => state.loadError);
+
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    hydrateConfig();
+  }, [hydrateConfig]);
+
+  useEffect(() => {
+    if (loadError) {
+      Toast({ message: '配置加载失败，已恢复默认设置' });
+    }
+  }, [loadError]);
+
+  // 组件卸载时清理音频
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  if (!isConfigLoaded) {
+    return <PageLoading message="配置加载中..." />;
+  }
 
   const handleProviderChange = (provider: VoiceProvider) => {
     if (provider === 'azure-tts') {
@@ -93,47 +113,35 @@ const ConfigPage: React.FC = () => {
 
   const handleApiConfigChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
-    setApiConfig(prev => ({
-      ...prev,
-      [name]: name === 'playDuration' ? parseInt(value) || 0 : value
-    }));
+    updateConfig({
+      [name]: name === 'playDuration' ? parseInt(value, 10) || 0 : value,
+    } as Partial<APIConfig>);
   };
 
   const handleAzureConfigChange = (config: Partial<APIConfig['azureTtsConfig']>) => {
-    setApiConfig(prev => {
-      const newConfig = {
-        ...prev,
-        azureTtsConfig: {
-          ...prev.azureTtsConfig,
-          ...config
-        }
-      };
-      return newConfig;
+    updateConfig({
+      azureTtsConfig: {
+        ...apiConfig.azureTtsConfig,
+        ...config,
+      },
     });
   };
 
   const handleVoiceProviderChange = (provider: VoiceProvider) => {
-    setApiConfig(prev => ({
-      ...prev,
-      voiceProvider: provider
-    }));
+    updateConfig({ voiceProvider: provider });
   };
 
   const handleMsConfigChange = (freeTtsConfig: Partial<APIConfig['freeTtsConfig']>) => {
-    setApiConfig(prev => ({
-      ...prev,
+    updateConfig({
       freeTtsConfig: {
-        ...prev.freeTtsConfig,
-        ...freeTtsConfig
-      }
-    }));
+        ...apiConfig.freeTtsConfig,
+        ...freeTtsConfig,
+      },
+    });
   };
 
   const handleModelChange = (type: 'storyModel' | 'summaryModel', value: string) => {
-    setApiConfig(prev => ({
-      ...prev,
-      [type]: value
-    }));
+    updateConfig({ [type]: value } as Partial<APIConfig>);
   };
 
   const handleSubmit = async () => {
@@ -170,10 +178,9 @@ const ConfigPage: React.FC = () => {
     }
 
     try {
-      localStorage.setItem('apiConfig', JSON.stringify(apiConfig));
       trackEvent('config_saved', 'config', apiConfig.voiceProvider);
       Toast({ type: 'success', message: '配置已保存' });
-      
+
       // 保存成功后导航回主页
       setTimeout(() => {
         router.push('/');
@@ -184,16 +191,6 @@ const ConfigPage: React.FC = () => {
       trackEvent('config_error', 'error', 'save_failed');
     }
   };
-
-  // 组件卸载时清理音频
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-    };
-  }, []);
 
   return (
     <div className={styles.configContainer}>

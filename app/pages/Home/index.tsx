@@ -7,11 +7,11 @@ import StoryViewer from '../../../components/StoryViewer';
 import { Toast } from '../../../components/Toast';
 import { useTheme } from '../../../components/ThemeProvider';
 import { trackEvent } from '../../utils/analytics';
-import { DEFAULT_API_CONFIG, CURRENT_CONFIG_VERSION, isValidConfig } from '../../config/home';
-import { APIConfig } from '@/types/types';
 import styles from './index.module.scss';
 // 只导入用户信息相关接口
 import { fetchUserInfo, UserInfo } from '../../api/user';
+import { useConfigStore } from '@/stores/configStore';
+import { PageLoading } from '@/components/PageLoading';
 
 const HomePage: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
@@ -28,39 +28,32 @@ const HomePage: React.FC = () => {
     error: null,
   });
 
-  // 初始化 apiConfig 状态
-  const [apiConfig, setApiConfig] = useState<APIConfig>(() => {
-    try {
-      const savedConfig = localStorage.getItem('apiConfig');
-      if (savedConfig) {
-        const config = JSON.parse(savedConfig);
-        if (config.version === CURRENT_CONFIG_VERSION && isValidConfig(config)) {
-          return config;
-        }
-        localStorage.removeItem('apiConfig');
-      }
-      // 如果没有有效配置，则存入默认配置
-      localStorage.setItem('apiConfig', JSON.stringify(DEFAULT_API_CONFIG));
-    } catch (error) {
-      console.error('Error loading config:', error);
-    }
-    return DEFAULT_API_CONFIG;
-  });
+  // 统一管理 apiConfig 状态
+  const apiConfig = useConfigStore(state => state.apiConfig);
+  const hydrateConfig = useConfigStore(state => state.hydrateFromStorage);
+  const isConfigLoaded = useConfigStore(state => state.isLoaded);
+  const configIsValid = useConfigStore(state => state.isConfigValid());
+  const configLoadError = useConfigStore(state => state.loadError);
+  const applyUserPreferences = useConfigStore(state => state.applyUserPreferences);
 
-  // 修改 showConfigForm 状态
-  const [shouldRedirectToConfig, setShouldRedirectToConfig] = useState(() => {
-    try {
-      const savedConfig = localStorage.getItem('apiConfig');
-      if (savedConfig) {
-        const config = JSON.parse(savedConfig);
-        return !isValidConfig(config);
-      }
-    } catch (error) {
-      console.error('Error checking config:', error);
+  useEffect(() => {
+    hydrateConfig();
+  }, [hydrateConfig]);
+
+  useEffect(() => {
+    if (!isConfigLoaded) {
+      return;
     }
-    // 默认不显示配置表单
-    return false;
-  });
+    if (!configIsValid) {
+      router.push('/config');
+    }
+  }, [isConfigLoaded, configIsValid, router]);
+
+  useEffect(() => {
+    if (configLoadError) {
+      Toast({ message: '配置加载失败，已恢复默认设置' });
+    }
+  }, [configLoadError]);
 
   // 故事文本相关状态
   const [storyState, setStoryState] = useState({
@@ -103,13 +96,6 @@ const HomePage: React.FC = () => {
     preloadStateRef.current = preloadState;
   }, [preloadState]);
 
-  // 如果需要重定向到配置页面
-  useEffect(() => {
-    if (shouldRedirectToConfig) {
-      router.push('/config');
-    }
-  }, [shouldRedirectToConfig, router]);
-
   // 添加获取用户信息的函数
   const getUserInfo = async () => {
     try {
@@ -129,9 +115,7 @@ const HomePage: React.FC = () => {
         
         // 更新播放时长
         if (userInfo.preferences.playDuration && userInfo.preferences.playDuration !== apiConfig.playDuration) {
-          const newConfig = { ...apiConfig, playDuration: userInfo.preferences.playDuration };
-          setApiConfig(newConfig);
-          localStorage.setItem('apiConfig', JSON.stringify(newConfig));
+          applyUserPreferences({ playDuration: userInfo.preferences.playDuration });
         }
       }
       
@@ -344,6 +328,10 @@ const HomePage: React.FC = () => {
     getUserInfo();
     Toast({ message: '用户信息已刷新' });
   };
+
+  if (!isConfigLoaded) {
+    return <PageLoading message="加载配置中..." />;
+  }
 
   return (
     <div className={styles.page}>

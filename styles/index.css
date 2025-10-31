@@ -1,30 +1,9 @@
-/* 主题变量定义 - iOS风格 */
-/* 预设系统首帧的主题，避免在脚本执行前闪烁 */
 :root {
-  --background: #f2f2f7;
-  --foreground: #666666;
-  --initial-background: #f2f2f7;
-  --initial-foreground: #666666;
   /* 过渡动画 */
   --transition-speed: 0.3s;
   --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   --blur-radius: 20px;
   --hover-opacity: 0.9;
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #000000;
-    --foreground: #ffffff;
-    --initial-background: #000000;
-    --initial-foreground: #ffffff;
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme-transition="off"] body {
-  transition: none !important;
 }
 
 /* 暗色主题 */
@@ -47,7 +26,6 @@
   --shadow-color: rgba(0, 0, 0, 0.3);
   --initial-background: #000000;
   --initial-foreground: #ffffff;
-  color-scheme: dark;
 }
 
 /* 亮色主题 */
@@ -70,7 +48,6 @@
   --shadow-color: rgba(0, 0, 0, 0.1);
   --initial-background: #f2f2f7;
   --initial-foreground: #666666;
-  color-scheme: light;
 }
 
 /* Reset and base styles */
@@ -87,13 +64,13 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   /* 使用初始变量或回退到主题变量 */
-  background-color: var(--initial-background, var(--background, #000000));
-  color: var(--initial-foreground, var(--foreground, #ffffff));
+  background-color: var(--initial-background, var(--background));
+  color: var(--initial-foreground, var(--foreground));
   line-height: 1.6;
   touch-action: manipulation;
   /* 添加过渡效果，使主题切换更平滑 */
-  transition: background-color var(--transition-speed, 0.3s) var(--transition-timing, ease),
-              color var(--transition-speed, 0.3s) var(--transition-timing, ease);
+  transition: background-color var(--transition-speed) var(--transition-timing),
+              color var(--transition-speed) var(--transition-timing);
 }
 
 /* 禁用默认的触摸行为 */
@@ -115,7 +92,7 @@ html, body, #root {
   background-color: var(--card-background);
   border: 1px solid var(--card-border);
   border-radius: 16px;
-  transition: all var(--transition-speed) var(--transition-timing);
+  transition: transform var(--transition-speed) var(--transition-timing);
 }
 
 /* iOS风格的卡片 */
@@ -124,7 +101,7 @@ html, body, #root {
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 8px 16px var(--shadow-color);
-  transition: all var(--transition-speed) var(--transition-timing);
+  transition: transform var(--transition-speed) var(--transition-timing);
 }
 
 /* iOS风格的按钮 */
@@ -136,7 +113,7 @@ html, body, #root {
   padding: 12px 20px;
   font-weight: 600;
   font-size: 16px;
-  transition: all var(--transition-speed) var(--transition-timing);
+  transition: transform var(--transition-speed) var(--transition-timing);
 }
 
 .ios-button:active {
@@ -152,7 +129,7 @@ html, body, #root {
   padding: 12px 16px;
   color: var(--foreground);
   font-size: 16px;
-  transition: all var(--transition-speed) var(--transition-timing);
+  transition: transform var(--transition-speed) var(--transition-timing);
 }
 
 .ios-input:focus {

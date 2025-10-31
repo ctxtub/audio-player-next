@@ -30,7 +30,7 @@
 | 播放（Playback） | 播放器实时状态 | `isPlaying`、`remainingMinutes`、`progress` | Home、AudioPlayer | 运行时 |
 | 预加载（Preload） | 下一段故事/音频缓存 | `preloadedStory`、`audioUrl`、重试状态 | Home | 运行时 |
 | 提示词历史（PromptHistory） | Prompt 列表与排序 | `items`、`sortMode` | InputStatusSection、HistoryRecords | `persist` + localStorage |
-| 全局 UI（UI/Theme/Toast） | Toast 队列、主题偏好等横切状态 | `toasts`、`theme`、`useSystemTheme` | 任意组件 | Toast 内存态、主题持久化 |
+| 全局 UI（UI/Theme/Toast） | Toast 队列、主题偏好等横切状态 | `toasts`、`themeMode` | 任意组件 | Toast 内存态、主题持久化 |
 
 > 采用“一个状态域一个 store”的拆分方式，降低耦合并便于懒加载或服务端注水。
 
@@ -49,7 +49,6 @@
   - `hydrateFromStorage()`：读取持久化数据，校验版本号，不合法时回退到默认值。
   - `update(partial)`：局部更新并写回 localStorage，同步版本号。
   - `resetToDefault()`：恢复默认配置。
-  - `applyUserPreferences(preferences)`：供用户 store 写入播放时长、主题等偏好。
 - **实现示例**：
   ```ts
   // stores/configStore.ts
@@ -66,7 +65,6 @@
     update: (partial: Partial<APIConfig>) => void;
     resetToDefault: () => void;
     isConfigValid: () => boolean;
-    applyUserPreferences: (preferences: Partial<APIConfig>) => void;
   }
 
   export const useConfigStore = create<ConfigState>()(
@@ -85,7 +83,6 @@
           update: (partial) => set({ apiConfig: { ...get().apiConfig, ...partial } }),
           resetToDefault: () => set({ apiConfig: DEFAULT_API_CONFIG }),
           isConfigValid: () => isValidConfig(get().apiConfig),
-          applyUserPreferences: (preferences) => set({ apiConfig: { ...get().apiConfig, ...preferences } }),
         }),
         { name: 'api-config' }
       )
@@ -97,17 +94,17 @@
 #### 依赖分析
 - **数据来源**：`fetchUserInfo` API。
 - **数据消费者**：Home 页头部显示、主题切换、播放时长同步；未来个人中心等页面。
-- **外部依赖**：写入 Config store（应用偏好）、Ui/Theme store（切换主题）、Toast（错误提示）。
+- **外部依赖**：写入 Config store（应用偏好）、ThemeProvider（切换主题）、Toast（错误提示）。
 
 #### Store 设计
 - **状态**：`userInfo`、`isLoading`、`error`、`lastFetched`。
 - **动作**：
-  - `fetchUserInfo()`：拉取用户资料并联动 Config/Theme store，失败时通知 UI store 弹 Toast。
+  - `fetchUserInfo()`：拉取用户资料并联动 Config store，失败时通知 UI 模块弹 Toast。
   - `refresh()`：对外暴露的强制刷新接口，重置错误与时间戳。
   - `clear()`：用户退出或强制重置时调用。
 - **实现要点**：
   - 使用 `AbortController` 或请求 id 防止重复写入。
-  - 将播放时长、主题偏好通过 `applyUserPreferences` 写入 Config store，并触发 Ui store 切换主题。
+  - 将播放时长等偏好通过 Config store 的 `update` 写入持久化层。
 
 ### 故事生成状态（Story）
 #### 依赖分析
@@ -188,7 +185,7 @@
 
 #### Store 设计
 - **Toast 队列**：维护 `{ id, message, type, duration }[]`，提供 `pushToast`、`dismissToast`、`clearAll`，替换当前 `window.__addToast` 方案。
-- **主题设置**：`theme`、`systemTheme`、`useSystemTheme`，动作包含 `toggleTheme()`、`applySystemTheme(theme)`，在 store 或订阅器中同步 DOM 属性、localStorage、cookie。
+- **主题设置**：`themeMode`（`light`/`dark`/`system`），动作包含 `setThemeMode()`，由 `ThemeProvider` 根据系统主题计算并同步 DOM。
 - **其他 UI**：预留 `modals`、`loadingOverlay` 等字段，统一管理全局 UI。
 - **实现要点**：
   - 将现有 `ThemeProvider` 改造成消费 store 的轻量组件，负责将状态写入 DOM。

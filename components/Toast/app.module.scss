@@ -7,6 +7,6 @@
   overflow-y: auto;
   position: relative;
   /* 添加过渡效果 */
-  transition: background-color var(--transition-speed) var(--transition-timing),
+  transition: transform  background-color var(--transition-speed) var(--transition-timing),
               color var(--transition-speed) var(--transition-timing);
 }

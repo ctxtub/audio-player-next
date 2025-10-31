@@ -1,6 +1,6 @@
 .storyPreview {
   backdrop-filter: blur(var(--blur-radius));
-  transition: all var(--transition-speed) var(--transition-timing);
+  transition: transform var(--transition-speed) var(--transition-timing);
   box-shadow: 0 8px 16px var(--shadow-color);
   border: 1px solid var(--card-border);
   background-color: var(--card-background);
@@ -16,7 +16,7 @@
   }
 
   .readMore {
-    transition: all var(--transition-speed) var(--transition-timing);
+    transition: transform var(--transition-speed) var(--transition-timing);
     display: inline-flex;
     align-items: center;
     font-weight: 600;

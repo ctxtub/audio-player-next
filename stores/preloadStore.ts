@@ -48,6 +48,10 @@ const INITIAL_STATE: PreloadStoreBaseState = {
   _ongoingPromise: null,
 };
 
+/**
+ * 生成唯一请求标识，避免并发请求串扰。
+ * @returns string 附带时间戳/UUID 的请求 id
+ */
 const createRequestId = (): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `preload-${crypto.randomUUID()}`;
@@ -56,6 +60,11 @@ const createRequestId = (): string => {
   return `preload-${Date.now()}-${randomPart}`;
 };
 
+/**
+ * 统一规范未知错误为 Error 实例，便于上层处理。
+ * @param error unknown 捕获到的异常
+ * @returns Error 归一化后的错误对象
+ */
 const normalizeError = (error: unknown): Error => {
   if (error instanceof Error) {
     return error;
@@ -184,6 +193,7 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
   },
   /**
    * 重置预加载状态，通常在启动新会话或取消播放时调用。
+   * @returns void
    */
   reset: () => {
     set({ ...INITIAL_STATE });

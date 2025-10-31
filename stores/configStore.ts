@@ -3,26 +3,54 @@ import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import { APIConfig } from '@/types/types';
 import { CURRENT_CONFIG_VERSION, DEFAULT_API_CONFIG, isValidConfig } from '@/app/config/home';
 
+/**
+ * 配置 store 的基础状态结构：记录当前配置、加载标记及错误信息。
+ */
 type ConfigStoreBaseState = {
   apiConfig: APIConfig;
   isLoaded: boolean;
   loadError?: string;
 };
 
+/**
+ * 配置 store 提供的操作集合，负责初始化、校验与更新。
+ */
 type ConfigStoreActions = {
+  /**
+   * 从持久化介质恢复配置数据。
+   * @returns Promise<void> 恢复流程结束时 resolve，便于外部等待
+   */
   hydrateFromStorage: () => Promise<void>;
+  /**
+   * 合并更新配置，并写入持久化层。
+   * @param partial Partial<APIConfig> 待更新的字段片段
+   * @returns void
+   */
   update: (partial: Partial<APIConfig>) => void;
+  /**
+   * 恢复为默认配置，常用于用户手动重置。
+   * @returns void
+   */
   resetToDefault: () => void;
+  /**
+   * 判断当前配置是否满足业务要求。
+   * @returns boolean true 表示配置合法
+   */
   isConfigValid: () => boolean;
+  /**
+   * 返回缺失的关键配置项，用于 UI 提示。
+   * @returns string[] 缺失字段名称数组
+   */
   missingFields: () => string[];
-  // TODO 此处需考虑跟播放器状态的分工划分
-  applyUserPreferences: (preferences: Partial<APIConfig>) => void;
 };
 
 export type ConfigStore = ConfigStoreBaseState & ConfigStoreActions;
 
 const CONFIG_STORAGE_KEY = 'config-store';
 
+/**
+ * 服务端或隐私模式下 localStorage 不可用时的兜底实现。
+ */
 const fallbackStorage: Storage = {
   get length() {
     return 0;
@@ -44,12 +72,22 @@ const fallbackStorage: Storage = {
   },
 };
 
+/**
+ * 克隆默认配置，保证引用安全。
+ * @returns APIConfig 默认配置的深拷贝
+ */
 const cloneDefaultConfig = (): APIConfig => ({
   ...DEFAULT_API_CONFIG,
   azureTtsConfig: { ...DEFAULT_API_CONFIG.azureTtsConfig },
   freeTtsConfig: { ...DEFAULT_API_CONFIG.freeTtsConfig },
 });
 
+/**
+ * 合并配置字段并更新版本号。
+ * @param base APIConfig 当前配置
+ * @param partial Partial<APIConfig> 待合并片段
+ * @returns APIConfig 合并后的配置
+ */
 const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig => ({
   ...base,
   ...partial,
@@ -64,6 +102,11 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
   version: CURRENT_CONFIG_VERSION,
 });
 
+/**
+ * 收集配置缺失字段，帮助前端展示校验信息。
+ * @param config APIConfig 当前配置
+ * @returns string[] 缺失字段列表
+ */
 const collectMissingFields = (config: APIConfig): string[] => {
   const missing: string[] = [];
 
@@ -111,9 +154,15 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
   const persistApi = api as PersistApi;
 
   return {
+    /**
+     * 初始配置默认取内置值，保证 UI 可立即渲染。
+     */
     apiConfig: cloneDefaultConfig(),
     isLoaded: false,
     loadError: undefined,
+    /**
+     * 尝试从 localStorage 恢复配置，失败则回退默认值。
+     */
     hydrateFromStorage: async () => {
       if (typeof window === 'undefined') {
         set({ isLoaded: true });
@@ -145,6 +194,9 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
         set({ isLoaded: true });
       }
     },
+    /**
+     * 合并更新配置，同时清除旧的错误提示。
+     */
     update: (partial) => {
       const current = get().apiConfig;
       const nextConfig = mergeConfig(current, partial);
@@ -153,25 +205,29 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
         loadError: undefined,
       });
     },
+    /**
+     * 恢复默认配置。
+     */
     resetToDefault: () => {
       set({
         apiConfig: cloneDefaultConfig(),
         loadError: undefined,
       });
     },
+    /**
+     * 校验当前配置是否满足业务约束。
+     */
     isConfigValid: () => isValidConfig(get().apiConfig),
+    /**
+     * 提供缺失字段列表以便前端提示。
+     */
     missingFields: () => collectMissingFields(get().apiConfig),
-    applyUserPreferences: (preferences) => {
-      const current = get().apiConfig;
-      const nextConfig = mergeConfig(current, preferences);
-      set({
-        apiConfig: nextConfig,
-        loadError: undefined,
-      });
-    },
   };
 };
 
+/**
+ * 带持久化与版本迁移能力的配置 store。
+ */
 const persistedConfigStore = persist(configStoreCreator, {
   name: CONFIG_STORAGE_KEY,
   version: CURRENT_CONFIG_VERSION,

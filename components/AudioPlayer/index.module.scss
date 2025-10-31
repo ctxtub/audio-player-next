@@ -4,7 +4,7 @@
   border: 1px solid var(--card-border);
   border-radius: 16px;
   background-color: var(--card-background);
-  transition: all var(--transition-speed) var(--transition-timing);
+  transition: transform var(--transition-speed) var(--transition-timing);
   padding: 20px;
   margin: 0 auto 10px auto;
   width: 100%;
@@ -47,7 +47,7 @@
       box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 50%, transparent);
       border-radius: 50%;
       background: var(--primary);
-      transition: all var(--transition-speed) var(--transition-timing);
+      transition: transform var(--transition-speed) var(--transition-timing);
       position: absolute;
       display: flex;
       justify-content: center;
@@ -108,7 +108,7 @@
     }
 
     .progressBar {
-      transition: all var(--transition-speed) var(--transition-timing);
+      transition: transform var(--transition-speed) var(--transition-timing);
       border-radius: 3px;
       background: color-mix(in srgb, var(--border) 50%, transparent);
       height: 6px;
@@ -181,7 +181,7 @@
         border-radius: 12px;
         background-color: color-mix(in srgb, var(--card-background) 80%, var(--primary));
         border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
-        transition: all var(--transition-speed) var(--transition-timing);
+        transition: transform var(--transition-speed) var(--transition-timing);
         padding: 4px 5px;
         font-size: 14px;
         font-weight: 500;
@@ -231,7 +231,7 @@
         .speedOption {
           border-radius: 8px;
           background-color: transparent;
-          transition: all var(--transition-speed) var(--transition-timing);
+          transition: transform var(--transition-speed) var(--transition-timing);
           border: none;
           padding: 6px 10px;
           text-align: center;

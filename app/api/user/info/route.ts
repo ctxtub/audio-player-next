@@ -3,7 +3,7 @@ import { createSuccessResponse, createErrorResponse, authMiddleware } from '@/ap
 import { mockUserInfo } from '@/app/server/mock';
 
 // 模拟用户数据库
-const usersDB = {
+const usersDB: Record<string, typeof mockUserInfo> = {
   'user-001': mockUserInfo
 };
 
@@ -11,11 +11,11 @@ const usersDB = {
 export async function GET(request: NextRequest) {
   // 身份验证
   const authResult = await authMiddleware(request);
-  
-  if ('error' in authResult) {
+
+  if (!('userId' in authResult)) {
     return authResult;
   }
-  
+
   try {
     const { userId } = authResult;
     
@@ -40,14 +40,14 @@ export async function GET(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   // 身份验证
   const authResult = await authMiddleware(request);
-  
-  if ('error' in authResult) {
+
+  if (!('userId' in authResult)) {
     return authResult;
   }
-  
+
   try {
     const { userId } = authResult;
-    const userData = await request.json();
+    const userData = (await request.json()) as Partial<typeof mockUserInfo>;
     
     // 从数据库获取用户信息
     const userInfo = usersDB[userId];

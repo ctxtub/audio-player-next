@@ -42,6 +42,11 @@ const INITIAL_STATE: StoryStoreBaseState = {
   _activeRequestId: null,
 };
 
+/**
+ * 生成带前缀的唯一请求 id，区分首段与续写请求。
+ * @param prefix 'session' | 'continue' 请求类型前缀
+ * @returns string 由时间戳/UUID 组成的 id
+ */
 const createRequestId = (prefix: 'session' | 'continue'): string => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `${prefix}-${crypto.randomUUID()}`;
@@ -51,6 +56,11 @@ const createRequestId = (prefix: 'session' | 'continue'): string => {
   return `${prefix}-${Date.now()}-${randomPart}`;
 };
 
+/**
+ * 将未知异常转换为 Error 实例，确保调用方处理一致。
+ * @param error unknown 捕获到的异常
+ * @returns Error 标准化后的错误对象
+ */
 const normalizeError = (error: unknown): Error => {
   if (error instanceof Error) {
     return error;
@@ -174,6 +184,8 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
   },
   /**
    * 将新段落加入故事列表，供 UI 展示或后续续写使用。
+   * @param segment string 新增的故事段落
+   * @returns void
    */
   appendSegment: (segment) => {
     set((state) => ({
@@ -182,6 +194,9 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
   },
   /**
    * 外部可手动覆盖 loading 标记（例如 orchestrator 保证状态一致）。
+   * @param flags Partial<{@link StoryStoreBaseState.isFirstStoryLoading} | {@link StoryStoreBaseState.isContinuing}>
+   *              需要覆盖的 loading 字段
+   * @returns void
    */
   setLoadingState: (flags) => {
     const updates: Partial<StoryStoreBaseState> = {};
@@ -200,6 +215,7 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
   },
   /**
    * 重置故事状态，通常在结束播放或启动新会话时调用。
+   * @returns void
    */
   reset: () => {
     set({ ...INITIAL_STATE });

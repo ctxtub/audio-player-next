@@ -19,10 +19,11 @@ interface AudioPlayerProps {
   onPause?: () => void;
   onEnded?: () => void;
   onNearEnd?: () => void;
+  onProgress?: (payload: { currentTime: number; duration: number }) => void;
 }
 
 export interface AudioPlayerHandle {
-  play: (audioUrl: string) => void;
+  play: (audioUrl: string) => Promise<void>;
   pause: () => void;
   seek: (time: number) => void;
   setPlaybackRate: (rate: number) => void;
@@ -39,7 +40,7 @@ const PLAYBACK_RATES = [
 ];
 
 export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
-  ({ onPlay, onPause, onEnded, onNearEnd }, ref: ForwardedRef<AudioPlayerHandle>) => {
+  ({ onPlay, onPause, onEnded, onNearEnd, onProgress }, ref: ForwardedRef<AudioPlayerHandle>) => {
     const audioRef = useRef<HTMLAudioElement>(null);
     const progressBarRef = useRef<HTMLInputElement>(null);
     const speedMenuRef = useRef<HTMLDivElement>(null);
@@ -51,8 +52,12 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
     const [playbackRate, setPlaybackRate] = useState(1);
     const [showSpeedMenu, setShowSpeedMenu] = useState(false);
 
-    const handlePlay = useCallback((audioUrl: string) => {
-      if (audioRef.current) {
+    const handlePlay = useCallback(
+      async (audioUrl: string) => {
+        if (!audioRef.current) {
+          throw new Error('音频播放器尚未就绪');
+        }
+
         // 重置内部播放状态
         audioRef.current.src = audioUrl;
         hasTriggeredPreload.current = false;
@@ -65,18 +70,19 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         // 设置播放速度
         audioRef.current.playbackRate = playbackRate;
         // 启动播放
-        audioRef.current
-          .play()
-          .then(() => {
-            setIsPlaying(true);
-            onPlay && onPlay();
-          })
-          .catch((error) => {
-            console.error('播放失败:', error);
-            onPause && onPause();
-          });
-      }
-    }, [onPlay, onPause, playbackRate]);
+        try {
+          await audioRef.current.play();
+          setIsPlaying(true);
+          onPlay?.();
+        } catch (error) {
+          console.error('播放失败:', error);
+          setIsPlaying(false);
+          onPause?.();
+          throw error instanceof Error ? error : new Error('无法播放音频');
+        }
+      },
+      [onPlay, onPause, playbackRate]
+    );
 
     const handlePause = useCallback(() => {
       if (audioRef.current) {
@@ -132,6 +138,12 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
             progressBarRef.current.style.setProperty('--progress-percent', `${percent}%`);
           }
         }
+        if (onProgress) {
+          onProgress({
+            currentTime: ct,
+            duration: audioEl.duration,
+          });
+        }
         if (onNearEnd && !hasTriggeredPreload.current) {
           const timeRemaining = audioEl.duration - ct;
           if (timeRemaining <= 120) {
@@ -155,7 +167,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         audioEl.removeEventListener('timeupdate', handleTimeUpdate);
         audioEl.removeEventListener('loadedmetadata', handleLoadedMetadata);
       };
-    }, [onNearEnd]);
+    }, [onNearEnd, onProgress]);
 
     // 点击外部关闭速度选择菜单
     useEffect(() => {

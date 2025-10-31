@@ -89,7 +89,7 @@ export interface MsVoiceOption {
 
 export const AVAILABLE_MODELS = {
   STORY_MODELS: [
-    { value: 'free-story-model', label: '故事生成大模型' }
+    { value: 'hoki-story', label: '故事生成大模型' }
   ],
   SUMMARY_MODELS: [
     { value: '', label: '关闭故事摘要' },

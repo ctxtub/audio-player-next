@@ -115,7 +115,7 @@ export const fetchAudio = async (text: string, config: APIConfig): Promise<strin
         'Authorization': `Bearer ${config.freeTtsConfig.speechKey}`
       },
       body: JSON.stringify({
-        model: 'free-tts',
+        model: 'hoki-tts',
         input: text,
         voice: config.freeTtsConfig.voiceName
       })

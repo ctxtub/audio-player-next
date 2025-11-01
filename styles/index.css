@@ -1,9 +1,16 @@
 :root {
+  --main-tab-bar-height: 56px;
   /* 过渡动画 */
   --transition-speed: 0.3s;
   --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
   --blur-radius: 20px;
   --hover-opacity: 0.9;
+  /* antd-mobile shared tokens */
+  --adm-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  --adm-border-radius: 12px;
+  --adm-border-radius-xs: 8px;
+  --adm-border-radius-sm: 10px;
+  --adm-border-radius-lg: 18px;
 }
 
 /* 暗色主题 */
@@ -26,6 +33,27 @@
   --shadow-color: rgba(0, 0, 0, 0.3);
   --initial-background: #000000;
   --initial-foreground: #ffffff;
+
+  /* antd-mobile 暗色主题变量 */
+  --adm-color-primary: var(--primary);
+  --adm-color-success: var(--success);
+  --adm-color-warning: #ffd60a;
+  --adm-color-danger: var(--error);
+  --adm-color-text: var(--foreground);
+  --adm-color-text-secondary: var(--secondary);
+  --adm-color-text-third: rgba(235, 235, 245, 0.6);
+  --adm-color-text-quaternary: rgba(235, 235, 245, 0.3);
+  --adm-color-weak: var(--secondary);
+  --adm-color-light: var(--hoverBackground);
+  --adm-color-border: var(--border);
+  --adm-color-border-secondary: var(--hoverBackground);
+  --adm-color-background: var(--background);
+  --adm-color-background-body: var(--background);
+  --adm-color-fill: var(--inputBackground);
+  --adm-color-fill-secondary: var(--hoverBackground);
+  --adm-color-fill-tertiary: rgba(235, 235, 245, 0.08);
+  --adm-color-fill-quaternary: rgba(235, 235, 245, 0.04);
+  --adm-color-shadow: rgba(0, 0, 0, 0.4);
 }
 
 /* 亮色主题 */
@@ -48,6 +76,27 @@
   --shadow-color: rgba(0, 0, 0, 0.1);
   --initial-background: #f2f2f7;
   --initial-foreground: #666666;
+
+  /* antd-mobile 亮色主题变量 */
+  --adm-color-primary: var(--primary);
+  --adm-color-success: var(--success);
+  --adm-color-warning: #ffd60a;
+  --adm-color-danger: var(--error);
+  --adm-color-text: var(--foreground);
+  --adm-color-text-secondary: var(--secondary);
+  --adm-color-text-third: rgba(60, 60, 67, 0.6);
+  --adm-color-text-quaternary: rgba(60, 60, 67, 0.3);
+  --adm-color-weak: var(--secondary);
+  --adm-color-light: #f9f9fb;
+  --adm-color-border: var(--border);
+  --adm-color-border-secondary: #e5e5ea;
+  --adm-color-background: var(--background);
+  --adm-color-background-body: var(--background);
+  --adm-color-fill: #ffffff;
+  --adm-color-fill-secondary: #f7f7fa;
+  --adm-color-fill-tertiary: #f2f2f7;
+  --adm-color-fill-quaternary: rgba(60, 60, 67, 0.08);
+  --adm-color-shadow: rgba(0, 0, 0, 0.12);
 }
 
 /* Reset and base styles */

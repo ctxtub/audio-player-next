@@ -1,14 +1,13 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { Toast } from 'antd-mobile';
 import { AudioPlayer, AudioPlayerHandle } from '../../../components/AudioPlayer';
 import InputStatusSection from '../../../components/InputStatusSection';
 import StoryViewer from '../../../components/StoryViewer';
-import { Toast } from '../../../components/Toast';
-import { useTheme } from '../../../components/ThemeProvider';
-import { ThemeMode } from '@/types/types';
+import { PageLoading } from '@/components/PageLoading';
 import { trackEvent } from '../../utils/analytics';
 import styles from './index.module.scss';
-// 只导入用户信息相关接口
+
 import { useConfigStore } from '@/stores/configStore';
 import { useStoryStore } from '@/stores/storyStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
@@ -22,22 +21,8 @@ import {
   resetStoryFlow,
   updatePlaybackProgress,
 } from '@/app/services/storyFlow';
-import { PageLoading } from '@/components/PageLoading';
-
-const THEME_MODE_ICONS: Record<ThemeMode, string> = {
-  light: '🌙',
-  dark: '🌞',
-  system: '🌓',
-};
-
-const THEME_MODE_LABELS: Record<ThemeMode, string> = {
-  light: '亮色模式',
-  dark: '暗色模式',
-  system: '跟随系统',
-};
 
 const HomePage: React.FC = () => {
-  const { themeMode, toggleTheme } = useTheme();
   const router = useRouter();
 
   // 统一管理 apiConfig 状态
@@ -62,7 +47,7 @@ const HomePage: React.FC = () => {
 
   useEffect(() => {
     if (configLoadError) {
-      Toast({ message: '配置加载失败，已恢复默认设置' });
+      Toast.show({ icon: 'fail', content: '配置加载失败，已恢复默认设置', duration: 3000 });
     }
   }, [configLoadError]);
 
@@ -95,7 +80,7 @@ const HomePage: React.FC = () => {
   const handleInputSubmit = useCallback(
     async (shortcutText: string) => {
       if (!apiConfig.apiKey) {
-        Toast({ message: '请先配置API密钥' });
+        Toast.show({ icon: 'fail', content: '请先配置API密钥', duration: 3000 });
         router.push('/config');
         trackEvent('config_required', 'error', 'missing_api_key');
         return;
@@ -117,7 +102,7 @@ const HomePage: React.FC = () => {
         await audioRef.current.play(audioUrl);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : '发生未知错误';
-        Toast({ message: errorMessage });
+        Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
         trackEvent('generation_error', 'error', errorMessage);
         resetStoryFlow();
       }
@@ -141,7 +126,7 @@ const HomePage: React.FC = () => {
       await audioRef.current.play(nextSegment.audioUrl);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '无法播放下一段音频';
-      Toast({ message: errorMessage });
+      Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
       trackEvent('playback_error', 'error', errorMessage);
       handlePlaybackPause();
     }
@@ -173,28 +158,6 @@ const HomePage: React.FC = () => {
 
   return (
     <div className={styles.page}>
-      <div className={styles.pageHeader}>
-        <h1>AI故事播放器</h1>
-        <div className={styles.headerRight}>
-          <button
-            className={styles.themeButton}
-            onClick={toggleTheme}
-            type="button"
-            aria-label={`${THEME_MODE_LABELS[themeMode]}，点击切换`}
-          >
-            <span className={styles.themeIcon}>{THEME_MODE_ICONS[themeMode]}</span>
-            <span className={styles.themeLabel}>{THEME_MODE_LABELS[themeMode]}</span>
-          </button>
-          <button
-            className={styles.settingsButton}
-            onClick={() => router.push('/config')}
-            aria-label="设置"
-          >
-            ⚙️
-          </button>
-        </div>
-      </div>
-
       <div className={styles.pageSection}>
         <InputStatusSection
           // StoryInput props

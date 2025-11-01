@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CSSTransition } from 'react-transition-group';
-import { Toast } from '../Toast';
+import { Toast } from 'antd-mobile';
 import ClockIcon from '@/public/icons/playstatus-clock.svg';
 import LoadingIcon from '@/public/icons/playstatus-loading.svg';
 import WarningIcon from '@/public/icons/playstatus-warning.svg';
@@ -107,7 +107,7 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
   // 处理input提交
   const onSubmit = () => {
     if (!textareaInput || textareaInput.trim() === '') {
-      Toast({ message: '请输入故事概要，再生成故事哦~' });
+      Toast.show({ icon: 'fail', content: '请输入故事概要，再生成故事哦~' });
       return;
     }
     handleSubmitWithHistory(textareaInput);

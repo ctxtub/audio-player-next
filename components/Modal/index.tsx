@@ -1,6 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
-import ReactDOM from 'react-dom';
-import { CSSTransition } from 'react-transition-group';
+import React, { useState } from 'react';
+import { Popup } from 'antd-mobile';
 import CloseIcon from '@/public/icons/close.svg';
 import styles from './index.module.scss';
 
@@ -35,93 +34,51 @@ const Modal: React.FC<ModalProps> = ({
   children,
   onClose,
 }) => {
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (isShow) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isShow]);
-
-  const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      handleClose();
-    }
-  };
-
   const handleClose = () => {
     if (onClose) {
       onClose();
     }
   };
+  const shouldRenderHeader = Boolean(title || showCloseButton || headerExtra);
 
-  const handleEntered = () => {
-    // 动画进入完成后的回调
-  };
-
-  const handleExited = () => {
-    // 动画退出完成后的回调
-  };
-
-  return ReactDOM.createPortal(
-    <CSSTransition
-      in={isShow}
-      timeout={{ enter: 350, exit: 250 }}
-      classNames={{
-        enter: styles.modalEnter,
-        enterActive: styles.modalEnterActive,
-        exit: styles.modalExit,
-        exitActive: styles.modalExitActive,
+  return (
+    <Popup
+      visible={isShow}
+      onClose={handleClose}
+      onMaskClick={handleClose}
+      position="bottom"
+      destroyOnClose
+      className={styles.modalPopup}
+      bodyClassName={styles.modalBody}
+      maskStyle={{
+        backgroundColor: 'color-mix(in srgb, var(--background) 40%, transparent)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
       }}
-      unmountOnExit
-      mountOnEnter
-      nodeRef={overlayRef}
-      onEntered={handleEntered}
-      onExited={handleExited}
     >
-      <div 
-        ref={overlayRef}
-        className={styles.modalOverlay}
-        onClick={handleOverlayClick}
-      >
-        <div 
-          ref={contentRef}
-          className={styles.modalContent}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {(title || showCloseButton || headerExtra) && (
-            <div className={styles.modalHeader}>
-              <div className={styles.modalTitle}>
-                {title}
-                {headerExtra && (
-                  <div className={styles.headerExtra}>
-                    {headerExtra}
-                  </div>
-                )}
-              </div>
-              {showCloseButton && (
-                <button 
-                  className={styles.closeButton}
-                  onClick={handleClose}
-                  aria-label="关闭"
-                >
-                  <CloseIcon />
-                </button>
+      <div className={styles.modalContent}>
+        {shouldRenderHeader && (
+          <div className={styles.modalHeader}>
+            <div className={styles.modalTitle}>
+              {title}
+              {headerExtra && (
+                <div className={styles.headerExtra}>{headerExtra}</div>
               )}
             </div>
-          )}
-          {children}
-        </div>
+            {showCloseButton && (
+              <button
+                className={styles.closeButton}
+                onClick={handleClose}
+                aria-label="关闭"
+              >
+                <CloseIcon />
+              </button>
+            )}
+          </div>
+        )}
+        <div className={styles.modalBodyContent}>{children}</div>
       </div>
-    </CSSTransition>,
-    document.body
+    </Popup>
   );
 };
 

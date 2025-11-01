@@ -8,7 +8,7 @@ import React, {
   useCallback,
 } from 'react';
 import { CSSTransition } from 'react-transition-group';
-import { Toast } from '../Toast';
+import { Toast } from 'antd-mobile';
 import PlayIcon from '@/public/icons/audioplayer-play.svg';
 import PauseIcon from '@/public/icons/audioplayer-pause.svg';
 import BackgroundIcon from '@/public/icons/audioplayer-background.svg';
@@ -193,7 +193,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
     // 点击播放/暂停按钮时切换状态
     const togglePlay = () => {
       if (!audioRef.current?.src) {
-        Toast({ type: 'error', message: '生成故事，再启动播放哦~' });
+        Toast.show({ icon: 'fail', content: '生成故事，再启动播放哦~' });
         return;
       }
       if (isPlaying) {

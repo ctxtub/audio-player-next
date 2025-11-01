@@ -7,13 +7,12 @@ import { continueStory, generateStory } from '@/lib/client/storyGenerate';
  * 故事 store 的基础状态，记录当前会话、文本段落及加载标记。
  */
 type StoryStoreBaseState = {
+  sessionId: string | null;
   inputText: string;
   segments: string[];
   isFirstStoryLoading: boolean;
   isContinuing: boolean;
   lastError?: string;
-  sessionId: string | null;
-  _activeRequestId: string | null;
 };
 
 /**
@@ -32,27 +31,12 @@ type StoryStoreActions = {
 export type StoryStore = StoryStoreBaseState & StoryStoreActions;
 
 const INITIAL_STATE: StoryStoreBaseState = {
+  sessionId: null,
   inputText: '',
   segments: [],
   isFirstStoryLoading: false,
   isContinuing: false,
   lastError: undefined,
-  sessionId: null,
-  _activeRequestId: null,
-};
-
-/**
- * 生成带前缀的唯一请求 id，区分首段与续写请求。
- * @param prefix 'session' | 'continue' 请求类型前缀
- * @returns string 由时间戳/UUID 组成的 id
- */
-const createRequestId = (prefix: 'session' | 'continue'): string => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `${prefix}-${crypto.randomUUID()}`;
-  }
-
-  const randomPart = Math.random().toString(36).slice(2, 10);
-  return `${prefix}-${Date.now()}-${randomPart}`;
 };
 
 /**
@@ -72,6 +56,16 @@ const normalizeError = (error: unknown): Error => {
   return new Error('UNKNOWN_ERROR');
 };
 
+/**
+ * 生成新的会话标识，优先使用浏览器原生方法，退化到时间戳随机串。
+ */
+const createSessionId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `story-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
 const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
   ...INITIAL_STATE,
   /**
@@ -80,41 +74,47 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
    * @returns Promise，resolve 为首段故事文本
    */
   startSession: async (prompt) => {
-    const requestId = createRequestId('session');
+    const sessionId = createSessionId();
     set({
+      sessionId,
       inputText: prompt,
       segments: [],
       isFirstStoryLoading: true,
       isContinuing: false,
       lastError: undefined,
-      sessionId: requestId,
-      _activeRequestId: requestId,
     });
 
     try {
       const response = await generateStory(prompt);
       const story = response.story;
 
-      if (get()._activeRequestId !== requestId) {
+      if (get().inputText !== prompt) {
         return story;
       }
 
       set({
         isFirstStoryLoading: false,
         lastError: undefined,
-        _activeRequestId: null,
       });
 
       return story;
     } catch (error) {
       const handledError = normalizeError(error);
+      const currentState = get();
 
-      if (get()._activeRequestId === requestId) {
-        set({
-          lastError: handledError.message,
-          isFirstStoryLoading: false,
-          _activeRequestId: null,
-        });
+      if (currentState.inputText === prompt) {
+        if (currentState.sessionId === sessionId) {
+          set({
+            sessionId: null,
+            lastError: handledError.message,
+            isFirstStoryLoading: false,
+          });
+        } else {
+          set({
+            lastError: handledError.message,
+            isFirstStoryLoading: false,
+          });
+        }
       }
 
       throw handledError;
@@ -125,19 +125,17 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
    * @returns Promise，resolve 为续写段落
    */
   continueSession: async () => {
-    const { inputText, segments, sessionId } = get();
+    const { inputText, segments } = get();
 
-    if (!sessionId || !inputText) {
+    if (!inputText || segments.length === 0) {
       const error = new Error('当前没有正在进行的故事会话');
       set({ lastError: error.message });
       throw error;
     }
 
-    const requestId = createRequestId('continue');
     set({
       isContinuing: true,
       lastError: undefined,
-      _activeRequestId: requestId,
     });
 
     try {
@@ -146,25 +144,23 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
       });
       const nextSegment = response.story;
 
-      if (get()._activeRequestId !== requestId) {
+      if (get().inputText !== inputText) {
         return nextSegment;
       }
 
       set({
         isContinuing: false,
         lastError: undefined,
-        _activeRequestId: null,
       });
 
       return nextSegment;
     } catch (error) {
       const handledError = normalizeError(error);
 
-      if (get()._activeRequestId === requestId) {
+      if (get().inputText === inputText) {
         set({
           lastError: handledError.message,
           isContinuing: false,
-          _activeRequestId: null,
         });
       }
 

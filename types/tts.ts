@@ -10,16 +10,3 @@ export type TtsApiRequest = {
   text: string;
   voiceName?: string;
 };
-
-export type TtsApiError = {
-  error: {
-    code: string;
-    message: string;
-    requestId?: string;
-  };
-};
-
-export type TtsVoicesResponse = {
-  voices: TtsVoiceOption[];
-  defaultVoice: string;
-};

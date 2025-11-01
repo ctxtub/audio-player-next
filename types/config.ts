@@ -10,11 +10,3 @@ export type AppConfigResponse = {
     voiceName: string;
   };
 };
-
-export type AppConfigError = {
-  error: {
-    code: string;
-    message: string;
-    requestId?: string;
-  };
-};

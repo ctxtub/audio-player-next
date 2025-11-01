@@ -8,14 +8,12 @@ import { HttpError } from '@/lib/http/common/ErrorHandler';
 export class TtsApiClientError extends Error {
   public readonly status: number;
   public readonly code: string;
-  public readonly requestId?: string;
 
-  constructor(message: string, status: number, code: string, requestId?: string) {
+  constructor(message: string, status: number, code: string) {
     super(message);
     this.name = 'TtsApiClientError';
     this.status = status;
     this.code = code;
-    this.requestId = requestId;
   }
 }
 
@@ -33,7 +31,7 @@ export const fetchAudio = async (text: string, voiceName?: string): Promise<stri
   };
 
   try {
-    const response = await browserHttp.post<Blob>('/api/tts', payload, {
+    const response = await browserHttp.post<Blob>('/api/ttsGenerate', payload, {
       headers: {
         'Content-Type': 'application/json',
       },
@@ -46,8 +44,7 @@ export const fetchAudio = async (text: string, voiceName?: string): Promise<stri
       throw new TtsApiClientError(
         error.message,
         error.status,
-        error.code || 'TTS_API_ERROR',
-        error.requestId
+        error.code || 'TTS_API_ERROR'
       );
     }
 

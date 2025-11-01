@@ -1,7 +1,6 @@
 export type HttpErrorPayload = {
   code?: string;
   message: string;
-  requestId?: string;
   status: number;
   details?: unknown;
 };
@@ -12,7 +11,6 @@ export type HttpErrorPayload = {
 export class HttpError extends Error {
   public readonly status: number;
   public readonly code?: string;
-  public readonly requestId?: string;
   public readonly details?: unknown;
 
   constructor(payload: HttpErrorPayload) {
@@ -20,7 +18,6 @@ export class HttpError extends Error {
     this.name = 'HttpError';
     this.status = payload.status;
     this.code = payload.code;
-    this.requestId = payload.requestId;
     this.details = payload.details;
   }
 }

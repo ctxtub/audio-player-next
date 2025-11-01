@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { AudioPlayer, AudioPlayerHandle } from '../../../components/AudioPlayer';
 import InputStatusSection from '../../../components/InputStatusSection';
@@ -9,7 +9,6 @@ import { ThemeMode } from '@/types/types';
 import { trackEvent } from '../../utils/analytics';
 import styles from './index.module.scss';
 // 只导入用户信息相关接口
-import { fetchUserInfo, UserInfo } from '../../api/user';
 import { useConfigStore } from '@/stores/configStore';
 import { useStoryStore } from '@/stores/storyStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
@@ -40,17 +39,6 @@ const THEME_MODE_LABELS: Record<ThemeMode, string> = {
 const HomePage: React.FC = () => {
   const { themeMode, toggleTheme } = useTheme();
   const router = useRouter();
-
-  // 添加用户信息状态
-  const [userState, setUserState] = useState<{
-    userInfo: UserInfo | null;
-    isLoading: boolean;
-    error: string | null;
-  }>({
-    userInfo: null,
-    isLoading: false,
-    error: null,
-  });
 
   // 统一管理 apiConfig 状态
   const apiConfig = useConfigStore(state => state.apiConfig);
@@ -93,30 +81,6 @@ const HomePage: React.FC = () => {
   const preloadAudioUrl = usePreloadStore((state) => state.cachedAudioUrl);
 
   const audioRef = useRef<AudioPlayerHandle>(null);
-
-  // 添加获取用户信息的函数
-  const getUserInfo = async () => {
-    try {
-      setUserState(prev => ({ ...prev, isLoading: true, error: null }));
-      
-      // 直接调用接口，不需要关心是否使用模拟数据
-      const userInfo = await fetchUserInfo();
-      
-      setUserState(prev => ({ ...prev, userInfo, isLoading: false }));
-      
-      trackEvent('user_info_loaded', 'user', userInfo.username);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '获取用户信息失败';
-      setUserState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
-      Toast({ message: errorMessage });
-      trackEvent('user_info_error', 'error', errorMessage);
-    }
-  };
-
-  // 组件挂载时获取用户信息
-  useEffect(() => {
-    getUserInfo();
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -203,12 +167,6 @@ const HomePage: React.FC = () => {
     updatePlaybackProgress(payload);
   }, []);
 
-  // 添加刷新用户信息的函数
-  const handleRefreshUserInfo = () => {
-    getUserInfo();
-    Toast({ message: '用户信息已刷新' });
-  };
-
   if (!isConfigLoaded) {
     return <PageLoading message="页面加载中..." />;
   }
@@ -218,21 +176,6 @@ const HomePage: React.FC = () => {
       <div className={styles.pageHeader}>
         <h1>AI故事播放器</h1>
         <div className={styles.headerRight}>
-          {/* 添加用户信息显示 */}
-          {userState.userInfo && (
-            <div className={styles.userInfo}>
-              <div className={styles.userAvatar} onClick={handleRefreshUserInfo}>
-                {userState.userInfo.avatar ? (
-                  <img src={userState.userInfo.avatar} alt="用户头像" />
-                ) : (
-                  <span>{userState.userInfo.nickname?.[0] || userState.userInfo.username[0]}</span>
-                )}
-              </div>
-              <div className={styles.userName}>
-                {userState.userInfo.nickname || userState.userInfo.username}
-              </div>
-            </div>
-          )}
           <button
             className={styles.themeButton}
             onClick={toggleTheme}

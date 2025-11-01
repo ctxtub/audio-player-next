@@ -9,7 +9,7 @@ import React, {
   useCallback,
 } from 'react';
 import { ConfigProvider } from 'antd-mobile';
-import { ThemeMode } from '@/types/types';
+import type { ThemeMode } from '@/types/theme';
 import {
   THEME_MODE_STORAGE_KEY,
   THEME_SEQUENCE,

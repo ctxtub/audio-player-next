@@ -1,4 +1,4 @@
-import type { AppConfigResponse } from '@/types/config';
+import type { AppConfigResponse } from '@/types/appConfig';
 import { browserHttp } from '@/lib/http/browser';
 import { HttpError } from '@/lib/http/common/ErrorHandler';
 
@@ -29,17 +29,7 @@ export const fetchAppConfig = async (): Promise<AppConfigResponse> => {
         Accept: 'application/json',
       },
     });
-
-    const data = response.data;
-    if (!data || typeof data !== 'object' || !('tts' in data) || !('defaults' in data)) {
-      throw new AppConfigClientError(
-        '配置服务返回数据格式不正确',
-        502,
-        'APP_CONFIG_INVALID_RESPONSE'
-      );
-    }
-
-    return data as AppConfigResponse;
+    return response.data as AppConfigResponse;
   } catch (error) {
     if (error instanceof AppConfigClientError) {
       throw error;

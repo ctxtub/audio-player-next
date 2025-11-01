@@ -1,4 +1,4 @@
-import { ThemeMode } from '@/types/types';
+import type { ThemeMode } from '@/types/theme';
 
 export type ThemeValue = Exclude<ThemeMode, 'system'>;
 

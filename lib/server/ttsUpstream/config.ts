@@ -1,17 +1,17 @@
 import { ServiceError } from '@/lib/http/server/ErrorHandler';
-import { TtsVoiceOption } from '@/types/tts';
+import type { VoiceOption, VoiceId, VoiceGender } from '@/types/ttsGenerate';
 
 export type TtsEnvConfig = {
   apiKey: string;
   region: string;
-  defaultVoice: string;
-  voices: TtsVoiceOption[];
+  voiceId: VoiceId;
+  voicesList: VoiceOption[];
   outputFormat: string;
 };
 
 const DEFAULT_OUTPUT_FORMAT = 'audio-16khz-128kbitrate-mono-mp3';
 
-const parseVoiceAllowList = (raw: string | undefined): TtsVoiceOption[] => {
+const parseVoiceAllowList = (raw: string | undefined): VoiceOption[] => {
   if (!raw?.trim()) {
     return [];
   }
@@ -22,7 +22,7 @@ const parseVoiceAllowList = (raw: string | undefined): TtsVoiceOption[] => {
       throw new Error('voice list should be an array');
     }
 
-    const voices = parsed
+    const voicesList = parsed
       .map((item) => {
         if (!item || typeof item !== 'object') {
           return null;
@@ -33,7 +33,7 @@ const parseVoiceAllowList = (raw: string | undefined): TtsVoiceOption[] => {
           return null;
         }
 
-        const voice: TtsVoiceOption = {
+        const voice: VoiceOption = {
           value,
           label: typeof label === 'string' && label.trim() ? label : value,
         };
@@ -47,18 +47,18 @@ const parseVoiceAllowList = (raw: string | undefined): TtsVoiceOption[] => {
         }
 
         if (gender === 'Female' || gender === 'Male') {
-          voice.gender = gender;
+          voice.gender = gender as VoiceGender;
         }
 
         return voice;
       })
-      .filter((voice): voice is TtsVoiceOption => voice !== null);
+      .filter((voice): voice is VoiceOption => voice !== null);
 
-    if (voices.length === 0) {
+    if (voicesList.length === 0) {
       throw new Error('voice list is empty');
     }
 
-    return voices;
+    return voicesList;
   } catch (error) {
     console.warn('[tts] Failed to parse AZURE_TTS_VOICE_ALLOW_LIST:', error);
     return [];
@@ -94,16 +94,16 @@ export const loadTtsConfig = (): TtsEnvConfig => {
     });
   }
 
-  let defaultVoice = process.env.AZURE_TTS_DEFAULT_VOICE?.trim();
-  if (!defaultVoice || !voiceList.some((voice) => voice.value === defaultVoice)) {
-    defaultVoice = voiceList[0].value;
+  let voiceId = process.env.AZURE_TTS_DEFAULT_VOICE?.trim();
+  if (!voiceId || !voiceList.some((voice) => voice.value === voiceId)) {
+    voiceId = voiceList[0].value;
   }
 
   return {
     apiKey,
     region,
-    defaultVoice,
-    voices: voiceList,
+    voiceId,
+    voicesList: voiceList,
     outputFormat: DEFAULT_OUTPUT_FORMAT,
   };
 };

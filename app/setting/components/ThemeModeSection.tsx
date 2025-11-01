@@ -2,8 +2,7 @@
 
 import React, { useCallback } from 'react';
 import { Selector } from 'antd-mobile';
-import { useTheme } from '@/components/ThemeProvider';
-import type { ThemeMode } from '@/types/types';
+import type { ThemeMode } from '@/types/theme';
 import styles from '../index.module.scss';
 
 interface ThemeOptionMeta {
@@ -30,21 +29,21 @@ const THEME_OPTIONS: ThemeOptionMeta[] = [
   },
 ];
 
-const ThemeModeSection: React.FC = () => {
-  const { themeMode, setThemeMode } = useTheme();
+interface ThemeModeSectionProps {
+  value: ThemeMode;
+  onChange: (next: ThemeMode) => void;
+}
 
+const ThemeModeSection: React.FC<ThemeModeSectionProps> = ({ value, onChange }) => {
   const handleChange = useCallback(
     (values: string[]) => {
       const [nextValue] = values as ThemeMode[];
-      if (!nextValue) {
-        setThemeMode(themeMode);
+      if (!nextValue || nextValue === value) {
         return;
       }
-      if (nextValue !== themeMode) {
-        setThemeMode(nextValue);
-      }
+      onChange(nextValue);
     },
-    [setThemeMode, themeMode],
+    [onChange, value],
   );
 
   return (
@@ -53,7 +52,7 @@ const ThemeModeSection: React.FC = () => {
       <Selector
         className={styles.themeSelector}
         columns={3}
-        value={[themeMode]}
+        value={[value]}
         onChange={handleChange}
         options={THEME_OPTIONS.map(option => ({
           label: (

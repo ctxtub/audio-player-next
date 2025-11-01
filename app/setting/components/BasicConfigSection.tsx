@@ -1,47 +1,60 @@
-import React from 'react';
-import { Form, Input } from 'antd-mobile';
+import React, { useCallback, useMemo } from 'react';
+import { Slider } from 'antd-mobile';
 import styles from '../index.module.scss';
 
-/**
- * 将输入转换为正整数，非法输入返回 0。
- * @param value 表单值。
- */
-const parsePositiveInteger = (value: number | string | undefined): number => {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : 0;
-  }
-  if (typeof value === 'string') {
-    const parsed = parseInt(value, 10);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  }
-  return 0;
-};
+interface BasicConfigSectionProps {
+  playDuration: number;
+  onPlayDurationChange: (value: number) => void;
+}
 
-/**
- * 基础配置区域：只负责播放时长的输入校验。
- */
-const BasicConfigSection: React.FC = () => (
-  <div className={styles.configSection}>
-    <h3>基础配置</h3>
-    <Form.Item
-      name="playDuration"
-      label="播放时长（分钟）"
-      rules={[
-        { required: true, message: '请输入播放时长' },
-        {
-          validator: (_, value) => {
-            const parsed = parsePositiveInteger(value);
-            if (parsed <= 0) {
-              return Promise.reject(new Error('请输入有效的播放时长'));
-            }
-            return Promise.resolve();
-          },
-        },
-      ]}
-    >
-      <Input type="number" placeholder="30" min={1} />
-    </Form.Item>
-  </div>
-);
+const MIN_DURATION = 10;
+const MAX_DURATION = 60;
+const STEP = 10;
+
+const BasicConfigSection: React.FC<BasicConfigSectionProps> = ({
+  playDuration,
+  onPlayDurationChange,
+}) => {
+  const marks = useMemo<Record<number, string>>(
+    () => ({
+      [MIN_DURATION]: `${MIN_DURATION}分钟`,
+      [MIN_DURATION + STEP]: `${MIN_DURATION + STEP}分钟`,
+      [MIN_DURATION + STEP * 2]: `${MIN_DURATION + STEP * 2}分钟`,
+      [MIN_DURATION + STEP * 3]: `${MIN_DURATION + STEP * 3}分钟`,
+      [MIN_DURATION + STEP * 4]: `${MIN_DURATION + STEP * 4}分钟`,
+      [MAX_DURATION]: `${MAX_DURATION}分钟`,
+    }),
+    []
+  );
+
+  const handleChange = useCallback(
+    (next: number | number[]) => {
+      const numericValue = Array.isArray(next) ? next[0] ?? MIN_DURATION : next;
+      const normalized = numericValue;
+      if (normalized !== playDuration) {
+        onPlayDurationChange(normalized);
+      }
+    },
+    [onPlayDurationChange, playDuration]
+  );
+
+  return (
+    <div className={styles.configSection}>
+      <h3>基础配置</h3>
+      <div className={styles.configField}>
+        <Slider
+          className={styles.configSlider}
+          min={MIN_DURATION}
+          max={MAX_DURATION}
+          step={STEP}
+          ticks
+          marks={marks}
+          value={playDuration}
+          onChange={handleChange}
+        />
+      </div>
+    </div>
+  );
+};
 
 export default BasicConfigSection;

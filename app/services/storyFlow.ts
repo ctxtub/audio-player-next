@@ -1,4 +1,4 @@
-import { fetchAudio } from '@/app/api/chat';
+import { fetchAudio } from '@/lib/client/ttsGenerate';
 import { useConfigStore } from '@/stores/configStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
@@ -13,7 +13,7 @@ type PlayableSegment = {
   source: 'initial' | 'preloaded' | 'generated';
 };
 
-const PRELOAD_RETRY_DELAY = 5_000;
+const PRELOAD_RETRY_DELAY = 5000;
 const PRELOAD_RETRY_LIMIT = 3;
 
 let preloadRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -75,7 +75,7 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
   playbackStore.reset();
 
   const firstSegment = await storyStore.startSession(prompt);
-  const audioUrl = await fetchAudio(firstSegment, apiConfig);
+  const audioUrl = await fetchAudio(firstSegment, apiConfig.voiceName);
   storyStore.appendSegment(firstSegment);
 
   const latestSessionId = useStoryStore.getState().sessionId;

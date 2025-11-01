@@ -74,18 +74,11 @@ const HomePage: React.FC = () => {
   }, []);
 
   const remainingMinutes =
-    playbackRemainingMs === null ? null : Math.max(0, playbackRemainingMs / 60_000);
+    playbackRemainingMs === null ? null : Math.max(0, playbackRemainingMs / 60000);
 
   // 输入框模块：提交生成故事请求
   const handleInputSubmit = useCallback(
     async (shortcutText: string) => {
-      if (!apiConfig.apiKey) {
-        Toast.show({ icon: 'fail', content: '请先配置API密钥', duration: 3000 });
-        router.push('/config');
-        trackEvent('config_required', 'error', 'missing_api_key');
-        return;
-      }
-
       try {
         if (audioRef.current) {
           audioRef.current.pause();
@@ -107,7 +100,7 @@ const HomePage: React.FC = () => {
         resetStoryFlow();
       }
     },
-    [apiConfig.apiKey, router]
+    []
   );
 
   // 播放控制模块：音频播放结束时处理

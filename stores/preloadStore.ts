@@ -1,7 +1,7 @@
 import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import { fetchAudio } from '@/app/api/chat';
+import { fetchAudio } from '@/lib/client/ttsGenerate';
 import { useConfigStore } from './configStore';
 import { useStoryStore } from './storyStore';
 
@@ -113,7 +113,7 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
     const preloadPromise = (async () => {
       const storyStore = useStoryStore.getState();
       const nextSegment = await storyStore.continueSession();
-      const audioUrl = await fetchAudio(nextSegment, configState.apiConfig);
+      const audioUrl = await fetchAudio(nextSegment, configState.apiConfig.voiceName);
 
       const currentState = get();
       if (currentState.lastRequestId !== requestId) {

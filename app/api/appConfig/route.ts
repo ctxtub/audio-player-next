@@ -1,26 +1,22 @@
 import { NextResponse } from 'next/server';
 
-import { DEFAULT_API_CONFIG } from '@/app/config/home';
 import { loadTtsConfig } from '@/lib/server/ttsUpstream/config';
 import { ServiceError } from '@/lib/http/server/ErrorHandler';
-import type { AppConfigResponse } from '@/types/config';
+import type { AppConfigResponse } from '@/types/appConfig';
+
+const DEFAULT_PLAY_DURATION = 30;
 
 /**
  * 返回应用运行时配置（例如语音白名单、默认播放设置）。
  */
 export const GET = async () => {
   try {
-    const { voices, defaultVoice } = loadTtsConfig();
+    const { voicesList, voiceId } = loadTtsConfig();
 
     const payload: AppConfigResponse = {
-      tts: {
-        voices,
-        defaultVoice,
-      },
-      defaults: {
-        playDuration: DEFAULT_API_CONFIG.playDuration,
-        voiceName: defaultVoice || DEFAULT_API_CONFIG.voiceName,
-      },
+      voicesList,
+      voiceId,
+      playDuration: DEFAULT_PLAY_DURATION,
     };
 
     return NextResponse.json<AppConfigResponse>(payload, {

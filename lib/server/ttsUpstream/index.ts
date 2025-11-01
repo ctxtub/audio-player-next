@@ -3,7 +3,7 @@ import { HttpError } from '@/lib/http/common/ErrorHandler';
 import { ServiceError } from '@/lib/http/server/ErrorHandler';
 import { loadTtsConfig } from '@/lib/server/ttsUpstream/config';
 import type { TtsEnvConfig } from '@/lib/server/ttsUpstream/config';
-import type { TtsApiRequest } from '@/types/tts';
+import type { TtsGeneratePayload, VoiceId } from '@/types/ttsGenerate';
 
 /**
  * 转义 SSML 允许的特殊字符。
@@ -27,12 +27,12 @@ const sanitizeText = (text: string): string => {
 
 type SynthesizeParams = {
   text: string;
-  voiceName?: string;
+  voiceName?: VoiceId;
 };
 
 type SynthesizeResult = {
   audio: ArrayBuffer;
-  voiceName: string;
+  voiceName: VoiceId;
 };
 
 /**
@@ -41,12 +41,12 @@ type SynthesizeResult = {
  * @param config 已解析好的 TTS 配置，可复用避免重复解析。
  * @returns 白名单中允许的语音名称。
  */
-export const resolveVoiceName = (voiceName?: string, config?: TtsEnvConfig): string => {
+export const resolveVoiceName = (voiceName?: VoiceId, config?: TtsEnvConfig): VoiceId => {
   const activeConfig = config ?? loadTtsConfig();
-  if (voiceName && activeConfig.voices.some((voice) => voice.value === voiceName)) {
+  if (voiceName && activeConfig.voicesList.some((voice) => voice.value === voiceName)) {
     return voiceName;
   }
-  return activeConfig.defaultVoice;
+  return activeConfig.voiceId;
 };
 
 /**
@@ -79,7 +79,7 @@ export const synthesizeSpeech = async ({
 
   const config = loadTtsConfig();
   const resolvedVoice = resolveVoiceName(voiceName, config);
-  const targetVoice = config.voices.find((voice) => voice.value === resolvedVoice);
+  const targetVoice = config.voicesList.find((voice) => voice.value === resolvedVoice);
 
   const ssml = `
     <speak version='1.0' xml:lang='zh-CN'>
@@ -156,7 +156,7 @@ export const handleTtsRequest = async (payload: unknown): Promise<SynthesizeResu
     });
   }
 
-  const rawPayload = payload as Partial<TtsApiRequest>;
+  const rawPayload = payload as Partial<TtsGeneratePayload>;
 
   const text =
     typeof rawPayload.text === 'string'
@@ -166,7 +166,7 @@ export const handleTtsRequest = async (payload: unknown): Promise<SynthesizeResu
         : String(rawPayload.text);
 
   const voiceName =
-    typeof rawPayload.voiceName === 'string' ? rawPayload.voiceName : undefined;
+    typeof rawPayload.voiceId === 'string' ? rawPayload.voiceId : undefined;
 
   return synthesizeSpeech({
     text,

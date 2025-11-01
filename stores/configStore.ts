@@ -1,16 +1,17 @@
 import { create, StateCreator, type StoreApi } from 'zustand';
 import { devtools, persist, createJSONStorage } from 'zustand/middleware';
-import { APIConfig } from '@/types/types';
-import { CURRENT_CONFIG_VERSION, DEFAULT_API_CONFIG, isValidConfig } from '@/app/config/home';
+import type { APIConfig } from '@/types/appConfig';
 import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
+import type { VoiceOption } from '@/types/ttsGenerate';
+import { fetchAppConfig, AppConfigClientError } from '@/lib/client/appConfig';
 
 /**
- * 配置 store 的基础状态结构：记录当前配置、加载标记及错误信息。
+ * 配置 store 的基础状态结构：记录当前配置、加载标记及可选语音列表。
  */
 type ConfigStoreBaseState = {
   apiConfig: APIConfig;
   isLoaded: boolean;
-  loadError?: string;
+  voiceOptions: VoiceOption[];
 };
 
 /**
@@ -18,10 +19,10 @@ type ConfigStoreBaseState = {
  */
 type ConfigStoreActions = {
   /**
-   * 从持久化介质恢复配置数据。
-   * @returns Promise<void> 恢复流程结束时 resolve，便于外部等待
+   * 初始化配置（本地 + 远端），确保仅执行一次。
+   * @returns Promise<void>
    */
-  hydrateFromStorage: () => Promise<void>;
+  initialize: () => Promise<void>;
   /**
    * 合并更新配置，并写入持久化层。
    * @param partial Partial<APIConfig> 待更新的字段片段
@@ -29,36 +30,36 @@ type ConfigStoreActions = {
    */
   update: (partial: Partial<APIConfig>) => void;
   /**
-   * 恢复为默认配置，常用于用户手动重置。
-   * @returns void
-   */
-  resetToDefault: () => void;
-  /**
    * 判断当前配置是否满足业务要求。
    * @returns boolean true 表示配置合法
    */
   isConfigValid: () => boolean;
-  /**
-   * 返回缺失的关键配置项，用于 UI 提示。
-   * @returns string[] 缺失字段名称数组
-   */
-  missingFields: () => string[];
 };
 
 export type ConfigStore = ConfigStoreBaseState & ConfigStoreActions;
 
 const CONFIG_STORAGE_KEY = 'config-store';
 
-/**
- * 服务端或隐私模式下 localStorage 不可用时的兜底实现。
- */
-/**
- * 克隆默认配置，保证引用安全。
- * @returns APIConfig 默认配置的深拷贝
- */
-const cloneDefaultConfig = (): APIConfig => ({
-  ...DEFAULT_API_CONFIG,
+const createEmptyConfig = (): APIConfig => ({
+  playDuration: 0,
+  voiceName: '',
 });
+
+const isValidConfig = (config: APIConfig | undefined): config is APIConfig => {
+  if (!config) {
+    return false;
+  }
+
+  if (typeof config.playDuration !== 'number' || config.playDuration <= 0) {
+    return false;
+  }
+
+  if (typeof config.voiceName !== 'string' || !config.voiceName.trim()) {
+    return false;
+  }
+
+  return true;
+};
 
 /**
  * 合并新旧配置，确保字段合法。
@@ -77,34 +78,9 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
       : base.playDuration;
 
   return {
-    version: CURRENT_CONFIG_VERSION,
     playDuration: nextPlayDuration,
     voiceName,
   };
-};
-
-/**
- * 收集配置缺失字段，帮助前端展示校验信息。
- * @param config APIConfig 当前配置
- * @returns string[] 缺失字段列表
- */
-/**
- * 收集缺失的关键配置字段。
- * @param config 当前配置。
- * @returns 缺失字段列表。
- */
-const collectMissingFields = (config: APIConfig): string[] => {
-  const missing: string[] = [];
-
-  if (!config.playDuration || config.playDuration <= 0) {
-    missing.push('playDuration');
-  }
-
-  if (!config.voiceName?.trim()) {
-    missing.push('voiceName');
-  }
-
-  return missing;
 };
 
 type PersistApi = StoreApi<ConfigStore> & {
@@ -116,76 +92,111 @@ type PersistApi = StoreApi<ConfigStore> & {
 
 const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
   const persistApi = api as PersistApi;
+  let initializationPromise: Promise<void> | null = null;
+
+  const hydrateLocalConfig = async (): Promise<APIConfig | undefined> => {
+    if (!isBrowserEnvironment()) {
+      return undefined;
+    }
+
+    if (persistApi.persist.hasHydrated()) {
+      const stored = get().apiConfig;
+      return isValidConfig(stored) ? stored : undefined;
+    }
+
+    try {
+      await persistApi.persist.rehydrate();
+      const stored = get().apiConfig;
+      return isValidConfig(stored) ? stored : undefined;
+    } catch (error) {
+      console.warn('[configStore] hydrateLocalConfig failed', error);
+      return undefined;
+    }
+  };
+
+  const loadRemoteConfig = async (
+    localConfig: APIConfig | undefined
+  ): Promise<{ config: APIConfig; voiceOptions: VoiceOption[] }> => {
+    try {
+      const remote = await fetchAppConfig();
+      const voiceOptions = Array.isArray(remote.voicesList) ? remote.voicesList : [];
+      const hasVoice = (voice?: string) =>
+        !!voice && voiceOptions.some(option => option.value === voice);
+
+      const playDuration =
+        localConfig && localConfig.playDuration > 0
+          ? localConfig.playDuration
+          : remote.playDuration;
+
+      if (!playDuration || playDuration <= 0) {
+        throw new Error('INVALID_PLAY_DURATION');
+      }
+
+      let resolvedVoice: string | undefined;
+
+      if (localConfig && hasVoice(localConfig.voiceName)) {
+        resolvedVoice = localConfig.voiceName;
+      } else if (hasVoice(remote.voiceId)) {
+        resolvedVoice = remote.voiceId;
+      }
+
+      if (!resolvedVoice) {
+        throw new Error('INVALID_VOICE');
+      }
+
+      const mergedConfig: APIConfig = {
+        playDuration,
+        voiceName: resolvedVoice,
+      };
+
+      return { config: mergedConfig, voiceOptions };
+    } catch (error) {
+      if (error instanceof AppConfigClientError) {
+        throw error;
+      }
+      throw new Error(
+        error instanceof Error ? error.message : 'FAILED_TO_FETCH_REMOTE_CONFIG'
+      );
+    }
+  };
+
+  const runInitialization = async () => {
+    const localConfig = await hydrateLocalConfig();
+    const { config, voiceOptions } = await loadRemoteConfig(localConfig);
+    set({
+      apiConfig: config,
+      voiceOptions,
+      isLoaded: true,
+    });
+  };
 
   return {
-    /**
-     * 初始配置默认取内置值，保证 UI 可立即渲染。
-     */
-    apiConfig: cloneDefaultConfig(),
+    apiConfig: createEmptyConfig(),
     isLoaded: false,
-    loadError: undefined,
-    /**
-     * 尝试从 localStorage 恢复配置，失败则回退默认值。
-     */
-    hydrateFromStorage: async () => {
-      if (!isBrowserEnvironment()) {
-        set({ isLoaded: true });
-        return;
-      }
-
-      if (persistApi.persist.hasHydrated()) {
-        set({ isLoaded: true });
-        return;
-      }
-
-      try {
-        await persistApi.persist.rehydrate();
-        const hydratedConfig = get().apiConfig;
-        if (!isValidConfig(hydratedConfig)) {
+    voiceOptions: [],
+    initialize: () => {
+      if (!initializationPromise) {
+        initializationPromise = runInitialization().catch(error => {
+          console.warn('[configStore] initialize failed', error);
           set({
-            apiConfig: cloneDefaultConfig(),
-            loadError: 'INVALID_CONFIG',
+            apiConfig: createEmptyConfig(),
+            isLoaded: false,
+            voiceOptions: [],
           });
-        } else {
-          set({ loadError: undefined });
-        }
-      } catch (error) {
-        set({
-          apiConfig: cloneDefaultConfig(),
-          loadError: error instanceof Error ? error.message : 'FAILED_TO_HYDRATE',
+          initializationPromise = null;
+          throw error;
         });
-      } finally {
-        set({ isLoaded: true });
       }
+      return initializationPromise;
     },
-    /**
-     * 合并更新配置，同时清除旧的错误提示。
-     */
     update: (partial) => {
       const current = get().apiConfig;
       const nextConfig = mergeConfig(current, partial);
       set({
         apiConfig: nextConfig,
-        loadError: undefined,
       });
     },
-    /**
-     * 恢复默认配置。
-     */
-    resetToDefault: () => {
-      set({
-        apiConfig: cloneDefaultConfig(),
-        loadError: undefined,
-      });
-    },
-    /**
-     * 校验当前配置是否满足业务约束。
-     */
     isConfigValid: () => isValidConfig(get().apiConfig),
-    /**
-     * 提供缺失字段列表以便前端提示。
-     */
-    missingFields: () => collectMissingFields(get().apiConfig),
   };
 };
 
@@ -194,23 +205,18 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
  */
 const persistedConfigStore = persist(configStoreCreator, {
   name: CONFIG_STORAGE_KEY,
-  version: CURRENT_CONFIG_VERSION,
   storage: createJSONStorage(getSafeLocalStorage),
   partialize: (state) => ({
     apiConfig: state.apiConfig,
   }),
   migrate: (persistedState: unknown) => {
     const config = (persistedState as Partial<ConfigStore> | undefined)?.apiConfig;
-    if (!config) {
-      return { apiConfig: cloneDefaultConfig() };
-    }
-
-    if (config.version !== CURRENT_CONFIG_VERSION || !isValidConfig(config)) {
-      return { apiConfig: cloneDefaultConfig() };
+    if (isValidConfig(config)) {
+      return { apiConfig: config };
     }
 
     return {
-      apiConfig: mergeConfig(cloneDefaultConfig(), config),
+      apiConfig: createEmptyConfig(),
     };
   },
   skipHydration: true,

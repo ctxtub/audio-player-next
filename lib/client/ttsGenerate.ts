@@ -1,4 +1,4 @@
-import type { TtsApiRequest } from '@/types/tts';
+import type { TtsGeneratePayload } from '@/types/ttsGenerate';
 import { browserHttp } from '@/lib/http/browser';
 import { HttpError } from '@/lib/http/common/ErrorHandler';
 
@@ -25,9 +25,9 @@ export class TtsApiClientError extends Error {
  * @throws TtsApiClientError
  */
 export const fetchAudio = async (text: string, voiceName?: string): Promise<string> => {
-  const payload: TtsApiRequest = {
+  const payload: TtsGeneratePayload = {
     text,
-    voiceName,
+    voiceId: voiceName,
   };
 
   try {

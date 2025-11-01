@@ -26,14 +26,13 @@ const HomePage: React.FC = () => {
 
   // 统一管理 apiConfig 状态
   const apiConfig = useConfigStore(state => state.apiConfig);
-  const hydrateConfig = useConfigStore(state => state.hydrateFromStorage);
+  const initializeConfig = useConfigStore(state => state.initialize);
   const isConfigLoaded = useConfigStore(state => state.isLoaded);
   const configIsValid = useConfigStore(state => state.isConfigValid());
-  const configLoadError = useConfigStore(state => state.loadError);
 
   useEffect(() => {
-    hydrateConfig();
-  }, [hydrateConfig]);
+    initializeConfig().catch(() => {});
+  }, [initializeConfig]);
 
   useEffect(() => {
     if (!isConfigLoaded) {
@@ -43,12 +42,6 @@ const HomePage: React.FC = () => {
       router.push('/config');
     }
   }, [isConfigLoaded, configIsValid, router]);
-
-  useEffect(() => {
-    if (configLoadError) {
-      Toast.show({ icon: 'fail', content: '配置加载失败，已恢复默认设置', duration: 3000 });
-    }
-  }, [configLoadError]);
 
   // 故事状态
   const storyInputText = useStoryStore((state) => state.inputText);

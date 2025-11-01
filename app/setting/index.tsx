@@ -3,7 +3,6 @@ import { useRouter } from 'next/navigation';
 import { Form, Button, Toast } from 'antd-mobile';
 
 import styles from './index.module.scss';
-import { trackEvent } from '../../utils/analytics';
 import { PageLoading } from '@/components/PageLoading';
 import { useConfigStore } from '@/stores/configStore';
 import BasicConfigSection from './components/BasicConfigSection';
@@ -231,7 +230,6 @@ const ConfigPage: React.FC = () => {
 
       try {
         updateConfig(normalized);
-        trackEvent('config_saved', 'config', normalized.voiceName);
         Toast.show({ icon: 'success', content: '配置已保存', duration: 3000 });
 
         setTimeout(() => {
@@ -240,7 +238,6 @@ const ConfigPage: React.FC = () => {
       } catch (error) {
         console.error('Error saving config:', error);
         Toast.show({ icon: 'fail', content: '保存配置失败，请重试', duration: 3000 });
-        trackEvent('config_error', 'error', 'save_failed');
       }
     },
     [apiConfig, router, updateConfig, voiceOptions]

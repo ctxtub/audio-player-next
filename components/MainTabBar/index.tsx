@@ -14,16 +14,16 @@ const TABS = [
     path: '/',
   },
   {
-    key: 'config',
+    key: 'setting',
     title: '设置',
     icon: <SetOutline />,
-    path: '/config',
+    path: '/setting',
   },
 ] as const;
 
 const resolveActiveKey = (pathname: string): (typeof TABS)[number]['key'] => {
-  if (pathname.startsWith('/config')) {
-    return 'config';
+  if (pathname.startsWith('/setting')) {
+    return 'setting';
   }
   return 'home';
 };

@@ -1,11 +1,10 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Toast } from 'antd-mobile';
-import { AudioPlayer, AudioPlayerHandle } from '../../../components/AudioPlayer';
-import InputStatusSection from '../../../components/InputStatusSection';
-import StoryViewer from '../../../components/StoryViewer';
+import { AudioPlayer, AudioPlayerHandle } from './components/AudioPlayer';
+import InputStatusSection from './components/InputStatusSection';
+import StoryViewer from './components/StoryViewer';
 import { PageLoading } from '@/components/PageLoading';
-import { trackEvent } from '../../utils/analytics';
 import styles from './index.module.scss';
 
 import { useConfigStore } from '@/stores/configStore';
@@ -84,9 +83,7 @@ const HomePage: React.FC = () => {
           audioRef.current.pause();
         }
 
-        trackEvent('generate_story', 'story', shortcutText);
         const { audioUrl, segment } = await beginStorySession(shortcutText);
-        trackEvent('story_generated', 'story_success', shortcutText, segment.length);
 
         if (!audioRef.current) {
           throw new Error('播放器尚未就绪');
@@ -96,7 +93,6 @@ const HomePage: React.FC = () => {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : '发生未知错误';
         Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
-        trackEvent('generation_error', 'error', errorMessage);
         resetStoryFlow();
       }
     },
@@ -106,7 +102,6 @@ const HomePage: React.FC = () => {
   // 播放控制模块：音频播放结束时处理
   const handleAudioEndedCallback = useCallback(async () => {
     try {
-      trackEvent('audio_completed', 'playback');
       const nextSegment = await handleSegmentEnded();
       if (!nextSegment) {
         return;
@@ -120,7 +115,6 @@ const HomePage: React.FC = () => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '无法播放下一段音频';
       Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
-      trackEvent('playback_error', 'error', errorMessage);
       handlePlaybackPause();
     }
   }, [handlePlaybackPause]);
@@ -133,12 +127,10 @@ const HomePage: React.FC = () => {
   // 播放控制模块：播放器播放/暂停回调
   const handlePlayCallback = useCallback(() => {
     handlePlaybackStart();
-    trackEvent('audio_play', 'playback');
   }, []);
 
   const handlePauseCallback = useCallback(() => {
     handlePlaybackPause();
-    trackEvent('audio_pause', 'playback');
   }, []);
 
   const handleProgressUpdate = useCallback((payload: { currentTime: number; duration: number }) => {

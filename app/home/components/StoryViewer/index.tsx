@@ -1,5 +1,5 @@
 import React from 'react';
-import Modal, { useModal } from '../Modal';
+import Modal, { useModal } from '../../../../components/Modal';
 import styles from './index.module.scss';
 
 interface StoryViewerProps {

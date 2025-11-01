@@ -1,7 +1,7 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import PlayIcon from '@/public/icons/audioplayer-play.svg';
 import DeleteIcon from '@/public/icons/close.svg';
-import Modal, { useModal } from '../Modal';
+import Modal, { useModal } from '../../../../components/Modal';
 import styles from './index.module.scss';
 
 export interface HistoryRecord {

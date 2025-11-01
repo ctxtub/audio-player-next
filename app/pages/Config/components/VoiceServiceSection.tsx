@@ -1,114 +1,87 @@
-import React from 'react';
-import { Form, Input, Selector } from 'antd-mobile';
+import React, { useMemo } from 'react';
+import { Form } from 'antd-mobile';
 import type { FormInstance } from 'antd-mobile';
-import type { VoiceProvider } from '@/types/types';
-import { AZURE_VOICE_GROUPS, MS_VOICE_GROUPS } from '../../../config/voices';
-import { AZURE_REGIONS } from '../../../config/regions';
+
 import styles from '../index.module.scss';
 import VoiceOptionList from './VoiceOptionList';
-import type { ConfigFormValues, ProviderOption, VoiceGroups } from './types';
+import type { ConfigFormValues, VoiceGroups } from './types';
+import type { TtsVoiceOption } from '@/types/tts';
 
-const PROVIDER_OPTIONS: ProviderOption[] = [
-  { label: 'Free TTS', value: 'free-tts' },
-  { label: 'Azure TTS', value: 'azure-tts' },
-];
-
+/**
+ * 语音配置区域的 props。
+ */
 interface VoiceServiceSectionProps {
   form: FormInstance<ConfigFormValues>;
+  voices: TtsVoiceOption[];
   playingVoice: string | null;
-  onProviderSelect: (provider: VoiceProvider) => void;
-  onVoiceSelect: (voice: string, provider: VoiceProvider) => void;
-  onPreview: (voice: string, provider: VoiceProvider) => void;
+  isLoading?: boolean;
+  onVoiceSelect: (voice: string) => void;
+  onPreview: (voice: string) => void;
 }
 
+/**
+ * 根据 locale 聚合语音列表，供列表展示。
+ * @param voices 服务端返回的语音数组。
+ */
+const buildVoiceGroups = (voices: TtsVoiceOption[]): VoiceGroups => {
+  return voices.reduce<VoiceGroups>((groups, voice) => {
+    const locale = voice.locale ?? '其他';
+    if (!groups[locale]) {
+      groups[locale] = {
+        label: locale,
+        voices: [],
+      };
+    }
+    groups[locale].voices.push(voice);
+    return groups;
+  }, {});
+};
+
+/**
+ * 语音配置区域：展示语音列表并支持试听。
+ */
 const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
   form,
+  voices,
   playingVoice,
-  onProviderSelect,
+  isLoading = false,
   onVoiceSelect,
   onPreview,
 }) => {
-  const voiceProvider = Form.useWatch('voiceProvider', form) as VoiceProvider | undefined;
-  const selectedFreeVoice = Form.useWatch(['freeTtsConfig', 'voiceName'], form) as string | undefined;
-  const selectedAzureVoice = Form.useWatch(['azureTtsConfig', 'voiceName'], form) as string | undefined;
-  const azureRegion = Form.useWatch(['azureTtsConfig', 'speechRegion'], form) as string | undefined;
+  const voiceName = Form.useWatch('voiceName', form) as string | undefined;
 
-  const handleProviderChange = (values: string[]) => {
-    if (!values.length) {
-      return;
-    }
-    const nextProvider = values[0] as VoiceProvider;
-    form.setFieldValue('voiceProvider', nextProvider);
-    onProviderSelect(nextProvider);
+  const voiceGroups = useMemo(() => buildVoiceGroups(voices), [voices]);
+
+  const handleVoiceChange = (value: string) => {
+    form.setFieldValue('voiceName', value);
+    onVoiceSelect(value);
   };
+
+  const hasVoices = voices.length > 0;
 
   return (
     <div className={styles.configSection}>
       <h3>语音服务</h3>
-
-      <Form.Item
-        name="voiceProvider"
-        label="语音服务提供商"
-        rules={[{ required: true, message: '请选择语音服务提供商' }]}
-      >
-        <Selector
-          options={PROVIDER_OPTIONS}
-          columns={PROVIDER_OPTIONS.length}
-          value={voiceProvider ? [voiceProvider] : []}
-          onChange={handleProviderChange}
-        />
-      </Form.Item>
-
-      {voiceProvider === 'free-tts' ? (
-        <VoiceOptionList
-          groups={MS_VOICE_GROUPS as VoiceGroups}
-          provider="free-tts"
-          selectedVoice={selectedFreeVoice}
-          playingVoice={playingVoice}
-          onSelect={onVoiceSelect}
-          onPreview={onPreview}
-        />
-      ) : (
-        <>
-          <Form.Item
-            name={['azureTtsConfig', 'speechKey']}
-            label="Azure Speech Key"
-            rules={[{ required: true, message: '请输入 Azure Speech Key' }]}
-          >
-            <Input type="password" placeholder="输入你的 Azure Speech Key" clearable />
-          </Form.Item>
-
-          <Form.Item
-            name={['azureTtsConfig', 'speechRegion']}
-            label="Azure Region"
-            rules={[{ required: true, message: '请选择 Azure Region' }]}
-          >
-            <Selector
-              options={AZURE_REGIONS.map(region => ({
-                label: `${region.label} · ${region.description}`,
-                value: region.value,
-              }))}
-              columns={2}
-              value={azureRegion ? [azureRegion] : []}
-              onChange={values => {
-                if (!values.length) {
-                  return;
-                }
-                const [regionValue] = values;
-                form.setFieldValue(['azureTtsConfig', 'speechRegion'], regionValue);
-              }}
-            />
-          </Form.Item>
-
+      {hasVoices ? (
+        <Form.Item
+          name="voiceName"
+          label="可选声音"
+          rules={[{ required: true, message: '请选择一个声音' }]}
+        >
           <VoiceOptionList
-            groups={AZURE_VOICE_GROUPS as VoiceGroups}
-            provider="azure-tts"
-            selectedVoice={selectedAzureVoice}
+            groups={voiceGroups}
+            value={voiceName}
             playingVoice={playingVoice}
-            onSelect={onVoiceSelect}
+            onChange={handleVoiceChange}
             onPreview={onPreview}
           />
-        </>
+        </Form.Item>
+      ) : (
+        <div className={styles.voiceEmptyState}>
+          {isLoading
+            ? '声音列表加载中，请稍候…'
+            : '暂无可用声音，请联系管理员配置 AZURE_TTS_VOICE_ALLOW_LIST。'}
+        </div>
       )}
     </div>
   );

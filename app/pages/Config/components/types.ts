@@ -1,4 +1,5 @@
-import type { APIConfig, VoiceProvider } from '@/types/types';
+import type { APIConfig } from '@/types/types';
+import type { TtsVoiceOption } from '@/types/tts';
 
 export type ConfigFormValues = Partial<APIConfig> & {
   playDuration?: number | string;
@@ -6,18 +7,7 @@ export type ConfigFormValues = Partial<APIConfig> & {
 
 export type VoiceGroup = {
   label: string;
-  voices: {
-    value: string;
-    label: string;
-    description: string;
-    gender: string;
-    locale: string;
-  }[];
+  voices: TtsVoiceOption[];
 };
 
 export type VoiceGroups = Record<string, VoiceGroup>;
-
-export type ProviderOption = {
-  label: string;
-  value: VoiceProvider;
-};

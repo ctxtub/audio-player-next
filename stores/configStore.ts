@@ -78,66 +78,50 @@ const fallbackStorage: Storage = {
  */
 const cloneDefaultConfig = (): APIConfig => ({
   ...DEFAULT_API_CONFIG,
-  azureTtsConfig: { ...DEFAULT_API_CONFIG.azureTtsConfig },
-  freeTtsConfig: { ...DEFAULT_API_CONFIG.freeTtsConfig },
 });
 
 /**
- * 合并配置字段并更新版本号。
- * @param base APIConfig 当前配置
- * @param partial Partial<APIConfig> 待合并片段
- * @returns APIConfig 合并后的配置
+ * 合并新旧配置，确保字段合法。
+ * @param base 当前配置。
+ * @param partial 待合并的增量配置。
  */
-const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig => ({
-  ...base,
-  ...partial,
-  azureTtsConfig: {
-    ...base.azureTtsConfig,
-    ...(partial.azureTtsConfig ?? {}),
-  },
-  freeTtsConfig: {
-    ...base.freeTtsConfig,
-    ...(partial.freeTtsConfig ?? {}),
-  },
-  version: CURRENT_CONFIG_VERSION,
-});
+const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig => {
+  const voiceName =
+    typeof partial.voiceName === 'string' && partial.voiceName.trim()
+      ? partial.voiceName.trim()
+      : base.voiceName;
+
+  const nextPlayDuration =
+    typeof partial.playDuration === 'number' && partial.playDuration > 0
+      ? partial.playDuration
+      : base.playDuration;
+
+  return {
+    version: CURRENT_CONFIG_VERSION,
+    playDuration: nextPlayDuration,
+    voiceName,
+  };
+};
 
 /**
  * 收集配置缺失字段，帮助前端展示校验信息。
  * @param config APIConfig 当前配置
  * @returns string[] 缺失字段列表
  */
+/**
+ * 收集缺失的关键配置字段。
+ * @param config 当前配置。
+ * @returns 缺失字段列表。
+ */
 const collectMissingFields = (config: APIConfig): string[] => {
   const missing: string[] = [];
-
-  if (!config.apiBaseUrl?.trim()) {
-    missing.push('apiBaseUrl');
-  }
-
-  if ((!config.apiKey || !config.apiKey.trim()) && config.voiceProvider !== 'free-tts') {
-    missing.push('apiKey');
-  }
 
   if (!config.playDuration || config.playDuration <= 0) {
     missing.push('playDuration');
   }
 
-  if (config.voiceProvider === 'azure-tts') {
-    if (!config.azureTtsConfig.speechKey?.trim()) {
-      missing.push('azureTtsConfig.speechKey');
-    }
-    if (!config.azureTtsConfig.speechRegion?.trim()) {
-      missing.push('azureTtsConfig.speechRegion');
-    }
-    if (!config.azureTtsConfig.voiceName?.trim()) {
-      missing.push('azureTtsConfig.voiceName');
-    }
-  }
-
-  if (config.voiceProvider === 'free-tts') {
-    if (!config.freeTtsConfig.voiceName?.trim()) {
-      missing.push('freeTtsConfig.voiceName');
-    }
+  if (!config.voiceName?.trim()) {
+    missing.push('voiceName');
   }
 
   return missing;

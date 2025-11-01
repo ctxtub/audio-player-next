@@ -1,74 +1,87 @@
 import React from 'react';
 import { Button, List, Radio } from 'antd-mobile';
 import styles from '../index.module.scss';
-import type { VoiceProvider } from '@/types/types';
 import type { VoiceGroups } from './types';
 
+/**
+ * 语音列表渲染组件的 props。
+ */
 interface VoiceOptionListProps {
   groups: VoiceGroups;
-  provider: VoiceProvider;
-  selectedVoice?: string;
+  value?: string;
   playingVoice: string | null;
-  onSelect: (voice: string, provider: VoiceProvider) => void;
-  onPreview: (voice: string, provider: VoiceProvider) => void;
+  onChange?: (voice: string) => void;
+  onPreview: (voice: string) => void;
 }
 
+/**
+ * 按语言分组展示语音列表，并支持试听与选中。
+ */
 const VoiceOptionList: React.FC<VoiceOptionListProps> = ({
   groups,
-  provider,
-  selectedVoice,
+  value,
   playingVoice,
-  onSelect,
+  onChange,
   onPreview,
-}) => (
-  <Radio.Group
-    value={selectedVoice}
-    onChange={value => onSelect(value as string, provider)}
-  >
-    {Object.entries(groups).map(([locale, group]) => (
-      <List
-        key={locale}
-        header={<div className={styles.voiceGroupTitle}>{group.label}</div>}
-        className={styles.voiceList}
-        mode="card"
-      >
-        {group.voices.map(option => {
-          const isPlaying = playingVoice === option.value;
+}) => {
+  const handleChange = (nextValue: string) => {
+    if (onChange) {
+      onChange(nextValue);
+    }
+  };
 
-          return (
-            <List.Item
-              key={option.value}
-              prefix={<Radio value={option.value} />}
-              description={
-                <div className={styles.voiceDescription}>
-                  <div>{option.description}</div>
-                  <div className={styles.voiceMeta}>{option.gender} · {option.locale}</div>
-                </div>
-              }
-              extra={
-                <Button
-                  size="mini"
-                  color="primary"
-                  fill="outline"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onPreview(option.value, provider);
-                  }}
-                  loading={isPlaying}
-                  disabled={playingVoice !== null && !isPlaying}
-                >
-                  {isPlaying ? '试听中' : '试听'}
-                </Button>
-              }
-              onClick={() => onSelect(option.value, provider)}
-            >
-              {option.label}
-            </List.Item>
-          );
-        })}
-      </List>
-    ))}
-  </Radio.Group>
-);
+  return (
+    <Radio.Group
+      value={value}
+      onChange={selected => handleChange(selected as string)}
+    >
+      {Object.entries(groups).map(([locale, group]) => (
+        <List
+          key={locale}
+          header={<div className={styles.voiceGroupTitle}>{group.label}</div>}
+          className={styles.voiceList}
+          mode="card"
+        >
+          {group.voices.map(option => {
+            const isPlaying = playingVoice === option.value;
+
+            return (
+              <List.Item
+                key={option.value}
+                prefix={<Radio value={option.value} />}
+                description={
+                  <div className={styles.voiceDescription}>
+                    <div>{option.description ?? '暂无描述'}</div>
+                    <div className={styles.voiceMeta}>
+                      {(option.gender ?? '未知')} · {(option.locale ?? '未知')}
+                    </div>
+                  </div>
+                }
+                extra={
+                  <Button
+                    size="mini"
+                    color="primary"
+                    fill="outline"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onPreview(option.value);
+                    }}
+                    loading={isPlaying}
+                    disabled={playingVoice !== null && !isPlaying}
+                  >
+                    {isPlaying ? '试听中' : '试听'}
+                  </Button>
+                }
+                onClick={() => handleChange(option.value)}
+              >
+                {option.label}
+              </List.Item>
+            );
+          })}
+        </List>
+      ))}
+    </Radio.Group>
+  );
+};
 
 export default VoiceOptionList;

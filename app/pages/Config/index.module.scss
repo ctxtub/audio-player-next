@@ -46,6 +46,15 @@
       }
     }
 
+    .voiceEmptyState {
+      padding: 16px;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--primary) 8%, transparent);
+      color: var(--secondary);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
     .voiceList {
       margin-bottom: 20px;
 

@@ -1,8 +1,7 @@
 import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import { generateStory, continueStory } from '@/app/api/chat';
-import { useConfigStore } from './configStore';
+import { continueStory, generateStory } from '@/lib/client/storyGenerate';
 
 /**
  * 故事 store 的基础状态，记录当前会话、文本段落及加载标记。
@@ -82,18 +81,6 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
    */
   startSession: async (prompt) => {
     const requestId = createRequestId('session');
-    const configState = useConfigStore.getState();
-
-    if (!configState.isConfigValid()) {
-      const error = new Error('配置未就绪，无法生成故事');
-      set({
-        lastError: error.message,
-        isFirstStoryLoading: false,
-        _activeRequestId: null,
-      });
-      throw error;
-    }
-
     set({
       inputText: prompt,
       segments: [],
@@ -105,7 +92,8 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
     });
 
     try {
-      const story = await generateStory(prompt, configState.apiConfig);
+      const response = await generateStory(prompt);
+      const story = response.story;
 
       if (get()._activeRequestId !== requestId) {
         return story;
@@ -146,8 +134,6 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
     }
 
     const requestId = createRequestId('continue');
-    const configState = useConfigStore.getState();
-
     set({
       isContinuing: true,
       lastError: undefined,
@@ -155,7 +141,10 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
     });
 
     try {
-      const nextSegment = await continueStory(inputText, segments.join(''), configState.apiConfig);
+      const response = await continueStory(inputText, segments.join(''), {
+        withSummary: true,
+      });
+      const nextSegment = response.story;
 
       if (get()._activeRequestId !== requestId) {
         return nextSegment;

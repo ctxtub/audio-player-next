@@ -2,6 +2,7 @@ import { create, StateCreator, type StoreApi } from 'zustand';
 import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import { APIConfig } from '@/types/types';
 import { CURRENT_CONFIG_VERSION, DEFAULT_API_CONFIG, isValidConfig } from '@/app/config/home';
+import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
 
 /**
  * 配置 store 的基础状态结构：记录当前配置、加载标记及错误信息。
@@ -51,27 +52,6 @@ const CONFIG_STORAGE_KEY = 'config-store';
 /**
  * 服务端或隐私模式下 localStorage 不可用时的兜底实现。
  */
-const fallbackStorage: Storage = {
-  get length() {
-    return 0;
-  },
-  clear() {
-    return undefined;
-  },
-  getItem() {
-    return null;
-  },
-  key() {
-    return null;
-  },
-  removeItem() {
-    return undefined;
-  },
-  setItem() {
-    return undefined;
-  },
-};
-
 /**
  * 克隆默认配置，保证引用安全。
  * @returns APIConfig 默认配置的深拷贝
@@ -148,7 +128,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
      * 尝试从 localStorage 恢复配置，失败则回退默认值。
      */
     hydrateFromStorage: async () => {
-      if (typeof window === 'undefined') {
+      if (!isBrowserEnvironment()) {
         set({ isLoaded: true });
         return;
       }
@@ -215,9 +195,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
 const persistedConfigStore = persist(configStoreCreator, {
   name: CONFIG_STORAGE_KEY,
   version: CURRENT_CONFIG_VERSION,
-  storage: createJSONStorage(() =>
-    typeof window === 'undefined' ? fallbackStorage : window.localStorage
-  ),
+  storage: createJSONStorage(getSafeLocalStorage),
   partialize: (state) => ({
     apiConfig: state.apiConfig,
   }),

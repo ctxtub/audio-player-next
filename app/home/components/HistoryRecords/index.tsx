@@ -1,14 +1,16 @@
-import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useEffect, forwardRef, useImperativeHandle, useMemo } from 'react';
 import PlayIcon from '@/public/icons/audioplayer-play.svg';
 import DeleteIcon from '@/public/icons/close.svg';
 import Modal, { useModal } from '../../../../components/Modal';
+import {
+  usePromptHistoryStore,
+  selectSortMode,
+  selectIsInitialized,
+  sortHistoryRecords,
+} from '@/stores/promptHistoryStore';
 import styles from './index.module.scss';
 
-export interface HistoryRecord {
-  prompt: string;
-  lastUsed: string;
-  useCount: number;
-}
+export type { HistoryRecord } from '@/stores/promptHistoryStore';
 
 export interface HistoryRecordsRef {
   showModal: () => void;
@@ -20,88 +22,37 @@ interface HistoryRecordsProps {
 
 const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props, ref) => {
   const { onSelectPrompt } = props;
-  const [historyRecords, setHistoryRecords] = useState<HistoryRecord[]>([]);
-  const [sortByFrequency, setSortByFrequency] = useState(true);
   const { isShow, showModal, closeModal } = useModal();
+  const recordsMap = usePromptHistoryStore((state) => state.recordsMap);
+  const sortMode = usePromptHistoryStore(selectSortMode);
+  const hydrateHistory = usePromptHistoryStore((state) => state.hydrate);
+  const removeHistoryRecord = usePromptHistoryStore((state) => state.remove);
+  const setSortMode = usePromptHistoryStore((state) => state.setSortMode);
+  const isHistoryInitialized = usePromptHistoryStore(selectIsInitialized);
+
+  const historyRecords = useMemo(
+    () => sortHistoryRecords(Object.values(recordsMap), sortMode),
+    [recordsMap, sortMode]
+  );
 
   useEffect(() => {
-    if (isShow) {
-      loadHistoryRecords();
+    if (isShow && !isHistoryInitialized) {
+      hydrateHistory();
     }
-  }, [isShow]);
-
-  const loadHistoryRecords = () => {
-    try {
-      const historyData = localStorage.getItem('promptHistory');
-      if (historyData) {
-        const parsedHistory: Record<string, HistoryRecord> = JSON.parse(historyData);
-        
-        // 转换为数组并过滤掉30天以前的记录
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
-        const historyArray = Object.values(parsedHistory).filter(record => {
-          const lastUsedDate = new Date(record.lastUsed);
-          return lastUsedDate >= thirtyDaysAgo;
-        });
-        
-        // 根据排序方式排序
-        const sortedHistory = sortHistoryRecords(historyArray, sortByFrequency);
-        setHistoryRecords(sortedHistory);
-      }
-    } catch (error) {
-      console.error('Failed to load history records:', error);
-      setHistoryRecords([]);
-      localStorage.removeItem('promptHistory');
-    }
-  };
-
-  const deleteHistoryRecord = (prompt: string) => {
-    try {
-      const historyData = localStorage.getItem('promptHistory');
-      if (historyData) {
-        const parsedHistory: Record<string, HistoryRecord> = JSON.parse(historyData);
-        
-        // 删除指定提示词的记录
-        if (parsedHistory[prompt]) {
-          delete parsedHistory[prompt];
-          localStorage.setItem('promptHistory', JSON.stringify(parsedHistory));
-          
-          // 更新状态
-          setHistoryRecords(prevRecords => 
-            prevRecords.filter(record => record.prompt !== prompt)
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Failed to delete history record:', error);
-    }
-  };
-
-  const sortHistoryRecords = (records: HistoryRecord[], byFrequency: boolean) => {
-    return [...records].sort((a, b) => {
-      if (byFrequency) {
-        // 按使用频率排序（从高到低）
-        return b.useCount - a.useCount;
-      } else {
-        // 按最近使用时间排序（从新到旧）
-        return new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime();
-      }
-    });
-  };
+  }, [hydrateHistory, isHistoryInitialized, isShow]);
 
   const toggleSortMethod = () => {
-    setSortByFrequency(!sortByFrequency);
-    setHistoryRecords(sortHistoryRecords(historyRecords, !sortByFrequency));
+    const nextMode = sortMode === 'frequency' ? 'recent' : 'frequency';
+    setSortMode(nextMode);
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('zh-CN', { 
-      month: 'numeric', 
+    return date.toLocaleDateString('zh-CN', {
+      month: 'numeric',
       day: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
@@ -109,24 +60,17 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
     onSelectPrompt(prompt);
   };
 
-  // 处理播放按钮点击，先关闭弹窗再选择提示词
   const handlePlayButtonClick = (prompt: string) => {
-    // 直接调用父组件的关闭函数
     closeModal();
-    // 然后选择提示词
     setTimeout(() => {
       handleSelectPrompt(prompt);
     }, 100);
   };
 
-  // 渲染排序按钮作为标题栏的额外内容
   const renderSortButton = () => {
     return (
-      <button 
-        onClick={toggleSortMethod}
-        className={styles.sortButton}
-      >
-        {sortByFrequency ? '按频率排序' : '按时间排序'}
+      <button onClick={toggleSortMethod} className={styles.sortButton}>
+        {sortMode === 'frequency' ? '按频率排序' : '按时间排序'}
       </button>
     );
   };
@@ -137,10 +81,7 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
         {historyRecords.length > 0 ? (
           <div className={styles.historyList}>
             {historyRecords.map((record, index) => (
-              <div 
-                key={index} 
-                className={styles.historyItem}
-              >
+              <div key={index} className={styles.historyItem}>
                 <div className={styles.historyIndex}>{index + 1}</div>
                 <div className={styles.historyContent}>
                   <div className={styles.historyPrompt}>{record.prompt}</div>
@@ -150,7 +91,7 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
                   </div>
                 </div>
                 <div className={styles.actionButtons}>
-                  <button 
+                  <button
                     className={styles.playButton}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -160,11 +101,11 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
                   >
                     <PlayIcon />
                   </button>
-                  <button 
+                  <button
                     className={styles.deleteButton}
                     onClick={(e) => {
                       e.stopPropagation();
-                      deleteHistoryRecord(record.prompt);
+                      removeHistoryRecord(record.prompt);
                     }}
                     aria-label="删除此提示词"
                   >

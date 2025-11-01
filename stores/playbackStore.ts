@@ -1,7 +1,7 @@
 import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-const MINUTE_IN_MS = 60_000;
+const MINUTE_IN_MS = 60000;
 
 /**
  * 播放器状态数据结构：负责记录播放会话标识、倒计时、当前段落与进度。
@@ -100,7 +100,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
       }
     };
 
-    const intervalId = window.setInterval(tick, 1_000);
+    const intervalId = window.setInterval(tick, 1000);
     set({
       _tickIntervalId: intervalId,
       _lastTickAt: Date.now(),

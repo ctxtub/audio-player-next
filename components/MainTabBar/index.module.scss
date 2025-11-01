@@ -1,0 +1,9 @@
+.tabBarContainer {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  background-color: var(--initial-background, var(--background));
+  border-top: 1px solid var(--card-border);
+  box-shadow: 0 -4px 16px color-mix(in srgb, var(--shadow-color) 60%, transparent);
+  min-height: var(--main-tab-bar-height, 56px);
+}

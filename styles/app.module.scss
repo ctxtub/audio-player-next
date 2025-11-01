@@ -4,9 +4,16 @@
   margin: 0 auto;
   background-color: var(--initial-background, var(--background, #000000));
   color: var(--initial-foreground, var(--foreground, #ffffff));
-  overflow-y: auto;
   position: relative;
+  display: flex;
+  flex-direction: column;
   /* 添加过渡效果 */
   transition: background-color var(--transition-speed) var(--transition-timing),
               color var(--transition-speed) var(--transition-timing);
+}
+
+.content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding-bottom: calc(var(--main-tab-bar-height, 56px) + 24px + env(safe-area-inset-bottom));
 }

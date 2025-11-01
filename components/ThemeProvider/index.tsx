@@ -8,6 +8,7 @@ import React, {
   useState,
   useCallback,
 } from 'react';
+import { ConfigProvider } from 'antd-mobile';
 import { ThemeMode } from '@/types/types';
 import {
   THEME_MODE_STORAGE_KEY,
@@ -21,6 +22,7 @@ interface ThemeContextType {
   currentTheme: ThemeValue;
   themeMode: ThemeMode;
   toggleTheme: () => void;
+  setThemeMode: (mode: ThemeMode) => void;
 }
 
 const INITIAL_THEME_STATE: ThemeState = getInitialThemeState();
@@ -29,6 +31,7 @@ const ThemeContext = createContext<ThemeContextType>({
   currentTheme: INITIAL_THEME_STATE.resolvedTheme,
   themeMode: INITIAL_THEME_STATE.themeMode,
   toggleTheme: () => {},
+  setThemeMode: () => {},
 });
 
 export const useTheme = () => useContext(ThemeContext);
@@ -85,6 +88,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [themeMode, systemTheme]
   );
 
+  const handleSetThemeMode = useCallback((mode: ThemeMode) => {
+    setThemeMode(mode);
+  }, []);
+
   const toggleTheme = useCallback(() => {
     const currentIndex = THEME_SEQUENCE.indexOf(themeMode);
     const nextMode =
@@ -108,6 +115,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (metaThemeColor && THEME_COLORS[resolvedTheme]) {
       metaThemeColor.setAttribute('content', THEME_COLORS[resolvedTheme]);
     }
+
   }, [resolvedTheme]);
 
   const contextValue = useMemo(
@@ -115,9 +123,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       currentTheme: resolvedTheme,
       themeMode,
       toggleTheme,
+      setThemeMode: handleSetThemeMode,
     }),
-    [resolvedTheme, themeMode, toggleTheme]
+    [resolvedTheme, themeMode, toggleTheme, handleSetThemeMode]
   );
 
-  return <ThemeContext.Provider value={contextValue}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={contextValue}>
+      <ConfigProvider>{children}</ConfigProvider>
+    </ThemeContext.Provider>
+  );
 };

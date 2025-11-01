@@ -23,14 +23,10 @@ export const createHttpClient = (options: CreateHttpClientOptions = {}): AxiosIn
     (response) => response,
     (error: AxiosError) => {
       if (error.response) {
-        const { status, data, headers } = error.response;
-        const requestId =
-          (headers?.['x-request-id'] as string | undefined) ??
-          (headers?.['request-id'] as string | undefined) ??
-          (headers?.['x-ms-request-id'] as string | undefined);
+        const { status, data } = error.response;
         const payload =
           typeof data === 'object' && data !== null
-            ? (data as { error?: { code?: string; message?: string; requestId?: string } }).error
+            ? (data as { error?: { code?: string; message?: string } }).error
             : undefined;
         const message =
           payload?.message ||
@@ -41,7 +37,6 @@ export const createHttpClient = (options: CreateHttpClientOptions = {}): AxiosIn
           status: typeof status === 'number' && status > 0 ? status : 500,
           code: payload?.code,
           message,
-          requestId: payload?.requestId ?? requestId,
           details: data,
         });
       }

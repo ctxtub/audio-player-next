@@ -14,6 +14,11 @@ import { useStoryStore } from './storyStore';
  */
 type PreloadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
+type ActivePreloadTask = {
+  token: symbol;
+  promise: Promise<{ segment: string; audioUrl: string }>;
+};
+
 /**
  * 预加载 store 的基础状态。
  */
@@ -23,8 +28,10 @@ type PreloadStoreBaseState = {
   cachedAudioUrl: string | null;
   error?: string;
   retryCount: number;
-  lastRequestId: string | null;
-  _ongoingPromise: Promise<{ segment: string; audioUrl: string }> | null;
+  /**
+   * 保存当前在运行的预加载任务，用于去重和防止过期任务写回结果。
+   */
+  _activePreloadTask: ActivePreloadTask | null;
 };
 
 /**
@@ -44,20 +51,7 @@ const INITIAL_STATE: PreloadStoreBaseState = {
   cachedAudioUrl: null,
   error: undefined,
   retryCount: 0,
-  lastRequestId: null,
-  _ongoingPromise: null,
-};
-
-/**
- * 生成唯一请求标识，避免并发请求串扰。
- * @returns string 附带时间戳/UUID 的请求 id
- */
-const createRequestId = (): string => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `preload-${crypto.randomUUID()}`;
-  }
-  const randomPart = Math.random().toString(36).slice(2, 10);
-  return `preload-${Date.now()}-${randomPart}`;
+  _activePreloadTask: null,
 };
 
 /**
@@ -83,8 +77,8 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
    */
   requestPreload: async () => {
     const state = get();
-    if (state.status === 'loading' && state._ongoingPromise) {
-      return state._ongoingPromise;
+    if (state.status === 'loading' && state._activePreloadTask) {
+      return state._activePreloadTask.promise;
     }
     if (state.status === 'ready' && state.cachedSegment && state.cachedAudioUrl) {
       return Promise.resolve({
@@ -102,21 +96,19 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
         retryCount: prev.retryCount + 1,
         cachedSegment: null,
         cachedAudioUrl: null,
-        lastRequestId: null,
-        _ongoingPromise: null,
+        _activePreloadTask: null,
       }));
       return Promise.reject(error);
     }
 
-    const requestId = createRequestId();
-
-    const preloadPromise = (async () => {
+    const taskToken = Symbol('active-preload');
+    const preloadTask = (async () => {
       const storyStore = useStoryStore.getState();
       const nextSegment = await storyStore.continueSession();
       const audioUrl = await fetchAudio(nextSegment, configState.apiConfig.voiceName);
 
       const currentState = get();
-      if (currentState.lastRequestId !== requestId) {
+      if (currentState._activePreloadTask?.token !== taskToken) {
         return {
           segment: nextSegment,
           audioUrl,
@@ -128,7 +120,6 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
         cachedSegment: nextSegment,
         cachedAudioUrl: audioUrl,
         retryCount: 0,
-        lastRequestId: null,
       });
 
       return {
@@ -140,14 +131,13 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
         const handledError = normalizeError(error);
         const currentState = get();
 
-        if (currentState.lastRequestId === requestId) {
+        if (currentState._activePreloadTask?.token === taskToken) {
           set((prev) => ({
             status: 'error',
             error: handledError.message,
             retryCount: prev.retryCount + 1,
             cachedSegment: null,
             cachedAudioUrl: null,
-            lastRequestId: null,
           }));
         }
 
@@ -155,18 +145,21 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
       })
       .finally(() => {
         set((prev) => ({
-          _ongoingPromise: prev._ongoingPromise === preloadPromise ? null : prev._ongoingPromise,
+          _activePreloadTask:
+            prev._activePreloadTask?.token === taskToken ? null : prev._activePreloadTask,
         }));
       });
 
     set({
       status: 'loading',
       error: undefined,
-      lastRequestId: requestId,
-      _ongoingPromise: preloadPromise,
+      _activePreloadTask: {
+        token: taskToken,
+        promise: preloadTask,
+      },
     });
 
-    return preloadPromise;
+    return preloadTask;
   },
   /**
    * 消费已缓存的预加载结果，并重置状态。

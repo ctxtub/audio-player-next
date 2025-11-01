@@ -8,14 +8,12 @@ import { HttpError } from '@/lib/http/common/ErrorHandler';
 export class AppConfigClientError extends Error {
   public readonly status: number;
   public readonly code: string;
-  public readonly requestId?: string;
 
-  constructor(message: string, status: number, code: string, requestId?: string) {
+  constructor(message: string, status: number, code: string) {
     super(message);
     this.name = 'AppConfigClientError';
     this.status = status;
     this.code = code;
-    this.requestId = requestId;
   }
 }
 
@@ -26,7 +24,7 @@ export class AppConfigClientError extends Error {
  */
 export const fetchAppConfig = async (): Promise<AppConfigResponse> => {
   try {
-    const response = await browserHttp.get<AppConfigResponse>('/api/config', {
+    const response = await browserHttp.get<AppConfigResponse>('/api/appConfig', {
       headers: {
         Accept: 'application/json',
       },
@@ -51,8 +49,7 @@ export const fetchAppConfig = async (): Promise<AppConfigResponse> => {
       throw new AppConfigClientError(
         error.message,
         error.status,
-        error.code || 'APP_CONFIG_API_ERROR',
-        error.requestId
+        error.code || 'APP_CONFIG_API_ERROR'
       );
     }
 

@@ -5,9 +5,11 @@ import ClockIcon from '@/public/icons/playstatus-clock.svg';
 import LoadingIcon from '@/public/icons/playstatus-loading.svg';
 import WarningIcon from '@/public/icons/playstatus-warning.svg';
 import CheckIcon from '@/public/icons/playstatus-check.svg';
-import ArrowUpIcon from '@/public/icons/arrow-up.svg';
-import ArrowDownIcon from '@/public/icons/arrow-down.svg';
-import HistoryRecords, { HistoryRecord, HistoryRecordsRef } from '../HistoryRecords';
+import HistoryRecords, { HistoryRecordsRef } from '../HistoryRecords';
+import {
+  usePromptHistoryStore,
+  selectIsInitialized,
+} from '@/stores/promptHistoryStore';
 
 import styles from './index.module.scss';
 
@@ -39,10 +41,12 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
   preloadAudioUrl,
 }) => {
   const [textareaInput, setTextareaInput] = useState('');
-  const [isExpanded, setIsExpanded] = useState(false);
   const [isStartedFirstGeneration, setIsStartedFirstGeneration] = useState(false);
   const historyRecordsRef = useRef<HistoryRecordsRef>(null);
   const loadingOverlayRef = useRef<HTMLDivElement>(null);
+  const hydrateHistory = usePromptHistoryStore((state) => state.hydrate);
+  const addHistoryRecord = usePromptHistoryStore((state) => state.addOrUpdate);
+  const isHistoryInitialized = usePromptHistoryStore(selectIsInitialized);
 
   // 预设故事类型及其描述
   const storyTypes = [
@@ -58,41 +62,11 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
     setTextareaInput(inputText);
   }, [inputText]);
 
-  const toggleExpanded = () => {
-    setIsExpanded(prev => !prev);
-  };
-
-  // 保存提示词到历史记录
-  const savePromptToHistory = (prompt: string) => {
-    try {
-      const now = new Date().toISOString();
-      const savedHistory = localStorage.getItem('promptHistory');
-      let historyObj: Record<string, HistoryRecord> = {};
-      
-      if (savedHistory) {
-        historyObj = JSON.parse(savedHistory);
-      }
-      
-      // 查找是否已存在相同提示词
-      if (historyObj[prompt]) {
-        // 更新现有记录
-        historyObj[prompt].useCount += 1;
-        historyObj[prompt].lastUsed = now;
-      } else {
-        // 添加新记录
-        historyObj[prompt] = {
-          prompt,
-          lastUsed: now,
-          useCount: 1
-        };
-      }
-      
-      // 保存回 localStorage
-      localStorage.setItem('promptHistory', JSON.stringify(historyObj));
-    } catch (error) {
-      console.error('Error saving prompt history:', error);
+  useEffect(() => {
+    if (!isHistoryInitialized) {
+      hydrateHistory();
     }
-  };
+  }, [hydrateHistory, isHistoryInitialized]);
 
   // 处理快捷按钮点击
   const handleQuickSelect = (content: string) => {
@@ -118,7 +92,7 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
     // 改变组件成播放态
     setIsStartedFirstGeneration(true);
     // 保存提示词到历史记录
-    savePromptToHistory(text);
+    addHistoryRecord(text);
     // 调用父组件的 handleSubmit
     handleSubmit(text);
   };
@@ -136,11 +110,6 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
   // 触发首次故事生成即转为播放态，展示折叠态UI
   const containerClass = isStartedFirstGeneration
     ? `${styles.container} ${styles.playing}` : styles.container;
-
-  // 未触发首次故事生成，输入框展示。触发首次故事生成后，根据isExpanded状态切换展开收缩状态
-  const inputContentClass =  !isStartedFirstGeneration
-    ? styles.inputContent : isExpanded
-    ? styles.inputContent : `${styles.inputContent} ${styles.unExpanded}`;
 
   return (
     <div className={containerClass}>
@@ -200,16 +169,10 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
               </div>
             )}
           </div>
-          
-          <div className={styles.collapsedInput}>
-            <span className={styles.collapsedText}>
-              {inputText ? `故事概要: ${inputText.length > 30 ? inputText.substring(0, 30) + '...' : inputText}` : '故事概要'}
-            </span>
-          </div>
         </div>
       )}
 
-      <div className={inputContentClass}>
+      <div className={styles.inputContent}>
         <div className={styles.quickButtons}>
           {storyTypes.map((type, index) => (
             <button
@@ -245,16 +208,7 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
           </button>
         </div>
       </div>
-      
-      {isStartedFirstGeneration && (
-        <div className={styles.toggleArrow} onClick={toggleExpanded}>
-          {isExpanded ? 
-            <ArrowUpIcon className={styles.arrowIcon} /> : 
-            <ArrowDownIcon className={styles.arrowIcon} />
-          }
-        </div>
-      )}
-      
+
       {/* 历史记录弹窗 */}
       <HistoryRecords
         ref={historyRecordsRef}

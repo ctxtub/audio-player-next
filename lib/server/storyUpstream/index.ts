@@ -7,6 +7,7 @@ import type { LlmClientConfig } from '@/lib/server/storyUpstream/config';
 import { serverHttp } from '@/lib/http/server';
 import { HttpError } from '@/lib/http/common/ErrorHandler';
 import { ServiceError } from '@/lib/http/server/ErrorHandler';
+import type { StoryApiRequest, StoryApiResponse, StoryMode } from '@/types/story';
 
 type ChatRole = 'system' | 'user' | 'assistant';
 
@@ -42,16 +43,16 @@ type StoryPromptPayload = {
   summarizedStory: string;
 };
 
+const allowedModes: StoryMode[] = ['generate', 'continue'];
+
 /**
  * 调用上游 Chat Completion 接口并处理错误。
  * @param body 请求体。
  * @param config LLM 客户端配置。
- * @param requestId 当前请求的日志跟踪 ID。
  */
 const performChatCompletion = async (
   body: Record<string, unknown>,
-  config: LlmClientConfig,
-  requestId?: string
+  config: LlmClientConfig
 ): Promise<ChatCompletionResponse> => {
   try {
     const response = await serverHttp.post<ChatCompletionResponse>(
@@ -70,10 +71,8 @@ const performChatCompletion = async (
         message: '上游返回格式无法解析',
         status: 502,
         code: 'UPSTREAM_PARSE_ERROR',
-        requestId,
         details: {
           payload: response.data,
-          requestId,
         },
       });
     }
@@ -90,7 +89,6 @@ const performChatCompletion = async (
         message: error.message,
         status,
         code: error.code ?? 'UPSTREAM_ERROR',
-        requestId: error.requestId ?? requestId,
         details: error.details,
         cause: error,
       });
@@ -100,7 +98,6 @@ const performChatCompletion = async (
       message: error instanceof Error ? error.message : '未知错误',
       status: 502,
       code: 'UPSTREAM_NETWORK_ERROR',
-      requestId,
       details: error,
       cause: error,
     });
@@ -110,13 +107,11 @@ const performChatCompletion = async (
 /**
  * 对已有故事文本生成摘要。
  * @param story 原始故事文本。
- * @param requestId 日志跟踪 ID。
  * @returns 摘要文本，若未启用摘要模型则返回 null。
  * @throws ServiceError 当上游返回异常或结果缺失时抛出。
  */
 export const summarizeStory = async (
-  story: string,
-  requestId?: string
+  story: string
 ): Promise<string | null> => {
   if (!story?.trim()) {
     return null;
@@ -144,8 +139,7 @@ export const summarizeStory = async (
       messages,
       temperature: 0.3,
     },
-    config,
-    requestId
+    config
   );
 
   const firstChoice = response.choices?.[0];
@@ -156,9 +150,7 @@ export const summarizeStory = async (
       message: '摘要结果缺失',
       status: 502,
       code: 'UPSTREAM_INVALID_RESPONSE',
-      requestId,
       details: {
-        requestId,
         response,
       },
     });
@@ -171,7 +163,6 @@ export const summarizeStory = async (
  * 根据提示词或摘要向上游请求生成故事。
  * @param params.prompt 原始提示词。
  * @param params.summarizedStory 提供给模型的前情摘要。
- * @param params.requestId 日志跟踪 ID。
  * @param params.temperature 采样温度，默认 0.7。
  * @returns 故事文本及 token 使用信息。
  * @throws ServiceError 当请求非法或上游失败时抛出。
@@ -180,11 +171,10 @@ export const fetchStory = async (
   params: {
     prompt: string;
     summarizedStory?: string;
-    requestId?: string;
     temperature?: number;
   }
 ): Promise<{ story: string }> => {
-  const { prompt, summarizedStory = '', requestId, temperature = 0.7 } = params;
+  const { prompt, summarizedStory = '', temperature = 0.7 } = params;
 
   if (!prompt?.trim()) {
     throw new ServiceError({
@@ -218,8 +208,7 @@ export const fetchStory = async (
       messages,
       temperature,
     },
-    config,
-    requestId
+    config
   );
 
   const firstChoice = response.choices?.[0];
@@ -230,9 +219,7 @@ export const fetchStory = async (
       message: '故事结果缺失',
       status: 502,
       code: 'UPSTREAM_INVALID_RESPONSE',
-      requestId,
       details: {
-        requestId,
         response,
       },
     });
@@ -241,4 +228,80 @@ export const fetchStory = async (
   return {
     story: content,
   };
+};
+
+/**
+ * 处理故事生成/续写请求，并在当前层统一做入参校验。
+ * @param payload 请求体。
+ */
+export const handleStoryRequest = async (
+  payload: unknown
+): Promise<StoryApiResponse> => {
+  if (!payload || typeof payload !== 'object') {
+    throw new ServiceError({
+      message: '请求体必须是对象',
+      status: 400,
+      code: 'INVALID_REQUEST',
+    });
+  }
+
+  const request = payload as Partial<StoryApiRequest>;
+  const { mode, prompt, storyContent, withSummary } = request;
+
+  if (!mode || !allowedModes.includes(mode)) {
+    throw new ServiceError({
+      message: 'mode 参数只能是 generate 或 continue',
+      status: 400,
+      code: 'INVALID_REQUEST',
+    });
+  }
+
+  if (typeof prompt !== 'string' || !prompt.trim()) {
+    throw new ServiceError({
+      message: 'prompt 不能为空',
+      status: 400,
+      code: 'INVALID_REQUEST',
+    });
+  }
+
+  if (withSummary !== undefined && typeof withSummary !== 'boolean') {
+    throw new ServiceError({
+      message: 'withSummary 必须是布尔值',
+      status: 400,
+      code: 'INVALID_REQUEST',
+    });
+  }
+
+  const storyMode = mode as StoryMode;
+  const storyText = typeof storyContent === 'string' ? storyContent : undefined;
+  const shouldSummarize = storyMode === 'continue' ? withSummary === true : false;
+
+  if (storyMode === 'continue' && (!storyText || !storyText.trim())) {
+    throw new ServiceError({
+      message: '续写模式需要提供 storyContent',
+      status: 400,
+      code: 'INVALID_REQUEST',
+    });
+  }
+
+  let summary: string | null = null;
+
+  if (storyMode === 'continue' && shouldSummarize && storyText) {
+    summary = await summarizeStory(storyText);
+  }
+
+  const { story } = await fetchStory({
+    prompt: prompt.trim(),
+    summarizedStory: storyMode === 'continue' ? summary ?? storyText ?? '' : '',
+  });
+
+  const response: StoryApiResponse = {
+    story,
+  };
+
+  if (summary) {
+    response.summary = summary;
+  }
+
+  return response;
 };

@@ -3,6 +3,7 @@ import { HttpError } from '@/lib/http/common/ErrorHandler';
 import { ServiceError } from '@/lib/http/server/ErrorHandler';
 import { loadTtsConfig } from '@/lib/server/ttsUpstream/config';
 import type { TtsEnvConfig } from '@/lib/server/ttsUpstream/config';
+import type { TtsApiRequest } from '@/types/tts';
 
 /**
  * 转义 SSML 允许的特殊字符。
@@ -27,7 +28,6 @@ const sanitizeText = (text: string): string => {
 type SynthesizeParams = {
   text: string;
   voiceName?: string;
-  requestId?: string;
 };
 
 type SynthesizeResult = {
@@ -53,14 +53,12 @@ export const resolveVoiceName = (voiceName?: string, config?: TtsEnvConfig): str
  * 调用 Azure TTS 合成语音。
  * @param text 待转换的文本内容。
  * @param voiceName 可选的语音参数。
- * @param requestId 当前请求的日志 ID。
  * @returns 音频数组缓冲及实际使用的语音。
  * @throws ServiceError 当请求非法或上游失败时抛出。
  */
 export const synthesizeSpeech = async ({
   text,
   voiceName,
-  requestId,
 }: SynthesizeParams): Promise<SynthesizeResult> => {
   const trimmed = typeof text === 'string' ? text.trim() : '';
   if (!trimmed) {
@@ -112,7 +110,6 @@ export const synthesizeSpeech = async ({
         message: 'Azure TTS 返回空音频',
         status: 502,
         code: 'UPSTREAM_INVALID_RESPONSE',
-        requestId,
       });
     }
 
@@ -131,7 +128,6 @@ export const synthesizeSpeech = async ({
         message: error.message,
         status,
         code: error.code ?? 'UPSTREAM_ERROR',
-        requestId: error.requestId ?? requestId,
         details: error.details,
         cause: error,
       });
@@ -141,9 +137,39 @@ export const synthesizeSpeech = async ({
       message: error instanceof Error ? error.message : '未知错误',
       status: 502,
       code: 'UPSTREAM_NETWORK_ERROR',
-      requestId,
       details: error,
       cause: error,
     });
   }
+};
+
+/**
+ * 处理语音合成请求的入参校验并调用底层合成逻辑。
+ * @param payload 原始请求体。
+ */
+export const handleTtsRequest = async (payload: unknown): Promise<SynthesizeResult> => {
+  if (!payload || typeof payload !== 'object') {
+    throw new ServiceError({
+      message: '请求体必须是对象',
+      status: 400,
+      code: 'INVALID_REQUEST',
+    });
+  }
+
+  const rawPayload = payload as Partial<TtsApiRequest>;
+
+  const text =
+    typeof rawPayload.text === 'string'
+      ? rawPayload.text
+      : rawPayload.text == null
+        ? ''
+        : String(rawPayload.text);
+
+  const voiceName =
+    typeof rawPayload.voiceName === 'string' ? rawPayload.voiceName : undefined;
+
+  return synthesizeSpeech({
+    text,
+    voiceName,
+  });
 };

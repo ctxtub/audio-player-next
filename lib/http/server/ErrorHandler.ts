@@ -2,7 +2,6 @@ export type ServiceErrorOptions = {
   message: string;
   status: number;
   code: string;
-  requestId?: string;
   details?: unknown;
   cause?: unknown;
 };
@@ -13,7 +12,6 @@ export type ServiceErrorOptions = {
 export class ServiceError extends Error {
   public readonly status: number;
   public readonly code: string;
-  public readonly requestId?: string;
   public readonly details?: unknown;
   public readonly cause?: unknown;
 
@@ -22,7 +20,6 @@ export class ServiceError extends Error {
     this.name = 'ServiceError';
     this.status = options.status;
     this.code = options.code;
-    this.requestId = options.requestId;
     this.details = options.details;
     this.cause = options.cause;
 

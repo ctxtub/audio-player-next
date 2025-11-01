@@ -8,14 +8,12 @@ import { HttpError } from '@/lib/http/common/ErrorHandler';
 export class StoryApiError extends Error {
   public readonly status: number;
   public readonly code: string;
-  public readonly requestId?: string;
 
-  constructor(message: string, status: number, code: string, requestId?: string) {
+  constructor(message: string, status: number, code: string) {
     super(message);
     this.name = 'StoryApiError';
     this.status = status;
     this.code = code;
-    this.requestId = requestId;
   }
 }
 
@@ -27,7 +25,7 @@ export class StoryApiError extends Error {
  */
 const callStoryApi = async (payload: StoryApiRequest): Promise<StoryApiResponse> => {
   try {
-    const response = await browserHttp.post<StoryApiResponse>('/api/story', payload, {
+    const response = await browserHttp.post<StoryApiResponse>('/api/storyGenerate', payload, {
       headers: {
         'Content-Type': 'application/json',
       },
@@ -60,8 +58,7 @@ const callStoryApi = async (payload: StoryApiRequest): Promise<StoryApiResponse>
       throw new StoryApiError(
         error.message,
         error.status,
-        error.code || 'STORY_API_ERROR',
-        error.requestId
+        error.code || 'STORY_API_ERROR'
       );
     }
 

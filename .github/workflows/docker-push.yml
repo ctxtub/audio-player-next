@@ -1,0 +1,53 @@
+# GitHub Action：推送镜像到 GHCR
+name: Docker Push
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  docker-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Push image via script
+        run: |
+          chmod +x scripts/push-ghcr.sh
+          ./scripts/push-ghcr.sh
+
+  notify:
+    needs: docker-push
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Bark notification
+        run: |
+          STATUS="${{ needs.docker-push.result }}"
+          if [ "${STATUS}" = "success" ]; then
+            MESSAGE_TITLE="Docker 推送成功"
+          else
+            MESSAGE_TITLE="Docker 推送失败"
+          fi
+          MESSAGE_BODY="仓库：${GITHUB_REPOSITORY}\n分支：${GITHUB_REF_NAME}\n标签：${IMAGE_TAG}\n状态：${STATUS}"
+          ENCODED_TITLE=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_TITLE}")
+          ENCODED_BODY=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_BODY}")
+          curl -sS "${{ secrets.BARK_WEBHOOK }}/${ENCODED_TITLE}/${ENCODED_BODY}"

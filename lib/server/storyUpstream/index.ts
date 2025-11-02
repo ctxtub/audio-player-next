@@ -7,7 +7,12 @@ import type { LlmClientConfig } from '@/lib/server/storyUpstream/config';
 import { serverHttp } from '@/lib/http/server';
 import { HttpError } from '@/lib/http/common/ErrorHandler';
 import { ServiceError } from '@/lib/http/server/ErrorHandler';
-import type { StoryApiRequest, StoryApiResponse, StoryMode } from '@/types/story';
+import type {
+  StoryApiRequest,
+  StoryApiResponse,
+  StoryMode,
+  StoryContinueRequest,
+} from '@/types/story';
 
 /**
  * 上游聊天接口支持的角色类型。
@@ -194,7 +199,7 @@ export const fetchStory = async (
     summarizedStory?: string;
     temperature?: number;
   }
-): Promise<{ story: string }> => {
+): Promise<{ storyContent: string }> => {
   const { prompt, summarizedStory = '', temperature = 0.7 } = params;
 
   if (!prompt?.trim()) {
@@ -247,7 +252,7 @@ export const fetchStory = async (
   }
 
   return {
-    story: content,
+    storyContent: content,
   };
 };
 
@@ -267,7 +272,7 @@ export const handleStoryRequest = async (
   }
 
   const request = payload as Partial<StoryApiRequest>;
-  const { mode, prompt, storyContent, withSummary } = request;
+  const { mode } = request;
 
   if (!mode || !allowedModes.includes(mode)) {
     throw new ServiceError({
@@ -277,13 +282,38 @@ export const handleStoryRequest = async (
     });
   }
 
-  if (typeof prompt !== 'string' || !prompt.trim()) {
+  const prompt = typeof request.prompt === 'string' ? request.prompt.trim() : '';
+  if (!prompt) {
     throw new ServiceError({
       message: 'prompt 不能为空',
       status: 400,
       code: 'INVALID_REQUEST',
     });
   }
+
+  if (mode === 'generate') {
+    const { storyContent } = await fetchStory({
+      prompt,
+    });
+
+    return {
+      storyContent,
+    };
+  }
+
+  const continueRequest = request as StoryContinueRequest;
+  const storyContent =
+    typeof continueRequest.storyContent === 'string' ? continueRequest.storyContent : '';
+
+  if (!storyContent.trim()) {
+    throw new ServiceError({
+      message: '续写模式需要提供 storyContent',
+      status: 400,
+      code: 'INVALID_REQUEST',
+    });
+  }
+
+  const withSummary = continueRequest.withSummary;
 
   if (withSummary !== undefined && typeof withSummary !== 'boolean') {
     throw new ServiceError({
@@ -293,35 +323,24 @@ export const handleStoryRequest = async (
     });
   }
 
-  const storyMode = mode as StoryMode;
-  const storyText = typeof storyContent === 'string' ? storyContent : undefined;
-  const shouldSummarize = storyMode === 'continue' ? withSummary === true : false;
-
-  if (storyMode === 'continue' && (!storyText || !storyText.trim())) {
-    throw new ServiceError({
-      message: '续写模式需要提供 storyContent',
-      status: 400,
-      code: 'INVALID_REQUEST',
-    });
-  }
-
+  const shouldSummarize = withSummary === true;
   let summary: string | null = null;
 
-  if (storyMode === 'continue' && shouldSummarize && storyText) {
-    summary = await summarizeStory(storyText);
+  if (shouldSummarize) {
+    summary = await summarizeStory(storyContent);
   }
 
-  const { story } = await fetchStory({
-    prompt: prompt.trim(),
-    summarizedStory: storyMode === 'continue' ? summary ?? storyText ?? '' : '',
+  const { storyContent: generatedStory } = await fetchStory({
+    prompt,
+    summarizedStory: summary ?? storyContent,
   });
 
   const response: StoryApiResponse = {
-    story,
+    storyContent: generatedStory,
   };
 
   if (summary) {
-    response.summary = summary;
+    response.summaryContent = summary;
   }
 
   return response;

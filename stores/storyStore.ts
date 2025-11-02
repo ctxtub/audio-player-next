@@ -98,7 +98,7 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
 
     try {
       const response = await generateStory(prompt);
-      const story = response.story;
+      const story = response.storyContent;
 
       if (get().inputText !== prompt) {
         return story;
@@ -154,7 +154,7 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
       const response = await continueStory(inputText, segments.join(''), {
         withSummary: true,
       });
-      const nextSegment = response.story;
+      const nextSegment = response.storyContent;
 
       if (get().inputText !== inputText) {
         return nextSegment;

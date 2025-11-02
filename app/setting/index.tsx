@@ -32,8 +32,8 @@ const ConfigPage: React.FC = () => {
       return;
     }
     setPlayDuration(apiConfig.playDuration);
-    setSelectedVoice(apiConfig.voiceName ?? undefined);
-  }, [apiConfig.playDuration, apiConfig.voiceName, isConfigLoaded]);
+    setSelectedVoice(apiConfig.voiceId ?? undefined);
+  }, [apiConfig.playDuration, apiConfig.voiceId, isConfigLoaded]);
 
   useEffect(() => {
     if (!isConfigLoaded) {
@@ -50,7 +50,7 @@ const ConfigPage: React.FC = () => {
     }
 
     if (!selectedVoice) {
-      const fallback = voiceOptions.find(option => option.value === apiConfig.voiceName)?.value;
+      const fallback = voiceOptions.find(option => option.value === apiConfig.voiceId)?.value;
       if (fallback) {
         setSelectedVoice(fallback);
       } else if (voiceOptions[0]) {
@@ -72,10 +72,10 @@ const ConfigPage: React.FC = () => {
       }
       return;
     }
-    if (selectedVoice !== apiConfig.voiceName) {
-      updateConfig({ voiceName: selectedVoice });
+    if (selectedVoice !== apiConfig.voiceId) {
+      updateConfig({ voiceId: selectedVoice });
     }
-  }, [apiConfig.voiceName, isConfigLoaded, selectedVoice, updateConfig, voiceOptions]);
+  }, [apiConfig.voiceId, isConfigLoaded, selectedVoice, updateConfig, voiceOptions]);
 
   const handlePlayDurationChange = useCallback((value: number) => {
     setPlayDuration(value);

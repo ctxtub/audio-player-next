@@ -30,7 +30,7 @@ const sanitizeText = (text: string): string => {
  */
 type SynthesizeParams = {
   text: string;
-  voiceName?: VoiceId;
+  voiceId?: VoiceId;
 };
 
 /**
@@ -38,19 +38,19 @@ type SynthesizeParams = {
  */
 type SynthesizeResult = {
   audio: ArrayBuffer;
-  voiceName: VoiceId;
+  voiceId: VoiceId;
 };
 
 /**
  * 根据白名单解析实际使用的语音。
- * @param voiceName 客户端请求的语音名称。
+ * @param voiceId 客户端请求的语音标识。
  * @param config 已解析好的 TTS 配置，可复用避免重复解析。
- * @returns 白名单中允许的语音名称。
+ * @returns 白名单中允许的语音标识。
  */
-export const resolveVoiceName = (voiceName?: VoiceId, config?: TtsEnvConfig): VoiceId => {
+export const resolveVoiceId = (voiceId?: VoiceId, config?: TtsEnvConfig): VoiceId => {
   const activeConfig = config ?? loadTtsConfig();
-  if (voiceName && activeConfig.voicesList.some((voice) => voice.value === voiceName)) {
-    return voiceName;
+  if (voiceId && activeConfig.voicesList.some((voice) => voice.value === voiceId)) {
+    return voiceId;
   }
   return activeConfig.voiceId;
 };
@@ -58,13 +58,13 @@ export const resolveVoiceName = (voiceName?: VoiceId, config?: TtsEnvConfig): Vo
 /**
  * 调用 Azure TTS 合成语音。
  * @param text 待转换的文本内容。
- * @param voiceName 可选的语音参数。
+ * @param voiceId 可选的语音参数。
  * @returns 音频数组缓冲及实际使用的语音。
  * @throws ServiceError 当请求非法或上游失败时抛出。
  */
 export const synthesizeSpeech = async ({
   text,
-  voiceName,
+  voiceId,
 }: SynthesizeParams): Promise<SynthesizeResult> => {
   const trimmed = typeof text === 'string' ? text.trim() : '';
   if (!trimmed) {
@@ -84,7 +84,7 @@ export const synthesizeSpeech = async ({
   }
 
   const config = loadTtsConfig();
-  const resolvedVoice = resolveVoiceName(voiceName, config);
+  const resolvedVoice = resolveVoiceId(voiceId, config);
   const targetVoice = config.voicesList.find((voice) => voice.value === resolvedVoice);
 
   const ssml = `
@@ -121,7 +121,7 @@ export const synthesizeSpeech = async ({
 
     return {
       audio,
-      voiceName: resolvedVoice,
+      voiceId: resolvedVoice,
     };
   } catch (error) {
     if (error instanceof ServiceError) {
@@ -171,11 +171,11 @@ export const handleTtsRequest = async (payload: unknown): Promise<SynthesizeResu
         ? ''
         : String(rawPayload.text);
 
-  const voiceName =
+  const voiceId =
     typeof rawPayload.voiceId === 'string' ? rawPayload.voiceId : undefined;
 
   return synthesizeSpeech({
     text,
-    voiceName,
+    voiceId,
   });
 };

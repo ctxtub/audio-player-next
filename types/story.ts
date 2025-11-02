@@ -4,19 +4,39 @@
 export type StoryMode = 'generate' | 'continue';
 
 /**
- * 故事生成 API 请求体。
+ * 首次生成故事时使用的请求体结构。
  */
-export type StoryApiRequest = {
-  mode: StoryMode;
+export type StoryGenerateRequest = {
+  mode: 'generate';
   prompt: string;
-  storyContent?: string;
+};
+
+/**
+ * 续写故事时可选的附加配置。
+ */
+export type StoryContinueOptions = {
   withSummary?: boolean;
 };
 
 /**
- * 故事生成 API 响应体。
+ * 续写故事时使用的请求体结构。
+ */
+export type StoryContinueRequest = {
+  mode: 'continue';
+  prompt: string;
+  storyContent: string;
+  withSummary?: boolean;
+};
+
+/**
+ * 故事生成接口统一的请求体联合类型。
+ */
+export type StoryApiRequest = StoryGenerateRequest | StoryContinueRequest;
+
+/**
+ * 故事生成接口的响应体结构。
  */
 export type StoryApiResponse = {
-  story: string;
-  summary?: string | null;
+  storyContent: string;
+  summaryContent?: string | null;
 };

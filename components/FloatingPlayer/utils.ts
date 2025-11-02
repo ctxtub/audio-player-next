@@ -1,31 +1,11 @@
 /**
- * 浮动播放器拖拽工具集合，提供状态生成与位置计算方法。
+ * 浮动播放器拖拽工具集合，负责对外暴露位置与边界计算工具。
  */
 export interface FloatingPosition {
   /** 浮窗当前横坐标，单位为像素 */
   x: number;
   /** 浮窗当前纵坐标，单位为像素 */
   y: number;
-}
-
-export interface DragState {
-  /** 指针标识，用于过滤多指同时拖拽 */
-  pointerId: number;
-  /** 指针按下时的横坐标 */
-  startX: number;
-  /** 指针按下时的纵坐标 */
-  startY: number;
-  /** 浮窗原始横坐标 */
-  originX: number;
-  /** 浮窗原始纵坐标 */
-  originY: number;
-}
-
-export interface DragDelta {
-  /** 指针移动相对起点的横向位移 */
-  deltaX: number;
-  /** 指针移动相对起点的纵向位移 */
-  deltaY: number;
 }
 
 export interface DragBoundary {
@@ -37,24 +17,6 @@ export interface DragBoundary {
   minY: number;
   /** 纵向可拖拽最大值 */
   maxY: number;
-}
-
-export interface DragStateRef {
-  /** React ref 容器，承载当前拖拽状态 */
-  current: DragState | null;
-}
-
-export interface DragListenerOptions {
-  /** 拖拽状态引用 */
-  dragStateRef: DragStateRef;
-  /** 拖拽结束回调 */
-  onDragEnd: () => void;
-  /** 拖拽过程位置更新回调 */
-  onDrag: (position: FloatingPosition) => void;
-  /** 运行时动态生成的拖拽边界 */
-  createBoundary: () => DragBoundary;
-  /** 自定义拖拽阈值 */
-  threshold?: number;
 }
 
 export interface DragBoundaryOptions {
@@ -70,12 +32,41 @@ export interface DragBoundaryOptions {
   panelWidth?: number;
   /** 浮窗组件高度估值 */
   panelHeight?: number;
+  /** 可视区域内需要保留的提手宽度 */
+  handleSize?: number;
+}
+
+/** 浮窗吸附方向定义，仅支持左右贴边 */
+export type DockedSide = 'left' | 'right';
+
+/** 浮窗提手宽度常量，单位像素 */
+export const FLOATING_HANDLE_SIZE = 28;
+
+/** 默认吸附判定阈值，避免轻微越界即触发吸附 */
+export const DEFAULT_DOCK_THRESHOLD = 0;
+
+/** 默认解除吸附所需的最小拖动距离 */
+export const DEFAULT_UNDOCK_THRESHOLD = 20;
+
+/**
+ * 面板尺寸描述，用于计算吸附与边界。
+ */
+export interface PanelSize {
+  /** 面板宽度像素 */
+  width: number;
+  /** 面板高度像素 */
+  height: number;
 }
 
 /**
- * 拖拽阈值常量，避免误触导致面板抖动。
+ * 视口尺寸描述，用于计算吸附与边界。
  */
-export const DRAG_THRESHOLD_PX = 4;
+export interface ViewportSize {
+  /** 视口宽度像素 */
+  width: number;
+  /** 视口高度像素 */
+  height: number;
+}
 
 /**
  * 判断指针按下目标是否应当阻止拖拽行为。
@@ -90,54 +81,6 @@ export const shouldSkipPointerDown = (target: EventTarget | null): boolean => {
 };
 
 /**
- * 根据指针事件生成拖拽状态快照。
- * @param event 指针事件
- * @param position 当前浮窗位置
- * @returns 拖拽状态对象
- */
-export const createDragState = (
-  event: Pick<PointerEvent, 'pointerId' | 'clientX' | 'clientY'>,
-  position: FloatingPosition
-): DragState => {
-  return {
-    pointerId: event.pointerId,
-    startX: event.clientX,
-    startY: event.clientY,
-    originX: position.x,
-    originY: position.y,
-  };
-};
-
-/**
- * 计算指针相对拖拽起点的位移。
- * @param dragState 当前拖拽状态
- * @param event 指针事件
- * @returns 横纵向位移
- */
-export const calculatePointerDelta = (
-  dragState: DragState,
-  event: Pick<PointerEvent, 'clientX' | 'clientY'>
-): DragDelta => {
-  return {
-    deltaX: event.clientX - dragState.startX,
-    deltaY: event.clientY - dragState.startY,
-  };
-};
-
-/**
- * 判断位移是否超过拖拽阈值。
- * @param delta 位移对象
- * @param threshold 阈值像素
- * @returns 是否满足拖拽条件
- */
-export const isBeyondDragThreshold = (
-  delta: DragDelta,
-  threshold: number = DRAG_THRESHOLD_PX
-): boolean => {
-  return Math.abs(delta.deltaX) >= threshold || Math.abs(delta.deltaY) >= threshold;
-};
-
-/**
  * 计算浮窗拖拽的边界范围。
  * @param options 边界计算参数
  * @returns 可用拖拽范围
@@ -146,38 +89,26 @@ export const createDragBoundary = (options: DragBoundaryOptions): DragBoundary =
   const {
     viewportWidth,
     viewportHeight,
-    marginX = 12,
-    marginY = 12,
+    marginX = 0,
+    marginY = 0,
     panelWidth = 320,
     panelHeight = 320,
+    handleSize = FLOATING_HANDLE_SIZE,
   } = options;
 
-  const maxX = Math.max(marginX, viewportWidth - panelWidth - marginX);
-  const maxY = Math.max(marginY, viewportHeight - panelHeight - marginY);
+  const availableWidth = Math.max(0, viewportWidth - marginX * 2);
+  const availableHeight = Math.max(0, viewportHeight - marginY * 2);
+  const maxX = marginX + Math.max(0, availableWidth - handleSize);
+  const maxY = marginY + Math.max(0, availableHeight - panelHeight);
+  const minX = marginX - Math.max(0, panelWidth - handleSize);
+  const minY = marginY;
 
   return {
-    minX: marginX,
-    minY: marginY,
+    minX,
+    minY,
     maxX,
     maxY,
   };
-};
-
-/**
- * 计算拖拽后夹紧到边界内的位置。
- * @param dragState 拖拽状态
- * @param delta 指针位移
- * @param boundary 拖拽边界
- * @returns 夹紧后的浮窗位置
- */
-export const computeDragPosition = (
-  dragState: DragState,
-  delta: DragDelta,
-  boundary: DragBoundary
-): FloatingPosition => {
-  const nextX = clampValue(dragState.originX + delta.deltaX, boundary.minX, boundary.maxX);
-  const nextY = clampValue(dragState.originY + delta.deltaY, boundary.minY, boundary.maxY);
-  return { x: nextX, y: nextY };
 };
 
 /**
@@ -192,47 +123,92 @@ export const clampValue = (value: number, min: number, max: number): number => {
 };
 
 /**
- * 注册指针对应的拖拽监听，返回卸载函数。
- * @param options 拖拽监听参数
- * @returns 卸载监听回调
+ * 根据最终位置判断是否应当吸附到屏幕某侧。
+ * @param position 当前浮窗位置
+ * @param panelSize 面板尺寸
+ * @param viewport 视口尺寸
+ * @param dockThreshold 吸附判定阈值
+ * @param handleSize 提手宽度
+ * @returns 吸附方向，未达阈值返回 null
  */
-export const attachDragListeners = (options: DragListenerOptions): (() => void) => {
-  if (typeof window === 'undefined') {
-    return () => undefined;
+export const determineDockedSide = (
+  position: FloatingPosition,
+  panelSize: PanelSize,
+  viewport: ViewportSize,
+  dockThreshold: number = DEFAULT_DOCK_THRESHOLD
+): DockedSide | null => {
+  const distanceToLeft = position.x;
+  if (distanceToLeft <= dockThreshold) {
+    return 'left';
   }
 
-  const { dragStateRef, onDragEnd, onDrag, createBoundary, threshold = DRAG_THRESHOLD_PX } = options;
+  const distanceToRight = viewport.width - (position.x + panelSize.width);
+  if (distanceToRight <= dockThreshold) {
+    return 'right';
+  }
 
-  const handlePointerMove = (event: PointerEvent) => {
-    const dragState = dragStateRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) {
-      return;
-    }
-    const delta = calculatePointerDelta(dragState, event);
-    if (!isBeyondDragThreshold(delta, threshold)) {
-      return;
-    }
-    const boundary = createBoundary();
-    const nextPosition = computeDragPosition(dragState, delta, boundary);
-    onDrag(nextPosition);
-  };
+  return null;
+};
 
-  const handlePointerUp = (event: PointerEvent) => {
-    const dragState = dragStateRef.current;
-    if (!dragState || dragState.pointerId !== event.pointerId) {
-      return;
-    }
-    dragStateRef.current = null;
-    onDragEnd();
-  };
+/**
+ * 判断拖拽过程中是否满足解除吸附的阈值。
+ * @param side 当前吸附方向
+ * @param movementX 横向移动距离
+ * @param undockThreshold 灵敏度阈值
+ * @returns 是否应当解除吸附
+ */
+export const shouldUndock = (
+  side: DockedSide,
+  movementX: number,
+  undockThreshold: number = DEFAULT_UNDOCK_THRESHOLD
+): boolean => {
+  if (side === 'left') {
+    return movementX >= undockThreshold;
+  }
+  return movementX <= -undockThreshold;
+};
 
-  window.addEventListener('pointermove', handlePointerMove);
-  window.addEventListener('pointerup', handlePointerUp);
-  window.addEventListener('pointercancel', handlePointerUp);
+export interface DockedPositionOptions {
+  /** 吸附方向 */
+  side: DockedSide;
+  /** 当前浮窗位置，用于保留垂直或水平位移 */
+  position: FloatingPosition;
+  /** 面板尺寸，用于计算越界距离 */
+  panelSize: PanelSize;
+  /** 视口尺寸，用于限制另一方向 */
+  viewport: ViewportSize;
+  /** 提手宽度 */
+  handleSize?: number;
+}
 
-  return () => {
-    window.removeEventListener('pointermove', handlePointerMove);
-    window.removeEventListener('pointerup', handlePointerUp);
-    window.removeEventListener('pointercancel', handlePointerUp);
-  };
+/**
+ * 计算吸附状态下的面板坐标，仅保留提手在屏幕内。
+ * @param options 吸附参数
+ * @returns 调整后的浮窗坐标
+ */
+export const getDockedPosition = (options: DockedPositionOptions): FloatingPosition => {
+  const { side, position, panelSize, viewport, handleSize = FLOATING_HANDLE_SIZE } = options;
+
+  const boundary = createDragBoundary({
+    viewportWidth: viewport.width,
+    viewportHeight: viewport.height,
+    panelWidth: panelSize.width,
+    panelHeight: panelSize.height,
+    handleSize,
+  });
+
+  switch (side) {
+    case 'left':
+      return {
+        x: boundary.minX,
+        y: clampValue(position.y, boundary.minY, boundary.maxY),
+      };
+    case 'right':
+      return {
+        x: boundary.maxX,
+        y: clampValue(position.y, boundary.minY, boundary.maxY),
+      };
+    default:
+      return position;
+  }
 };

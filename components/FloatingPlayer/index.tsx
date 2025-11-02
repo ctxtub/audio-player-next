@@ -1,19 +1,23 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useDrag } from '@use-gesture/react';
 import { Toast } from 'antd-mobile';
-import { PlayOutline, StopOutline, MoreOutline } from 'antd-mobile-icons';
-import { useRouter } from 'next/navigation';
+import PlayIcon from '@/public/icons/audioplayer-play.svg';
+import PauseIcon from '@/public/icons/audioplayer-pause.svg';
 import { useConfigStore } from '@/stores/configStore';
-import { useStoryStore } from '@/stores/storyStore';
 import { usePlaybackStore, useFloatingPlayer } from '@/stores/playbackStore';
 import {
-  attachDragListeners,
-  createDragBoundary,
-  createDragState,
+  clampValue,
+  determineDockedSide,
+  getDockedPosition,
   shouldSkipPointerDown,
-  type DragState,
+  shouldUndock,
+  FLOATING_HANDLE_SIZE,
+  type DockedSide,
   type FloatingPosition,
+  type PanelSize,
+  type ViewportSize,
 } from './utils';
 import styles from './index.module.scss';
 
@@ -24,16 +28,14 @@ export { useFloatingPlayer } from '@/stores/playbackStore';
  * @returns JSX.Element 浮动播放器节点
  */
 export const FloatingPlayer: React.FC = () => {
-  const router = useRouter();
   // 浮动面板当前位置，单位为像素
   const [position, setPosition] = useState<FloatingPosition>({ x: 16, y: 360 });
   // 是否处于拖拽中状态
   const [isDragging, setIsDragging] = useState(false);
-  // 拖拽起点及面板原始位置记录
-  const dragStateRef = useRef<DragState | null>(null);
+  // 当前吸附方向，null 表示未吸附
+  const [dockedSide, setDockedSide] = useState<DockedSide | null>(null);
   // 浮动面板 DOM 引用，用于读取尺寸
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const storySegments = useStoryStore((state) => state.segments);
   const isPlaying = usePlaybackStore((state) => state.isPlaying);
   const playbackRemainingMs = usePlaybackStore((state) => state.remainingMs);
   const { resume, pause, show, hide } = useFloatingPlayer();
@@ -41,7 +43,6 @@ export const FloatingPlayer: React.FC = () => {
   const isFloatingPlayerEnabled = useConfigStore(
     (state) => state.apiConfig.floatingPlayerEnabled
   );
-  const currentStoryPreview = Array.isArray(storySegments) ? storySegments.at(-1) ?? '' : storySegments;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -53,37 +54,154 @@ export const FloatingPlayer: React.FC = () => {
     }));
   }, []);
 
-  const handlePointerDown = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (shouldSkipPointerDown(event.target)) {
-        return;
-      }
-      dragStateRef.current = createDragState(event, position);
-      setIsDragging(true);
-    },
-    [position]
-  );
+  // 浮窗拖拽手势绑定器，负责处理拖拽开始与位置更新
+  interface DragContext {
+    /** 拖拽起始位置 */
+    origin: FloatingPosition;
+    /** 拖拽开始时的面板尺寸 */
+    panelSize: PanelSize;
+    /** 拖拽开始时的视口尺寸 */
+    viewport: ViewportSize;
+    /** 用作计算相对位移的拖拽基准 */
+    movementOrigin: [number, number];
+  }
 
-  useEffect(() => {
-    if (!isDragging) {
-      return;
+  // 浮窗拖拽手势绑定器，负责处理拖拽开始与位置更新
+  const bindFloatingHeaderDrag = useDrag(
+    (state) => {
+      const { first, last, canceled, movement, cancel, event, memo } = state;
+      if (typeof window === 'undefined') {
+        return memo as DragContext | null;
+      }
+
+      if (first) {
+        const target = (event?.target ?? null) as EventTarget | null;
+        if (shouldSkipPointerDown(target)) {
+          cancel();
+          return memo as DragContext | null;
+        }
+
+        const panelWidth = panelRef.current?.offsetWidth ?? 320;
+        const panelHeight = panelRef.current?.offsetHeight ?? 320;
+        const context: DragContext = {
+          origin: { x: position.x, y: position.y },
+          panelSize: { width: panelWidth, height: panelHeight },
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          movementOrigin: [0, 0],
+        };
+        setIsDragging(true);
+        return context;
+      }
+
+      const context = memo as DragContext | null;
+      if (!context) {
+        return context;
+      }
+
+      const [movementX, movementY] = movement;
+      let relativeMovementX = movementX - context.movementOrigin[0];
+      let relativeMovementY = movementY - context.movementOrigin[1];
+      let activeDockSide = dockedSide;
+      let undockedThisFrame = false;
+
+      const panelSize = context.panelSize;
+      const viewport = context.viewport;
+
+      if (activeDockSide !== null && shouldUndock(activeDockSide, relativeMovementX)) {
+        setDockedSide(null);
+        activeDockSide = null;
+        undockedThisFrame = true;
+        const maxX = Math.max(0, viewport.width - panelSize.width);
+        const maxY = Math.max(0, viewport.height - panelSize.height);
+        const newOrigin: FloatingPosition = {
+          x: clampValue(context.origin.x + relativeMovementX, 0, maxX),
+          y: clampValue(context.origin.y + relativeMovementY, 0, maxY),
+        };
+        context.origin = newOrigin;
+        context.movementOrigin = [movementX, movementY];
+        relativeMovementX = 0;
+        relativeMovementY = 0;
+      }
+
+      const rawPosition: FloatingPosition = {
+        x: context.origin.x + relativeMovementX,
+        y: context.origin.y + relativeMovementY,
+      };
+
+      const maxX = Math.max(0, viewport.width - panelSize.width);
+      const maxY = Math.max(0, viewport.height - panelSize.height);
+      const freePosition: FloatingPosition = {
+        x: clampValue(rawPosition.x, 0, maxX),
+        y: clampValue(rawPosition.y, 0, maxY),
+      };
+
+      const detectionPosition = activeDockSide !== null ? rawPosition : freePosition;
+      const nextDockSide = undockedThisFrame
+        ? null
+        : determineDockedSide(detectionPosition, panelSize, viewport);
+
+      if (activeDockSide !== null) {
+        if (nextDockSide && nextDockSide !== activeDockSide) {
+          // 切换到另一侧吸附
+          setDockedSide(nextDockSide);
+          const dockedPosition = getDockedPosition({
+            side: nextDockSide,
+            position: rawPosition,
+            panelSize,
+            viewport,
+            handleSize: FLOATING_HANDLE_SIZE,
+          });
+          setPosition(dockedPosition);
+          return context;
+        }
+
+        if (nextDockSide === activeDockSide) {
+          const dockedPosition = getDockedPosition({
+            side: activeDockSide,
+            position: rawPosition,
+            panelSize,
+            viewport,
+            handleSize: FLOATING_HANDLE_SIZE,
+          });
+          setPosition(dockedPosition);
+          return context;
+        }
+
+        const dockedPosition = getDockedPosition({
+          side: activeDockSide,
+          position: rawPosition,
+          panelSize,
+          viewport,
+          handleSize: FLOATING_HANDLE_SIZE,
+        });
+        setPosition(dockedPosition);
+        return context;
+      }
+
+      if (nextDockSide) {
+        setDockedSide(nextDockSide);
+        const dockedPosition = getDockedPosition({
+          side: nextDockSide,
+          position: rawPosition,
+          panelSize,
+          viewport,
+          handleSize: FLOATING_HANDLE_SIZE,
+        });
+        setPosition(dockedPosition);
+      } else {
+        setPosition(freePosition);
+      }
+
+      if (last || canceled) {
+        setIsDragging(false);
+      }
+
+      return context;
+    },
+    {
+      filterTaps: true,
     }
-    if (typeof window === 'undefined') {
-      return;
-    }
-    return attachDragListeners({
-      dragStateRef,
-      onDrag: setPosition,
-      onDragEnd: () => setIsDragging(false),
-      createBoundary: () =>
-        createDragBoundary({
-          viewportWidth: window.innerWidth,
-          viewportHeight: window.innerHeight,
-          panelWidth: panelRef.current?.offsetWidth,
-          panelHeight: panelRef.current?.offsetHeight,
-        }),
-    });
-  }, [isDragging]);
+  );
 
   const togglePlay = useCallback(() => {
     if (isPlaying) {
@@ -95,10 +213,6 @@ export const FloatingPlayer: React.FC = () => {
       });
     }
   }, [isPlaying, pause, resume]);
-
-  const handleOpenFullPlayer = useCallback(() => {
-    router.push('/player');
-  }, [router]);
 
   useEffect(() => {
     if (isFloatingPlayerEnabled) {
@@ -127,10 +241,25 @@ export const FloatingPlayer: React.FC = () => {
 
   const shouldShowFloatingPanel = isFloatingPlayerEnabled && isVisible;
 
+  // 浮窗标题展示内容，依据播放状态切换默认文案与倒计时
+  const floatingTitleLabel = useMemo(() => {
+    if (isPlaying && remainingTimeLabel) {
+      return `${remainingTimeLabel} 后停止`;
+    }
+    return '快来首页创作吧';
+  }, [isPlaying, remainingTimeLabel]);
+
+  const dockedClassMap: Record<DockedSide, string> = {
+    left: styles.floatingPanelDockedLeft,
+    right: styles.floatingPanelDockedRight,
+  };
+
   const floatingPanelClassName = [
     styles.floatingPanel,
     shouldShowFloatingPanel ? styles.floatingPanelExpanded : styles.floatingPanelHidden,
     isDragging ? styles.floatingPanelDragging : '',
+    dockedSide ? styles.floatingPanelDocked : '',
+    dockedSide ? dockedClassMap[dockedSide] : '',
   ].join(' ');
 
   return (
@@ -142,9 +271,13 @@ export const FloatingPlayer: React.FC = () => {
           left: `${position.x}px`,
           top: `${position.y}px`,
         }}
+        {...bindFloatingHeaderDrag()}
       >
-        <div className={styles.floatingHeader} onPointerDown={handlePointerDown}>
-          <div className={styles.floatingTitle}>{currentStoryPreview || '快来首页创作故事吧'}</div>
+        <div className={styles.floatingHandle} aria-hidden={dockedSide === null}>
+          <span className={styles.floatingHandleBar} />
+        </div>
+        <div className={styles.floatingHeader}>
+          <div className={styles.floatingTitle}>{floatingTitleLabel}</div>
           <div className={styles.floatingActions}>
             <button
               type="button"
@@ -152,22 +285,9 @@ export const FloatingPlayer: React.FC = () => {
               aria-label={isPlaying ? '暂停播放' : '继续播放'}
               onClick={togglePlay}
             >
-              {isPlaying ? <StopOutline /> : <PlayOutline />}
-            </button>
-            <button
-              type="button"
-              className={styles.floatingActionButton}
-              aria-label="查看播放器详情"
-              onClick={handleOpenFullPlayer}
-            >
-              <MoreOutline />
+              {isPlaying ? <PauseIcon /> : <PlayIcon />}
             </button>
           </div>
-        </div>
-        <div className={styles.floatingBodyExpanded}>
-          {remainingTimeLabel !== null && (
-            <div className={styles.miniHint}>剩余时长 {remainingTimeLabel}</div>
-          )}
         </div>
       </div>
     </div>

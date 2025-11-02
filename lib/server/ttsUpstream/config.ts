@@ -18,6 +18,16 @@ export type TtsEnvConfig = {
 const DEFAULT_OUTPUT_FORMAT = 'audio-16khz-128kbitrate-mono-mp3';
 
 /**
+ * 是否处于生产环境，用于决定缓存策略。
+ */
+const isProductionEnv = process.env.NODE_ENV === 'production';
+
+/**
+ * 缓存的 TTS 配置，用于生产环境复用解析结果。
+ */
+let cachedTtsConfig: TtsEnvConfig | null = null;
+
+/**
  * 解析环境变量中的语音白名单，过滤掉异常项。
  * @param raw 环境变量原始字符串。
  */
@@ -76,10 +86,10 @@ const parseVoiceAllowList = (raw: string | undefined): VoiceOption[] => {
 };
 
 /**
- * 加载并校验 TTS 服务所需的环境配置。
- * @throws ServiceError 当关键配置缺失或非法时抛出。
+ * 从环境变量构造 TTS 配置对象。
+ * @returns 解析后的配置结果
  */
-export const loadTtsConfig = (): TtsEnvConfig => {
+const buildConfigFromEnv = (): TtsEnvConfig => {
   const apiKey = process.env.AZURE_TTS_KEY?.trim();
   const region = process.env.AZURE_TTS_REGION?.trim();
 
@@ -120,4 +130,22 @@ export const loadTtsConfig = (): TtsEnvConfig => {
     voicesList: voiceList,
     outputFormat: DEFAULT_OUTPUT_FORMAT,
   };
+};
+
+/**
+ * 加载并校验 TTS 服务所需的环境配置。
+ * @throws ServiceError 当关键配置缺失或非法时抛出。
+ */
+export const loadTtsConfig = (): TtsEnvConfig => {
+  if (!isProductionEnv) {
+    return buildConfigFromEnv();
+  }
+
+  if (cachedTtsConfig) {
+    return cachedTtsConfig;
+  }
+
+  const config = buildConfigFromEnv();
+  cachedTtsConfig = config;
+  return config;
 };

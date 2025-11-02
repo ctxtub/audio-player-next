@@ -173,7 +173,7 @@
     
     .speedControl {
       position: relative;
-      
+
       .speedButton {
         width: 50px;
         backdrop-filter: blur(5px);
@@ -187,18 +187,18 @@
         font-weight: 500;
         color: var(--text);
         cursor: pointer;
-        
+
         &:hover {
           box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 40%, transparent);
           transform: scale(1.05);
         }
-        
+
         &:active {
           box-shadow: 0 1px 4px color-mix(in srgb, var(--primary) 20%, transparent);
           transform: scale(0.98);
         }
       }
-      
+
       .speedMenu {
         backdrop-filter: blur(15px);
         box-shadow: 0 8px 24px var(--shadow-color);
@@ -214,7 +214,7 @@
         display: flex;
         flex-direction: column;
         gap: 4px;
-        
+
         &::before {
           content: '';
           position: absolute;
@@ -227,7 +227,7 @@
           border-bottom: 1px solid var(--card-border);
           transform: rotate(45deg);
         }
-        
+
         .speedOption {
           border-radius: 8px;
           background-color: transparent;
@@ -238,16 +238,39 @@
           font-size: 14px;
           color: var(--text);
           cursor: pointer;
-          
+
           &:hover {
             background-color: color-mix(in srgb, var(--primary) 10%, transparent);
           }
-          
+
           &.active {
             background-color: color-mix(in srgb, var(--primary) 20%, transparent);
             color: var(--primary);
             font-weight: 500;
           }
+        }
+
+        /* CSSTransition 类名 - Speed Menu 动画 */
+        &Enter {
+          opacity: 0;
+          transform: translateY(10px) scale(0.95);
+        }
+
+        &EnterActive {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+          transition: opacity 200ms ease-out, transform 200ms ease-out;
+        }
+
+        &Exit {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+
+        &ExitActive {
+          opacity: 0;
+          transform: translateY(10px) scale(0.95);
+          transition: opacity 150ms ease-in, transform 150ms ease-in;
         }
       }
     }
@@ -261,27 +284,4 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-/* CSSTransition 类名 - Speed Menu 动画 */
-.speedMenuEnter {
-  opacity: 0;
-  transform: translateY(10px) scale(0.95);
-}
-
-.speedMenuEnterActive {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  transition: opacity 200ms ease-out, transform 200ms ease-out;
-}
-
-.speedMenuExit {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-.speedMenuExitActive {
-  opacity: 0;
-  transform: translateY(10px) scale(0.95);
-  transition: opacity 150ms ease-in, transform 150ms ease-in;
 }

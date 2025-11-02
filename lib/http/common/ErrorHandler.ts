@@ -24,9 +24,3 @@ export class HttpError extends Error {
     this.details = payload.details;
   }
 }
-
-/**
- * 判断未知错误是否为 HttpError。
- */
-export const isHttpError = (error: unknown): error is HttpError =>
-  error instanceof HttpError;

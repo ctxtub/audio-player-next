@@ -11,18 +11,6 @@ export interface ApiResponse<T> {
 }
 
 /**
- * 构造成功响应，返回携带数据的 JSON。
- * @param data 要返回的业务数据
- * @returns Next.js JSON 响应对象
- */
-export function createSuccessResponse<T>(data: T): NextResponse<ApiResponse<T>> {
-  return NextResponse.json({
-    success: true,
-    data,
-  });
-}
-
-/**
  * 构造错误响应，统一输出错误信息与状态码。
  * @param message 错误描述
  * @param code HTTP 状态码，默认 400

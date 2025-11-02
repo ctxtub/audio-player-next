@@ -16,16 +16,6 @@ export interface ModalProps {
 }
 
 /**
- * 模态框实例在程序化调用下暴露的方法。
- */
-export interface ModalInstance {
-  show: () => void;
-  close: () => void;
-  destroy: () => void;
-  update: (newProps: Partial<ModalProps>) => void;
-}
-
-/**
  * 控制模态框显隐的 Hook。
  * @returns 模态框可见状态及开关方法
  */

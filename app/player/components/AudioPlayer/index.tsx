@@ -73,7 +73,6 @@ const AudioPlayer: React.FC = () => {
 
   const togglePlay = () => {
     if (!hasAudio) {
-      Toast.show({ icon: 'fail', content: '生成故事，再启动播放哦~' });
       return;
     }
     if (isPlaying) {

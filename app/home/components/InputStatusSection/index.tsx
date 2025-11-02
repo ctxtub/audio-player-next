@@ -15,7 +15,7 @@ import styles from './index.module.scss';
 interface InputStatusSectionProps {
   // StoryInput props
   inputText: string;
-  handleSubmit: (text: string) => void;
+  handleSubmit: (text: string) => Promise<void>;
 }
 
 /**
@@ -26,6 +26,8 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
   inputText,
   handleSubmit,
 }) => {
+  // 接口请求中的状态锁，true 表示阻塞新的请求。
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [textareaInput, setTextareaInput] = useState('');
   const historyRecordsRef = useRef<HistoryRecordsRef>(null);
   const hydrateHistory = usePromptHistoryStore((state) => state.hydrate);
@@ -54,16 +56,25 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
 
   // 处理快捷按钮点击
   const handleQuickSelect = (content: string) => {
+    if (isSubmitting) {
+      return;
+    }
     handleSubmitWithHistory(content);
   };
 
   // 从历史记录中选择提示词
   const handleSelectHistoryPrompt = (prompt: string) => {
+    if (isSubmitting) {
+      return;
+    }
     handleSubmitWithHistory(prompt);
   };
   
   // 处理input提交
   const onSubmit = () => {
+    if (isSubmitting) {
+      return;
+    }
     if (!textareaInput || textareaInput.trim() === '') {
       Toast.show({ icon: 'fail', content: '请输入故事概要，再生成故事哦~' });
       return;
@@ -71,12 +82,20 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
     handleSubmitWithHistory(textareaInput);
   };
 
-  // 包装 handleSubmit 以添加历史记录功能
-  const handleSubmitWithHistory = (text: string) => {
+  // 包装 handleSubmit 以添加历史记录功能，同时在请求过程中加锁。
+  const handleSubmitWithHistory = async (text: string) => {
+    if (isSubmitting) {
+      return;
+    }
+    setIsSubmitting(true);
     // 保存提示词到历史记录
     addHistoryRecord(text);
-    // 调用父组件的 handleSubmit
-    handleSubmit(text);
+    try {
+      // 调用父组件的 handleSubmit
+      await handleSubmit(text);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleHistoryButtonClick = () => {
@@ -92,6 +111,7 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
               key={index}
               className={styles.quickButton}
               onClick={() => handleQuickSelect(type.content)}
+              disabled={isSubmitting}
               title={type.content}
             >
               {type.label}
@@ -100,6 +120,7 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
           <button 
             className={`${styles.quickButton} ${styles.historyButton}`}
             onClick={handleHistoryButtonClick}
+            disabled={isSubmitting}
             title="查看历史提示词记录"
           >
             历史记录
@@ -112,12 +133,14 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
             placeholder="输入你想听的故事概要..."
             rows={2}
             className={styles.storyInput}
+            disabled={isSubmitting}
           />
           <button
             className={styles.generateButton}
             onClick={onSubmit}
+            disabled={isSubmitting}
           >
-            生成故事
+            {isSubmitting ? '生成中...' : '生成故事'}
           </button>
         </div>
       </div>

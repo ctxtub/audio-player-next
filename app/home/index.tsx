@@ -1,8 +1,7 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Toast } from 'antd-mobile';
 import StoryViewer from '@/components/StoryViewer';
-import { PageLoading } from '@/components/PageLoading';
 import PlaybackStatusBoard from '@/components/PlaybackStatusBoard';
 import { useFloatingPlayer } from '@/components/FloatingPlayer';
 
@@ -24,13 +23,8 @@ const HomePage: React.FC = () => {
   const { play: playAudio, pause: pauseAudio } = useFloatingPlayer();
 
   // 配置初始化与校验能力
-  const initializeConfig = useConfigStore(state => state.initialize);
   const isConfigLoaded = useConfigStore(state => state.isLoaded);
   const configIsValid = useConfigStore(state => state.isConfigValid());
-
-  useEffect(() => {
-    initializeConfig().catch(() => {});
-  }, [initializeConfig]);
 
   useEffect(() => {
     if (!isConfigLoaded) {
@@ -62,10 +56,6 @@ const HomePage: React.FC = () => {
     },
     [pauseAudio, playAudio, router]
   );
-
-  if (!isConfigLoaded) {
-    return <PageLoading message="页面加载中..." />;
-  }
 
   return (
     <div className={styles.homePage}>

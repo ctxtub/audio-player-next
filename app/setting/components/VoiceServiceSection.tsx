@@ -5,12 +5,18 @@ import styles from '../index.module.scss';
 import type { VoiceOption } from '@/types/ttsGenerate';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
 
+/**
+ * 语音服务配置模块的入参。
+ */
 interface VoiceServiceSectionProps {
   value?: string;
   voicesList: VoiceOption[];
   onChange: (voice: string) => void;
 }
 
+/**
+ * 语音服务配置模块，支持选择声音并试听。
+ */
 const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
   value,
   voicesList,

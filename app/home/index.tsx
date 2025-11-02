@@ -21,6 +21,10 @@ import {
   updatePlaybackProgress,
 } from '@/app/services/storyFlow';
 
+/**
+ * 首页页面组件，负责串联故事生成与音频播放交互。
+ * @returns 首页 JSX 结构
+ */
 const HomePage: React.FC = () => {
   const router = useRouter();
 

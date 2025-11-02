@@ -36,15 +36,30 @@ type ConfigStoreActions = {
   isConfigValid: () => boolean;
 };
 
+/**
+ * 配置 store 的完整状态与动作集合。
+ */
 export type ConfigStore = ConfigStoreBaseState & ConfigStoreActions;
 
+/**
+ * 持久化存储键名。
+ */
 const CONFIG_STORAGE_KEY = 'config-store';
 
+/**
+ * 构造初始配置对象。
+ * @returns 默认配置
+ */
 const createEmptyConfig = (): APIConfig => ({
   playDuration: 0,
   voiceName: '',
 });
 
+/**
+ * 校验配置对象是否满足使用条件。
+ * @param config 待校验的配置
+ * @returns 是否有效
+ */
 const isValidConfig = (config: APIConfig | undefined): config is APIConfig => {
   if (!config) {
     return false;
@@ -83,6 +98,9 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
   };
 };
 
+/**
+ * Zustand persist 中间件暴露的扩展 API。
+ */
 type PersistApi = StoreApi<ConfigStore> & {
   persist: {
     rehydrate: () => Promise<void> | void;
@@ -90,6 +108,9 @@ type PersistApi = StoreApi<ConfigStore> & {
   };
 };
 
+/**
+ * 配置 store 的状态创建器，包含初始化与更新逻辑。
+ */
 const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
   const persistApi = api as PersistApi;
   let initializationPromise: Promise<void> | null = null;
@@ -222,4 +243,7 @@ const persistedConfigStore = persist(configStoreCreator, {
   skipHydration: true,
 });
 
+/**
+ * 配置 store Hook，提供配置读取与操作能力。
+ */
 export const useConfigStore = create<ConfigStore>()(devtools(persistedConfigStore));

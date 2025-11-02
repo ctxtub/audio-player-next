@@ -1,7 +1,8 @@
-// 服务端接口的入口文件
 import { NextRequest, NextResponse } from 'next/server';
 
-// 定义API响应格式
+/**
+ * 定义 API 响应的统一数据结构。
+ */
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -9,48 +10,63 @@ export interface ApiResponse<T> {
   code?: number;
 }
 
-// 创建成功响应
+/**
+ * 构造成功响应，返回携带数据的 JSON。
+ * @param data 要返回的业务数据
+ * @returns Next.js JSON 响应对象
+ */
 export function createSuccessResponse<T>(data: T): NextResponse<ApiResponse<T>> {
   return NextResponse.json({
     success: true,
-    data
+    data,
   });
 }
 
-// 创建错误响应
-export function createErrorResponse(message: string, code: number = 400): NextResponse<ApiResponse<null>> {
-  return NextResponse.json({
-    success: false,
-    error: message,
-    code
-  }, { status: code });
+/**
+ * 构造错误响应，统一输出错误信息与状态码。
+ * @param message 错误描述
+ * @param code HTTP 状态码，默认 400
+ * @returns Next.js JSON 响应对象
+ */
+export function createErrorResponse(
+  message: string,
+  code: number = 400
+): NextResponse<ApiResponse<null>> {
+  return NextResponse.json(
+    {
+      success: false,
+      error: message,
+      code,
+    },
+    { status: code }
+  );
 }
 
-// 身份验证中间件
+/**
+ * 简化版身份验证中间件，用于示例受保护接口。
+ * @param request 需要认证的请求对象
+ * @returns 验证成功时返回用户标识，失败时返回错误响应
+ */
 export async function authMiddleware(request: NextRequest) {
-  // 从请求头或cookie中获取token
-  const token = request.headers.get('Authorization')?.replace('Bearer ', '') || 
-                request.cookies.get('auth_token')?.value;
-  
+  const token =
+    request.headers.get('Authorization')?.replace('Bearer ', '') ||
+    request.cookies.get('auth_token')?.value;
+
   if (!token) {
     return createErrorResponse('未授权访问', 401);
   }
-  
+
   try {
-    // 这里应该验证token的有效性，例如使用JWT验证
-    // 简化版本，仅作示例
     if (token === 'invalid') {
       throw new Error('无效的令牌');
     }
-    
-    // 模拟获取用户信息
-    const userId = 'user-001'; // 实际应从token中解析
-    
-    // 返回用户ID，可以在后续处理中使用
+
+    const userId = 'user-001';
+
     return { userId };
   } catch (error) {
     return createErrorResponse(
-      error instanceof Error ? error.message : '身份验证失败', 
+      error instanceof Error ? error.message : '身份验证失败',
       401
     );
   }

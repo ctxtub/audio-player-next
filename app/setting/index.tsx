@@ -8,6 +8,10 @@ import VoiceServiceSection from './components/VoiceServiceSection';
 import ThemeModeSection from './components/ThemeModeSection';
 import { useTheme } from '@/components/ThemeProvider';
 
+/**
+ * 设置页面组件，承载播放配置与主题切换。
+ * @returns 设置页 JSX 结构
+ */
 const ConfigPage: React.FC = () => {
   const apiConfig = useConfigStore(state => state.apiConfig);
   const updateConfig = useConfigStore(state => state.update);

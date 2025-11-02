@@ -1,12 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 
-import styles from './index.module.scss';
 import { PageLoading } from '@/components/PageLoading';
-import { useConfigStore } from '@/stores/configStore';
-import BasicConfigSection from './components/BasicConfigSection';
-import VoiceServiceSection from './components/VoiceServiceSection';
-import ThemeModeSection from './components/ThemeModeSection';
 import { useTheme } from '@/components/ThemeProvider';
+import { useConfigStore } from '@/stores/configStore';
+import styles from './index.module.scss';
+import BasicConfigSection from './components/BasicConfigSection';
+import FloatingPlayerSection from './components/FloatingPlayerSection';
+import ThemeModeSection from './components/ThemeModeSection';
+import VoiceServiceSection from './components/VoiceServiceSection';
 
 /**
  * 设置页面组件，承载播放配置与主题切换。
@@ -20,70 +21,69 @@ const ConfigPage: React.FC = () => {
   const voiceOptions = useConfigStore(state => state.voiceOptions);
   const { themeMode, setThemeMode } = useTheme();
 
-  const [selectedVoice, setSelectedVoice] = useState<string | undefined>();
-  const [playDuration, setPlayDuration] = useState<number>(0);
-
   useEffect(() => {
     initializeConfig().catch(() => {});
   }, [initializeConfig]);
 
   useEffect(() => {
-    if (!isConfigLoaded) {
-      return;
-    }
-    setPlayDuration(apiConfig.playDuration);
-    setSelectedVoice(apiConfig.voiceId ?? undefined);
-  }, [apiConfig.playDuration, apiConfig.voiceId, isConfigLoaded]);
-
-  useEffect(() => {
-    if (!isConfigLoaded) {
-      return;
-    }
-    if (playDuration !== apiConfig.playDuration) {
-      updateConfig({ playDuration });
-    }
-  }, [apiConfig.playDuration, isConfigLoaded, playDuration, updateConfig]);
-
-  useEffect(() => {
-    if (!isConfigLoaded) {
+    if (!isConfigLoaded || voiceOptions.length === 0) {
       return;
     }
 
-    if (!selectedVoice) {
-      const fallback = voiceOptions.find(option => option.value === apiConfig.voiceId)?.value;
-      if (fallback) {
-        setSelectedVoice(fallback);
-      } else if (voiceOptions[0]) {
-        setSelectedVoice(voiceOptions[0].value);
+    const isVoiceValid = voiceOptions.some(option => option.value === apiConfig.voiceId);
+    if (isVoiceValid) {
+      return;
+    }
+
+    const fallbackVoice = voiceOptions[0]?.value;
+    if (fallbackVoice && fallbackVoice !== apiConfig.voiceId) {
+      updateConfig({ voiceId: fallbackVoice });
+    }
+  }, [apiConfig.voiceId, isConfigLoaded, updateConfig, voiceOptions]);
+
+  /**
+   * 当前有效的语音配置值。
+   */
+  const selectedVoice = useMemo(() => {
+    if (!isConfigLoaded) {
+      return undefined;
+    }
+    const matchedVoice = voiceOptions.find(option => option.value === apiConfig.voiceId);
+    return matchedVoice?.value;
+  }, [apiConfig.voiceId, isConfigLoaded, voiceOptions]);
+
+  /**
+   * 当前播放时长（分钟）。
+   */
+  const playDuration = useMemo(() => apiConfig.playDuration, [apiConfig.playDuration]);
+
+  /**
+   * 是否开启浮动播放器。
+   */
+  const isFloatingPlayerEnabled = useMemo(
+    () => apiConfig.floatingPlayerEnabled,
+    [apiConfig.floatingPlayerEnabled]
+  );
+
+  const handlePlayDurationChange = useCallback(
+    (value: number) => {
+      if (!isConfigLoaded) {
+        return;
       }
-      return;
-    }
-    const isVoiceValid = voiceOptions.some(option => option.value === selectedVoice);
-    if (!isVoiceValid) {
-      if (voiceOptions.length === 0) {
-        if (selectedVoice !== undefined) {
-          setSelectedVoice(undefined);
-        }
-      } else {
-        const fallbackVoice = voiceOptions[0]?.value;
-        if (fallbackVoice && fallbackVoice !== selectedVoice) {
-          setSelectedVoice(fallbackVoice);
-        }
+      if (value === apiConfig.playDuration) {
+        return;
       }
-      return;
-    }
-    if (selectedVoice !== apiConfig.voiceId) {
-      updateConfig({ voiceId: selectedVoice });
-    }
-  }, [apiConfig.voiceId, isConfigLoaded, selectedVoice, updateConfig, voiceOptions]);
-
-  const handlePlayDurationChange = useCallback((value: number) => {
-    setPlayDuration(value);
-  }, []);
+      updateConfig({ playDuration: value });
+    },
+    [apiConfig.playDuration, isConfigLoaded, updateConfig]
+  );
 
   const handleVoiceSelect = useCallback(
     (voice: string) => {
-      if (!voice || voice === selectedVoice) {
+      if (!isConfigLoaded) {
+        return;
+      }
+      if (!voice || voice === apiConfig.voiceId) {
         return;
       }
 
@@ -92,22 +92,36 @@ const ConfigPage: React.FC = () => {
         return;
       }
 
-      setSelectedVoice(voice);
+      updateConfig({ voiceId: voice });
     },
-    [selectedVoice, voiceOptions]
+    [apiConfig.voiceId, isConfigLoaded, updateConfig, voiceOptions]
   );
+
+  const handleFloatingPlayerToggle = useCallback((enabled: boolean) => {
+    if (!isConfigLoaded) {
+      return;
+    }
+    if (enabled === apiConfig.floatingPlayerEnabled) {
+      return;
+    }
+    updateConfig({ floatingPlayerEnabled: enabled });
+  }, [apiConfig.floatingPlayerEnabled, isConfigLoaded, updateConfig]);
 
   if (!isConfigLoaded) {
     return <PageLoading message="页面加载中..." />;
   }
 
   return (
-    <div className={styles.configContainer}>
+    <div className={styles.configPage}>
       <div className={styles.configForm}>
         <ThemeModeSection value={themeMode} onChange={setThemeMode} />
         <BasicConfigSection
           playDuration={playDuration}
           onPlayDurationChange={handlePlayDurationChange}
+        />
+        <FloatingPlayerSection
+          value={isFloatingPlayerEnabled}
+          onChange={handleFloatingPlayerToggle}
         />
         <VoiceServiceSection
           value={selectedVoice}

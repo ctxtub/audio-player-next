@@ -53,6 +53,7 @@ const CONFIG_STORAGE_KEY = 'config-store';
 const createEmptyConfig = (): APIConfig => ({
   playDuration: 0,
   voiceId: '',
+  floatingPlayerEnabled: true,
 });
 
 /**
@@ -70,6 +71,10 @@ const isValidConfig = (config: APIConfig | undefined): config is APIConfig => {
   }
 
   if (typeof config.voiceId !== 'string' || !config.voiceId.trim()) {
+    return false;
+  }
+
+  if (typeof config.floatingPlayerEnabled !== 'boolean') {
     return false;
   }
 
@@ -92,9 +97,15 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
       ? partial.playDuration
       : base.playDuration;
 
+  const floatingPlayerEnabled =
+    typeof partial.floatingPlayerEnabled === 'boolean'
+      ? partial.floatingPlayerEnabled
+      : base.floatingPlayerEnabled;
+
   return {
     playDuration: nextPlayDuration,
     voiceId,
+    floatingPlayerEnabled,
   };
 };
 
@@ -165,9 +176,15 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
         throw new Error('INVALID_VOICE');
       }
 
+      const floatingPlayerEnabled =
+        typeof remote.floatingPlayerEnabled === 'boolean'
+          ? remote.floatingPlayerEnabled
+          : localConfig?.floatingPlayerEnabled ?? true;
+
       const mergedConfig: APIConfig = {
         playDuration,
         voiceId: resolvedVoice,
+        floatingPlayerEnabled,
       };
 
       return { config: mergedConfig, voiceOptions };

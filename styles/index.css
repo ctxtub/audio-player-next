@@ -1,5 +1,7 @@
 :root {
   --main-tab-bar-height: 56px;
+  /* 页面统一内边距 */
+  --page-padding: 16px;
   /* 过渡动画 */
   --transition-speed: 0.3s;
   --transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
@@ -220,6 +222,10 @@ html, body, #root {
 
 .adm-slider {
   --fill-color: var(--primary);
+}
+
+.adm-switch {
+  --border-width: 1px !important;
 }
 
 :root[data-theme="dark"] .adm-slider-thumb {

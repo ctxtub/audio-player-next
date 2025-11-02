@@ -9,96 +9,7 @@
   gap: 12px;
   background-color: var(--card-background);
   border-radius: 16px;
-  position: relative;
   overflow: hidden;
-  
-  &.playing {
-    padding-bottom: 50px;
-  }
-
-  .loadingOverlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: color-mix(in srgb, var(--card-background) 80%, transparent);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    border-radius: 16px;
-
-    .loadingBar {
-      width: 60%;
-      height: 8px;
-      background-color: color-mix(in srgb, var(--foreground) 10%, transparent);
-      border-radius: 4px;
-      overflow: hidden;
-      box-shadow: 0 0 0 1px var(--shadow-color);
-
-      .loadingBarProgress {
-        height: 100%;
-        width: 30%;
-        background-color: var(--primary);
-        border-radius: 4px;
-        position: relative;
-        animation: loadingAnimation 1.5s infinite ease-in-out;
-      }
-    }
-  }
-  
-  .playingContent {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    
-    .statusItems {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-
-      .statusItem {
-        backdrop-filter: blur(5px);
-        box-shadow: 0 2px 8px var(--shadow-color);
-        transition: transform var(--transition-speed) var(--transition-timing);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        min-width: 172px;
-        padding: 10px 14px;
-        border-radius: 12px;
-        font-size: 14px;
-        font-weight: 500;
-
-        .statusIcon {
-          width: 16px;
-          height: 16px;
-          stroke: currentColor;
-        }
-
-        &.countdown {
-          background: color-mix(in srgb, var(--process) 20%, transparent);
-          color: var(--process);
-        }
-        &.loading {
-          background: color-mix(in srgb, var(--process) 20%, transparent);
-          color: var(--process);
-        }
-        &.error {
-          background: color-mix(in srgb, var(--error) 20%, transparent);
-          color: var(--error);
-        }
-        &.success {
-          background: color-mix(in srgb, var(--success) 20%, transparent);
-          color: var(--success);
-        }
-      }
-    }
-    
-  }
   
   .inputContent {
     display: flex;
@@ -244,46 +155,6 @@
           cursor: not-allowed;
         }
       }
-    }
-  }
-
-  /* CSSTransition 类名 - Loading Overlay 动画 */
-  .loadingEnter {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-
-  .loadingEnterActive {
-    opacity: 1;
-    transform: scale(1);
-    transition: opacity 300ms ease-out, transform 300ms ease-out;
-  }
-
-  .loadingExit {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  .loadingExitActive {
-    opacity: 0;
-    transform: scale(0.95);
-    transition: opacity 300ms ease-in, transform 300ms ease-in;
-  }
-
-  @keyframes loadingAnimation {
-    0% {
-      left: -30%;
-      width: 30%;
-    }
-    50% {
-      width: 30%;
-    }
-    70% {
-      width: 70%;
-    }
-    100% {
-      left: 100%;
-      width: 30%;
     }
   }
 }

@@ -2,11 +2,11 @@
 
 ## 目录职责
 - 管理全局状态，使用 Zustand 提供轻量化 store。
-- 将配置、播放、故事等状态统一托管。
+- 将配置、播放、故事等状态统一托管，并封装音频播放控制。
 
 ## 子目录结构
-- `configStore.ts`：应用配置状态。
-- `playbackStore.ts`：播放进度与控制状态。
+- `configStore.ts`：应用配置状态（播放时长、首选语音、浮动播放器开关）。
+- `playbackStore.ts`：播放进度、音频控制器与倒计时状态。
 - `preloadStore.ts`：音频预加载状态。
 - `promptHistoryStore.ts`：提示词与历史记录。
 - `storyStore.ts`：故事生成状态。

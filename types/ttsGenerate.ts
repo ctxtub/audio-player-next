@@ -1,5 +1,5 @@
 /**
- * 语音服务使用的声音标识。
+ * 语音音色使用的声音标识。
  */
 export type VoiceId = string;
 

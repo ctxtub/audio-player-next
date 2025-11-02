@@ -4,14 +4,12 @@ import { devtools } from 'zustand/middleware';
 import { continueStory, generateStory } from '@/lib/client/storyGenerate';
 
 /**
- * 故事 store 的基础状态，记录当前会话、文本段落及加载标记。
+ * 故事 store 的基础状态，记录当前会话、文本段落及最近错误。
  */
 type StoryStoreBaseState = {
   sessionId: string | null;
   inputText: string;
   segments: string[];
-  isFirstStoryLoading: boolean;
-  isContinuing: boolean;
   lastError?: string;
 };
 
@@ -22,9 +20,6 @@ type StoryStoreActions = {
   startSession: (prompt: string) => Promise<string>;
   continueSession: () => Promise<string>;
   appendSegment: (segment: string) => void;
-  setLoadingState: (
-    flags: Partial<Pick<StoryStoreBaseState, 'isFirstStoryLoading' | 'isContinuing'>>
-  ) => void;
   reset: () => void;
 };
 
@@ -40,8 +35,6 @@ const INITIAL_STATE: StoryStoreBaseState = {
   sessionId: null,
   inputText: '',
   segments: [],
-  isFirstStoryLoading: false,
-  isContinuing: false,
   lastError: undefined,
 };
 
@@ -91,8 +84,6 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
       sessionId,
       inputText: prompt,
       segments: [],
-      isFirstStoryLoading: true,
-      isContinuing: false,
       lastError: undefined,
     });
 
@@ -105,7 +96,6 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
       }
 
       set({
-        isFirstStoryLoading: false,
         lastError: undefined,
       });
 
@@ -119,12 +109,10 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
           set({
             sessionId: null,
             lastError: handledError.message,
-            isFirstStoryLoading: false,
           });
         } else {
           set({
             lastError: handledError.message,
-            isFirstStoryLoading: false,
           });
         }
       }
@@ -146,7 +134,6 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
     }
 
     set({
-      isContinuing: true,
       lastError: undefined,
     });
 
@@ -161,7 +148,6 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
       }
 
       set({
-        isContinuing: false,
         lastError: undefined,
       });
 
@@ -172,7 +158,6 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
       if (get().inputText === inputText) {
         set({
           lastError: handledError.message,
-          isContinuing: false,
         });
       }
 
@@ -191,27 +176,6 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
   },
   /**
    * 外部可手动覆盖 loading 标记（例如 orchestrator 保证状态一致）。
-   * @param flags Partial<{@link StoryStoreBaseState.isFirstStoryLoading} | {@link StoryStoreBaseState.isContinuing}>
-   *              需要覆盖的 loading 字段
-   * @returns void
-   */
-  setLoadingState: (flags) => {
-    const updates: Partial<StoryStoreBaseState> = {};
-
-    if (typeof flags.isFirstStoryLoading === 'boolean') {
-      updates.isFirstStoryLoading = flags.isFirstStoryLoading;
-    }
-
-    if (typeof flags.isContinuing === 'boolean') {
-      updates.isContinuing = flags.isContinuing;
-    }
-
-    if (Object.keys(updates).length > 0) {
-      set(updates);
-    }
-  },
-  /**
-   * 重置故事状态，通常在结束播放或启动新会话时调用。
    * @returns void
    */
   reset: () => {

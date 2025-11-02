@@ -1,5 +1,7 @@
+import { useCallback } from 'react';
 import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
+import type { AudioControllerHandle } from '@/types/audioPlayer';
 
 /**
  * 一分钟对应的毫秒数，用于换算倒计时。
@@ -20,6 +22,11 @@ type PlaybackStoreBaseState = {
   duration: number;
   _tickIntervalId: number | null;
   _lastTickAt: number | null;
+  audioController: AudioControllerHandle | null;
+  /**
+   * 浮动播放器是否展示。
+   */
+  isFloatingVisible: boolean;
 };
 
 /**
@@ -30,9 +37,24 @@ type PlaybackStoreActions = {
   start: () => void;
   pause: () => void;
   updateProgress: (payload: { currentTime: number; duration: number }) => void;
-  setPlaybackRate: (rate: number) => void;
+  setPlaybackRate: (rate: number, options?: { applyToController?: boolean }) => void;
   advanceSegment: () => void;
   reset: () => void;
+  registerAudioController: (controller: AudioControllerHandle | null) => void;
+  playAudio: (audioUrl: string) => Promise<void>;
+  resumeAudio: () => Promise<void>;
+  pauseAudioPlayback: () => void;
+  seekAudio: (time: number) => void;
+  /**
+   * 显示浮动播放器面板。
+   * @returns void
+   */
+  showFloatingPlayer: () => void;
+  /**
+   * 隐藏浮动播放器面板。
+   * @returns void
+   */
+  hideFloatingPlayer: () => void;
 };
 
 /**
@@ -54,6 +76,8 @@ const INITIAL_STATE: PlaybackStoreBaseState = {
   duration: 0,
   _tickIntervalId: null,
   _lastTickAt: null,
+  audioController: null,
+  isFloatingVisible: false,
 };
 
 /**
@@ -139,6 +163,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         isPlaying: false,
         _tickIntervalId: null,
         _lastTickAt: null,
+        isFloatingVisible: false,
       });
     },
     /**
@@ -179,10 +204,15 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
      * @param rate number 目标倍速值
      * @returns void
      */
-    setPlaybackRate: (rate) => {
+    setPlaybackRate: (rate, options) => {
       set({
         playbackRate: rate,
       });
+      if (options?.applyToController === false) {
+        return;
+      }
+      const controller = get().audioController;
+      controller?.setPlaybackRate(rate);
     },
     /**
      * 在切换到下一段音频时自增段落索引，便于统计或调试。
@@ -198,7 +228,70 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
      */
     reset: () => {
       clearCountdown();
-      set({ ...INITIAL_STATE });
+      const controller = get().audioController;
+      set({
+        ...INITIAL_STATE,
+        audioController: controller,
+      });
+    },
+    /**
+     * 注册播放器控制器，供 Store 内部执行播放控制。
+     * @param controller AudioControllerHandle 或 null
+     * @returns void
+     */
+    registerAudioController: (controller) => {
+      set({
+        audioController: controller,
+      });
+      if (controller) {
+        controller.setPlaybackRate(get().playbackRate);
+      }
+    },
+    /**
+     * 播放指定音频地址，若控制器尚未注册则抛出异常。
+     * @param audioUrl string 音频文件地址
+     * @returns Promise<void>
+     */
+    playAudio: async (audioUrl: string) => {
+      const controller = get().audioController;
+      if (!controller) {
+        throw new Error('音频播放器尚未注册');
+      }
+      set({ isFloatingVisible: true });
+      await controller.play(audioUrl);
+    },
+    /**
+     * 恢复暂停的音频播放。
+     * @returns Promise<void>
+     */
+    resumeAudio: async () => {
+      const controller = get().audioController;
+      if (!controller) {
+        throw new Error('音频播放器尚未注册');
+      }
+      set({ isFloatingVisible: true });
+      await controller.resume();
+    },
+    /**
+     * 暂停当前音频播放。
+     * @returns void
+     */
+    pauseAudioPlayback: () => {
+      get().audioController?.pause();
+    },
+    /**
+     * 跳转到指定播放时间点。
+     * @param time number 目标时间（秒）
+     * @returns void
+     */
+    seekAudio: (time: number) => {
+      get().audioController?.seek(time);
+    },
+    showFloatingPlayer: () => {
+      set({ isFloatingVisible: true });
+    },
+    hideFloatingPlayer: () => {
+      set({ isFloatingVisible: false });
     },
   };
 };
@@ -207,3 +300,40 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
  * 播放器 store Hook，提供播放状态与操作。
  */
 export const usePlaybackStore = create<PlaybackStore>()(devtools(playbackStoreCreator));
+
+/**
+ * 浮动播放器控制 Hook，封装播放显隐等操作。
+ * @returns 浮动播放器控制方法集合
+ */
+export const useFloatingPlayer = () => {
+  const playAudio = usePlaybackStore((state) => state.playAudio);
+  const resumeAudio = usePlaybackStore((state) => state.resumeAudio);
+  const pauseAudioPlayback = usePlaybackStore((state) => state.pauseAudioPlayback);
+  const showFloatingPlayer = usePlaybackStore((state) => state.showFloatingPlayer);
+  const hideFloatingPlayer = usePlaybackStore((state) => state.hideFloatingPlayer);
+
+  const play = useCallback(
+    async (audioUrl: string) => {
+      showFloatingPlayer();
+      await playAudio(audioUrl);
+    },
+    [playAudio, showFloatingPlayer]
+  );
+
+  const resume = useCallback(async () => {
+    showFloatingPlayer();
+    await resumeAudio();
+  }, [resumeAudio, showFloatingPlayer]);
+
+  const pause = useCallback(() => {
+    pauseAudioPlayback();
+  }, [pauseAudioPlayback]);
+
+  return {
+    play,
+    resume,
+    pause,
+    show: showFloatingPlayer,
+    hide: hideFloatingPlayer,
+  };
+};

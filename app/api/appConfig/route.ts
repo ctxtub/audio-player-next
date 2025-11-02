@@ -20,6 +20,7 @@ export const GET = async () => {
       voicesList,
       voiceId,
       playDuration: DEFAULT_PLAY_DURATION,
+      floatingPlayerEnabled: true,
     };
 
     return NextResponse.json<AppConfigResponse>(payload, {

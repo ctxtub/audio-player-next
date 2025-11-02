@@ -5,6 +5,8 @@ import styles from '@/styles/app.module.scss';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AntdMobileCompat } from '@/components/AntdMobileCompat';
 import MainTabBar from '@/components/MainTabBar';
+import AudioControllerHost from '@/components/AudioControllerHost';
+import { FloatingPlayer } from '@/components/FloatingPlayer';
 import {
   FALLBACK_THEME,
   THEME_COLORS,
@@ -38,6 +40,8 @@ export default function RootLayout({
             </main>
             <MainTabBar />
           </div>
+          <AudioControllerHost />
+          <FloatingPlayer />
         </ThemeProvider>
       </body>
     </html>

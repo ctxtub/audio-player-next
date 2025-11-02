@@ -1,11 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CSSTransition } from 'react-transition-group';
 import { Toast } from 'antd-mobile';
 import HistoryRecords, { HistoryRecordsRef } from '@/app/home/components/HistoryRecords';
-import ClockIcon from '@/public/icons/playstatus-clock.svg';
-import LoadingIcon from '@/public/icons/playstatus-loading.svg';
-import WarningIcon from '@/public/icons/playstatus-warning.svg';
-import CheckIcon from '@/public/icons/playstatus-check.svg';
 import {
   usePromptHistoryStore,
   selectIsInitialized,
@@ -20,37 +15,19 @@ import styles from './index.module.scss';
 interface InputStatusSectionProps {
   // StoryInput props
   inputText: string;
-  isFirstStoryLoading: boolean;
   handleSubmit: (text: string) => void;
-
-  // PlayStatusSection props
-  remainingTime: number | null;
-  isPreloadLoading: boolean;
-  preloadRetryCount: number;
-  preloadErrorMsg: string;
-  preloadAudioUrl: string | null;
 }
 
 /**
- * 首页输入与状态模块，负责发起故事生成并展示当前播放/预加载情况。
+ * 首页输入与状态模块，负责发起故事生成并聚合输入操作。
  */
 const InputStatusSection: React.FC<InputStatusSectionProps> = ({
   // StoryInput props
   inputText,
-  isFirstStoryLoading,
   handleSubmit,
-  
-  // PlayStatusSection props
-  remainingTime,
-  isPreloadLoading,
-  preloadRetryCount,
-  preloadErrorMsg,
-  preloadAudioUrl,
 }) => {
   const [textareaInput, setTextareaInput] = useState('');
-  const [isStartedFirstGeneration, setIsStartedFirstGeneration] = useState(false);
   const historyRecordsRef = useRef<HistoryRecordsRef>(null);
-  const loadingOverlayRef = useRef<HTMLDivElement>(null);
   const hydrateHistory = usePromptHistoryStore((state) => state.hydrate);
   const addHistoryRecord = usePromptHistoryStore((state) => state.addOrUpdate);
   const isHistoryInitialized = usePromptHistoryStore(selectIsInitialized);
@@ -96,89 +73,18 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
 
   // 包装 handleSubmit 以添加历史记录功能
   const handleSubmitWithHistory = (text: string) => {
-    // 改变组件成播放态
-    setIsStartedFirstGeneration(true);
     // 保存提示词到历史记录
     addHistoryRecord(text);
     // 调用父组件的 handleSubmit
     handleSubmit(text);
   };
 
-  const formatCountdown = (minutes: number): string => {
-    const wholeMinutes = Math.floor(minutes);
-    const seconds = Math.floor((minutes - wholeMinutes) * 60);
-    return `${wholeMinutes}:${seconds.toString().padStart(2, '0')}`;
-  };
-
   const handleHistoryButtonClick = () => {
     historyRecordsRef.current?.showModal();
   };
 
-  // 触发首次故事生成即转为播放态，展示折叠态UI
-  const containerClass = isStartedFirstGeneration
-    ? `${styles.container} ${styles.playing}` : styles.container;
-
   return (
-    <div className={containerClass}>
-      <CSSTransition
-        in={isFirstStoryLoading}
-        timeout={300}
-        classNames={{
-          enter: styles.loadingEnter,
-          enterActive: styles.loadingEnterActive,
-          exit: styles.loadingExit,
-          exitActive: styles.loadingExitActive,
-        }}
-        unmountOnExit
-        nodeRef={loadingOverlayRef}
-      >
-        <div ref={loadingOverlayRef} className={styles.loadingOverlay}>
-          <div className={styles.loadingBar}>
-            <div className={styles.loadingBarProgress}></div>
-          </div>
-        </div>
-      </CSSTransition>
-
-      {isStartedFirstGeneration && (
-        <div className={styles.playingContent}>
-          <div className={styles.statusItems}>
-            {remainingTime !== null && (
-              <div className={`${styles.statusItem} ${styles.countdown}`}>
-                <ClockIcon className={styles.statusIcon} />
-                <span>播放倒计时: {formatCountdown(remainingTime)}</span>
-              </div>
-            )}
-
-            {isPreloadLoading && (
-              <div className={`${styles.statusItem} ${styles.loading}`}>
-                <LoadingIcon className={styles.statusIcon} />
-                <span>
-                  预加载中...
-                  {preloadRetryCount > 0 && ` (第${preloadRetryCount}次重试)`}
-                </span>
-              </div>
-            )}
-
-            {preloadErrorMsg && (
-              <div className={`${styles.statusItem} ${styles.error}`}>
-                <WarningIcon className={styles.statusIcon} />
-                <span>
-                  预加载失败: {preloadErrorMsg}
-                  {preloadRetryCount < 3 && ` (即将重试)`}
-                </span>
-              </div>
-            )}
-
-            {preloadAudioUrl && !isPreloadLoading && (
-              <div className={`${styles.statusItem} ${styles.success}`}>
-                <CheckIcon className={styles.statusIcon} />
-                <span>下一段内容已准备就绪</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
+    <div className={styles.container}>
       <div className={styles.inputContent}>
         <div className={styles.quickButtons}>
           {storyTypes.map((type, index) => (

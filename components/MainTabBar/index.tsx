@@ -2,7 +2,7 @@
 
 import React, { useCallback } from 'react';
 import { TabBar } from 'antd-mobile';
-import { AppOutline, SetOutline } from 'antd-mobile-icons';
+import { AppOutline, SoundOutline, SetOutline } from 'antd-mobile-icons';
 import { usePathname, useRouter } from 'next/navigation';
 import styles from './index.module.scss';
 
@@ -15,6 +15,12 @@ const TABS = [
     title: '首页',
     icon: <AppOutline />,
     path: '/',
+  },
+  {
+    key: 'player',
+    title: '播放器',
+    icon: <SoundOutline />,
+    path: '/player',
   },
   {
     key: 'setting',
@@ -30,6 +36,9 @@ const TABS = [
  * @returns 对应的标签 key
  */
 const resolveActiveKey = (pathname: string): (typeof TABS)[number]['key'] => {
+  if (pathname.startsWith('/player')) {
+    return 'player';
+  }
   if (pathname.startsWith('/setting')) {
     return 'setting';
   }

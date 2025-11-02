@@ -1,0 +1,120 @@
+.floatingPlaceholder {
+  display: contents;
+}
+
+.floatingRoot {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 900;
+}
+
+.floatingRootEmbedded {
+  position: static;
+  inset: auto;
+  pointer-events: auto;
+  width: 100%;
+}
+
+.floatingPanel {
+  position: fixed;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--card-border);
+  background: color-mix(in srgb, var(--card-background) 90%, transparent);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(12px);
+  transition: opacity 0.2s ease, transform 0.2s ease, width 0.2s ease;
+}
+
+.floatingPanelHidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(-50%, 16px, 0);
+}
+
+.floatingPanelCollapsed {
+  width: 220px;
+  cursor: grab;
+}
+
+.floatingPanelExpanded {
+  width: 320px;
+  cursor: grab;
+  max-height: min(560px, 80vh);
+  overflow-y: auto;
+}
+
+.floatingPanelDragging {
+  cursor: grabbing;
+}
+
+.floatingRootEmbedded .floatingPanel {
+  display: none;
+}
+
+.floatingHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.floatingTitle {
+  font-size: 14px;
+  color: var(--secondary);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floatingActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.floatingActionButton {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.floatingActionButton:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.floatingActionButton:active {
+  transform: translateY(0);
+}
+
+.floatingBodyCollapsed {
+  display: none;
+}
+
+.floatingBodyExpanded {
+  display: block;
+}
+
+.miniHint {
+  font-size: 12px;
+  color: var(--secondary);
+  text-align: center;
+}

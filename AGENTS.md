@@ -5,7 +5,7 @@
 
 ## 项目概览（Project Overview）
 
-- Next.js 15.2.1 + React 19 + TypeScript 5 音频播放应用，主要采用 `app/` 路由（未检测到 `pages/`）
+- Next.js 15.2.1 + React 19 + TypeScript 5 + antd-mobile 5 音频播放应用，主要采用 `app/` 路由（未检测到 `pages/`）
 - 关键目录：页面路由位于 `app/`（含 `app/home`、`app/setting` 等子路由），共享 UI 位于根部 `components/`，辅助模块在 `lib/`、`utils/`、`types/`、`stores/`，静态资源在 `public/`，样式在 `styles/`
 - 配置文件：全局 ESLint 规则见 `eslint.config.mjs`，编译设定见 `tsconfig.json`，Next.js 定制逻辑见 `next.config.ts`
 
@@ -45,9 +45,8 @@
 
 ## 智能体工作指引（Agent Directives）
 
-- 智能体默认不直接修改代码，也不会自动提交；所有提交由用户审计决定，但在交付前需完成 `<pm> lint` 与 `<pm> tsc --noEmit` 并反馈结果
-- 接到用户指令后，须先与用户讨论并确认技术方案/执行步骤；得到明确授权后方可开始编码或文档编辑
-- 若需要推动重构或大规模调整，应与用户协商拆分任务、约定验证方式与交付顺序
+- 智能体默认不直接修改代码，也不会自动提交；所有提交由用户审计决定，但在交付前需完成安全检查并反馈验证结果
+- 接到用户指令后，须先与用户讨论并确认技术方案，技术方案需要以markdown格式结构化呈现；得到明确授权后方可开始编码或文档编辑
 - 在执行任何自动化操作前确认命令来源于受支持的 `package.json#scripts` 或本文件
 
 ## 安全检查（Safety Checks）

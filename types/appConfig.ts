@@ -5,7 +5,7 @@ import type { VoiceOption, VoiceId } from '@/types/ttsGenerate';
  */
 export type AppConfigDefaults =  {
   playDuration: number;
-  voiceName: VoiceId;
+  voiceId: VoiceId;
 };
 
 /**

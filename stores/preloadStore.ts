@@ -117,7 +117,7 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
     const preloadTask = (async () => {
       const storyStore = useStoryStore.getState();
       const nextSegment = await storyStore.continueSession();
-      const audioUrl = await fetchAudio(nextSegment, configState.apiConfig.voiceName);
+      const audioUrl = await fetchAudio(nextSegment, configState.apiConfig.voiceId);
 
       const currentState = get();
       if (currentState._activePreloadTask?.token !== taskToken) {

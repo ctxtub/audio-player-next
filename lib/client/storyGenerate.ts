@@ -1,4 +1,8 @@
-import type { StoryApiRequest, StoryApiResponse } from '@/types/story';
+import type {
+  StoryApiRequest,
+  StoryApiResponse,
+  StoryContinueOptions,
+} from '@/types/story';
 import { browserHttp } from '@/lib/http/browser';
 import { HttpError } from '@/lib/http/common/ErrorHandler';
 
@@ -40,7 +44,7 @@ const callStoryApi = async (payload: StoryApiRequest): Promise<StoryApiResponse>
       );
     }
 
-    if (typeof (data as StoryApiResponse).story !== 'string') {
+    if (typeof (data as StoryApiResponse).storyContent !== 'string') {
       throw new StoryApiError(
         '故事内容缺失',
         502,
@@ -92,7 +96,7 @@ export const generateStory = async (prompt: string): Promise<StoryApiResponse> =
 export const continueStory = async (
   prompt: string,
   storyContent: string,
-  options: { withSummary?: boolean } = {}
+  options: StoryContinueOptions = {}
 ): Promise<StoryApiResponse> => {
   return callStoryApi({
     mode: 'continue',

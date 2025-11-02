@@ -52,7 +52,7 @@ const CONFIG_STORAGE_KEY = 'config-store';
  */
 const createEmptyConfig = (): APIConfig => ({
   playDuration: 0,
-  voiceName: '',
+  voiceId: '',
 });
 
 /**
@@ -69,7 +69,7 @@ const isValidConfig = (config: APIConfig | undefined): config is APIConfig => {
     return false;
   }
 
-  if (typeof config.voiceName !== 'string' || !config.voiceName.trim()) {
+  if (typeof config.voiceId !== 'string' || !config.voiceId.trim()) {
     return false;
   }
 
@@ -82,10 +82,10 @@ const isValidConfig = (config: APIConfig | undefined): config is APIConfig => {
  * @param partial 待合并的增量配置。
  */
 const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig => {
-  const voiceName =
-    typeof partial.voiceName === 'string' && partial.voiceName.trim()
-      ? partial.voiceName.trim()
-      : base.voiceName;
+  const voiceId =
+    typeof partial.voiceId === 'string' && partial.voiceId.trim()
+      ? partial.voiceId.trim()
+      : base.voiceId;
 
   const nextPlayDuration =
     typeof partial.playDuration === 'number' && partial.playDuration > 0
@@ -94,7 +94,7 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
 
   return {
     playDuration: nextPlayDuration,
-    voiceName,
+    voiceId,
   };
 };
 
@@ -155,8 +155,8 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
 
       let resolvedVoice: string | undefined;
 
-      if (localConfig && hasVoice(localConfig.voiceName)) {
-        resolvedVoice = localConfig.voiceName;
+      if (localConfig && hasVoice(localConfig.voiceId)) {
+        resolvedVoice = localConfig.voiceId;
       } else if (hasVoice(remote.voiceId)) {
         resolvedVoice = remote.voiceId;
       }
@@ -167,7 +167,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
 
       const mergedConfig: APIConfig = {
         playDuration,
-        voiceName: resolvedVoice,
+        voiceId: resolvedVoice,
       };
 
       return { config: mergedConfig, voiceOptions };

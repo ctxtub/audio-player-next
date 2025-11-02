@@ -14,6 +14,9 @@ import { useStoryStore } from './storyStore';
  */
 type PreloadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
+/**
+ * 正在进行中的预加载任务，用于防止重复请求。
+ */
 type ActivePreloadTask = {
   token: symbol;
   promise: Promise<{ segment: string; audioUrl: string }>;
@@ -43,8 +46,14 @@ type PreloadStoreActions = {
   reset: () => void;
 };
 
+/**
+ * 预加载 store 的完整状态与动作集合。
+ */
 export type PreloadStore = PreloadStoreBaseState & PreloadStoreActions;
 
+/**
+ * 预加载状态的初始值。
+ */
 const INITIAL_STATE: PreloadStoreBaseState = {
   status: 'idle',
   cachedSegment: null,
@@ -69,6 +78,9 @@ const normalizeError = (error: unknown): Error => {
   return new Error('UNKNOWN_PRELOAD_ERROR');
 };
 
+/**
+ * 预加载 store 创建器，封装预加载流程与错误处理。
+ */
 const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
   ...INITIAL_STATE,
   /**
@@ -193,4 +205,7 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
   },
 });
 
+/**
+ * 预加载 store Hook，提供预加载状态与动作。
+ */
 export const usePreloadStore = create<PreloadStore>()(devtools(preloadStoreCreator));

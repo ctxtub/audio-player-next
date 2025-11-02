@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authMiddleware } from './app/server';
+import { authMiddleware } from '@/app/server';
 
-// 定义需要保护的路径
+/**
+ * 需要进行身份校验的受保护路径前缀。
+ */
 const protectedPaths = ['/dashboard', '/profile', '/settings'];
 
+/**
+ * 应用中间件，在访问受保护路径时执行身份校验。
+ * @param request 当前请求对象
+ * @returns 认证通过返回原请求，失败则重定向到登录页
+ */
 export async function middleware(request: NextRequest) {
-  // 检查是否是受保护的路径
   const path = request.nextUrl.pathname;
   if (protectedPaths.some((prefix) => path.startsWith(prefix))) {
-    // 调用认证中间件
     const authResult = await authMiddleware(request);
 
-    // 如果认证失败，重定向到登录页面
     if ('error' in authResult) {
       const loginUrl = new URL('/login', request.url);
       loginUrl.searchParams.set('from', path);
@@ -22,7 +26,9 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// 配置匹配的路径
+/**
+ * 中间件匹配配置，排除静态与 API 资源。
+ */
 export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };

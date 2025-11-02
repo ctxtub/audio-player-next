@@ -1,6 +1,9 @@
 import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
+/**
+ * 一分钟对应的毫秒数，用于换算倒计时。
+ */
 const MINUTE_IN_MS = 60000;
 
 /**
@@ -32,8 +35,14 @@ type PlaybackStoreActions = {
   reset: () => void;
 };
 
+/**
+ * 播放器 store 的完整状态与动作集合。
+ */
 export type PlaybackStore = PlaybackStoreBaseState & PlaybackStoreActions;
 
+/**
+ * 播放器状态的默认初始值。
+ */
 const INITIAL_STATE: PlaybackStoreBaseState = {
   sessionId: null,
   isPlaying: false,
@@ -47,6 +56,9 @@ const INITIAL_STATE: PlaybackStoreBaseState = {
   _lastTickAt: null,
 };
 
+/**
+ * 播放器 store 创建器，封装倒计时与状态更新逻辑。
+ */
 const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
   /**
    * 停止倒计时定时器，防止内存泄漏或重复累加。
@@ -191,4 +203,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
   };
 };
 
+/**
+ * 播放器 store Hook，提供播放状态与操作。
+ */
 export const usePlaybackStore = create<PlaybackStore>()(devtools(playbackStoreCreator));

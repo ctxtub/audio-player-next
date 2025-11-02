@@ -2,15 +2,30 @@ import React, { useCallback, useMemo } from 'react';
 import { Slider } from 'antd-mobile';
 import styles from '../index.module.scss';
 
+/**
+ * 基础播放配置模块的入参。
+ */
 interface BasicConfigSectionProps {
   playDuration: number;
   onPlayDurationChange: (value: number) => void;
 }
 
+/**
+ * 支持设置的最小时长（分钟）。
+ */
 const MIN_DURATION = 10;
+/**
+ * 支持设置的最大时长（分钟）。
+ */
 const MAX_DURATION = 60;
+/**
+ * 调整步长（分钟）。
+ */
 const STEP = 10;
 
+/**
+ * 设置页面的基础配置模块，控制播放时长。
+ */
 const BasicConfigSection: React.FC<BasicConfigSectionProps> = ({
   playDuration,
   onPlayDurationChange,

@@ -5,12 +5,18 @@ import { Selector } from 'antd-mobile';
 import type { ThemeMode } from '@/types/theme';
 import styles from '../index.module.scss';
 
+/**
+ * 主题选项的元数据结构。
+ */
 interface ThemeOptionMeta {
   value: ThemeMode;
   label: string;
   icon: string;
 }
 
+/**
+ * 可供选择的主题模式列表。
+ */
 const THEME_OPTIONS: ThemeOptionMeta[] = [
   {
     value: 'light',
@@ -29,11 +35,17 @@ const THEME_OPTIONS: ThemeOptionMeta[] = [
   },
 ];
 
+/**
+ * 主题设置组件的入参。
+ */
 interface ThemeModeSectionProps {
   value: ThemeMode;
   onChange: (next: ThemeMode) => void;
 }
 
+/**
+ * 主题模式切换模块，允许选择亮/暗/跟随系统。
+ */
 const ThemeModeSection: React.FC<ThemeModeSectionProps> = ({ value, onChange }) => {
   const handleChange = useCallback(
     (values: string[]) => {

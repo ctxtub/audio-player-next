@@ -1,3 +1,6 @@
+/**
+ * 构造 ServiceError 时可选的初始化参数。
+ */
 export type ServiceErrorOptions = {
   message: string;
   status: number;

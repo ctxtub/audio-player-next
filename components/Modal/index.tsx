@@ -3,6 +3,9 @@ import { Popup } from 'antd-mobile';
 import CloseIcon from '@/public/icons/close.svg';
 import styles from './index.module.scss';
 
+/**
+ * 模态框组件的入参。
+ */
 export interface ModalProps {
   isShow: boolean;
   title?: string;
@@ -12,6 +15,9 @@ export interface ModalProps {
   onClose?: () => void;
 }
 
+/**
+ * 模态框实例在程序化调用下暴露的方法。
+ */
 export interface ModalInstance {
   show: () => void;
   close: () => void;
@@ -19,6 +25,10 @@ export interface ModalInstance {
   update: (newProps: Partial<ModalProps>) => void;
 }
 
+/**
+ * 控制模态框显隐的 Hook。
+ * @returns 模态框可见状态及开关方法
+ */
 export const useModal = () => {
   const [isShow, setIsShow] = useState(false);
   const showModal = () => setIsShow(true);
@@ -26,6 +36,9 @@ export const useModal = () => {
   return { isShow, showModal, closeModal };
 };
 
+/**
+ * 通用模态框组件，支持头部额外内容与关闭按钮。
+ */
 const Modal: React.FC<ModalProps> = ({
   isShow,
   title,

@@ -25,11 +25,17 @@ const sanitizeText = (text: string): string => {
   return escapeSsml(text.replace(/\s+/g, ' ').trim());
 };
 
+/**
+ * 调用底层语音合成时需要的参数。
+ */
 type SynthesizeParams = {
   text: string;
   voiceName?: VoiceId;
 };
 
+/**
+ * 语音合成的结果载体。
+ */
 type SynthesizeResult = {
   audio: ArrayBuffer;
   voiceName: VoiceId;

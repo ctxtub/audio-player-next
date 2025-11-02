@@ -11,7 +11,11 @@ import {
   INITIAL_THEME_SCRIPT,
 } from '@/components/ThemeProvider/themeConfig';
 
-
+/**
+ * 应用根布局，注入主题脚本与全局导航。
+ * @param children 页面渲染内容
+ * @returns 包裹全局 Provider 的 HTML 结构
+ */
 export default function RootLayout({
   children,
 }: {

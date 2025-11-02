@@ -28,8 +28,14 @@ type StoryStoreActions = {
   reset: () => void;
 };
 
+/**
+ * 故事 store 的完整状态与动作集合。
+ */
 export type StoryStore = StoryStoreBaseState & StoryStoreActions;
 
+/**
+ * 故事状态的默认初始值。
+ */
 const INITIAL_STATE: StoryStoreBaseState = {
   sessionId: null,
   inputText: '',
@@ -59,6 +65,9 @@ const normalizeError = (error: unknown): Error => {
 /**
  * 生成新的会话标识，优先使用浏览器原生方法，退化到时间戳随机串。
  */
+/**
+ * 生成新的会话标识，优先使用浏览器原生方法，退化到时间戳随机串。
+ */
 const createSessionId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -66,6 +75,9 @@ const createSessionId = () => {
   return `story-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
+/**
+ * 故事 store 创建器，封装故事生成与状态管理逻辑。
+ */
 const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
   ...INITIAL_STATE,
   /**
@@ -207,4 +219,7 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
   },
 });
 
+/**
+ * 故事 store Hook，提供故事文本状态与操作。
+ */
 export const useStoryStore = create<StoryStore>()(devtools(storyStoreCreator));

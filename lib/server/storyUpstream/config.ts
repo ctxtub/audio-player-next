@@ -1,5 +1,9 @@
 import { ServiceError } from '@/lib/http/server/ErrorHandler';
 
+/**
+ * 故事生成相关的上游接口配置。
+ */
+
 export type LlmClientConfig = {
   apiBaseUrl: string;
   apiKey: string;
@@ -7,7 +11,14 @@ export type LlmClientConfig = {
   summaryModel?: string;
 };
 
+/**
+ * 加载 LLM 配置时必须存在的环境变量列表。
+ */
 const requiredEnv = ['LLM_API_BASE_URL', 'LLM_API_KEY', 'LLM_STORY_MODEL'] as const;
+
+/**
+ * 缓存的 LLM 配置，避免重复读取环境变量。
+ */
 let cachedConfig: LlmClientConfig | null = null;
 
 /**

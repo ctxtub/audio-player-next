@@ -9,19 +9,31 @@ import { HttpError } from '@/lib/http/common/ErrorHandler';
 import { ServiceError } from '@/lib/http/server/ErrorHandler';
 import type { StoryApiRequest, StoryApiResponse, StoryMode } from '@/types/story';
 
+/**
+ * 上游聊天接口支持的角色类型。
+ */
 type ChatRole = 'system' | 'user' | 'assistant';
 
+/**
+ * 发送给上游的单条消息结构。
+ */
 type ChatMessage = {
   role: ChatRole;
   content: string;
 };
 
+/**
+ * 上游返回的用量统计信息。
+ */
 type LlmUsagePayload = {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
 };
 
+/**
+ * 上游返回的单条补全结果。
+ */
 type ChatCompletionChoice = {
   index: number;
   message?: {
@@ -30,6 +42,9 @@ type ChatCompletionChoice = {
   };
 };
 
+/**
+ * Chat Completion 接口的完整响应结构。
+ */
 type ChatCompletionResponse = {
   id?: string;
   object?: string;
@@ -38,11 +53,17 @@ type ChatCompletionResponse = {
   usage?: LlmUsagePayload;
 };
 
+/**
+ * 传入模型的故事主题与摘要信息。
+ */
 type StoryPromptPayload = {
   storyPrompt: string;
   summarizedStory: string;
 };
 
+/**
+ * 允许处理的故事生成模式枚举。
+ */
 const allowedModes: StoryMode[] = ['generate', 'continue'];
 
 /**

@@ -1,3 +1,6 @@
+/**
+ * 用于构造 HttpError 的原始错误负载。
+ */
 export type HttpErrorPayload = {
   code?: string;
   message: string;
@@ -22,5 +25,8 @@ export class HttpError extends Error {
   }
 }
 
+/**
+ * 判断未知错误是否为 HttpError。
+ */
 export const isHttpError = (error: unknown): error is HttpError =>
   error instanceof HttpError;

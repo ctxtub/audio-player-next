@@ -18,6 +18,9 @@ import {
 } from './themeConfig';
 import type { ThemeValue, ThemeState } from './themeConfig';
 
+/**
+ * 主题上下文的状态结构。
+ */
 interface ThemeContextType {
   currentTheme: ThemeValue;
   themeMode: ThemeMode;
@@ -25,8 +28,14 @@ interface ThemeContextType {
   setThemeMode: (mode: ThemeMode) => void;
 }
 
+/**
+ * 初始化主题状态，读取存储或系统偏好。
+ */
 const INITIAL_THEME_STATE: ThemeState = getInitialThemeState();
 
+/**
+ * 主题上下文实例，提供主题状态读写。
+ */
 const ThemeContext = createContext<ThemeContextType>({
   currentTheme: INITIAL_THEME_STATE.resolvedTheme,
   themeMode: INITIAL_THEME_STATE.themeMode,
@@ -34,8 +43,17 @@ const ThemeContext = createContext<ThemeContextType>({
   setThemeMode: () => {},
 });
 
+/**
+ * 获取主题上下文的快捷 Hook。
+ * @returns 主题上下文状态与操作
+ */
 export const useTheme = () => useContext(ThemeContext);
 
+/**
+ * 主题 Provider，负责管理主题状态并同步至文档。
+ * @param children 需要包裹的子节点
+ * @returns 包裹 ConfigProvider 的主题上下文
+ */
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themeMode, setThemeMode] = useState<ThemeMode>(INITIAL_THEME_STATE.themeMode);
   const [systemTheme, setSystemTheme] = useState<ThemeValue>(INITIAL_THEME_STATE.systemTheme);

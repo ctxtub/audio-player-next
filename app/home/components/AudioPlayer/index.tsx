@@ -14,6 +14,9 @@ import PauseIcon from '@/public/icons/audioplayer-pause.svg';
 import BackgroundIcon from '@/public/icons/audioplayer-background.svg';
 import styles from './index.module.scss';
 
+/**
+ * 音频播放器接受的事件回调与配置。
+ */
 interface AudioPlayerProps {
   onPlay?: () => void;
   onPause?: () => void;
@@ -22,6 +25,9 @@ interface AudioPlayerProps {
   onProgress?: (payload: { currentTime: number; duration: number }) => void;
 }
 
+/**
+ * 通过 ref 暴露给父级的播放器控制方法。
+ */
 export interface AudioPlayerHandle {
   play: (audioUrl: string) => Promise<void>;
   pause: () => void;
@@ -29,6 +35,9 @@ export interface AudioPlayerHandle {
   setPlaybackRate: (rate: number) => void;
 }
 
+/**
+ * 可选的播放速度列表，按按钮顺序显示。
+ */
 const PLAYBACK_RATES = [
   { value: 0.8, label: '0.8x' },
   { value: 0.9, label: '0.9x' },
@@ -39,6 +48,9 @@ const PLAYBACK_RATES = [
   { value: 1.5, label: '1.5x' },
 ];
 
+/**
+ * 首页音频播放器组件，负责播放控制与进度反馈。
+ */
 export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
   ({ onPlay, onPause, onEnded, onNearEnd, onProgress }, ref: ForwardedRef<AudioPlayerHandle>) => {
     const audioRef = useRef<HTMLAudioElement>(null);

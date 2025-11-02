@@ -13,9 +13,18 @@ type PlayableSegment = {
   source: 'initial' | 'preloaded' | 'generated';
 };
 
+/**
+ * 预加载失败后的重试间隔（毫秒）。
+ */
 const PRELOAD_RETRY_DELAY = 5000;
+/**
+ * 预加载允许的最大重试次数。
+ */
 const PRELOAD_RETRY_LIMIT = 3;
 
+/**
+ * 预加载重试的挂起定时器实例。
+ */
 let preloadRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
@@ -51,6 +60,10 @@ const schedulePreloadRetry = () => {
   }, PRELOAD_RETRY_DELAY);
 };
 
+/**
+ * 确保配置已经加载并合法，否则抛出错误。
+ * @returns 当前有效的配置对象
+ */
 const ensureConfigReady = () => {
   const configState = useConfigStore.getState();
   if (!configState.isConfigValid()) {

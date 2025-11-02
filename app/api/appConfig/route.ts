@@ -4,6 +4,9 @@ import { loadTtsConfig } from '@/lib/server/ttsUpstream/config';
 import { ServiceError } from '@/lib/http/server/ErrorHandler';
 import type { AppConfigResponse } from '@/types/appConfig';
 
+/**
+ * 默认播放时长（分钟），用于缺省配置。
+ */
 const DEFAULT_PLAY_DURATION = 30;
 
 /**

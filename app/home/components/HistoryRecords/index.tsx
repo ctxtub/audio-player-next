@@ -1,7 +1,7 @@
 import React, { useEffect, forwardRef, useImperativeHandle, useMemo } from 'react';
+import Modal, { useModal } from '@/components/Modal';
 import PlayIcon from '@/public/icons/audioplayer-play.svg';
 import DeleteIcon from '@/public/icons/close.svg';
-import Modal, { useModal } from '../../../../components/Modal';
 import {
   usePromptHistoryStore,
   selectSortMode,
@@ -12,14 +12,23 @@ import styles from './index.module.scss';
 
 export type { HistoryRecord } from '@/stores/promptHistoryStore';
 
+/**
+ * 暴露给父组件的历史记录弹窗控制方法。
+ */
 export interface HistoryRecordsRef {
   showModal: () => void;
 }
 
+/**
+ * 历史记录组件的入参定义。
+ */
 interface HistoryRecordsProps {
   onSelectPrompt: (prompt: string) => void;
 }
 
+/**
+ * 历史记录弹窗组件，支持提示词排序与回放。
+ */
 const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props, ref) => {
   const { onSelectPrompt } = props;
   const { isShow, showModal, closeModal } = useModal();

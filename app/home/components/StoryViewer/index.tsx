@@ -1,11 +1,17 @@
 import React from 'react';
-import Modal, { useModal } from '../../../../components/Modal';
+import Modal, { useModal } from '@/components/Modal';
 import styles from './index.module.scss';
 
+/**
+ * 故事展示组件的入参定义。
+ */
 interface StoryViewerProps {
   storyList: string[] | string;
 }
 
+/**
+ * 故事展示组件，支持预览与弹窗阅读全文。
+ */
 const StoryViewer: React.FC<StoryViewerProps> = ({ storyList }) => {
   const storyText = Array.isArray(storyList) ? storyList.join('\n') : storyList;
   const { isShow, showModal, closeModal } = useModal();

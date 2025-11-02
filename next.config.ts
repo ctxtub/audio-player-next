@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: "standalone",
   experimental: {
     turbo: {
       rules: {
@@ -11,6 +11,15 @@ const nextConfig: NextConfig = {
         },
       },
     },
+  },
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.svg$/i,
+      issuer: { and: [/\.[jt]sx?$/] },
+      use: ['@svgr/webpack'],
+    });
+
+    return config;
   },
 };
 

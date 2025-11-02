@@ -21,8 +21,10 @@ jobs:
             echo "BARK_WEBHOOK 未配置，跳过开始通知"
             exit 0
           fi
-          MESSAGE_TITLE="Docker镜像 推送开始"
-          MESSAGE_BODY="仓库：${GITHUB_REPOSITORY} 分支：${GITHUB_REF_NAME}"
+          MESSAGE_TITLE="Docker镜像 编译开始"
+          REPO_NAME=$(basename "${GITHUB_REPOSITORY}")
+          COMMIT_ID=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          MESSAGE_BODY="仓库：${REPO_NAME} 分支：${GITHUB_REF_NAME} 提交：${COMMIT_ID}"
           ENCODED_TITLE=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_TITLE}")
           ENCODED_BODY=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_BODY}")
           curl -sS "${BARK_WEBHOOK}/${ENCODED_TITLE}/${ENCODED_BODY}"
@@ -61,7 +63,9 @@ jobs:
           else
             MESSAGE_TITLE="Docker镜像 推送失败"
           fi
-          MESSAGE_BODY="仓库：${GITHUB_REPOSITORY} 分支：${GITHUB_REF_NAME}"
+          REPO_NAME=$(basename "${GITHUB_REPOSITORY}")
+          COMMIT_ID=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          MESSAGE_BODY="仓库：${REPO_NAME} 分支：${GITHUB_REF_NAME} 提交：${COMMIT_ID}"
           ENCODED_TITLE=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_TITLE}")
           ENCODED_BODY=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_BODY}")
           curl -sS "${{ secrets.BARK_WEBHOOK }}/${ENCODED_TITLE}/${ENCODED_BODY}"

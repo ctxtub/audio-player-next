@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, forwardRef, useImperativeHandle, useMemo } from 'react';
 import Modal, { useModal } from '@/components/Modal';
 import PlayIcon from '@/public/icons/audioplayer-play.svg';

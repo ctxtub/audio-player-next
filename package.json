@@ -2,11 +2,15 @@
   "name": "audio-player-next",
   "version": "0.1.0",
   "private": true,
+  "repository": "https://github.com/ctxtub/audio-player-next",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up",
+    "docker:push": "./scripts/push-ghcr.sh"
   },
   "dependencies": {
     "@svgr/webpack": "^8.1.0",

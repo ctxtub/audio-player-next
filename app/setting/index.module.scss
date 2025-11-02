@@ -47,6 +47,11 @@
 
     .voiceSelector {
       width: 100%;
+
+      :global(.adm-selector-item) {
+        width: 100%;
+        text-align: left;
+      }
     }
 
     .voiceSelectorWrapper {
@@ -57,7 +62,7 @@
 
     .voiceSelectorOption {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
       gap: 12px;
       width: 100%;

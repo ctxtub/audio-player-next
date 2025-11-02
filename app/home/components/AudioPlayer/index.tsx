@@ -47,7 +47,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
     const hasTriggeredPreload = useRef(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
-    const [progressPercent, setProgressPercent] = useState(0);
     const [isPlaying, setIsPlaying] = useState(false);
     const [playbackRate, setPlaybackRate] = useState(1);
     const [showSpeedMenu, setShowSpeedMenu] = useState(false);
@@ -63,7 +62,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         hasTriggeredPreload.current = false;
         setCurrentTime(0);
         setDuration(0);
-        setProgressPercent(0);
         if (progressBarRef.current) {
           progressBarRef.current.style.setProperty('--progress-percent', '0%');
         }
@@ -88,7 +86,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
       if (audioRef.current) {
         audioRef.current.pause();
         setIsPlaying(false);
-        onPause && onPause();
+        onPause?.();
       }
     }, [onPause]);
 
@@ -99,7 +97,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
           setCurrentTime(time);
           if (duration > 0) {
             const percent = (time / duration) * 100;
-            setProgressPercent(percent);
             if (progressBarRef.current) {
               progressBarRef.current.style.setProperty('--progress-percent', `${percent}%`);
             }
@@ -133,7 +130,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         setCurrentTime(ct);
         if (audioEl.duration > 0) {
           const percent = (ct / audioEl.duration) * 100;
-          setProgressPercent(percent);
           if (progressBarRef.current) {
             progressBarRef.current.style.setProperty('--progress-percent', `${percent}%`);
           }
@@ -155,7 +151,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
       const handleLoadedMetadata = () => {
         setDuration(audioEl.duration);
         setCurrentTime(0);
-        setProgressPercent(0);
         if (progressBarRef.current) {
           progressBarRef.current.style.setProperty('--progress-percent', '0%');
         }
@@ -199,17 +194,17 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
       if (isPlaying) {
         audioRef.current.pause();
         setIsPlaying(false);
-        onPause && onPause();
+        onPause?.();
       } else {
         audioRef.current
           .play()
           .then(() => {
             setIsPlaying(true);
-            onPlay && onPlay();
+            onPlay?.();
           })
           .catch((error) => {
             console.error('播放失败:', error);
-            onPause && onPause();
+            onPause?.();
           });
       }
     };
@@ -221,7 +216,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, AudioPlayerProps>(
         setCurrentTime(time);
         if (duration > 0) {
           const percent = (time / duration) * 100;
-          setProgressPercent(percent);
           event.target.style.setProperty('--progress-percent', `${percent}%`);
         }
       }

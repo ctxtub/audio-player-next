@@ -141,4 +141,6 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
   );
 });
 
+HistoryRecords.displayName = 'HistoryRecords';
+
 export default HistoryRecords;

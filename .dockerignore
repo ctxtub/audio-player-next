@@ -1,0 +1,13 @@
+.git
+.gitignore
+.turbo
+.next
+node_modules
+npm-debug.log
+yarn-error.log
+dist
+coverage
+artifacts
+Dockerfile
+README.md
+docs

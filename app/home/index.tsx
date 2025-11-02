@@ -76,7 +76,7 @@ const HomePage: React.FC = () => {
           audioRef.current.pause();
         }
 
-        const { audioUrl, segment } = await beginStorySession(shortcutText);
+        const { audioUrl } = await beginStorySession(shortcutText);
 
         if (!audioRef.current) {
           throw new Error('播放器尚未就绪');
@@ -91,6 +91,15 @@ const HomePage: React.FC = () => {
     },
     []
   );
+
+  // 播放控制模块：播放器播放/暂停回调
+  const handlePlayCallback = useCallback(() => {
+    handlePlaybackStart();
+  }, []);
+
+  const handlePauseCallback = useCallback(() => {
+    handlePlaybackPause();
+  }, []);
 
   // 播放控制模块：音频播放结束时处理
   const handleAudioEndedCallback = useCallback(async () => {
@@ -108,22 +117,13 @@ const HomePage: React.FC = () => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '无法播放下一段音频';
       Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
-      handlePlaybackPause();
+      handlePauseCallback();
     }
-  }, [handlePlaybackPause]);
+  }, [handlePauseCallback]);
 
   // 播放控制模块：音频即将结束时触发预加载
   const handleNearEndCallback = useCallback(() => {
     handleNearEnd();
-  }, []);
-
-  // 播放控制模块：播放器播放/暂停回调
-  const handlePlayCallback = useCallback(() => {
-    handlePlaybackStart();
-  }, []);
-
-  const handlePauseCallback = useCallback(() => {
-    handlePlaybackPause();
   }, []);
 
   const handleProgressUpdate = useCallback((payload: { currentTime: number; duration: number }) => {

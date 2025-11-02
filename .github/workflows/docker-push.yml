@@ -13,6 +13,20 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Send Bark start notification
+        env:
+          BARK_WEBHOOK: ${{ secrets.BARK_WEBHOOK }}
+        run: |
+          if [ -z "${BARK_WEBHOOK}" ]; then
+            echo "BARK_WEBHOOK 未配置，跳过开始通知"
+            exit 0
+          fi
+          MESSAGE_TITLE="Docker镜像 推送开始"
+          MESSAGE_BODY="仓库：${GITHUB_REPOSITORY} 分支：${GITHUB_REF_NAME}"
+          ENCODED_TITLE=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_TITLE}")
+          ENCODED_BODY=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_BODY}")
+          curl -sS "${BARK_WEBHOOK}/${ENCODED_TITLE}/${ENCODED_BODY}"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 

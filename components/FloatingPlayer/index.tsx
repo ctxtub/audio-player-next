@@ -9,12 +9,7 @@ import { useConfigStore } from '@/stores/configStore';
 import { usePlaybackStore, useFloatingPlayer } from '@/stores/playbackStore';
 import {
   clampValue,
-  determineDockedSide,
-  getDockedPosition,
   shouldSkipPointerDown,
-  shouldUndock,
-  FLOATING_HANDLE_SIZE,
-  type DockedSide,
   type FloatingPosition,
   type PanelSize,
   type ViewportSize,
@@ -32,8 +27,6 @@ export const FloatingPlayer: React.FC = () => {
   const [position, setPosition] = useState<FloatingPosition>({ x: 16, y: 360 });
   // 是否处于拖拽中状态
   const [isDragging, setIsDragging] = useState(false);
-  // 当前吸附方向，null 表示未吸附
-  const [dockedSide, setDockedSide] = useState<DockedSide | null>(null);
   // 浮动面板 DOM 引用，用于读取尺寸
   const panelRef = useRef<HTMLDivElement | null>(null);
   const isPlaying = usePlaybackStore((state) => state.isPlaying);
@@ -99,29 +92,11 @@ export const FloatingPlayer: React.FC = () => {
       }
 
       const [movementX, movementY] = movement;
-      let relativeMovementX = movementX - context.movementOrigin[0];
-      let relativeMovementY = movementY - context.movementOrigin[1];
-      let activeDockSide = dockedSide;
-      let undockedThisFrame = false;
+      const relativeMovementX = movementX - context.movementOrigin[0];
+      const relativeMovementY = movementY - context.movementOrigin[1];
 
       const panelSize = context.panelSize;
       const viewport = context.viewport;
-
-      if (activeDockSide !== null && shouldUndock(activeDockSide, relativeMovementX)) {
-        setDockedSide(null);
-        activeDockSide = null;
-        undockedThisFrame = true;
-        const maxX = Math.max(0, viewport.width - panelSize.width);
-        const maxY = Math.max(0, viewport.height - panelSize.height);
-        const newOrigin: FloatingPosition = {
-          x: clampValue(context.origin.x + relativeMovementX, 0, maxX),
-          y: clampValue(context.origin.y + relativeMovementY, 0, maxY),
-        };
-        context.origin = newOrigin;
-        context.movementOrigin = [movementX, movementY];
-        relativeMovementX = 0;
-        relativeMovementY = 0;
-      }
 
       const rawPosition: FloatingPosition = {
         x: context.origin.x + relativeMovementX,
@@ -135,62 +110,7 @@ export const FloatingPlayer: React.FC = () => {
         y: clampValue(rawPosition.y, 0, maxY),
       };
 
-      const detectionPosition = activeDockSide !== null ? rawPosition : freePosition;
-      const nextDockSide = undockedThisFrame
-        ? null
-        : determineDockedSide(detectionPosition, panelSize, viewport);
-
-      if (activeDockSide !== null) {
-        if (nextDockSide && nextDockSide !== activeDockSide) {
-          // 切换到另一侧吸附
-          setDockedSide(nextDockSide);
-          const dockedPosition = getDockedPosition({
-            side: nextDockSide,
-            position: rawPosition,
-            panelSize,
-            viewport,
-            handleSize: FLOATING_HANDLE_SIZE,
-          });
-          setPosition(dockedPosition);
-          return context;
-        }
-
-        if (nextDockSide === activeDockSide) {
-          const dockedPosition = getDockedPosition({
-            side: activeDockSide,
-            position: rawPosition,
-            panelSize,
-            viewport,
-            handleSize: FLOATING_HANDLE_SIZE,
-          });
-          setPosition(dockedPosition);
-          return context;
-        }
-
-        const dockedPosition = getDockedPosition({
-          side: activeDockSide,
-          position: rawPosition,
-          panelSize,
-          viewport,
-          handleSize: FLOATING_HANDLE_SIZE,
-        });
-        setPosition(dockedPosition);
-        return context;
-      }
-
-      if (nextDockSide) {
-        setDockedSide(nextDockSide);
-        const dockedPosition = getDockedPosition({
-          side: nextDockSide,
-          position: rawPosition,
-          panelSize,
-          viewport,
-          handleSize: FLOATING_HANDLE_SIZE,
-        });
-        setPosition(dockedPosition);
-      } else {
-        setPosition(freePosition);
-      }
+      setPosition(freePosition);
 
       if (last || canceled) {
         setIsDragging(false);
@@ -249,17 +169,10 @@ export const FloatingPlayer: React.FC = () => {
     return '快来首页创作吧';
   }, [isPlaying, remainingTimeLabel]);
 
-  const dockedClassMap: Record<DockedSide, string> = {
-    left: styles.floatingPanelDockedLeft,
-    right: styles.floatingPanelDockedRight,
-  };
-
   const floatingPanelClassName = [
     styles.floatingPanel,
     shouldShowFloatingPanel ? styles.floatingPanelExpanded : styles.floatingPanelHidden,
     isDragging ? styles.floatingPanelDragging : '',
-    dockedSide ? styles.floatingPanelDocked : '',
-    dockedSide ? dockedClassMap[dockedSide] : '',
   ].join(' ');
 
   return (
@@ -273,9 +186,6 @@ export const FloatingPlayer: React.FC = () => {
         }}
         {...bindFloatingHeaderDrag()}
       >
-        <div className={styles.floatingHandle} aria-hidden={dockedSide === null}>
-          <span className={styles.floatingHandleBar} />
-        </div>
         <div className={styles.floatingHeader}>
           <div className={styles.floatingTitle}>{floatingTitleLabel}</div>
           <div className={styles.floatingActions}>

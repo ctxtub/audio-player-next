@@ -13,6 +13,26 @@ import { usePlaybackStore } from '@/stores/playbackStore';
 import type { AudioControllerHandle } from '@/types/audioPlayer';
 
 /**
+ * 判断播放请求因暂停而被中断的异常类型，避免重复弹出错误提示。
+ * @param error 未处理的异常对象
+ * @returns 是否属于暂停触发的中断错误
+ */
+const isPlayInterruptedError = (error: unknown): boolean => {
+  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
+    if (error.name === 'AbortError' || error.code === 20) {
+      return true;
+    }
+  }
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    if (message.includes('play() request was interrupted') && message.includes('pause')) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
  * 全局音频控制宿主组件，挂载隐藏的 audio 元素并向 Store 注册控制器。
  * @returns 隐藏的音频标签
  */
@@ -42,6 +62,9 @@ const AudioControllerHost: React.FC = () => {
         await audioEl.play();
         handlePlaybackStart();
       } catch (error) {
+        if (isPlayInterruptedError(error)) {
+          return;
+        }
         handlePlaybackPause();
         const message = error instanceof Error ? error.message : '无法播放音频';
         Toast.show({ icon: 'fail', content: message, duration: 3000 });
@@ -64,6 +87,9 @@ const AudioControllerHost: React.FC = () => {
       await audioEl.play();
       handlePlaybackStart();
     } catch (error) {
+      if (isPlayInterruptedError(error)) {
+        return;
+      }
       handlePlaybackPause();
       const message = error instanceof Error ? error.message : '无法恢复播放';
       Toast.show({ icon: 'fail', content: message, duration: 3000 });

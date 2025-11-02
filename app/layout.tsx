@@ -7,6 +7,7 @@ import { AntdMobileCompat } from '@/components/AntdMobileCompat';
 import MainTabBar from '@/components/MainTabBar';
 import AudioControllerHost from '@/components/AudioControllerHost';
 import { FloatingPlayer } from '@/components/FloatingPlayer';
+import ConfigInitializer from '@/components/ConfigInitializer';
 import {
   FALLBACK_THEME,
   THEME_COLORS,
@@ -34,14 +35,16 @@ export default function RootLayout({
       <body>
         <AntdMobileCompat />
         <ThemeProvider>
-          <div className={styles.app}>
-            <main className={styles.content}>
-              {children}
-            </main>
-            <MainTabBar />
-          </div>
-          <AudioControllerHost />
-          <FloatingPlayer />
+          <ConfigInitializer>
+            <div className={styles.app}>
+              <main className={styles.content}>
+                {children}
+              </main>
+              <MainTabBar />
+            </div>
+            <AudioControllerHost />
+            <FloatingPlayer />
+          </ConfigInitializer>
         </ThemeProvider>
       </body>
     </html>

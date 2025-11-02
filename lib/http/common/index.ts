@@ -1,6 +1,10 @@
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { HttpError } from '@/lib/http/common/ErrorHandler';
 
+/**
+ * 创建 HTTP 客户端时允许配置的参数集合。
+ */
+
 type CreateHttpClientOptions = {
   baseURL?: string;
   timeout?: number;

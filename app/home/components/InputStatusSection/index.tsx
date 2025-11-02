@@ -1,17 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CSSTransition } from 'react-transition-group';
 import { Toast } from 'antd-mobile';
+import HistoryRecords, { HistoryRecordsRef } from '@/app/home/components/HistoryRecords';
 import ClockIcon from '@/public/icons/playstatus-clock.svg';
 import LoadingIcon from '@/public/icons/playstatus-loading.svg';
 import WarningIcon from '@/public/icons/playstatus-warning.svg';
 import CheckIcon from '@/public/icons/playstatus-check.svg';
-import HistoryRecords, { HistoryRecordsRef } from '../HistoryRecords';
 import {
   usePromptHistoryStore,
   selectIsInitialized,
 } from '@/stores/promptHistoryStore';
 
 import styles from './index.module.scss';
+
+/**
+ * 输入与状态模块的入参定义。
+ */
 
 interface InputStatusSectionProps {
   // StoryInput props
@@ -27,6 +31,9 @@ interface InputStatusSectionProps {
   preloadAudioUrl: string | null;
 }
 
+/**
+ * 首页输入与状态模块，负责发起故事生成并展示当前播放/预加载情况。
+ */
 const InputStatusSection: React.FC<InputStatusSectionProps> = ({
   // StoryInput props
   inputText,

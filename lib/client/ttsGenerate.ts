@@ -1,4 +1,4 @@
-import type { TtsGeneratePayload } from '@/types/ttsGenerate';
+import type { TtsGeneratePayload, VoiceId } from '@/types/ttsGenerate';
 import { browserHttp } from '@/lib/http/browser';
 import { HttpError } from '@/lib/http/common/ErrorHandler';
 
@@ -20,14 +20,14 @@ export class TtsApiClientError extends Error {
 /**
  * 通过服务端代理请求语音音频。
  * @param text 待合成的文本。
- * @param voiceName 可选的语音名称。
+ * @param voiceId 可选的语音标识。
  * @returns 指向生成音频的临时 URL。
  * @throws TtsApiClientError
  */
-export const fetchAudio = async (text: string, voiceName?: string): Promise<string> => {
+export const fetchAudio = async (text: string, voiceId?: VoiceId): Promise<string> => {
   const payload: TtsGeneratePayload = {
     text,
-    voiceId: voiceName,
+    voiceId,
   };
 
   try {

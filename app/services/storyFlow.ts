@@ -88,7 +88,7 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
   playbackStore.reset();
 
   const firstSegment = await storyStore.startSession(prompt);
-  const audioUrl = await fetchAudio(firstSegment, apiConfig.voiceName);
+  const audioUrl = await fetchAudio(firstSegment, apiConfig.voiceId);
   storyStore.appendSegment(firstSegment);
 
   const latestSessionId = useStoryStore.getState().sessionId;

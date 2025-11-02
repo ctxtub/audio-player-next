@@ -14,6 +14,7 @@
 - `PageLoading/`：页面级加载组件。
 - `StoryViewer/`：故事文本预览与弹窗展示。
 - `ThemeProvider/`：主题上下文与脚本注入。
+- `ConfigInitializer/`：统一触发配置加载并提供加载态。
 
 ## 关键协作与依赖
 - 组件依赖 `@/stores/**`、`@/utils/**` 提供的状态与工具。

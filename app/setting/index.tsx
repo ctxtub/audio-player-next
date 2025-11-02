@@ -16,14 +16,9 @@ import VoiceServiceSection from './components/VoiceServiceSection';
 const ConfigPage: React.FC = () => {
   const apiConfig = useConfigStore(state => state.apiConfig);
   const updateConfig = useConfigStore(state => state.update);
-  const initializeConfig = useConfigStore(state => state.initialize);
   const isConfigLoaded = useConfigStore(state => state.isLoaded);
   const voiceOptions = useConfigStore(state => state.voiceOptions);
   const { themeMode, setThemeMode } = useTheme();
-
-  useEffect(() => {
-    initializeConfig().catch(() => {});
-  }, [initializeConfig]);
 
   useEffect(() => {
     if (!isConfigLoaded || voiceOptions.length === 0) {

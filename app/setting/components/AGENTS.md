@@ -6,6 +6,7 @@
 
 ## 子目录结构
 - `BasicConfigSection.tsx`：基础播放配置表单。
+- `FloatingPlayerSection.tsx`：浮动播放器开关。
 - `ThemeModeSection.tsx`：主题模式选择组件。
 - `VoiceServiceSection.tsx`：语音音色配置表单。
 

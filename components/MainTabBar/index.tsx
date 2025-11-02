@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { TabBar } from 'antd-mobile';
 import { AppOutline, SoundOutline, SetOutline } from 'antd-mobile-icons';
 import { usePathname, useRouter } from 'next/navigation';
@@ -52,6 +52,11 @@ const MainTabBar: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
   const activeKey = resolveActiveKey(pathname);
+
+  useEffect(() => {
+    router.prefetch('/player');
+    router.prefetch('/setting');
+  }, [router]);
 
   const handleTabChange = useCallback(
     (key: string) => {

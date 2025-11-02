@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useCallback, useEffect, useMemo } from 'react';
 
 import { PageLoading } from '@/components/PageLoading';

@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Toast } from 'antd-mobile';

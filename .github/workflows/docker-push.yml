@@ -43,11 +43,11 @@ jobs:
         run: |
           STATUS="${{ needs.docker-push.result }}"
           if [ "${STATUS}" = "success" ]; then
-            MESSAGE_TITLE="Docker 推送成功"
+            MESSAGE_TITLE="Docker镜像 推送成功"
           else
-            MESSAGE_TITLE="Docker 推送失败"
+            MESSAGE_TITLE="Docker镜像 推送失败"
           fi
-          MESSAGE_BODY="仓库：${GITHUB_REPOSITORY}\n分支：${GITHUB_REF_NAME}\n标签：${IMAGE_TAG}\n状态：${STATUS}"
+          MESSAGE_BODY="仓库：${GITHUB_REPOSITORY} 分支：${GITHUB_REF_NAME}"
           ENCODED_TITLE=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_TITLE}")
           ENCODED_BODY=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_BODY}")
           curl -sS "${{ secrets.BARK_WEBHOOK }}/${ENCODED_TITLE}/${ENCODED_BODY}"

@@ -7,7 +7,7 @@
 ## 子目录结构
 - `BasicConfigSection.tsx`：基础播放配置表单。
 - `ThemeModeSection.tsx`：主题模式选择组件。
-- `VoiceServiceSection.tsx`：语音服务配置表单。
+- `VoiceServiceSection.tsx`：语音音色配置表单。
 
 ## 关键协作与依赖
 - 使用 `@/stores/configStore` 与页面层共享状态更新。

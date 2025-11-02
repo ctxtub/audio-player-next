@@ -6,7 +6,7 @@ import type { VoiceOption } from '@/types/ttsGenerate';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
 
 /**
- * 语音服务配置模块的入参。
+ * 语音音色配置模块的入参。
  */
 interface VoiceServiceSectionProps {
   value?: string;
@@ -15,7 +15,7 @@ interface VoiceServiceSectionProps {
 }
 
 /**
- * 语音服务配置模块，支持选择声音并试听。
+ * 语音音色配置模块，支持选择声音并试听。
  */
 const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
   value,
@@ -113,7 +113,7 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
 
   return (
     <div className={styles.configSection}>
-      <h3>语音服务</h3>
+      <h3>语音音色</h3>
       {hasVoices ? (
         <div className={styles.voiceSelectorWrapper}>
           <Selector

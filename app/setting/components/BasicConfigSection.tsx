@@ -55,7 +55,7 @@ const BasicConfigSection: React.FC<BasicConfigSectionProps> = ({
 
   return (
     <div className={styles.configSection}>
-      <h3>基础配置</h3>
+      <h3>播放时长</h3>
       <div className={styles.configField}>
         <Slider
           className={styles.configSlider}

@@ -148,90 +148,40 @@ html, body, #root {
   min-height: 100vh;
 }
 
-/* iOS风格的毛玻璃效果 */
-.glass-effect {
-  backdrop-filter: blur(var(--blur-radius));
-  -webkit-backdrop-filter: blur(var(--blur-radius));
-  background-color: var(--card-background);
-  border: 1px solid var(--card-border);
-  border-radius: 16px;
-  transition: transform var(--transition-speed) var(--transition-timing);
-}
-
-/* iOS风格的卡片 */
-.ios-card {
-  background-color: var(--card-background);
-  border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0 8px 16px var(--shadow-color);
-  transition: transform var(--transition-speed) var(--transition-timing);
-}
-
-/* iOS风格的按钮 */
-.ios-button {
-  background-color: var(--primary);
-  color: #ffffff;
-  border: none;
-  border-radius: 12px;
-  padding: 12px 20px;
-  font-weight: 600;
-  font-size: 16px;
-  transition: transform var(--transition-speed) var(--transition-timing);
-}
-
-.ios-button:active {
-  transform: scale(0.98);
-  opacity: 0.9;
-}
-
-/* iOS风格的输入框 */
-.ios-input {
-  background-color: var(--inputBackground);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 16px;
-  color: var(--foreground);
-  font-size: 16px;
-  transition: transform var(--transition-speed) var(--transition-timing);
-}
-
-.ios-input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent);
-}
 
 /* antd-mobile Selector & Slider adjustments */
 .adm-selector {
-  --padding: 12px 16px;
-  --gap: 12px;
-  --text-color: var(--foreground);
-  --checked-text-color: var(--primary);
-  --color: var(--selector-surface);
-  --checked-color: var(--selector-selected-surface);
-  --border: 1px solid var(--selector-border-color);
-  --checked-border: 1px solid color-mix(in srgb, var(--primary) 42%, transparent);
+  --padding: 12px 16px !important;
+  --gap: 12px !important;
+  --text-color: var(--foreground) !important;
+  --checked-text-color: var(--primary) !important;
+  --color: var(--selector-surface) !important;
+  --checked-color: var(--selector-selected-surface) !important;
+  --border: 1px solid var(--selector-border-color) !important;
+  --checked-border: 1px solid color-mix(in srgb, var(--primary) 42%, transparent) !important;
 }
 
 .adm-selector-item {
-  backdrop-filter: blur(var(--blur-radius));
-  -webkit-backdrop-filter: blur(var(--blur-radius));
-  transition: background-color var(--transition-speed) var(--transition-timing),
-              border-color var(--transition-speed) var(--transition-timing),
-              color var(--transition-speed) var(--transition-timing);
+  backdrop-filter: blur(var(--blur-radius)) !important;
+  -webkit-backdrop-filter: blur(var(--blur-radius)) !important;
+  transition: background-color var(--transition-speed) var(--transition-timing) ,
+              border-color var(--transition-speed) var(--transition-timing) ,
+              color var(--transition-speed) var(--transition-timing) !important;
 }
 
 .adm-slider {
-  --fill-color: var(--primary);
+  --fill-color: var(--primary) !important;
 }
 
 .adm-switch {
   --border-width: 1px !important;
 }
 
+
 :root[data-theme="dark"] .adm-slider-thumb {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45) !important;
 }
 
 :root[data-theme="light"] .adm-slider-thumb {
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.18) !important;
 }

@@ -2,44 +2,54 @@
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-}
 
-.statusItem {
-  backdrop-filter: blur(5px);
-  box-shadow: 0 2px 8px var(--shadow-color);
-  transition: transform var(--transition-speed) var(--transition-timing);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 172px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 14px;
-  font-weight: 500;
+  .statusItem {
+    backdrop-filter: blur(5px);
+    box-shadow: 0 2px 8px var(--shadow-color);
+    transition: transform var(--transition-speed) var(--transition-timing);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 172px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
 
-  &:hover {
-    transform: translateY(-1px);
+    &:hover {
+      transform: translateY(-1px);
+    }
+
+    &.countdown {
+      background: color-mix(in srgb, var(--process) 20%, transparent);
+      color: var(--process);
+    }
+
+    &.loading {
+      background: color-mix(in srgb, var(--process) 20%, transparent);
+      color: var(--process);
+    }
+
+    &.error {
+      background: color-mix(in srgb, var(--error) 20%, transparent);
+      color: var(--error);
+    }
+
+    &.success {
+      background: color-mix(in srgb, var(--success) 20%, transparent);
+      color: var(--success);
+    }
+
+    .statusIcon {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+
+      &.loadingIcon {
+        animation: spin 1s linear infinite;
+      }
+    }
   }
-}
-
-.statusIcon {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-}
-
-.countdown {
-  background: color-mix(in srgb, var(--process) 20%, transparent);
-  color: var(--process);
-}
-
-.loading {
-  background: color-mix(in srgb, var(--process) 20%, transparent);
-  color: var(--process);
-}
-
-.loadingIcon {
-  animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
@@ -50,14 +60,4 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-.error {
-  background: color-mix(in srgb, var(--error) 20%, transparent);
-  color: var(--error);
-}
-
-.success {
-  background: color-mix(in srgb, var(--success) 20%, transparent);
-  color: var(--success);
 }

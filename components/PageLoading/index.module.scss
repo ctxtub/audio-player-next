@@ -9,14 +9,14 @@
   color: var(--foreground);
   text-align: center;
   padding: 24px;
-}
 
-.spinner {
-  --size: 48px;
-  --color: var(--foreground);
-}
+  .spinner {
+    --size: 48px;
+    --color: var(--foreground);
+  }
 
-.message {
-  font-size: 16px;
-  letter-spacing: 0.4px;
+  .message {
+    font-size: 16px;
+    letter-spacing: 0.4px;
+  }
 }

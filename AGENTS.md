@@ -17,7 +17,7 @@
   - 页面私有实现放在页面同级子目录：例如 `app/(group)/feature/page.tsx` 的专用组件放入 `app/(group)/feature/components/`，私有工具放入 `.../utils/`，私有 Hook 放入 `.../hooks/`
   - 跨页面复用的 UI/逻辑分别归档至根部 `components/`、`utils/`、`hooks/`，并按领域细分（如 `utils/http/`、`hooks/useAuth/`）；禁止从页面私有目录跨页引用
   - 建议项：为公共模块维护 Barrel 文件（如 `components/index.ts`、`utils/index.ts`）与最小使用示例/Story（若团队引入 Storybook）
-- 样式：共享样式放在 `styles/`，组件私有样式命名为 `*.module.scss` 并与组件共存；避免全局样式污染
+- 样式：共享样式放在 `styles/`，组件私有样式命名为 `*.module.scss` 并与组件共存；避免全局样式污染。类名使用小驼峰格式，并按父子层级嵌套组织选择器
 - 数据与状态：
   - 数据请求置于 Next.js Server Actions、`app/api/*` Route 或 `lib/` 服务层，再在客户端通过 props/Hook 使用
   - 全局/跨页状态使用 `stores/` 内的 Zustand store；页面内部优先 `useState`/`useReducer`
@@ -28,9 +28,7 @@
 - 代码注释：所有文件中的首层函数与变量必须编写中文注释；函数需说明职责及入参/返回，变量需说明用途与取值来源
 - AGENTS文档：
   - 每个目录需维护本地 `AGENTS.md` 描述该目录的职责、内部结构与上下游依赖，保持与根目录规范一致
-  - 非经用户指示，禁止主动修改根目录 `AGENTS.md`
-  - 新增目录时需在此目录下创建 `AGENTS.md`
-  - 编码交付前需确认新增或调整的注释与对应目录的 `AGENTS.md` 已同步更新
+  - 非经用户指示，禁止主动修改根目录 `AGENTS.md`，新增目录时需在此目录下创建 `AGENTS.md`，编码交付前需确认新增或调整的注释与对应目录的 `AGENTS.md` 已同步更新
 
 ## 测试与验证（Testing & Validation）
 

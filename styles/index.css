@@ -49,11 +49,17 @@
   --adm-color-border-secondary: var(--hoverBackground);
   --adm-color-background: var(--background);
   --adm-color-background-body: var(--background);
+  --adm-color-wathet: color-mix(in srgb, var(--primary) 22%, transparent);
+  --adm-color-fill-content: color-mix(in srgb, var(--foreground) 12%, transparent);
   --adm-color-fill: var(--inputBackground);
   --adm-color-fill-secondary: var(--hoverBackground);
   --adm-color-fill-tertiary: rgba(235, 235, 245, 0.08);
   --adm-color-fill-quaternary: rgba(235, 235, 245, 0.04);
+  --adm-color-text-light-solid: rgba(255, 255, 255, 0.9);
   --adm-color-shadow: rgba(0, 0, 0, 0.4);
+  --selector-surface: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --selector-selected-surface: color-mix(in srgb, var(--primary) 26%, transparent);
+  --selector-border-color: color-mix(in srgb, var(--foreground) 18%, transparent);
 }
 
 /* 亮色主题 */
@@ -92,11 +98,17 @@
   --adm-color-border-secondary: #e5e5ea;
   --adm-color-background: var(--background);
   --adm-color-background-body: var(--background);
+  --adm-color-wathet: color-mix(in srgb, var(--primary) 16%, transparent);
+  --adm-color-fill-content: color-mix(in srgb, var(--foreground) 6%, #ffffff);
   --adm-color-fill: #ffffff;
   --adm-color-fill-secondary: #f7f7fa;
   --adm-color-fill-tertiary: #f2f2f7;
   --adm-color-fill-quaternary: rgba(60, 60, 67, 0.08);
+  --adm-color-text-light-solid: #ffffff;
   --adm-color-shadow: rgba(0, 0, 0, 0.12);
+  --selector-surface: color-mix(in srgb, var(--foreground) 6%, transparent);
+  --selector-selected-surface: color-mix(in srgb, var(--primary) 18%, transparent);
+  --selector-border-color: color-mix(in srgb, var(--foreground) 12%, transparent);
 }
 
 /* Reset and base styles */
@@ -184,4 +196,36 @@ html, body, #root {
 .ios-input:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+/* antd-mobile Selector & Slider adjustments */
+.adm-selector {
+  --padding: 12px 16px;
+  --gap: 12px;
+  --text-color: var(--foreground);
+  --checked-text-color: var(--primary);
+  --color: var(--selector-surface);
+  --checked-color: var(--selector-selected-surface);
+  --border: 1px solid var(--selector-border-color);
+  --checked-border: 1px solid color-mix(in srgb, var(--primary) 42%, transparent);
+}
+
+.adm-selector-item {
+  backdrop-filter: blur(var(--blur-radius));
+  -webkit-backdrop-filter: blur(var(--blur-radius));
+  transition: background-color var(--transition-speed) var(--transition-timing),
+              border-color var(--transition-speed) var(--transition-timing),
+              color var(--transition-speed) var(--transition-timing);
+}
+
+.adm-slider {
+  --fill-color: var(--primary);
+}
+
+:root[data-theme="dark"] .adm-slider-thumb {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme="light"] .adm-slider-thumb {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.18);
 }

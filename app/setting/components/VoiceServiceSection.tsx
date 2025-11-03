@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Selector, Toast } from 'antd-mobile';
 
-import styles from '../index.module.scss';
 import type { VoiceOption } from '@/types/ttsGenerate';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
+import { SECTION_CLASS, SECTION_TITLE_CLASS } from './sectionStyles';
 
 /**
  * 语音音色配置模块的入参。
@@ -112,12 +112,12 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
   );
 
   return (
-    <div className={styles.configSection}>
-      <h3>语音音色</h3>
+    <div className={SECTION_CLASS}>
+      <h3 className={SECTION_TITLE_CLASS}>语音音色</h3>
       {hasVoices ? (
-        <div className={styles.voiceSelectorWrapper}>
+        <div className="flex flex-col gap-3">
           <Selector
-            className={styles.voiceSelector}
+            className="voice-selector w-full"
             columns={1}
             multiple={false}
             value={selectorValue}
@@ -127,21 +127,21 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
               return {
                 value: option.value,
                 label: (
-                  <div className={styles.voiceSelectorOption}>
-                    <div className={styles.voiceSelectorInfo}>
-                      <div className={styles.voiceSelectorName}>
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <div className="flex flex-col gap-1">
+                      <div className="text-[15px] font-semibold text-[var(--foreground)]">
                         {option.label}
                       </div>
-                      <div className={styles.voiceDescription}>
+                      <div className="flex flex-col gap-1 text-xs text-[var(--secondary)]">
                         <div>{option.description ?? '暂无描述'}</div>
-                        <div className={styles.voiceMeta}>
+                        <div className="text-xs text-[var(--secondary)]">
                           {(option.gender ?? '未知')} ·{' '}
                           {(option.locale ?? '未知')}
                         </div>
                       </div>
                     </div>
                     <Button
-                      className={styles.voicePreviewButton}
+                      className="whitespace-nowrap"
                       size="mini"
                       color="primary"
                       fill="outline"
@@ -161,7 +161,7 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
           />
         </div>
       ) : (
-        <div className={styles.voiceEmptyState}>
+        <div className="rounded-[12px] bg-[color-mix(in_srgb,var(--primary)_8%,transparent)] p-4 text-sm leading-[1.5] text-[var(--secondary)]">
           暂无可用声音，请联系管理员配置 AZURE_TTS_VOICE_ALLOW_LIST。
         </div>
       )}

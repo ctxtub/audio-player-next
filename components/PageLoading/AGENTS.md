@@ -5,7 +5,6 @@
 
 ## 子目录结构
 - `index.tsx`：组件实现。
-- `index.module.scss`：样式定义。
 
 ## 关键协作与依赖
 - 被 `app/home`、`app/setting` 等页面调用显示 loading 状态。

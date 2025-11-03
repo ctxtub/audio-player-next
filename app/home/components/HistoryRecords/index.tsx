@@ -10,7 +10,6 @@ import {
   selectIsInitialized,
   sortHistoryRecords,
 } from '@/stores/promptHistoryStore';
-import styles from './index.module.scss';
 
 export type { HistoryRecord } from '@/stores/promptHistoryStore';
 
@@ -80,7 +79,10 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
 
   const renderSortButton = () => {
     return (
-      <button onClick={toggleSortMethod} className={styles.sortButton}>
+      <button
+        onClick={toggleSortMethod}
+        className="rounded-[15px] border-0 bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-[10px] py-[5px] text-sm text-[var(--process)] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] hover:-translate-y-px"
+      >
         {sortMode === 'frequency' ? '按频率排序' : '按时间排序'}
       </button>
     );
@@ -90,46 +92,51 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
     return (
       <>
         {historyRecords.length > 0 ? (
-          <div className={styles.historyList}>
+          <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-5">
             {historyRecords.map((record, index) => (
-              <div key={index} className={styles.historyItem}>
-                <div className={styles.historyIndex}>{index + 1}</div>
-                <div className={styles.historyContent}>
-                  <div className={styles.historyPrompt}>{record.prompt}</div>
-                  <div className={styles.historyMeta}>
-                    <span className={styles.historyDate}>最后使用: {formatDate(record.lastUsed)}</span>
-                    <span className={styles.historyCount}>使用次数: {record.useCount}</span>
+              <div
+                key={index}
+                className="flex items-center gap-3 rounded-[12px] border border-[var(--card-border)] bg-[color-mix(in_srgb,var(--card-background)_80%,transparent)] px-4 py-4 transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] hover:-translate-y-[2px] hover:bg-[color-mix(in_srgb,var(--primary)_5%,transparent)] hover:shadow-[0_4px_12px_var(--shadow-color)] backdrop-blur-[5px]"
+              >
+                <div className="mr-3 flex h-[30px] min-w-[30px] items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--primary)_15%,transparent)] font-semibold text-[var(--foreground)]">
+                  {index + 1}
+                </div>
+                <div className="mr-[10px] flex-1">
+                  <div className="mb-2 break-words text-[16px] leading-[1.5] text-[var(--foreground)]">{record.prompt}</div>
+                  <div className="flex gap-2 text-xs text-[var(--secondary)]">
+                    <span>最后使用: {formatDate(record.lastUsed)}</span>
+                    <span>使用次数: {record.useCount}</span>
                   </div>
                 </div>
-                <div className={styles.actionButtons}>
+                <div className="flex flex-shrink-0 items-center gap-2">
                   <button
-                    className={styles.playButton}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[var(--primary)] text-white shadow-[0_4px_12px_color-mix(in_srgb,var(--primary)_50%,transparent)] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] hover:scale-110"
                     onClick={(e) => {
                       e.stopPropagation();
                       handlePlayButtonClick(record.prompt);
                     }}
                     aria-label="播放此提示词"
                   >
-                    <PlayIcon />
+                    <PlayIcon className="h-5 w-5 stroke-white" />
                   </button>
                   <button
-                    className={styles.deleteButton}
+                    className="flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[var(--error)] text-white shadow-[0_4px_12px_color-mix(in_srgb,var(--error)_50%,transparent)] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] hover:scale-110"
                     onClick={(e) => {
                       e.stopPropagation();
                       removeHistoryRecord(record.prompt);
                     }}
                     aria-label="删除此提示词"
                   >
-                    <DeleteIcon />
+                    <DeleteIcon className="h-[22px] w-[22px] stroke-white" />
                   </button>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className={styles.emptyHistory}>
+          <div className="m-auto space-y-2 px-5 py-10 text-center text-[var(--secondary)]">
             <p>暂无历史记录</p>
-            <p className={styles.emptyHistoryHint}>生成故事后，您的提示词将会显示在这里</p>
+            <p className="text-sm opacity-70">生成故事后，您的提示词将会显示在这里</p>
           </div>
         )}
       </>

@@ -8,7 +8,6 @@
 - `components/`：设置页专用组件集合。
 - `index.tsx`：页面实现。
 - `page.tsx`：Next.js 页面导出。
-- `index.module.scss`：页面样式。
 
 ## 关键协作与依赖
 - 依赖 `@/stores/configStore`、`@/components/ThemeProvider` 获取配置和主题。

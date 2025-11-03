@@ -1,7 +1,6 @@
 import React from 'react';
 import 'antd-mobile/es/global';
 import '@/styles/index.css';
-import styles from '@/styles/app.module.scss';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AntdMobileCompat } from '@/components/AntdMobileCompat';
 import MainTabBar from '@/components/MainTabBar';
@@ -32,12 +31,19 @@ export default function RootLayout({
         <meta name="theme-color" content={THEME_COLORS[FALLBACK_THEME]} />
         <script dangerouslySetInnerHTML={{ __html: INITIAL_THEME_SCRIPT }} />
       </head>
-      <body>
+      <body className="min-h-screen">
         <AntdMobileCompat />
         <ThemeProvider>
           <ConfigInitializer>
-            <div className={styles.app}>
-              <main className={styles.content}>
+            <div
+              className="relative mx-auto flex min-h-screen w-full max-w-[800px] flex-col"
+              style={{
+                backgroundColor: 'var(--initial-background, var(--background, #000000))',
+                color: 'var(--initial-foreground, var(--foreground, #ffffff))',
+                transition: 'background-color var(--transition-speed) var(--transition-timing), color var(--transition-speed) var(--transition-timing)',
+              }}
+            >
+              <main className="flex-1 overflow-y-auto pb-[calc(var(--main-tab-bar-height,56px)+24px+env(safe-area-inset-bottom))]">
                 {children}
               </main>
               <MainTabBar />

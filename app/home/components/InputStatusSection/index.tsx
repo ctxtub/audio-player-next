@@ -6,8 +6,6 @@ import {
   selectIsInitialized,
 } from '@/stores/promptHistoryStore';
 
-import styles from './index.module.scss';
-
 /**
  * 输入与状态模块的入参定义。
  */
@@ -103,13 +101,13 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
   };
 
   return (
-    <div className={styles.container}>
-      <div className={styles.inputContent}>
-        <div className={styles.quickButtons}>
+    <div className="mb-[10px] flex flex-col gap-3 overflow-hidden rounded-2xl bg-[var(--card-background)] p-[15px] shadow-[0_8px_16px_var(--shadow-color)] backdrop-blur-[var(--blur-radius)] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)]">
+      <div className="flex max-h-[300px] flex-col gap-1 transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)]">
+        <div className="mb-[10px] grid grid-cols-3 gap-[10px]">
           {storyTypes.map((type, index) => (
             <button
               key={index}
-              className={styles.quickButton}
+              className="overflow-hidden text-ellipsis whitespace-nowrap rounded-[10px] border border-transparent bg-[color-mix(in_srgb,var(--primary)_5%,transparent)] px-2 py-3 text-sm font-medium text-[var(--foreground)] shadow-[0_2px_8px_rgba(0,0,0,0.03)] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] enabled:hover:-translate-y-[2px] enabled:hover:bg-[color-mix(in_srgb,var(--primary)_15%,transparent)] enabled:hover:shadow-[0_4px_8px_color-mix(in_srgb,var(--primary)_10%,transparent)] enabled:active:translate-y-0 enabled:active:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] enabled:active:shadow-[0_2px_4px_color-mix(in_srgb,var(--primary)_10%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
               onClick={() => handleQuickSelect(type.content)}
               disabled={isSubmitting}
               title={type.content}
@@ -117,8 +115,8 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
               {type.label}
             </button>
           ))}
-          <button 
-            className={`${styles.quickButton} ${styles.historyButton}`}
+          <button
+            className="overflow-hidden text-ellipsis whitespace-nowrap rounded-[10px] border border-dashed border-[color-mix(in_srgb,var(--process)_30%,transparent)] bg-[color-mix(in_srgb,var(--process)_10%,transparent)] px-2 py-3 text-sm font-semibold text-[var(--foreground)] shadow-[0_2px_8px_rgba(0,0,0,0.03)] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] enabled:hover:-translate-y-[2px] enabled:hover:bg-[color-mix(in_srgb,var(--process)_20%,transparent)] enabled:hover:shadow-[0_4px_8px_color-mix(in_srgb,var(--process)_15%,transparent)] enabled:active:translate-y-0 enabled:active:bg-[color-mix(in_srgb,var(--process)_25%,transparent)] enabled:active:shadow-[0_2px_4px_color-mix(in_srgb,var(--process)_15%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={handleHistoryButtonClick}
             disabled={isSubmitting}
             title="查看历史提示词记录"
@@ -126,29 +124,29 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
             历史记录
           </button>
         </div>
-        <div className={styles.inputButtonContainer}>
+        <div className="flex w-full items-stretch rounded-[12px] shadow-[0_2px_8px_rgba(0,0,0,0.03)]">
           <textarea
             value={textareaInput}
             onChange={(e) => setTextareaInput(e.target.value)}
             placeholder="输入你想听的故事概要..."
             rows={2}
-            className={styles.storyInput}
+            className="min-h-[60px] flex-1 resize-y rounded-l-[12px] rounded-r-none border-0 bg-[color-mix(in_srgb,var(--inputBackground)_80%,transparent)] px-5 py-[15px] text-sm text-[var(--foreground)] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] placeholder:text-[var(--secondary)] focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--primary)_30%,transparent)] focus:ring-offset-0 focus:bg-[var(--inputBackground)] disabled:cursor-not-allowed disabled:opacity-70"
             disabled={isSubmitting}
           />
           <button
-            className={styles.generateButton}
+            className="relative ml-[-1px] flex min-w-[120px] items-center justify-center gap-2 rounded-r-[12px] border-0 bg-[color-mix(in_srgb,var(--primary)_5%,transparent)] px-4 py-[15px] text-sm font-semibold text-[var(--foreground)] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] enabled:hover:-translate-y-[2px] enabled:hover:bg-[color-mix(in_srgb,var(--primary)_15%,transparent)] enabled:hover:shadow-[0_4px_8px_color-mix(in_srgb,var(--primary)_10%,transparent)] enabled:active:translate-y-0 enabled:active:bg-[color-mix(in_srgb,var(--primary)_20%,transparent)] enabled:active:shadow-[0_2px_4px_color-mix(in_srgb,var(--primary)_10%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
             onClick={onSubmit}
             disabled={isSubmitting}
           >
             {isSubmitting ? '生成中...' : '生成故事'}
           </button>
         </div>
-      </div>
+    </div>
 
-      {/* 历史记录弹窗 */}
-      <HistoryRecords
-        ref={historyRecordsRef}
-        onSelectPrompt={handleSelectHistoryPrompt}
+    {/* 历史记录弹窗 */}
+    <HistoryRecords
+      ref={historyRecordsRef}
+      onSelectPrompt={handleSelectHistoryPrompt}
       />
     </div>
   );

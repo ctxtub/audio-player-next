@@ -9,6 +9,7 @@
 - `FloatingPlayerSection.tsx`：浮动播放器开关。
 - `ThemeModeSection.tsx`：主题模式选择组件。
 - `VoiceServiceSection.tsx`：语音音色配置表单。
+- `sectionStyles.ts`：设置模块共用样式类名定义。
 
 ## 关键协作与依赖
 - 使用 `@/stores/configStore` 与页面层共享状态更新。

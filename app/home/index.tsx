@@ -14,7 +14,6 @@ import {
   resetStoryFlow,
 } from '@/app/services/storyFlow';
 import InputStatusSection from './components/InputStatusSection';
-import styles from './index.module.scss';
 
 /**
  * 首页页面组件，负责串联故事生成与音频播放交互。
@@ -60,10 +59,9 @@ const HomePage: React.FC = () => {
   );
 
   return (
-    <div className={styles.homePage}>
-      <div className={styles.pageSection}>
-        <PlaybackStatusBoard
-        />
+    <div className="p-[var(--page-padding)]">
+      <div className="flex flex-col gap-5">
+        <PlaybackStatusBoard />
 
         <InputStatusSection
           inputText={storyInputText}

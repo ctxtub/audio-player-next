@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { cx } from '@/utils/cx';
 import { useDrag } from '@use-gesture/react';
 import { Toast } from 'antd-mobile';
 import PlayIcon from '@/public/icons/audioplayer-play.svg';
@@ -14,7 +15,6 @@ import {
   type PanelSize,
   type ViewportSize,
 } from './utils';
-import styles from './index.module.scss';
 
 export { useFloatingPlayer } from '@/stores/playbackStore';
 
@@ -169,14 +169,16 @@ export const FloatingPlayer: React.FC = () => {
     return '快来首页创作吧';
   }, [isPlaying, remainingTimeLabel]);
 
-  const floatingPanelClassName = [
-    styles.floatingPanel,
-    shouldShowFloatingPanel ? styles.floatingPanelExpanded : styles.floatingPanelHidden,
-    isDragging ? styles.floatingPanelDragging : '',
-  ].join(' ');
+  const floatingPanelClassName = cx(
+    'fixed flex w-[220px] flex-col gap-[6px] rounded-[18px] border border-[color:color-mix(in_srgb,var(--primary)_24%,var(--card-border))] bg-[color-mix(in_srgb,var(--card-background)_85%,var(--primary)_15%)] px-4 py-3 shadow-[0_10px_24px_color-mix(in_srgb,var(--primary)_22%,rgba(0,0,0,0.35))] backdrop-blur-[14px] pointer-events-auto touch-none transition-[left,top,opacity,transform] duration-200 ease-linear',
+    shouldShowFloatingPanel
+      ? 'w-[200px] cursor-grab max-h-[min(560px,80vh)] overflow-y-auto'
+      : 'pointer-events-none -translate-x-1/2 translate-y-4 opacity-0',
+    isDragging ? 'cursor-grabbing transition-none' : null
+  );
 
   return (
-    <div className={styles.floatingRoot} aria-hidden={!shouldShowFloatingPanel}>
+    <div className="fixed inset-0 pointer-events-none z-[900]" aria-hidden={!shouldShowFloatingPanel}>
       <div
         ref={panelRef}
         className={floatingPanelClassName}
@@ -186,16 +188,18 @@ export const FloatingPlayer: React.FC = () => {
         }}
         {...bindFloatingHeaderDrag()}
       >
-        <div className={styles.floatingHeader}>
-          <div className={styles.floatingTitle}>{floatingTitleLabel}</div>
-          <div className={styles.floatingActions}>
+        <div className="flex items-center justify-between gap-[10px] touch-none">
+          <div className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[15px] font-semibold text-[var(--foreground)]">
+            {floatingTitleLabel}
+          </div>
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              className={styles.floatingActionButton}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[var(--primary)] text-white shadow-[0_4px_12px_color-mix(in_srgb,var(--primary)_45%,transparent)] transition-[background,transform,box-shadow] duration-200 ease-in-out hover:bg-[color-mix(in_srgb,var(--primary)_80%,#ffffff_20%)] hover:shadow-[0_6px_16px_color-mix(in_srgb,var(--primary)_55%,transparent)] hover:-translate-y-px active:bg-[color-mix(in_srgb,var(--primary)_70%,#000000_10%)] active:shadow-[0_2px_8px_color-mix(in_srgb,var(--primary)_35%,transparent)] active:translate-y-0"
               aria-label={isPlaying ? '暂停播放' : '继续播放'}
               onClick={togglePlay}
             >
-              {isPlaying ? <PauseIcon /> : <PlayIcon />}
+              {isPlaying ? <PauseIcon className="h-5 w-5" /> : <PlayIcon className="h-5 w-5" />}
             </button>
           </div>
         </div>

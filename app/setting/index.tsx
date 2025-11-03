@@ -5,7 +5,6 @@ import React, { useCallback, useEffect, useMemo } from 'react';
 import { PageLoading } from '@/components/PageLoading';
 import { useTheme } from '@/components/ThemeProvider';
 import { useConfigStore } from '@/stores/configStore';
-import styles from './index.module.scss';
 import BasicConfigSection from './components/BasicConfigSection';
 import FloatingPlayerSection from './components/FloatingPlayerSection';
 import ThemeModeSection from './components/ThemeModeSection';
@@ -109,8 +108,8 @@ const ConfigPage: React.FC = () => {
   }
 
   return (
-    <div className={styles.configPage}>
-      <div className={styles.configForm}>
+    <div className="min-h-screen bg-[var(--initial-background,var(--background))] p-[var(--page-padding)]">
+      <div className="flex w-full flex-col gap-5">
         <ThemeModeSection value={themeMode} onChange={setThemeMode} />
         <BasicConfigSection
           playDuration={playDuration}

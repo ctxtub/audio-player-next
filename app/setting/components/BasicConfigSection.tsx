@@ -1,6 +1,10 @@
 import React, { useCallback, useMemo } from 'react';
 import { Slider } from 'antd-mobile';
-import styles from '../index.module.scss';
+import {
+  SECTION_CLASS,
+  SECTION_FIELD_CLASS,
+  SECTION_TITLE_CLASS,
+} from './sectionStyles';
 
 /**
  * 基础播放配置模块的入参。
@@ -54,11 +58,13 @@ const BasicConfigSection: React.FC<BasicConfigSectionProps> = ({
   );
 
   return (
-    <div className={styles.configSection}>
-      <h3>播放时长</h3>
-      <div className={styles.configField}>
+    <div className={SECTION_CLASS}>
+      <h3 className={SECTION_TITLE_CLASS}>
+        播放时长
+      </h3>
+      <div className={SECTION_FIELD_CLASS}>
         <Slider
-          className={styles.configSlider}
+          className="w-full"
           min={MIN_DURATION}
           max={MAX_DURATION}
           step={STEP}

@@ -3,7 +3,7 @@
 import React, { useMemo } from 'react';
 import Modal, { useModal } from '@/components/Modal';
 import { useStoryStore } from '@/stores/storyStore';
-import styles from './index.module.scss';
+import { cx } from '@/utils/cx';
 
 /**
  * 故事展示组件的入参定义。
@@ -20,14 +20,17 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ className }) => {
   const storyList = useStoryStore((state) => state.segments);
   const storyText = useMemo(() => storyList.join('\n'), [storyList]);
   const { isShow, showModal, closeModal } = useModal();
-  const containerClassName = className
-    ? `${styles.storyPreview} ${className}`
-    : styles.storyPreview;
-  
+  const containerClassName = cx(
+    'cursor-pointer rounded-2xl border border-[var(--card-border)] bg-[var(--card-background)] p-5 shadow-[0_8px_16px_var(--shadow-color)] backdrop-blur-[var(--blur-radius)] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)]',
+    className
+  );
+
   const renderStoryContent = () => (
-    <div className={styles.storyText}>
+    <div className="space-y-4 p-5 text-[16px] leading-[1.8] text-[var(--foreground)]">
       {storyList.map((paragraph, index) => (
-        <p key={index}>{paragraph}</p>
+        <p key={index} className="indent-8">
+          {paragraph}
+        </p>
       ))}
     </div>
   );
@@ -39,8 +42,13 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ className }) => {
   return (
     <>
       <div className={containerClassName} onClick={showModal}>
-        <p className={styles.storyPreviewText}>{storyText.slice(0, 100)}...</p>
-        <button className={styles.readMore}>查看全文</button>
+        <p className="text-[16px] leading-[1.6] text-[var(--foreground)] indent-8">{storyText.slice(0, 100)}...</p>
+        <button
+          className="mt-[15px] inline-flex items-center border-0 bg-transparent text-sm font-semibold text-[var(--primary)] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] after:ml-[5px] after:content-['→'] after:transition-transform after:duration-[var(--transition-speed)] after:ease-[var(--transition-timing)] hover:after:translate-x-[3px]"
+          type="button"
+        >
+          查看全文
+        </button>
       </div>
 
       <Modal

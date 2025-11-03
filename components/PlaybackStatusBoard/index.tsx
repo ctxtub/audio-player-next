@@ -7,8 +7,7 @@ import { useStoryStore } from '@/stores/storyStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useConfigStore } from '@/stores/configStore';
-
-import styles from './index.module.scss';
+import { cx } from '@/utils/cx';
 
 /**
  * 状态阶段枚举。
@@ -65,9 +64,7 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
   /** 是否已有已缓存的语音资源，可提示预加载成功。 */
   const hasPreloadedAudio = Boolean(preloadAudioUrl);
 
-  const containerClassName = className
-    ? `${styles.statusContainer} ${className}`
-    : styles.statusContainer;
+  const containerClassName = cx('flex flex-wrap gap-3', className);
 
   /**
    * 将分钟数格式化为 mm:ss 字符串。
@@ -129,8 +126,11 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
       {statusItems.map((item) => {
         if (item.key === 'countdown') {
           return (
-            <div key={item.key} className={`${styles.statusItem} ${styles.countdown}`}>
-              <ClockIcon className={styles.statusIcon} />
+            <div
+              key={item.key}
+              className="flex min-w-[172px] items-center gap-2 rounded-[12px] bg-[color-mix(in_srgb,var(--process)_20%,transparent)] px-[14px] py-[10px] text-sm font-medium text-[var(--process)] shadow-[0_2px_8px_var(--shadow-color)] backdrop-blur-[5px] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] hover:-translate-y-px"
+            >
+              <ClockIcon className="h-4 w-4 text-current" />
               <span>{item.message}</span>
             </div>
           );
@@ -141,19 +141,21 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
         }
 
         const IconComponent = iconForPhase[item.phase] ?? CheckIcon;
-        const phaseClass =
+        const phaseClass = cx(
+          'flex min-w-[172px] items-center gap-2 rounded-[12px] px-[14px] py-[10px] text-sm font-medium shadow-[0_2px_8px_var(--shadow-color)] backdrop-blur-[5px] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] hover:-translate-y-px',
           item.phase === 'loading'
-            ? styles.loading
+            ? 'bg-[color-mix(in_srgb,var(--process)_20%,transparent)] text-[var(--process)]'
             : item.phase === 'error'
-              ? styles.error
-              : styles.success;
-        const iconClassName =
-          item.phase === 'loading'
-            ? `${styles.statusIcon} ${styles.loadingIcon}`
-            : styles.statusIcon;
+              ? 'bg-[color-mix(in_srgb,var(--error)_20%,transparent)] text-[var(--error)]'
+              : 'bg-[color-mix(in_srgb,var(--success)_20%,transparent)] text-[var(--success)]'
+        );
+        const iconClassName = cx(
+          'h-4 w-4 text-current',
+          item.phase === 'loading' && 'animate-spin'
+        );
 
         return (
-          <div key={item.key} className={`${styles.statusItem} ${phaseClass}`}>
+          <div key={item.key} className={phaseClass}>
             <IconComponent className={iconClassName} />
             <span>{item.message}</span>
           </div>

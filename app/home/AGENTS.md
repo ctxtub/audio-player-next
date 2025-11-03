@@ -7,7 +7,6 @@
 ## 子目录结构
 - `components/`：首页专用组件集合。
 - `index.tsx`：页面入口组件。
-- `index.module.scss`：页面样式。
 
 ## 关键协作与依赖
 - 依赖 `@/app/services/storyFlow` 驱动故事生成流程。

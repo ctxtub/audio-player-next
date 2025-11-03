@@ -4,7 +4,6 @@ import React, { useCallback, useEffect } from 'react';
 import { TabBar } from 'antd-mobile';
 import { AppOutline, SoundOutline, SetOutline } from 'antd-mobile-icons';
 import { usePathname, useRouter } from 'next/navigation';
-import styles from './index.module.scss';
 
 /**
  * 底部标签配置，定义导航目标与图标。
@@ -73,7 +72,7 @@ const MainTabBar: React.FC = () => {
   );
 
   return (
-    <div className={styles.tabBarContainer}>
+    <div className="sticky bottom-0 z-20 min-h-[var(--main-tab-bar-height,56px)] border-t border-[var(--card-border)] bg-[var(--initial-background,var(--background))] shadow-[0_-4px_16px_color-mix(in_srgb,var(--shadow-color)_60%,transparent)]">
       <TabBar activeKey={activeKey} onChange={handleTabChange} safeArea>
         {TABS.map(({ key, title, icon }) => (
           <TabBar.Item key={key} icon={icon} title={title} />

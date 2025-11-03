@@ -1,6 +1,5 @@
 import React from 'react';
 import { SpinLoading } from 'antd-mobile';
-import styles from './index.module.scss';
 
 /**
  * 页面加载态组件的入参。
@@ -13,8 +12,16 @@ type PageLoadingProps = {
  * 页面级加载状态组件，展示旋转动画与提示文案。
  */
 export const PageLoading: React.FC<PageLoadingProps> = ({ message = '加载中…' }) => (
-  <div className={styles.loadingContainer} role="status" aria-live="polite">
-    <SpinLoading className={styles.spinner} color="primary" />
-    {message ? <p className={styles.message}>{message}</p> : null}
+  <div
+    className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--background)] p-6 text-center text-[var(--foreground)]"
+    role="status"
+    aria-live="polite"
+  >
+    <SpinLoading
+      className="[--size:48px]"
+      color="primary"
+      style={{ '--color': 'var(--foreground)' } as React.CSSProperties}
+    />
+    {message ? <p className="text-[16px] tracking-[0.4px]">{message}</p> : null}
   </div>
 );

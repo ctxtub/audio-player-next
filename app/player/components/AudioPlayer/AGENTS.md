@@ -6,7 +6,6 @@
 
 ## 子目录结构
 - `index.tsx`：播放器组件实现。
-- `index.module.scss`：播放器样式定义。
 
 ## 关键协作与依赖
 - 依赖 `@/stores/playbackStore` 获取播放状态并派发控制指令。

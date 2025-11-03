@@ -6,7 +6,6 @@
 
 ## 子目录结构
 - `index.tsx`：组件实现。
-- `index.module.scss`：组件样式。
 
 ## 关键协作与依赖
 - 依赖 `@/stores/storyStore`、`@/stores/promptHistoryStore` 获取数据。

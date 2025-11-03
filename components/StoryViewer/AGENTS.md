@@ -6,7 +6,6 @@
 
 ## 子目录结构
 - `index.tsx`：故事展示组件实现。
-- `index.module.scss`：样式定义。
 
 ## 关键协作与依赖
 - 依赖 `@/components/Modal` 提供弹窗能力。

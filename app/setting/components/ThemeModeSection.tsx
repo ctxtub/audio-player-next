@@ -3,7 +3,10 @@
 import React, { useCallback } from 'react';
 import { Selector } from 'antd-mobile';
 import type { ThemeMode } from '@/types/theme';
-import styles from '../index.module.scss';
+import {
+  SECTION_CLASS,
+  SECTION_TITLE_CLASS,
+} from './sectionStyles';
 
 /**
  * 主题选项的元数据结构。
@@ -59,21 +62,21 @@ const ThemeModeSection: React.FC<ThemeModeSectionProps> = ({ value, onChange }) 
   );
 
   return (
-    <div className={styles.configSection}>
-      <h3>主题设置</h3>
+    <div className={SECTION_CLASS}>
+      <h3 className={SECTION_TITLE_CLASS}>主题设置</h3>
       <Selector
-        className={styles.themeSelector}
+        className="w-full"
         columns={3}
         value={[value]}
         onChange={handleChange}
         options={THEME_OPTIONS.map(option => ({
           label: (
-            <div className={styles.themeOption}>
-              <span className={styles.themeOptionIcon} aria-hidden>
+            <div className="flex items-center gap-3">
+              <span className="text-2xl" aria-hidden>
                 {option.icon}
               </span>
-              <div className={styles.themeOptionContent}>
-                <span className={styles.themeOptionLabel}>{option.label}</span>
+              <div className="flex flex-col items-start gap-1">
+                <span className="text-[15px] font-semibold text-[var(--foreground)]">{option.label}</span>
               </div>
             </div>
           ),

@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import React, {
   createContext,
@@ -7,16 +7,16 @@ import React, {
   useMemo,
   useState,
   useCallback,
-} from 'react';
-import { ConfigProvider } from 'antd-mobile';
-import type { ThemeMode } from '@/types/theme';
+} from "react";
+import { ConfigProvider } from "antd-mobile";
+import type { ThemeMode } from "@/types/theme";
 import {
   THEME_MODE_STORAGE_KEY,
   THEME_SEQUENCE,
   THEME_COLORS,
   getInitialThemeState,
-} from './themeConfig';
-import type { ThemeValue, ThemeState } from './themeConfig';
+} from "./themeConfig";
+import type { ThemeValue, ThemeState } from "./themeConfig";
 
 /**
  * 主题上下文的状态结构。
@@ -54,35 +54,41 @@ export const useTheme = () => useContext(ThemeContext);
  * @param children 需要包裹的子节点
  * @returns 包裹 ConfigProvider 的主题上下文
  */
-export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [themeMode, setThemeMode] = useState<ThemeMode>(INITIAL_THEME_STATE.themeMode);
-  const [systemTheme, setSystemTheme] = useState<ThemeValue>(INITIAL_THEME_STATE.systemTheme);
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [themeMode, setThemeMode] = useState<ThemeMode>(
+    INITIAL_THEME_STATE.themeMode,
+  );
+  const [systemTheme, setSystemTheme] = useState<ThemeValue>(
+    INITIAL_THEME_STATE.systemTheme,
+  );
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
 
-    if (typeof window.matchMedia !== 'function') {
+    if (typeof window.matchMedia !== "function") {
       return;
     }
 
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const handleChange = (event: MediaQueryListEvent) => {
-      setSystemTheme(event.matches ? 'dark' : 'light');
+      setSystemTheme(event.matches ? "dark" : "light");
     };
 
     if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener('change', handleChange);
+      mediaQuery.addEventListener("change", handleChange);
     } else {
       mediaQuery.addListener(handleChange);
     }
 
-    setSystemTheme(mediaQuery.matches ? 'dark' : 'light');
+    setSystemTheme(mediaQuery.matches ? "dark" : "light");
 
     return () => {
       if (mediaQuery.removeEventListener) {
-        mediaQuery.removeEventListener('change', handleChange);
+        mediaQuery.removeEventListener("change", handleChange);
       } else {
         mediaQuery.removeListener(handleChange);
       }
@@ -90,7 +96,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -102,8 +108,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [themeMode]);
 
   const resolvedTheme: ThemeValue = useMemo(
-    () => themeMode === 'system' ? systemTheme : themeMode,
-    [themeMode, systemTheme]
+    () => (themeMode === "system" ? systemTheme : themeMode),
+    [themeMode, systemTheme],
   );
 
   const handleSetThemeMode = useCallback((mode: ThemeMode) => {
@@ -114,26 +120,25 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const currentIndex = THEME_SEQUENCE.indexOf(themeMode);
     const nextMode =
       currentIndex === -1
-        ? 'light'
+        ? "light"
         : THEME_SEQUENCE[(currentIndex + 1) % THEME_SEQUENCE.length];
     setThemeMode(nextMode);
   }, [themeMode]);
 
   useEffect(() => {
-    if (typeof document === 'undefined') {
+    if (typeof document === "undefined") {
       return;
     }
 
     const docEl = document.documentElement;
-    if (docEl.getAttribute('data-theme') !== resolvedTheme) {
-      docEl.setAttribute('data-theme', resolvedTheme);
+    if (docEl.getAttribute("data-theme") !== resolvedTheme) {
+      docEl.setAttribute("data-theme", resolvedTheme);
     }
 
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor && THEME_COLORS[resolvedTheme]) {
-      metaThemeColor.setAttribute('content', THEME_COLORS[resolvedTheme]);
+      metaThemeColor.setAttribute("content", THEME_COLORS[resolvedTheme]);
     }
-
   }, [resolvedTheme]);
 
   const contextValue = useMemo(
@@ -143,7 +148,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       toggleTheme,
       setThemeMode: handleSetThemeMode,
     }),
-    [resolvedTheme, themeMode, toggleTheme, handleSetThemeMode]
+    [resolvedTheme, themeMode, toggleTheme, handleSetThemeMode],
   );
 
   return (

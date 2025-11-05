@@ -1,19 +1,16 @@
-'use client';
+"use client";
 
-import React, { useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Toast } from 'antd-mobile';
-import StoryViewer from '@/components/StoryViewer';
-import PlaybackStatusBoard from '@/components/PlaybackStatusBoard';
-import { useFloatingPlayer } from '@/components/FloatingPlayer';
+import React, { useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Toast } from "antd-mobile";
+import StoryViewer from "@/components/StoryViewer";
+import PlaybackStatusBoard from "@/components/PlaybackStatusBoard";
+import { useFloatingPlayer } from "@/components/FloatingPlayer";
 
-import { useConfigStore } from '@/stores/configStore';
-import { useStoryStore } from '@/stores/storyStore';
-import {
-  beginStorySession,
-  resetStoryFlow,
-} from '@/app/services/storyFlow';
-import InputStatusSection from './components/InputStatusSection';
+import { useConfigStore } from "@/stores/configStore";
+import { useStoryStore } from "@/stores/storyStore";
+import { beginStorySession, resetStoryFlow } from "@/app/services/storyFlow";
+import InputStatusSection from "./components/InputStatusSection";
 
 /**
  * 首页页面组件，负责串联故事生成与音频播放交互。
@@ -24,15 +21,15 @@ const HomePage: React.FC = () => {
   const { play: playAudio, pause: pauseAudio } = useFloatingPlayer();
 
   // 配置初始化与校验能力
-  const isConfigLoaded = useConfigStore(state => state.isLoaded);
-  const configIsValid = useConfigStore(state => state.isConfigValid());
+  const isConfigLoaded = useConfigStore((state) => state.isLoaded);
+  const configIsValid = useConfigStore((state) => state.isConfigValid());
 
   useEffect(() => {
     if (!isConfigLoaded) {
       return;
     }
     if (!configIsValid) {
-      router.push('/config');
+      router.push("/config");
     }
   }, [isConfigLoaded, configIsValid, router]);
 
@@ -48,14 +45,15 @@ const HomePage: React.FC = () => {
         const { audioUrl } = await beginStorySession(shortcutText);
 
         await playAudio(audioUrl);
-        router.push('/player');
+        router.push("/player");
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : '发生未知错误';
-        Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
+        const errorMessage =
+          error instanceof Error ? error.message : "发生未知错误";
+        Toast.show({ icon: "fail", content: errorMessage, duration: 3000 });
         resetStoryFlow();
       }
     },
-    [pauseAudio, playAudio, router]
+    [pauseAudio, playAudio, router],
   );
 
   return (

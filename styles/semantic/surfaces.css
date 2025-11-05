@@ -1,0 +1,20 @@
+@layer components {
+  .surface-card {
+    @apply rounded-2xl border border-border-card bg-surface shadow-floating transition-transform duration-theme ease-theme;
+    backdrop-filter: blur(var(--blur-glass));
+    -webkit-backdrop-filter: blur(var(--blur-glass));
+  }
+
+  .surface-panel {
+    @apply border border-border-primary-blend bg-surface-mixed shadow-primary-panel backdrop-blur-panel text-foreground;
+  }
+
+  .floating-panel-shell {
+    width: var(--size-width-floating);
+    @apply pointer-events-auto flex flex-col gap-1.5 rounded-xl-plus px-4 py-3;
+  }
+
+  .floating-panel-shell--active {
+    width: var(--size-width-floating-active);
+  }
+}

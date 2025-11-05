@@ -1,17 +1,17 @@
-import React from 'react';
-import 'antd-mobile/es/global';
-import '@/styles/index.css';
-import { ThemeProvider } from '@/components/ThemeProvider';
-import { AntdMobileCompat } from '@/components/AntdMobileCompat';
-import MainTabBar from '@/components/MainTabBar';
-import AudioControllerHost from '@/components/AudioControllerHost';
-import { FloatingPlayer } from '@/components/FloatingPlayer';
-import ConfigInitializer from '@/components/ConfigInitializer';
+import React from "react";
+import "antd-mobile/es/global";
+import "@/styles/index.css";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { AntdMobileCompat } from "@/components/AntdMobileCompat";
+import MainTabBar from "@/components/MainTabBar";
+import AudioControllerHost from "@/components/AudioControllerHost";
+import { FloatingPlayer } from "@/components/FloatingPlayer";
+import ConfigInitializer from "@/components/ConfigInitializer";
 import {
   FALLBACK_THEME,
   THEME_COLORS,
   INITIAL_THEME_SCRIPT,
-} from '@/components/ThemeProvider/themeConfig';
+} from "@/components/ThemeProvider/themeConfig";
 
 /**
  * 应用根布局，注入主题脚本与全局导航。
@@ -36,11 +36,14 @@ export default function RootLayout({
         <ThemeProvider>
           <ConfigInitializer>
             <div
-              className="relative mx-auto flex min-h-screen w-full max-w-[800px] flex-col"
+              className="relative mx-auto flex min-h-screen w-full max-w-[var(--size-max-width-modal)] flex-col"
               style={{
-                backgroundColor: 'var(--initial-background, var(--background, #000000))',
-                color: 'var(--initial-foreground, var(--foreground, #ffffff))',
-                transition: 'background-color var(--transition-speed) var(--transition-timing), color var(--transition-speed) var(--transition-timing)',
+                backgroundColor:
+                  "var(--color-background-initial, var(--color-background, #000000))",
+                color:
+                  "var(--color-foreground-initial, var(--color-foreground, #ffffff))",
+                transition:
+                  "background-color var(--motion-duration-theme) var(--motion-ease-theme), color var(--motion-duration-theme) var(--motion-ease-theme)",
               }}
             >
               <main className="flex-1 overflow-y-auto pb-[calc(var(--main-tab-bar-height,56px)+24px+env(safe-area-inset-bottom))]">

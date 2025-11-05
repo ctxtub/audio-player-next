@@ -1,0 +1,37 @@
+@layer components {
+  .adm-selector {
+    --padding: 12px 16px !important;
+    --gap: 12px !important;
+    --text-color: var(--color-foreground) !important;
+    --checked-text-color: var(--color-primary) !important;
+    --color: var(--selector-surface) !important;
+    --checked-color: var(--selector-selected-surface) !important;
+    --border: 1px solid var(--selector-border-color) !important;
+    --checked-border: 1px solid var(--selector-border-checked) !important;
+  }
+
+  .adm-selector-item {
+    backdrop-filter: blur(var(--blur-glass)) !important;
+    -webkit-backdrop-filter: blur(var(--blur-glass)) !important;
+    transition:
+      background-color var(--motion-duration-theme) var(--motion-ease-theme),
+      border-color var(--motion-duration-theme) var(--motion-ease-theme),
+      color var(--motion-duration-theme) var(--motion-ease-theme) !important;
+  }
+
+  .adm-slider {
+    --fill-color: var(--color-primary) !important;
+  }
+
+  .adm-switch {
+    --border-width: 1px !important;
+  }
+
+  :root[data-theme='dark'] .adm-slider-thumb {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45) !important;
+  }
+
+  :root[data-theme='light'] .adm-slider-thumb {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.18) !important;
+  }
+}

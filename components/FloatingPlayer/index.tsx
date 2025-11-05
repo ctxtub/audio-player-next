@@ -1,22 +1,28 @@
-'use client';
+"use client";
 
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { cx } from '@/utils/cx';
-import { useDrag } from '@use-gesture/react';
-import { Toast } from 'antd-mobile';
-import PlayIcon from '@/public/icons/audioplayer-play.svg';
-import PauseIcon from '@/public/icons/audioplayer-pause.svg';
-import { useConfigStore } from '@/stores/configStore';
-import { usePlaybackStore, useFloatingPlayer } from '@/stores/playbackStore';
+import React, {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  useMemo,
+} from "react";
+import { cx } from "@/utils/cx";
+import { useDrag } from "@use-gesture/react";
+import { Toast } from "antd-mobile";
+import PlayIcon from "@/public/icons/audioplayer-play.svg";
+import PauseIcon from "@/public/icons/audioplayer-pause.svg";
+import { useConfigStore } from "@/stores/configStore";
+import { usePlaybackStore, useFloatingPlayer } from "@/stores/playbackStore";
 import {
   clampValue,
   shouldSkipPointerDown,
   type FloatingPosition,
   type PanelSize,
   type ViewportSize,
-} from './utils';
+} from "./utils";
 
-export { useFloatingPlayer } from '@/stores/playbackStore';
+export { useFloatingPlayer } from "@/stores/playbackStore";
 
 /**
  * 浮动播放器组件，常驻布局层维护音频播放与迷你面板。
@@ -34,11 +40,11 @@ export const FloatingPlayer: React.FC = () => {
   const { resume, pause, show, hide } = useFloatingPlayer();
   const isVisible = usePlaybackStore((state) => state.isFloatingVisible);
   const isFloatingPlayerEnabled = useConfigStore(
-    (state) => state.apiConfig.floatingPlayerEnabled
+    (state) => state.apiConfig.floatingPlayerEnabled,
   );
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
     setPosition((prev) => ({
@@ -63,7 +69,7 @@ export const FloatingPlayer: React.FC = () => {
   const bindFloatingHeaderDrag = useDrag(
     (state) => {
       const { first, last, canceled, movement, cancel, event, memo } = state;
-      if (typeof window === 'undefined') {
+      if (typeof window === "undefined") {
         return memo as DragContext | null;
       }
 
@@ -120,7 +126,7 @@ export const FloatingPlayer: React.FC = () => {
     },
     {
       filterTaps: true,
-    }
+    },
   );
 
   const togglePlay = useCallback(() => {
@@ -128,8 +134,8 @@ export const FloatingPlayer: React.FC = () => {
       pause();
     } else {
       resume().catch((error) => {
-        const message = error instanceof Error ? error.message : '无法恢复播放';
-        Toast.show({ icon: 'fail', content: message, duration: 3000 });
+        const message = error instanceof Error ? error.message : "无法恢复播放";
+        Toast.show({ icon: "fail", content: message, duration: 3000 });
       });
     }
   }, [isPlaying, pause, resume]);
@@ -154,8 +160,8 @@ export const FloatingPlayer: React.FC = () => {
     const totalSeconds = Math.max(0, Math.ceil(playbackRemainingMs / 1000));
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    const minutesLabel = minutes.toString().padStart(2, '0');
-    const secondsLabel = seconds.toString().padStart(2, '0');
+    const minutesLabel = minutes.toString().padStart(2, "0");
+    const secondsLabel = seconds.toString().padStart(2, "0");
     return `${minutesLabel}:${secondsLabel}`;
   }, [playbackRemainingMs]);
 
@@ -166,19 +172,22 @@ export const FloatingPlayer: React.FC = () => {
     if (isPlaying && remainingTimeLabel) {
       return `${remainingTimeLabel} 后停止`;
     }
-    return '快来首页创作吧';
+    return "快来首页创作吧";
   }, [isPlaying, remainingTimeLabel]);
 
   const floatingPanelClassName = cx(
-    'fixed flex w-[220px] flex-col gap-[6px] rounded-[18px] border border-[color:color-mix(in_srgb,var(--primary)_24%,var(--card-border))] bg-[color-mix(in_srgb,var(--card-background)_85%,var(--primary)_15%)] px-4 py-3 shadow-[0_10px_24px_color-mix(in_srgb,var(--primary)_22%,rgba(0,0,0,0.35))] backdrop-blur-[14px] pointer-events-auto touch-none transition-[left,top,opacity,transform] duration-200 ease-linear',
+    "surface-panel floating-panel-shell fixed touch-none transition-[left,top,opacity,transform] duration-200 ease-linear",
     shouldShowFloatingPanel
-      ? 'w-[200px] cursor-grab max-h-[min(560px,80vh)] overflow-y-auto'
-      : 'pointer-events-none -translate-x-1/2 translate-y-4 opacity-0',
-    isDragging ? 'cursor-grabbing transition-none' : null
+      ? "floating-panel-shell--active cursor-grab max-h-[min(560px,80vh)] overflow-y-auto"
+      : "pointer-events-none -translate-x-1/2 translate-y-4 opacity-0",
+    isDragging ? "cursor-grabbing transition-none" : null,
   );
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-[900]" aria-hidden={!shouldShowFloatingPanel}>
+    <div
+      className="pointer-events-none fixed inset-0 z-[900]"
+      aria-hidden={!shouldShowFloatingPanel}
+    >
       <div
         ref={panelRef}
         className={floatingPanelClassName}
@@ -188,18 +197,22 @@ export const FloatingPlayer: React.FC = () => {
         }}
         {...bindFloatingHeaderDrag()}
       >
-        <div className="flex items-center justify-between gap-[10px] touch-none">
-          <div className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[15px] font-semibold text-[var(--foreground)]">
+        <div className="flex touch-none items-center justify-between gap-sm">
+          <div className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm-plus font-semibold">
             {floatingTitleLabel}
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border-0 bg-[var(--primary)] text-white shadow-[0_4px_12px_color-mix(in_srgb,var(--primary)_45%,transparent)] transition-[background,transform,box-shadow] duration-200 ease-in-out hover:bg-[color-mix(in_srgb,var(--primary)_80%,#ffffff_20%)] hover:shadow-[0_6px_16px_color-mix(in_srgb,var(--primary)_55%,transparent)] hover:-translate-y-px active:bg-[color-mix(in_srgb,var(--primary)_70%,#000000_10%)] active:shadow-[0_2px_8px_color-mix(in_srgb,var(--primary)_35%,transparent)] active:translate-y-0"
-              aria-label={isPlaying ? '暂停播放' : '继续播放'}
+              className="btn-circle-primary"
+              aria-label={isPlaying ? "暂停播放" : "继续播放"}
               onClick={togglePlay}
             >
-              {isPlaying ? <PauseIcon className="h-5 w-5" /> : <PlayIcon className="h-5 w-5" />}
+              {isPlaying ? (
+                <PauseIcon className="h-5 w-5" />
+              ) : (
+                <PlayIcon className="h-5 w-5" />
+              )}
             </button>
           </div>
         </div>

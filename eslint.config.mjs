@@ -23,6 +23,18 @@ const compat = new FlatCompat({
  */
 const eslintConfig = [
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
+  {
+    files: ['**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'Literal[value=/\\[[0-9]+px\\]/]',
+          message: '请使用 Tailwind token 或公共类替代硬编码 px 任意值。',
+        },
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

@@ -6,6 +6,7 @@
 
 ## 子目录结构
 - `index.tsx`：播放器组件实现。
+- `AudioPlayer.module.css`：进度条与倍速菜单的私有样式，隔离全局污染。
 
 ## 关键协作与依赖
 - 依赖 `@/stores/playbackStore` 获取播放状态并派发控制指令。

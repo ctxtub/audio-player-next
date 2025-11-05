@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import { loadTtsConfig } from '@/lib/server/ttsUpstream/config';
-import { ServiceError } from '@/lib/http/server/ErrorHandler';
-import type { AppConfigResponse } from '@/types/appConfig';
+import { loadTtsConfig } from "@/lib/server/ttsUpstream/config";
+import { ServiceError } from "@/lib/http/server/ErrorHandler";
+import type { AppConfigResponse } from "@/types/appConfig";
 
 /**
  * 默认播放时长（分钟），用于缺省配置。
@@ -26,7 +26,7 @@ export const GET = async () => {
     return NextResponse.json<AppConfigResponse>(payload, {
       status: 200,
       headers: {
-        'Cache-Control': 'no-store',
+        "Cache-Control": "no-store",
       },
     });
   } catch (error) {
@@ -38,18 +38,18 @@ export const GET = async () => {
             message: error.message,
           },
         },
-        { status: error.status }
+        { status: error.status },
       );
     }
 
     return NextResponse.json(
       {
         error: {
-          code: 'INTERNAL_SERVER_ERROR',
-          message: '获取应用配置时发生未知错误',
+          code: "INTERNAL_SERVER_ERROR",
+          message: "获取应用配置时发生未知错误",
         },
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 };

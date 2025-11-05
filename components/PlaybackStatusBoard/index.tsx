@@ -1,18 +1,18 @@
-import React, { useMemo } from 'react';
-import ClockIcon from '@/public/icons/playstatus-clock.svg';
-import LoadingIcon from '@/public/icons/playstatus-loading.svg';
-import WarningIcon from '@/public/icons/playstatus-warning.svg';
-import CheckIcon from '@/public/icons/playstatus-check.svg';
-import { useStoryStore } from '@/stores/storyStore';
-import { usePlaybackStore } from '@/stores/playbackStore';
-import { usePreloadStore } from '@/stores/preloadStore';
-import { useConfigStore } from '@/stores/configStore';
-import { cx } from '@/utils/cx';
+import React, { useMemo } from "react";
+import ClockIcon from "@/public/icons/playstatus-clock.svg";
+import LoadingIcon from "@/public/icons/playstatus-loading.svg";
+import WarningIcon from "@/public/icons/playstatus-warning.svg";
+import CheckIcon from "@/public/icons/playstatus-check.svg";
+import { useStoryStore } from "@/stores/storyStore";
+import { usePlaybackStore } from "@/stores/playbackStore";
+import { usePreloadStore } from "@/stores/preloadStore";
+import { useConfigStore } from "@/stores/configStore";
+import { cx } from "@/utils/cx";
 
 /**
  * 状态阶段枚举。
  */
-type GenerationPhase = 'idle' | 'loading' | 'success' | 'error';
+type GenerationPhase = "idle" | "loading" | "success" | "error";
 
 /**
  * 播放状态面板组件可选入参。
@@ -27,7 +27,9 @@ interface PlaybackStatusBoardProps {
  * @param props 自定义样式类名
  * @returns 播放状态展示 JSX
  */
-const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) => {
+const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({
+  className,
+}) => {
   /** 故事文本列表，用于判断首段生成是否完成。 */
   const storySegments = useStoryStore((state) => state.segments);
   /** 当前故事会话标识，判定是否已有会话。 */
@@ -60,11 +62,12 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
     Boolean(storySessionId) &&
     (storySegments.length === 0 || playbackSessionId !== storySessionId);
   /** 故事生成流程是否处于进行状态（文本或音频请求）。 */
-  const isStoryLoading = hasPendingInitialRequest || preloadStatus === 'loading';
+  const isStoryLoading =
+    hasPendingInitialRequest || preloadStatus === "loading";
   /** 是否已有已缓存的语音资源，可提示预加载成功。 */
   const hasPreloadedAudio = Boolean(preloadAudioUrl);
 
-  const containerClassName = cx('flex flex-wrap gap-3', className);
+  const containerClassName = cx("flex flex-wrap gap-3", className);
 
   /**
    * 将分钟数格式化为 mm:ss 字符串。
@@ -74,7 +77,7 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
   const formatCountdown = (minutes: number): string => {
     const wholeMinutes = Math.floor(minutes);
     const seconds = Math.floor((minutes - wholeMinutes) * 60);
-    return `${wholeMinutes}:${seconds.toString().padStart(2, '0')}`;
+    return `${wholeMinutes}:${seconds.toString().padStart(2, "0")}`;
   };
 
   const statusItems: Array<{
@@ -85,29 +88,29 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
 
   if (remainingTime !== null) {
     statusItems.push({
-      key: 'countdown',
-      phase: 'success',
+      key: "countdown",
+      phase: "success",
       message: `播放倒计时: ${formatCountdown(remainingTime)}`,
     });
   }
 
   if (isStoryLoading) {
     const retryInfo =
-      preloadStatus === 'loading' && preloadRetryCount > 0
+      preloadStatus === "loading" && preloadRetryCount > 0
         ? ` (第${preloadRetryCount}次重试)`
-        : '';
+        : "";
     statusItems.push({
-      key: 'story-loading',
-      phase: 'loading',
+      key: "story-loading",
+      phase: "loading",
       message: `故事加载中${retryInfo}`,
     });
   }
 
   if (hasPreloadedAudio) {
     statusItems.push({
-      key: 'story-preload-ready',
-      phase: 'success',
-      message: '故事预加载',
+      key: "story-preload-ready",
+      phase: "success",
+      message: "故事预加载",
     });
   }
 
@@ -115,7 +118,10 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
     return null;
   }
 
-  const iconForPhase: Record<Exclude<GenerationPhase, 'idle'>, React.FC<React.SVGProps<SVGSVGElement>>> = {
+  const iconForPhase: Record<
+    Exclude<GenerationPhase, "idle">,
+    React.FC<React.SVGProps<SVGSVGElement>>
+  > = {
     loading: LoadingIcon,
     success: CheckIcon,
     error: WarningIcon,
@@ -124,11 +130,11 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
   return (
     <div className={containerClassName}>
       {statusItems.map((item) => {
-        if (item.key === 'countdown') {
+        if (item.key === "countdown") {
           return (
             <div
               key={item.key}
-              className="flex min-w-[172px] items-center gap-2 rounded-[12px] bg-[color-mix(in_srgb,var(--process)_20%,transparent)] px-[14px] py-[10px] text-sm font-medium text-[var(--process)] shadow-[0_2px_8px_var(--shadow-color)] backdrop-blur-[5px] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] hover:-translate-y-px"
+              className="flex min-w-[var(--size-min-width-status)] items-center gap-2 rounded-xl bg-surface-process px-3.5 py-2.5 text-sm font-medium text-process shadow-surface-sm backdrop-blur-soft transition-transform duration-theme ease-theme hover:-translate-y-0.5"
             >
               <ClockIcon className="h-4 w-4 text-current" />
               <span>{item.message}</span>
@@ -136,22 +142,22 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
           );
         }
 
-        if (item.phase === 'idle' || !item.message) {
+        if (item.phase === "idle" || !item.message) {
           return null;
         }
 
         const IconComponent = iconForPhase[item.phase] ?? CheckIcon;
         const phaseClass = cx(
-          'flex min-w-[172px] items-center gap-2 rounded-[12px] px-[14px] py-[10px] text-sm font-medium shadow-[0_2px_8px_var(--shadow-color)] backdrop-blur-[5px] transition-transform duration-[var(--transition-speed)] ease-[var(--transition-timing)] hover:-translate-y-px',
-          item.phase === 'loading'
-            ? 'bg-[color-mix(in_srgb,var(--process)_20%,transparent)] text-[var(--process)]'
-            : item.phase === 'error'
-              ? 'bg-[color-mix(in_srgb,var(--error)_20%,transparent)] text-[var(--error)]'
-              : 'bg-[color-mix(in_srgb,var(--success)_20%,transparent)] text-[var(--success)]'
+          "flex min-w-[var(--size-min-width-status)] items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-medium shadow-surface-sm backdrop-blur-soft transition-transform duration-theme ease-theme hover:-translate-y-0.5",
+          item.phase === "loading"
+            ? "bg-surface-process text-process"
+            : item.phase === "error"
+              ? "bg-surface-error text-error"
+              : "bg-surface-success text-success",
         );
         const iconClassName = cx(
-          'h-4 w-4 text-current',
-          item.phase === 'loading' && 'animate-spin'
+          "h-4 w-4 text-current",
+          item.phase === "loading" && "animate-spin",
         );
 
         return (

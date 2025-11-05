@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
 /**
  * 定义 API 响应的统一数据结构。
@@ -18,7 +18,7 @@ export interface ApiResponse<T> {
  */
 export function createErrorResponse(
   message: string,
-  code: number = 400
+  code: number = 400,
 ): NextResponse<ApiResponse<null>> {
   return NextResponse.json(
     {
@@ -26,7 +26,7 @@ export function createErrorResponse(
       error: message,
       code,
     },
-    { status: code }
+    { status: code },
   );
 }
 
@@ -37,25 +37,25 @@ export function createErrorResponse(
  */
 export async function authMiddleware(request: NextRequest) {
   const token =
-    request.headers.get('Authorization')?.replace('Bearer ', '') ||
-    request.cookies.get('auth_token')?.value;
+    request.headers.get("Authorization")?.replace("Bearer ", "") ||
+    request.cookies.get("auth_token")?.value;
 
   if (!token) {
-    return createErrorResponse('未授权访问', 401);
+    return createErrorResponse("未授权访问", 401);
   }
 
   try {
-    if (token === 'invalid') {
-      throw new Error('无效的令牌');
+    if (token === "invalid") {
+      throw new Error("无效的令牌");
     }
 
-    const userId = 'user-001';
+    const userId = "user-001";
 
     return { userId };
   } catch (error) {
     return createErrorResponse(
-      error instanceof Error ? error.message : '身份验证失败',
-      401
+      error instanceof Error ? error.message : "身份验证失败",
+      401,
     );
   }
 }

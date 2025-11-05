@@ -33,7 +33,7 @@ export const shouldSkipPointerDown = (target: EventTarget | null): boolean => {
   if (!(target instanceof Element)) {
     return false;
   }
-  return Boolean(target.closest('button'));
+  return Boolean(target.closest("button"));
 };
 
 /**

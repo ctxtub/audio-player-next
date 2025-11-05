@@ -1,5 +1,5 @@
-import React from 'react';
-import HomePage from './home/index';
+import React from "react";
+import HomePage from "./home/index";
 
 /**
  * Next.js 默认首页，转发至 Home 页面实现。

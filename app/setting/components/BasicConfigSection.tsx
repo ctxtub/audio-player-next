@@ -1,10 +1,10 @@
-import React, { useCallback, useMemo } from 'react';
-import { Slider } from 'antd-mobile';
+import React, { useCallback, useMemo } from "react";
+import { Slider } from "antd-mobile";
 import {
   SECTION_CLASS,
   SECTION_FIELD_CLASS,
   SECTION_TITLE_CLASS,
-} from './sectionStyles';
+} from "./sectionStyles";
 
 /**
  * 基础播放配置模块的入参。
@@ -43,25 +43,25 @@ const BasicConfigSection: React.FC<BasicConfigSectionProps> = ({
       [MIN_DURATION + STEP * 4]: `${MIN_DURATION + STEP * 4}分钟`,
       [MAX_DURATION]: `${MAX_DURATION}分钟`,
     }),
-    []
+    [],
   );
 
   const handleChange = useCallback(
     (next: number | number[]) => {
-      const numericValue = Array.isArray(next) ? next[0] ?? MIN_DURATION : next;
+      const numericValue = Array.isArray(next)
+        ? (next[0] ?? MIN_DURATION)
+        : next;
       const normalized = numericValue;
       if (normalized !== playDuration) {
         onPlayDurationChange(normalized);
       }
     },
-    [onPlayDurationChange, playDuration]
+    [onPlayDurationChange, playDuration],
   );
 
   return (
     <div className={SECTION_CLASS}>
-      <h3 className={SECTION_TITLE_CLASS}>
-        播放时长
-      </h3>
+      <h3 className={SECTION_TITLE_CLASS}>播放时长</h3>
       <div className={SECTION_FIELD_CLASS}>
         <Slider
           className="w-full"

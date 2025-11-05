@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import { handleStoryRequest } from '@/lib/server/storyUpstream';
-import { ServiceError } from '@/lib/http/server/ErrorHandler';
-import type { StoryApiResponse } from '@/types/story';
+import { handleStoryRequest } from "@/lib/server/storyUpstream";
+import { ServiceError } from "@/lib/http/server/ErrorHandler";
+import type { StoryApiResponse } from "@/types/story";
 
 /**
  * 处理故事生成/续写请求。
@@ -18,9 +18,9 @@ export const POST = async (req: Request) => {
     return NextResponse.json(
       {
         error: {
-          code: 'INVALID_JSON',
+          code: "INVALID_JSON",
           message: `请求体不是合法的 JSON: ${
-            error instanceof Error ? error.message : '未知错误'
+            error instanceof Error ? error.message : "未知错误"
           }`,
         },
       },
@@ -33,7 +33,7 @@ export const POST = async (req: Request) => {
     return NextResponse.json<StoryApiResponse>(response, {
       status: 200,
       headers: {
-        'Cache-Control': 'no-store',
+        "Cache-Control": "no-store",
       },
     });
   } catch (error) {
@@ -52,8 +52,8 @@ export const POST = async (req: Request) => {
     return NextResponse.json(
       {
         error: {
-          code: 'INTERNAL_SERVER_ERROR',
-          message: '故事生成服务发生未知错误',
+          code: "INTERNAL_SERVER_ERROR",
+          message: "故事生成服务发生未知错误",
         },
       },
       { status: 500 },

@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import React, { useCallback, useEffect, useRef } from 'react';
-import { Toast } from 'antd-mobile';
+import React, { useCallback, useEffect, useRef } from "react";
+import { Toast } from "antd-mobile";
 import {
   handleNearEnd,
   handleSegmentEnded,
   handlePlaybackPause,
   handlePlaybackStart,
   updatePlaybackProgress,
-} from '@/app/services/storyFlow';
-import { usePlaybackStore } from '@/stores/playbackStore';
-import type { AudioControllerHandle } from '@/types/audioPlayer';
+} from "@/app/services/storyFlow";
+import { usePlaybackStore } from "@/stores/playbackStore";
+import type { AudioControllerHandle } from "@/types/audioPlayer";
 
 /**
  * 判断播放请求因暂停而被中断的异常类型，避免重复弹出错误提示。
@@ -18,14 +18,17 @@ import type { AudioControllerHandle } from '@/types/audioPlayer';
  * @returns 是否属于暂停触发的中断错误
  */
 const isPlayInterruptedError = (error: unknown): boolean => {
-  if (typeof DOMException !== 'undefined' && error instanceof DOMException) {
-    if (error.name === 'AbortError' || error.code === 20) {
+  if (typeof DOMException !== "undefined" && error instanceof DOMException) {
+    if (error.name === "AbortError" || error.code === 20) {
       return true;
     }
   }
   if (error instanceof Error) {
     const message = error.message.toLowerCase();
-    if (message.includes('play() request was interrupted') && message.includes('pause')) {
+    if (
+      message.includes("play() request was interrupted") &&
+      message.includes("pause")
+    ) {
       return true;
     }
   }
@@ -40,7 +43,9 @@ const AudioControllerHost: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hasTriggeredPreload = useRef(false);
   const playbackRate = usePlaybackStore((state) => state.playbackRate);
-  const registerAudioController = usePlaybackStore((state) => state.registerAudioController);
+  const registerAudioController = usePlaybackStore(
+    (state) => state.registerAudioController,
+  );
 
   /**
    * 启动新音频播放，负责重置状态与触发播放开始回调。
@@ -51,7 +56,7 @@ const AudioControllerHost: React.FC = () => {
     async (audioUrl: string) => {
       const audioEl = audioRef.current;
       if (!audioEl) {
-        throw new Error('音频播放器尚未就绪');
+        throw new Error("音频播放器尚未就绪");
       }
       audioEl.src = audioUrl;
       audioEl.currentTime = 0;
@@ -66,12 +71,12 @@ const AudioControllerHost: React.FC = () => {
           return;
         }
         handlePlaybackPause();
-        const message = error instanceof Error ? error.message : '无法播放音频';
-        Toast.show({ icon: 'fail', content: message, duration: 3000 });
+        const message = error instanceof Error ? error.message : "无法播放音频";
+        Toast.show({ icon: "fail", content: message, duration: 3000 });
         throw error instanceof Error ? error : new Error(message);
       }
     },
-    [playbackRate]
+    [playbackRate],
   );
 
   /**
@@ -81,7 +86,7 @@ const AudioControllerHost: React.FC = () => {
   const handleResume = useCallback(async () => {
     const audioEl = audioRef.current;
     if (!audioEl) {
-      throw new Error('音频播放器尚未就绪');
+      throw new Error("音频播放器尚未就绪");
     }
     try {
       await audioEl.play();
@@ -91,8 +96,8 @@ const AudioControllerHost: React.FC = () => {
         return;
       }
       handlePlaybackPause();
-      const message = error instanceof Error ? error.message : '无法恢复播放';
-      Toast.show({ icon: 'fail', content: message, duration: 3000 });
+      const message = error instanceof Error ? error.message : "无法恢复播放";
+      Toast.show({ icon: "fail", content: message, duration: 3000 });
       throw error instanceof Error ? error : new Error(message);
     }
   }, []);
@@ -146,7 +151,14 @@ const AudioControllerHost: React.FC = () => {
     return () => {
       registerAudioController(null);
     };
-  }, [handlePause, handlePlay, handleResume, handleSeek, handleSetPlaybackRate, registerAudioController]);
+  }, [
+    handlePause,
+    handlePlay,
+    handleResume,
+    handleSeek,
+    handleSetPlaybackRate,
+    registerAudioController,
+  ]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -169,7 +181,7 @@ const AudioControllerHost: React.FC = () => {
         if (!hasTriggeredPreload.current && remaining <= 120) {
           hasTriggeredPreload.current = true;
           handleNearEnd().catch((error) => {
-            console.error('预加载下一段音频失败:', error);
+            console.error("预加载下一段音频失败:", error);
           });
         }
       }
@@ -190,23 +202,24 @@ const AudioControllerHost: React.FC = () => {
         }
         await handlePlay(nextSegment.audioUrl);
       } catch (error) {
-        const message = error instanceof Error ? error.message : '无法播放下一段音频';
-        Toast.show({ icon: 'fail', content: message, duration: 3000 });
+        const message =
+          error instanceof Error ? error.message : "无法播放下一段音频";
+        Toast.show({ icon: "fail", content: message, duration: 3000 });
       }
     };
 
-    audioEl.addEventListener('timeupdate', handleTimeUpdate);
-    audioEl.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audioEl.addEventListener('ended', handleEnded);
+    audioEl.addEventListener("timeupdate", handleTimeUpdate);
+    audioEl.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audioEl.addEventListener("ended", handleEnded);
 
     return () => {
-      audioEl.removeEventListener('timeupdate', handleTimeUpdate);
-      audioEl.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audioEl.removeEventListener('ended', handleEnded);
+      audioEl.removeEventListener("timeupdate", handleTimeUpdate);
+      audioEl.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audioEl.removeEventListener("ended", handleEnded);
     };
   }, [handlePlay]);
 
-  return <audio ref={audioRef} style={{ display: 'none' }} />;
+  return <audio ref={audioRef} style={{ display: "none" }} />;
 };
 
 export default AudioControllerHost;

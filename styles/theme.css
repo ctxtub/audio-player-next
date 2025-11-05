@@ -1,0 +1,364 @@
+@theme {
+  --main-tab-bar-height: 56px;
+  /* 页面统一内边距 */
+  --page-padding: 16px;
+
+  /* 动效参数 */
+  --motion-duration-theme: 0.3s;
+  --motion-ease-theme: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* 模糊半径 */
+  --blur-soft: 5px;
+  --blur-panel: 14px;
+  --blur-glass: 20px;
+
+  /* 间距令牌 */
+  --space-xs: 0.3125rem;
+  --space-sm: 0.625rem;
+  --space-md: 0.9375rem;
+  --space-lg: 1.25rem;
+  --space-xl: 1.875rem;
+
+  /* 圆角令牌 */
+  --radius-lgx: 0.625rem;
+  --radius-lg-plus: 0.9375rem;
+  --radius-xl-plus: 1.125rem;
+  --radius-modal: 1.25rem;
+
+  /* 尺寸令牌 */
+  --size-min-width-label: 2.8125rem;
+  --size-min-width-button: 7.5rem;
+  --size-min-width-status: 10.75rem;
+  --size-min-width-badge: 1.875rem;
+  --size-max-width-content: 45rem;
+  --size-max-width-modal: 50rem;
+  --size-max-width-player: 25rem;
+  --size-width-disc: 12.25rem;
+  --size-width-icon: 3.125rem;
+  --size-width-speed-menu: 6.25rem;
+  --size-width-icon-md: 1.375rem;
+  --size-width-floating: 13.75rem;
+  --size-width-floating-active: 12.5rem;
+  --size-height-disc: 12.25rem;
+  --size-height-icon: 3.125rem;
+  --size-height-badge: 1.875rem;
+  --size-height-icon-md: 1.375rem;
+  --size-min-height-input: 3.75rem;
+  --size-max-height-prompt-panel: 18.75rem;
+
+  /* 字体令牌 */
+  --font-xs-plus: 0.8125rem;
+  --font-xs-plus-line: 1.5;
+  --font-sm-plus: 0.9375rem;
+  --font-sm-plus-line: 1.6;
+  --font-lg-plus: 1.1875rem;
+  --font-lg-plus-line: 1.5;
+
+  /* 颜色令牌：默认使用暗色系作为兜底，避免闪烁 */
+  --color-background: #000000;
+  --color-background-initial: var(--color-background);
+  --color-page-background: transparent;
+  --color-foreground: #ffffff;
+  --color-foreground-initial: var(--color-foreground);
+  --color-foreground-secondary: #98989f;
+  --color-primary: #0a84ff;
+  --color-primary-hover: color-mix(in srgb, var(--color-primary) 80%, #ffffff 20%);
+  --color-primary-active: color-mix(in srgb, var(--color-primary) 70%, #000000 10%);
+  --color-process: #0a84ff;
+  --color-success: #30d158;
+  --color-error: #ff453a;
+  --color-surface: rgba(28, 28, 30, 0.8);
+  --color-surface-overlay: color-mix(in srgb, var(--color-background) 90%, transparent);
+  --color-surface-accent: color-mix(in srgb, var(--color-surface) 80%, var(--color-primary));
+  --color-surface-interactive: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  --color-surface-primary-soft: color-mix(in srgb, var(--color-primary) 5%, transparent);
+  --color-surface-primary-medium: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  --color-surface-primary-strong: color-mix(in srgb, var(--color-primary) 20%, transparent);
+  --color-surface-primary-intense: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  --color-surface-mixed: color-mix(in srgb, var(--color-surface) 85%, var(--color-primary) 15%);
+  --color-surface-process-soft: color-mix(in srgb, var(--color-process) 10%, transparent);
+  --color-surface-process: color-mix(in srgb, var(--color-process) 20%, transparent);
+  --color-surface-process-strong: color-mix(in srgb, var(--color-process) 25%, transparent);
+  --color-surface-success: color-mix(in srgb, var(--color-success) 20%, transparent);
+  --color-surface-error: color-mix(in srgb, var(--color-error) 20%, transparent);
+  --color-border: #38383a;
+  --color-border-card: rgba(84, 84, 88, 0.65);
+  --color-border-primary: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  --color-border-process: color-mix(in srgb, var(--color-process) 30%, transparent);
+  --color-border-primary-blend: color-mix(in srgb, var(--color-primary) 24%, var(--color-border-card));
+  --color-input-background: #1c1c1e;
+  --color-shadow: rgba(0, 0, 0, 0.3);
+
+  /* 阴影令牌 */
+  --shadow-floating: 0 8px 16px var(--color-shadow);
+  --shadow-panel: 0 10px 20px var(--color-shadow);
+  --shadow-surface-sm: 0 2px 8px var(--color-shadow);
+  --shadow-surface-md: 0 4px 12px var(--color-shadow);
+  --shadow-surface-lg: 0 8px 24px var(--color-shadow);
+  --shadow-surface-top: 0 -4px 16px color-mix(in srgb, var(--color-shadow) 60%, transparent);
+  --shadow-surface-inner: 0 2px 10px color-mix(in srgb, var(--color-shadow) 30%, transparent);
+  --shadow-surface-ambient: 0 0 20px var(--color-shadow);
+  --shadow-primary-panel: 0 10px 24px color-mix(in srgb, var(--color-primary) 22%, rgba(0, 0, 0, 0.35));
+  --shadow-primary-glow: 0 4px 12px color-mix(in srgb, var(--color-primary) 45%, transparent);
+  --shadow-primary-glow-strong: 0 6px 16px color-mix(in srgb, var(--color-primary) 55%, transparent);
+  --shadow-primary-glow-muted: 0 2px 8px color-mix(in srgb, var(--color-primary) 35%, transparent);
+  --shadow-primary-soft: 0 2px 8px color-mix(in srgb, var(--color-primary) 30%, transparent);
+  --shadow-primary-active: 0 1px 4px color-mix(in srgb, var(--color-primary) 20%, transparent);
+  --shadow-process-glow: 0 4px 12px color-mix(in srgb, var(--color-process) 35%, transparent);
+  --shadow-error-glow: 0 4px 12px color-mix(in srgb, var(--color-error) 50%, transparent);
+
+  /* antd-mobile 共享令牌 */
+  --adm-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", sans-serif;
+  --adm-border-radius: 12px;
+  --adm-border-radius-xs: 8px;
+  --adm-border-radius-sm: 10px;
+  --adm-border-radius-lg: 18px;
+  --selector-surface: color-mix(in srgb, var(--color-foreground) 8%, transparent);
+  --selector-selected-surface: color-mix(in srgb, var(--color-primary) 26%, transparent);
+  --selector-border-color: color-mix(in srgb, var(--color-foreground) 18%, transparent);
+  --selector-border-checked: color-mix(in srgb, var(--color-primary) 42%, transparent);
+}
+
+@layer base {
+    --main-tab-bar-height: 56px;
+    /* 页面统一内边距 */
+    --page-padding: 16px;
+
+    /* 动效参数 */
+    --motion-duration-theme: 0.3s;
+    --motion-ease-theme: cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* 模糊半径 */
+    --blur-soft: 5px;
+    --blur-panel: 14px;
+    --blur-glass: 20px;
+
+    /* 间距令牌 */
+    --space-xs: 0.3125rem;
+    --space-sm: 0.625rem;
+    --space-md: 0.9375rem;
+    --space-lg: 1.25rem;
+    --space-xl: 1.875rem;
+
+    /* 圆角令牌 */
+    --radius-lgx: 0.625rem;
+    --radius-lg-plus: 0.9375rem;
+    --radius-xl-plus: 1.125rem;
+    --radius-modal: 1.25rem;
+
+    /* 尺寸令牌 */
+    --size-min-width-label: 2.8125rem;
+    --size-min-width-button: 7.5rem;
+    --size-min-width-status: 10.75rem;
+    --size-min-width-badge: 1.875rem;
+    --size-max-width-content: 45rem;
+    --size-max-width-modal: 50rem;
+    --size-max-width-player: 25rem;
+    --size-width-disc: 12.25rem;
+    --size-width-icon: 3.125rem;
+    --size-width-speed-menu: 6.25rem;
+    --size-width-icon-md: 1.375rem;
+    --size-width-floating: 13.75rem;
+    --size-width-floating-active: 12.5rem;
+    --size-height-disc: 12.25rem;
+    --size-height-icon: 3.125rem;
+    --size-height-badge: 1.875rem;
+    --size-height-icon-md: 1.375rem;
+    --size-min-height-input: 3.75rem;
+    --size-max-height-prompt-panel: 18.75rem;
+
+    /* 字体令牌 */
+    --font-xs-plus: 0.8125rem;
+    --font-xs-plus-line: 1.5;
+    --font-sm-plus: 0.9375rem;
+    --font-sm-plus-line: 1.6;
+    --font-lg-plus: 1.1875rem;
+    --font-lg-plus-line: 1.5;
+
+    /* 颜色令牌：默认使用暗色系作为兜底，避免闪烁 */
+    --color-background: #000000;
+    --color-background-initial: var(--color-background);
+    --color-page-background: transparent;
+    --color-foreground: #ffffff;
+    --color-foreground-initial: var(--color-foreground);
+    --color-foreground-secondary: #98989f;
+    --color-primary: #0a84ff;
+    --color-primary-hover: color-mix(in srgb, var(--color-primary) 80%, #ffffff 20%);
+    --color-primary-active: color-mix(in srgb, var(--color-primary) 70%, #000000 10%);
+    --color-process: #0a84ff;
+    --color-success: #30d158;
+    --color-error: #ff453a;
+    --color-surface: rgba(28, 28, 30, 0.8);
+    --color-surface-overlay: color-mix(in srgb, var(--color-background) 90%, transparent);
+    --color-surface-accent: color-mix(in srgb, var(--color-surface) 80%, var(--color-primary));
+    --color-surface-interactive: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    --color-surface-primary-soft: color-mix(in srgb, var(--color-primary) 5%, transparent);
+    --color-surface-primary-medium: color-mix(in srgb, var(--color-primary) 15%, transparent);
+    --color-surface-primary-strong: color-mix(in srgb, var(--color-primary) 20%, transparent);
+    --color-surface-primary-intense: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    --color-surface-mixed: color-mix(in srgb, var(--color-surface) 85%, var(--color-primary) 15%);
+    --color-surface-process-soft: color-mix(in srgb, var(--color-process) 10%, transparent);
+    --color-surface-process: color-mix(in srgb, var(--color-process) 20%, transparent);
+    --color-surface-process-strong: color-mix(in srgb, var(--color-process) 25%, transparent);
+    --color-surface-success: color-mix(in srgb, var(--color-success) 20%, transparent);
+    --color-surface-error: color-mix(in srgb, var(--color-error) 20%, transparent);
+    --color-border: #38383a;
+    --color-border-card: rgba(84, 84, 88, 0.65);
+    --color-border-primary: color-mix(in srgb, var(--color-primary) 30%, transparent);
+    --color-border-process: color-mix(in srgb, var(--color-process) 30%, transparent);
+    --color-border-primary-blend: color-mix(in srgb, var(--color-primary) 24%, var(--color-border-card));
+    --color-input-background: #1c1c1e;
+    --color-shadow: rgba(0, 0, 0, 0.3);
+
+    /* 阴影令牌 */
+    --shadow-floating: 0 8px 16px var(--color-shadow);
+    --shadow-panel: 0 10px 20px var(--color-shadow);
+    --shadow-surface-sm: 0 2px 8px var(--color-shadow);
+    --shadow-surface-md: 0 4px 12px var(--color-shadow);
+    --shadow-surface-lg: 0 8px 24px var(--color-shadow);
+    --shadow-surface-top: 0 -4px 16px color-mix(in srgb, var(--color-shadow) 60%, transparent);
+    --shadow-surface-inner: 0 2px 10px color-mix(in srgb, var(--color-shadow) 30%, transparent);
+    --shadow-surface-ambient: 0 0 20px var(--color-shadow);
+    --shadow-primary-panel: 0 10px 24px color-mix(in srgb, var(--color-primary) 22%, rgba(0, 0, 0, 0.35));
+    --shadow-primary-glow: 0 4px 12px color-mix(in srgb, var(--color-primary) 45%, transparent);
+    --shadow-primary-glow-strong: 0 6px 16px color-mix(in srgb, var(--color-primary) 55%, transparent);
+    --shadow-primary-glow-muted: 0 2px 8px color-mix(in srgb, var(--color-primary) 35%, transparent);
+    --shadow-primary-soft: 0 2px 8px color-mix(in srgb, var(--color-primary) 30%, transparent);
+    --shadow-primary-active: 0 1px 4px color-mix(in srgb, var(--color-primary) 20%, transparent);
+    --shadow-process-glow: 0 4px 12px color-mix(in srgb, var(--color-process) 35%, transparent);
+    --shadow-error-glow: 0 4px 12px color-mix(in srgb, var(--color-error) 50%, transparent);
+
+    /* antd-mobile 共享令牌 */
+    --adm-font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", sans-serif;
+    --adm-border-radius: 12px;
+    --adm-border-radius-xs: 8px;
+    --adm-border-radius-sm: 10px;
+    --adm-border-radius-lg: 18px;
+    --selector-surface: color-mix(in srgb, var(--color-foreground) 8%, transparent);
+    --selector-selected-surface: color-mix(in srgb, var(--color-primary) 26%, transparent);
+    --selector-border-color: color-mix(in srgb, var(--color-foreground) 18%, transparent);
+    --selector-border-checked: color-mix(in srgb, var(--color-primary) 42%, transparent);
+  }
+
+  /* 暗色主题 */
+  :root[data-theme='dark'] {
+    --color-background: #000000;
+    --color-background-initial: #000000;
+    --color-foreground: #ffffff;
+    --color-foreground-initial: #ffffff;
+    --color-foreground-secondary: #98989f;
+    --color-primary: #0a84ff;
+    --color-process: #0a84ff;
+    --color-success: #30d158;
+    --color-error: #ff453a;
+    --color-surface: rgba(28, 28, 30, 0.8);
+    --color-border: #38383a;
+    --color-border-card: rgba(84, 84, 88, 0.65);
+    --color-input-background: #1c1c1e;
+    --color-shadow: rgba(0, 0, 0, 0.3);
+
+    --adm-color-primary: var(--color-primary);
+    --adm-color-success: var(--color-success);
+    --adm-color-warning: #ffd60a;
+    --adm-color-danger: var(--color-error);
+    --adm-color-text: var(--color-foreground);
+    --adm-color-text-secondary: var(--color-foreground-secondary);
+    --adm-color-text-third: rgba(235, 235, 245, 0.6);
+    --adm-color-text-quaternary: rgba(235, 235, 245, 0.3);
+    --adm-color-weak: var(--color-foreground-secondary);
+    --adm-color-light: color-mix(in srgb, var(--color-background) 12%, transparent);
+    --adm-color-border: var(--color-border);
+    --adm-color-border-secondary: color-mix(in srgb, var(--color-background) 20%, transparent);
+    --adm-color-background: var(--color-background);
+    --adm-color-background-body: var(--color-background);
+    --adm-color-wathet: color-mix(in srgb, var(--color-primary) 22%, transparent);
+    --adm-color-fill-content: color-mix(in srgb, var(--color-foreground) 12%, transparent);
+    --adm-color-fill: var(--color-input-background);
+    --adm-color-fill-secondary: color-mix(in srgb, var(--color-background) 10%, transparent);
+    --adm-color-fill-tertiary: rgba(235, 235, 245, 0.08);
+    --adm-color-fill-quaternary: rgba(235, 235, 245, 0.04);
+    --adm-color-text-light-solid: rgba(255, 255, 255, 0.9);
+    --adm-color-shadow: rgba(0, 0, 0, 0.4);
+    --selector-surface: color-mix(in srgb, var(--color-foreground) 8%, transparent);
+    --selector-selected-surface: color-mix(in srgb, var(--color-primary) 26%, transparent);
+    --selector-border-color: color-mix(in srgb, var(--color-foreground) 18%, transparent);
+  }
+
+  /* 亮色主题 */
+  :root[data-theme='light'] {
+    --color-background: #f2f2f7;
+    --color-background-initial: #f2f2f7;
+    --color-foreground: #666666;
+    --color-foreground-initial: #666666;
+    --color-foreground-secondary: #8e8e93;
+    --color-primary: #007aff;
+    --color-process: #007aff;
+    --color-success: #34c759;
+    --color-error: #ff3b30;
+    --color-surface: rgba(255, 255, 255, 0.8);
+    --color-border: #d1d1d6;
+    --color-border-card: rgba(209, 209, 214, 0.65);
+    --color-input-background: #ffffff;
+    --color-shadow: rgba(0, 0, 0, 0.1);
+
+    --selector-surface: color-mix(in srgb, var(--color-foreground) 6%, transparent);
+    --selector-selected-surface: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    --selector-border-color: color-mix(in srgb, var(--color-foreground) 12%, transparent);
+
+    --adm-color-primary: var(--color-primary);
+    --adm-color-success: var(--color-success);
+    --adm-color-warning: #ffd60a;
+    --adm-color-danger: var(--color-error);
+    --adm-color-text: var(--color-foreground);
+    --adm-color-text-secondary: var(--color-foreground-secondary);
+    --adm-color-text-third: rgba(60, 60, 67, 0.6);
+    --adm-color-text-quaternary: rgba(60, 60, 67, 0.3);
+    --adm-color-weak: var(--color-foreground-secondary);
+    --adm-color-light: #f9f9fb;
+    --adm-color-border: var(--color-border);
+    --adm-color-border-secondary: #e5e5ea;
+    --adm-color-background: var(--color-background);
+    --adm-color-background-body: var(--color-background);
+    --adm-color-wathet: color-mix(in srgb, var(--color-primary) 16%, transparent);
+    --adm-color-fill-content: color-mix(in srgb, var(--color-foreground) 6%, #ffffff);
+    --adm-color-fill: #ffffff;
+    --adm-color-fill-secondary: #f7f7fa;
+    --adm-color-fill-tertiary: #f2f2f7;
+    --adm-color-fill-quaternary: rgba(60, 60, 67, 0.08);
+    --adm-color-text-light-solid: #ffffff;
+    --adm-color-shadow: rgba(0, 0, 0, 0.12);
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+      "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: var(--color-background-initial, var(--color-background));
+    color: var(--color-foreground-initial, var(--color-foreground));
+    line-height: 1.6;
+    touch-action: manipulation;
+    transition:
+      background-color var(--motion-duration-theme) var(--motion-ease-theme),
+      color var(--motion-duration-theme) var(--motion-ease-theme);
+  }
+
+  html {
+    touch-action: manipulation;
+  }
+
+  html,
+  body,
+  #root {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+  }
+}

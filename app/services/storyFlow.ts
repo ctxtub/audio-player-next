@@ -1,8 +1,8 @@
-import { fetchAudio } from '@/lib/client/ttsGenerate';
-import { useConfigStore } from '@/stores/configStore';
-import { usePlaybackStore } from '@/stores/playbackStore';
-import { usePreloadStore } from '@/stores/preloadStore';
-import { useStoryStore } from '@/stores/storyStore';
+import { fetchAudio } from "@/lib/client/ttsGenerate";
+import { useConfigStore } from "@/stores/configStore";
+import { usePlaybackStore } from "@/stores/playbackStore";
+import { usePreloadStore } from "@/stores/preloadStore";
+import { useStoryStore } from "@/stores/storyStore";
 
 /**
  * 可播放段落对象，包含音频地址与文本内容，并标注来源（首段/预加载/即时生成）。
@@ -10,7 +10,7 @@ import { useStoryStore } from '@/stores/storyStore';
 type PlayableSegment = {
   audioUrl: string;
   segment: string;
-  source: 'initial' | 'preloaded' | 'generated';
+  source: "initial" | "preloaded" | "generated";
 };
 
 /**
@@ -67,7 +67,7 @@ const schedulePreloadRetry = () => {
 const ensureConfigReady = () => {
   const configState = useConfigStore.getState();
   if (!configState.isConfigValid()) {
-    throw new Error('请先完成配置，再开始生成故事');
+    throw new Error("请先完成配置，再开始生成故事");
   }
   return configState.apiConfig;
 };
@@ -77,7 +77,9 @@ const ensureConfigReady = () => {
  * @param prompt 用户输入的故事提示词
  * @returns 包含首段故事文本、音频地址及来源标记的对象
  */
-export const beginStorySession = async (prompt: string): Promise<PlayableSegment> => {
+export const beginStorySession = async (
+  prompt: string,
+): Promise<PlayableSegment> => {
   const apiConfig = ensureConfigReady();
   const playbackStore = usePlaybackStore.getState();
   const preloadStore = usePreloadStore.getState();
@@ -99,7 +101,7 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
   return {
     audioUrl,
     segment: firstSegment,
-    source: 'initial',
+    source: "initial",
   };
 };
 
@@ -117,7 +119,7 @@ export const handleNearEnd = async (): Promise<void> => {
   }
 
   const preloadState = usePreloadStore.getState();
-  if (preloadState.status === 'loading' || preloadState.status === 'ready') {
+  if (preloadState.status === "loading" || preloadState.status === "ready") {
     return;
   }
 
@@ -125,7 +127,7 @@ export const handleNearEnd = async (): Promise<void> => {
     await usePreloadStore.getState().requestPreload();
     clearPreloadRetryTimer();
   } catch (error) {
-    if (error instanceof Error && error.message === 'PRELOAD_IN_PROGRESS') {
+    if (error instanceof Error && error.message === "PRELOAD_IN_PROGRESS") {
       return;
     }
     schedulePreloadRetry();
@@ -147,15 +149,15 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
     return null;
   }
 
-  let source: PlayableSegment['source'] = 'preloaded';
+  let source: PlayableSegment["source"] = "preloaded";
   let result = usePreloadStore.getState().consume();
   if (!result) {
-    source = 'generated';
+    source = "generated";
     try {
       await usePreloadStore.getState().requestPreload();
       result = usePreloadStore.getState().consume();
     } catch (error) {
-      if (error instanceof Error && error.message === 'PRELOAD_IN_PROGRESS') {
+      if (error instanceof Error && error.message === "PRELOAD_IN_PROGRESS") {
         return null;
       }
       schedulePreloadRetry();
@@ -196,7 +198,10 @@ export const handlePlaybackPause = () => {
  * @param payload.currentTime 当前播放位置（秒）
  * @param payload.duration 当前音频总时长（秒）
  */
-export const updatePlaybackProgress = (payload: { currentTime: number; duration: number }) => {
+export const updatePlaybackProgress = (payload: {
+  currentTime: number;
+  duration: number;
+}) => {
   usePlaybackStore.getState().updateProgress(payload);
 };
 

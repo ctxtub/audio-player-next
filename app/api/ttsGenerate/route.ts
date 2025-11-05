@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-import { handleTtsRequest } from '@/lib/server/ttsUpstream';
-import { ServiceError } from '@/lib/http/server/ErrorHandler';
+import { handleTtsRequest } from "@/lib/server/ttsUpstream";
+import { ServiceError } from "@/lib/http/server/ErrorHandler";
 
 /**
  * 处理语音合成请求。
@@ -16,13 +16,13 @@ export const POST = async (req: Request) => {
     return NextResponse.json(
       {
         error: {
-          code: 'INVALID_JSON',
+          code: "INVALID_JSON",
           message: `请求体不是合法的 JSON: ${
-            error instanceof Error ? error.message : '未知错误'
+            error instanceof Error ? error.message : "未知错误"
           }`,
         },
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -34,8 +34,8 @@ export const POST = async (req: Request) => {
     return new NextResponse(buffer, {
       status: 200,
       headers: {
-        'Content-Type': 'audio/mpeg',
-        'Cache-Control': 'no-store',
+        "Content-Type": "audio/mpeg",
+        "Cache-Control": "no-store",
       },
     });
   } catch (error) {
@@ -47,18 +47,18 @@ export const POST = async (req: Request) => {
             message: error.message,
           },
         },
-        { status: error.status }
+        { status: error.status },
       );
     }
 
     return NextResponse.json(
       {
         error: {
-          code: 'INTERNAL_SERVER_ERROR',
-          message: '语音合成服务发生未知错误',
+          code: "INTERNAL_SERVER_ERROR",
+          message: "语音合成服务发生未知错误",
         },
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 };

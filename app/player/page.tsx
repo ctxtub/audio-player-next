@@ -1,5 +1,5 @@
-import React from 'react';
-import PlayerPage from './index';
+import React from "react";
+import PlayerPage from "./index";
 
 /**
  * 播放器页面，呈现全屏播放内容与故事展示。

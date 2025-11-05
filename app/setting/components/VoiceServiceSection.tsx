@@ -1,9 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Selector, Toast } from 'antd-mobile';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Button, Selector, Toast } from "antd-mobile";
 
-import type { VoiceOption } from '@/types/ttsGenerate';
-import { fetchAudio } from '@/lib/client/ttsGenerate';
-import { SECTION_CLASS, SECTION_TITLE_CLASS } from './sectionStyles';
+import type { VoiceOption } from "@/types/ttsGenerate";
+import { fetchAudio } from "@/lib/client/ttsGenerate";
+import { SECTION_CLASS, SECTION_TITLE_CLASS } from "./sectionStyles";
 
 /**
  * 语音音色配置模块的入参。
@@ -45,7 +51,10 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
   const hasVoices = useMemo(() => voicesList.length > 0, [voicesList]);
 
   useEffect(() => {
-    if (playingVoice && !voicesList.some(option => option.value === playingVoice)) {
+    if (
+      playingVoice &&
+      !voicesList.some((option) => option.value === playingVoice)
+    ) {
       stopPreview();
     }
   }, [playingVoice, stopPreview, voicesList]);
@@ -68,8 +77,12 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
         return;
       }
 
-      if (!voicesList.some(option => option.value === voice)) {
-        Toast.show({ icon: 'fail', content: '所选声音已不可用，请重新选择', duration: 3000 });
+      if (!voicesList.some((option) => option.value === voice)) {
+        Toast.show({
+          icon: "fail",
+          content: "所选声音已不可用，请重新选择",
+          duration: 3000,
+        });
         return;
       }
 
@@ -78,34 +91,34 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
       let objectUrl: string | null = null;
       try {
         setPlayingVoice(voice);
-        const previewText = '你好，让我为你讲故事吧';
+        const previewText = "你好，让我为你讲故事吧";
         objectUrl = await fetchAudio(previewText, voice);
         previewUrlRef.current = objectUrl;
 
         const audio = new Audio(objectUrl);
         audioRef.current = audio;
 
-        audio.addEventListener('ended', stopPreview, { once: true });
+        audio.addEventListener("ended", stopPreview, { once: true });
         audio.addEventListener(
-          'error',
-          event => {
+          "error",
+          (event) => {
             const errorMessage =
-              (event as ErrorEvent).error?.message || '音频播放失败，请重试';
+              (event as ErrorEvent).error?.message || "音频播放失败，请重试";
             stopPreview();
-            Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
+            Toast.show({ icon: "fail", content: errorMessage, duration: 3000 });
           },
-          { once: true }
+          { once: true },
         );
 
         await audio.play();
       } catch (error) {
-        console.error('试听失败:', error);
+        console.error("试听失败:", error);
         stopPreview();
         if (objectUrl) {
           URL.revokeObjectURL(objectUrl);
         }
         const message = error instanceof Error ? error.message : String(error);
-        Toast.show({ icon: 'fail', content: message, duration: 3000 });
+        Toast.show({ icon: "fail", content: message, duration: 3000 });
       }
     },
     [playingVoice, stopPreview, voicesList],
@@ -122,21 +135,20 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
             multiple={false}
             value={selectorValue}
             onChange={handleSelectorChange}
-            options={voicesList.map(option => {
+            options={voicesList.map((option) => {
               const isPlaying = playingVoice === option.value;
               return {
                 value: option.value,
                 label: (
                   <div className="flex w-full items-center justify-between gap-3">
                     <div className="flex flex-col gap-1">
-                      <div className="text-[15px] font-semibold text-[var(--foreground)]">
+                      <div className="text-sm-plus font-semibold text-foreground">
                         {option.label}
                       </div>
-                      <div className="flex flex-col gap-1 text-xs text-[var(--secondary)]">
-                        <div>{option.description ?? '暂无描述'}</div>
-                        <div className="text-xs text-[var(--secondary)]">
-                          {(option.gender ?? '未知')} ·{' '}
-                          {(option.locale ?? '未知')}
+                      <div className="flex flex-col gap-1 text-xs text-foreground-secondary">
+                        <div>{option.description ?? "暂无描述"}</div>
+                        <div className="text-xs text-foreground-secondary">
+                          {option.gender ?? "未知"} · {option.locale ?? "未知"}
                         </div>
                       </div>
                     </div>
@@ -145,14 +157,14 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
                       size="mini"
                       color="primary"
                       fill="outline"
-                      onClick={event => {
+                      onClick={(event) => {
                         event.stopPropagation();
                         void handlePreview(option.value);
                       }}
                       loading={isPlaying}
                       disabled={playingVoice !== null && !isPlaying}
                     >
-                      {isPlaying ? '试听中' : '试听'}
+                      {isPlaying ? "试听中" : "试听"}
                     </Button>
                   </div>
                 ),
@@ -161,7 +173,7 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
           />
         </div>
       ) : (
-        <div className="rounded-[12px] bg-[color-mix(in_srgb,var(--primary)_8%,transparent)] p-4 text-sm leading-[1.5] text-[var(--secondary)]">
+        <div className="rounded-xl bg-surface-primary-soft p-4 text-sm text-foreground-secondary">
           暂无可用声音，请联系管理员配置 AZURE_TTS_VOICE_ALLOW_LIST。
         </div>
       )}

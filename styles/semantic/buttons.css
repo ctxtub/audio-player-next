@@ -1,0 +1,62 @@
+@layer components {
+  .btn-chip {
+    @apply overflow-hidden text-ellipsis whitespace-nowrap rounded-lgx border border-transparent bg-surface-primary-soft px-2 py-3 text-sm font-medium text-foreground shadow-surface-sm transition-transform duration-theme ease-theme;
+  }
+
+  .btn-chip:enabled:hover {
+    @apply -translate-y-0.5 bg-surface-primary-medium shadow-primary-soft;
+  }
+
+  .btn-chip:enabled:active {
+    @apply translate-y-0 bg-surface-primary-strong shadow-primary-active;
+  }
+
+  .btn-chip:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  .btn-chip--history {
+    @apply border border-dashed border-border-process bg-surface-process-soft font-semibold;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border-0 bg-surface-primary-soft px-4 py-md text-sm font-semibold text-foreground shadow-primary-soft transition-transform duration-theme ease-theme;
+  }
+
+  .btn-primary:enabled:hover {
+    @apply -translate-y-0.5 bg-surface-primary-medium shadow-primary-glow;
+  }
+
+  .btn-primary:enabled:active {
+    @apply translate-y-0 bg-surface-primary-strong shadow-primary-active;
+  }
+
+  .btn-primary:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  .btn-circle-primary {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-full border-0 bg-primary text-white shadow-primary-glow transition-[background,transform,box-shadow] duration-200 ease-in-out;
+  }
+
+  .btn-circle-primary:hover {
+    @apply -translate-y-0.5 bg-primary-hover shadow-primary-glow-strong;
+  }
+
+  .btn-circle-primary:active {
+    @apply translate-y-0 bg-primary-active shadow-primary-glow-muted;
+  }
+
+  .btn-speed-control {
+    width: var(--size-width-icon);
+    @apply rounded-xl border border-border-primary bg-surface-accent px-xs py-1 text-sm font-medium text-foreground shadow-primary-soft backdrop-blur-soft transition-transform duration-theme ease-theme;
+  }
+
+  .btn-speed-control:hover {
+    @apply scale-105 shadow-primary-glow;
+  }
+
+  .btn-speed-control:active {
+    @apply scale-95 shadow-primary-active;
+  }
+}

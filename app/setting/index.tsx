@@ -1,24 +1,24 @@
-'use client';
+"use client";
 
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from "react";
 
-import { PageLoading } from '@/components/PageLoading';
-import { useTheme } from '@/components/ThemeProvider';
-import { useConfigStore } from '@/stores/configStore';
-import BasicConfigSection from './components/BasicConfigSection';
-import FloatingPlayerSection from './components/FloatingPlayerSection';
-import ThemeModeSection from './components/ThemeModeSection';
-import VoiceServiceSection from './components/VoiceServiceSection';
+import { PageLoading } from "@/components/PageLoading";
+import { useTheme } from "@/components/ThemeProvider";
+import { useConfigStore } from "@/stores/configStore";
+import BasicConfigSection from "./components/BasicConfigSection";
+import FloatingPlayerSection from "./components/FloatingPlayerSection";
+import ThemeModeSection from "./components/ThemeModeSection";
+import VoiceServiceSection from "./components/VoiceServiceSection";
 
 /**
  * 设置页面组件，承载播放配置与主题切换。
  * @returns 设置页 JSX 结构
  */
 const ConfigPage: React.FC = () => {
-  const apiConfig = useConfigStore(state => state.apiConfig);
-  const updateConfig = useConfigStore(state => state.update);
-  const isConfigLoaded = useConfigStore(state => state.isLoaded);
-  const voiceOptions = useConfigStore(state => state.voiceOptions);
+  const apiConfig = useConfigStore((state) => state.apiConfig);
+  const updateConfig = useConfigStore((state) => state.update);
+  const isConfigLoaded = useConfigStore((state) => state.isLoaded);
+  const voiceOptions = useConfigStore((state) => state.voiceOptions);
   const { themeMode, setThemeMode } = useTheme();
 
   useEffect(() => {
@@ -26,7 +26,9 @@ const ConfigPage: React.FC = () => {
       return;
     }
 
-    const isVoiceValid = voiceOptions.some(option => option.value === apiConfig.voiceId);
+    const isVoiceValid = voiceOptions.some(
+      (option) => option.value === apiConfig.voiceId,
+    );
     if (isVoiceValid) {
       return;
     }
@@ -44,21 +46,26 @@ const ConfigPage: React.FC = () => {
     if (!isConfigLoaded) {
       return undefined;
     }
-    const matchedVoice = voiceOptions.find(option => option.value === apiConfig.voiceId);
+    const matchedVoice = voiceOptions.find(
+      (option) => option.value === apiConfig.voiceId,
+    );
     return matchedVoice?.value;
   }, [apiConfig.voiceId, isConfigLoaded, voiceOptions]);
 
   /**
    * 当前播放时长（分钟）。
    */
-  const playDuration = useMemo(() => apiConfig.playDuration, [apiConfig.playDuration]);
+  const playDuration = useMemo(
+    () => apiConfig.playDuration,
+    [apiConfig.playDuration],
+  );
 
   /**
    * 是否开启浮动播放器。
    */
   const isFloatingPlayerEnabled = useMemo(
     () => apiConfig.floatingPlayerEnabled,
-    [apiConfig.floatingPlayerEnabled]
+    [apiConfig.floatingPlayerEnabled],
   );
 
   const handlePlayDurationChange = useCallback(
@@ -71,7 +78,7 @@ const ConfigPage: React.FC = () => {
       }
       updateConfig({ playDuration: value });
     },
-    [apiConfig.playDuration, isConfigLoaded, updateConfig]
+    [apiConfig.playDuration, isConfigLoaded, updateConfig],
   );
 
   const handleVoiceSelect = useCallback(
@@ -83,32 +90,37 @@ const ConfigPage: React.FC = () => {
         return;
       }
 
-      const isVoiceValid = voiceOptions.some(option => option.value === voice);
+      const isVoiceValid = voiceOptions.some(
+        (option) => option.value === voice,
+      );
       if (!isVoiceValid) {
         return;
       }
 
       updateConfig({ voiceId: voice });
     },
-    [apiConfig.voiceId, isConfigLoaded, updateConfig, voiceOptions]
+    [apiConfig.voiceId, isConfigLoaded, updateConfig, voiceOptions],
   );
 
-  const handleFloatingPlayerToggle = useCallback((enabled: boolean) => {
-    if (!isConfigLoaded) {
-      return;
-    }
-    if (enabled === apiConfig.floatingPlayerEnabled) {
-      return;
-    }
-    updateConfig({ floatingPlayerEnabled: enabled });
-  }, [apiConfig.floatingPlayerEnabled, isConfigLoaded, updateConfig]);
+  const handleFloatingPlayerToggle = useCallback(
+    (enabled: boolean) => {
+      if (!isConfigLoaded) {
+        return;
+      }
+      if (enabled === apiConfig.floatingPlayerEnabled) {
+        return;
+      }
+      updateConfig({ floatingPlayerEnabled: enabled });
+    },
+    [apiConfig.floatingPlayerEnabled, isConfigLoaded, updateConfig],
+  );
 
   if (!isConfigLoaded) {
     return <PageLoading message="页面加载中..." />;
   }
 
   return (
-    <div className="min-h-screen bg-[var(--initial-background,var(--background))] p-[var(--page-padding)]">
+    <div className="min-h-screen bg-background-initial p-[var(--page-padding)]">
       <div className="flex w-full flex-col gap-5">
         <ThemeModeSection value={themeMode} onChange={setThemeMode} />
         <BasicConfigSection

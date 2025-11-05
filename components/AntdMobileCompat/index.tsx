@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import { unstableSetRender } from 'antd-mobile';
-import { createRoot, type Root } from 'react-dom/client';
+import { useEffect } from "react";
+import { unstableSetRender } from "antd-mobile";
+import { createRoot, type Root } from "react-dom/client";
 
 /**
  * 扩充容器以缓存 React Root，适配 antd-mobile 自定义渲染。

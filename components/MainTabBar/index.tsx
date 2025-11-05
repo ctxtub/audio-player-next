@@ -1,31 +1,31 @@
-'use client';
+"use client";
 
-import React, { useCallback, useEffect } from 'react';
-import { TabBar } from 'antd-mobile';
-import { AppOutline, SoundOutline, SetOutline } from 'antd-mobile-icons';
-import { usePathname, useRouter } from 'next/navigation';
+import React, { useCallback, useEffect } from "react";
+import { TabBar } from "antd-mobile";
+import { AppOutline, SoundOutline, SetOutline } from "antd-mobile-icons";
+import { usePathname, useRouter } from "next/navigation";
 
 /**
  * 底部标签配置，定义导航目标与图标。
  */
 const TABS = [
   {
-    key: 'home',
-    title: '首页',
+    key: "home",
+    title: "首页",
     icon: <AppOutline />,
-    path: '/',
+    path: "/",
   },
   {
-    key: 'player',
-    title: '播放器',
+    key: "player",
+    title: "播放器",
     icon: <SoundOutline />,
-    path: '/player',
+    path: "/player",
   },
   {
-    key: 'setting',
-    title: '设置',
+    key: "setting",
+    title: "设置",
     icon: <SetOutline />,
-    path: '/setting',
+    path: "/setting",
   },
 ] as const;
 
@@ -34,14 +34,14 @@ const TABS = [
  * @param pathname 当前路由路径
  * @returns 对应的标签 key
  */
-const resolveActiveKey = (pathname: string): (typeof TABS)[number]['key'] => {
-  if (pathname.startsWith('/player')) {
-    return 'player';
+const resolveActiveKey = (pathname: string): (typeof TABS)[number]["key"] => {
+  if (pathname.startsWith("/player")) {
+    return "player";
   }
-  if (pathname.startsWith('/setting')) {
-    return 'setting';
+  if (pathname.startsWith("/setting")) {
+    return "setting";
   }
-  return 'home';
+  return "home";
 };
 
 /**
@@ -53,13 +53,13 @@ const MainTabBar: React.FC = () => {
   const activeKey = resolveActiveKey(pathname);
 
   useEffect(() => {
-    router.prefetch('/player');
-    router.prefetch('/setting');
+    router.prefetch("/player");
+    router.prefetch("/setting");
   }, [router]);
 
   const handleTabChange = useCallback(
     (key: string) => {
-      const target = TABS.find(tab => tab.key === key);
+      const target = TABS.find((tab) => tab.key === key);
       if (!target) {
         return;
       }
@@ -72,7 +72,7 @@ const MainTabBar: React.FC = () => {
   );
 
   return (
-    <div className="sticky bottom-0 z-20 min-h-[var(--main-tab-bar-height,56px)] border-t border-[var(--card-border)] bg-[var(--initial-background,var(--background))] shadow-[0_-4px_16px_color-mix(in_srgb,var(--shadow-color)_60%,transparent)]">
+    <div className="sticky bottom-0 z-20 min-h-[var(--main-tab-bar-height,56px)] border-t border-border-card bg-background-initial shadow-surface-top">
       <TabBar activeKey={activeKey} onChange={handleTabChange} safeArea>
         {TABS.map(({ key, title, icon }) => (
           <TabBar.Item key={key} icon={icon} title={title} />

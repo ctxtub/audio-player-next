@@ -1,7 +1,7 @@
 import { createHttpClient } from '@/lib/http/common';
 
 /**
- * 服务端 HTTP 客户端的默认超时时间（毫秒），可通过环境变量覆盖。
+ * 服务端 HTTP 客户端的默认超时时间（毫秒）
  */
 
 const defaultTimeout = Number(process.env.HTTP_SERVER_TIMEOUT_MS ?? '60000');

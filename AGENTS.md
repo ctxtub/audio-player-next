@@ -52,6 +52,6 @@
 
 ## 安全检查（Safety Checks）
 
-- 提交或交付前必须确保：`<pm> lint`、`<pm> tsc --noEmit` 通过；涉及上线风险的改动建议额外执行 `<pm> build`
-- 禁止提交密钥、凭证或 `.env*` 等敏感文件；遵守 `.gitignore` 约束
+- 提交或交付前必须确保：`<pm> lint`、`<pm> tsc --noEmit`、`<pm> build` 通过
+- 禁止提交密钥、凭证或 `.env.local` 等敏感文件；遵守 `.gitignore` 约束
 - Patch 控制在易于审阅的粒度；对大规模改动需拆分 PR，并在描述中注明验证步骤

@@ -90,7 +90,7 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
     statusItems.push({
       key: 'countdown',
       phase: 'success',
-      message: `播放倒计时: ${formatCountdown(remainingTime)}`,
+      message: `播放倒计时 ${formatCountdown(remainingTime)}`,
     });
   }
 

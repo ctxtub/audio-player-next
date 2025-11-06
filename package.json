@@ -2,6 +2,7 @@
   "name": "audio-player-next",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "yarn@1.22.22",
   "repository": "https://github.com/ctxtub/audio-player-next",
   "scripts": {
     "dev": "next dev --turbopack",

@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 /**
  * 设计令牌命名映射，保留 CSS 变量 ID 以便跨层复用。
@@ -212,4 +213,18 @@ export const tailwindThemeExtension = {
 /**
  * Tailwind 插件钩子，占位以便后续集中维护。
  */
-export const tailwindPlugins = [] as const;
+export const tailwindPlugins = [
+  plugin(({ addUtilities }) => {
+    /**
+     * 组合主题动效工具类，确保 `@apply` 可以引用自定义时长与缓动。
+     */
+    addUtilities({
+      ".duration-theme": {
+        transitionDuration: "var(--motion-duration-theme)",
+      },
+      ".ease-theme": {
+        transitionTimingFunction: "var(--motion-ease-theme)",
+      },
+    });
+  }),
+] as const;

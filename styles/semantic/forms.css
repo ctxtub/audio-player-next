@@ -1,6 +1,18 @@
 @layer components {
   .input-surface {
     min-height: var(--size-min-height-input);
-    @apply flex-1 resize-y rounded-l-xl rounded-r-none border-0 bg-input-background px-5 py-md text-sm text-foreground transition-transform duration-theme ease-theme placeholder:text-foreground-secondary focus:bg-input-background focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-70;
+    @apply flex-1 resize-y rounded-l-xl rounded-r-none border-0 px-5 text-sm transition-transform focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-70;
+    background-color: var(--color-input-background);
+    color: var(--color-foreground);
+    padding-block: var(--space-md);
+    transition-duration: var(--motion-duration-theme);
+    transition-timing-function: var(--motion-ease-theme);
+    &::placeholder {
+      color: var(--color-foreground-secondary);
+    }
+    &:focus {
+      background-color: var(--color-input-background);
+      --tw-ring-color: var(--color-primary);
+    }
   }
 }

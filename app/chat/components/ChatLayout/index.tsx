@@ -3,6 +3,7 @@ import InputArea from './InputArea';
 import MessageArea from './MessageArea';
 import TopBar from './TopBar';
 import styles from './index.module.scss';
+import type { ChatLayoutProps } from './types';
 
 /**
  * 聊天页面布局组件，组织顶部栏、消息区与输入区。
@@ -10,10 +11,7 @@ import styles from './index.module.scss';
  * @param props.conversationId 当前会话 ID，可为空。
  * @returns 布局结构 JSX。
  */
-const ChatLayout: React.FC<{ userNickname: string; conversationId: string | null }> = ({
-  userNickname,
-  conversationId,
-}) => {
+const ChatLayout: React.FC<ChatLayoutProps> = ({ userNickname, conversationId }) => {
   return (
     <div className={styles.chatLayout}>
       <TopBar

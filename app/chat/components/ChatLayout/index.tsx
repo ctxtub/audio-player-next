@@ -8,17 +8,11 @@ import type { ChatLayoutProps } from './types';
 import type { ChatMessage, ChatPendingMessage } from '../ChatLog/types';
 
 /**
- * 聊天页面布局组件，组织头部信息、消息区与输入区。
- * @param props.userNickname 当前用户昵称。
- * @param props.conversationId 当前会话 ID，可为空。
+ * 聊天页面布局组件，组织消息区与输入区。
  * @param props.initialMessages 初始消息列表。
  * @returns 布局结构 JSX。
  */
-const ChatLayout: React.FC<ChatLayoutProps> = ({
-  userNickname,
-  conversationId,
-  initialMessages,
-}) => {
+const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
   /** 已确认写入的历史消息列表。 */
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   /** 待发送或发送中的消息占位，用于展示发送进度。 */
@@ -132,18 +126,6 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
 
   return (
     <div className={styles.chatLayout}>
-      <header className={styles.header}>
-        <div className={styles.headerMeta}>
-          <div className={styles.headerMetaRow}>
-            <span className={styles.headerMetaLabel}>当前用户</span>
-            <span className={styles.headerMetaValue}>{userNickname}</span>
-          </div>
-          <div className={styles.headerMetaRow}>
-            <span className={styles.headerMetaLabel}>会话标识</span>
-            <span className={styles.headerMetaValue}>{conversationId ?? '待创建'}</span>
-          </div>
-        </div>
-      </header>
       <MessageArea
         messages={messages}
         pendingMessage={pendingMessage}

@@ -8,10 +8,6 @@ import type { ChatMessage } from './components/ChatLog/types';
  * @returns 聊天页面 JSX。
  */
 const ChatPage = async () => {
-  /** 当前会话展示的用户昵称，占位使用固定值。 */
-  const userNickname = '未登录用户';
-  /** 会话 ID 占位字段，后续接入真实数据时更新。 */
-  const conversationId: string | null = null;
   /** 默认展示的示例消息列表，模拟已有对话上下文。 */
   const initialMessages: ChatMessage[] = [
     {
@@ -37,11 +33,7 @@ const ChatPage = async () => {
   return (
     <div className={styles.chatPage}>
       <div className={styles.mainContent}>
-        <ChatLayout
-          conversationId={conversationId}
-          initialMessages={initialMessages}
-          userNickname={userNickname}
-        />
+        <ChatLayout initialMessages={initialMessages} />
       </div>
     </div>
   );

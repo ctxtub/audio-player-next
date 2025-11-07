@@ -49,7 +49,7 @@
 ## 验证与部署
 1. `yarn lint`
 2. `yarn tsc --noEmit`
-3. `yarn build`（如将要部署或变更范围较大）
+3. `yarn build`
 4. 可选：使用 `yarn docker:build` / `yarn docker:push` 构建与发布镜像
 
 ## 贡献指南

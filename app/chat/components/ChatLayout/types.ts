@@ -4,7 +4,7 @@
 import type { ChatMessage } from '../ChatLog/types';
 
 export interface ChatLayoutProps {
-  /** 用户昵称，用于顶部栏展示。 */
+  /** 用户昵称，用于头部信息展示。 */
   userNickname: string;
   /** 会话 ID，可为空用于占位展示。 */
   conversationId: string | null;

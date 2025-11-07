@@ -1,5 +1,6 @@
 import React from 'react';
 import ChatLayout from './components/ChatLayout';
+import styles from './index.module.scss';
 import type { ChatMessage } from './components/ChatLog/types';
 
 /**
@@ -34,11 +35,15 @@ const ChatPage = async () => {
   ];
 
   return (
-    <ChatLayout
-      conversationId={conversationId}
-      initialMessages={initialMessages}
-      userNickname={userNickname}
-    />
+    <div className={styles.chatPage}>
+      <div className={styles.mainContent}>
+        <ChatLayout
+          conversationId={conversationId}
+          initialMessages={initialMessages}
+          userNickname={userNickname}
+        />
+      </div>
+    </div>
   );
 };
 

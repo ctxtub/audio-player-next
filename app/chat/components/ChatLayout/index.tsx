@@ -3,13 +3,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import InputArea from './InputArea';
 import MessageArea from './MessageArea';
-import TopBar from './TopBar';
 import styles from './index.module.scss';
 import type { ChatLayoutProps } from './types';
 import type { ChatMessage, ChatPendingMessage } from '../ChatLog/types';
 
 /**
- * 聊天页面布局组件，组织顶部栏、消息区与输入区。
+ * 聊天页面布局组件，组织头部信息、消息区与输入区。
  * @param props.userNickname 当前用户昵称。
  * @param props.conversationId 当前会话 ID，可为空。
  * @param props.initialMessages 初始消息列表。
@@ -133,10 +132,18 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({
 
   return (
     <div className={styles.chatLayout}>
-      <TopBar
-        conversationId={conversationId}
-        userNickname={userNickname}
-      />
+      <header className={styles.header}>
+        <div className={styles.headerMeta}>
+          <div className={styles.headerMetaRow}>
+            <span className={styles.headerMetaLabel}>当前用户</span>
+            <span className={styles.headerMetaValue}>{userNickname}</span>
+          </div>
+          <div className={styles.headerMetaRow}>
+            <span className={styles.headerMetaLabel}>会话标识</span>
+            <span className={styles.headerMetaValue}>{conversationId ?? '待创建'}</span>
+          </div>
+        </div>
+      </header>
       <MessageArea
         messages={messages}
         pendingMessage={pendingMessage}

@@ -1,0 +1,89 @@
+.container {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background-color: var(--card-background);
+  border-radius: 16px;
+  box-shadow: 0 8px 16px var(--shadow-color);
+  backdrop-filter: blur(var(--blur-radius));
+}
+
+.leftSlot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.inputArea {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.textAreaWrapper {
+  flex: 1;
+  background-color: color-mix(in srgb, var(--inputBackground) 80%, transparent);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+  transition: transform var(--transition-speed) var(--transition-timing);
+
+  &:focus-within {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent);
+    transform: translateY(-1px);
+  }
+}
+
+.textArea {
+  width: 100%;
+  border: none;
+  padding: 12px 16px;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.6;
+  font-family: inherit;
+  resize: none;
+
+  &::placeholder {
+    color: var(--secondary);
+  }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+}
+
+.submitButton {
+  min-width: 108px;
+  border-radius: 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 15%, transparent);
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--foreground);
+  border: none;
+  transition: transform var(--transition-speed) var(--transition-timing);
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px color-mix(in srgb, var(--primary) 20%, transparent);
+    background-color: color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--primary) 15%, transparent);
+    background-color: color-mix(in srgb, var(--primary) 25%, transparent);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+}

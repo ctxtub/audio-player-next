@@ -45,17 +45,26 @@ const Composer: React.FC<ComposerProps> = ({
   /** 本地发送中状态，用于在 props isSending 前后衔接提交锁。 */
   const [isLocalSending, setIsLocalSending] = useState(false);
 
+  /**
+   * 同步外部受控的 value 变化，保持内部状态一致。
+   */
   useEffect(() => {
     if (value !== undefined && value !== internalValue) {
       setInternalValue(value);
     }
   }, [value, internalValue]);
 
+  /**
+   * 计算禁用态，整合外部禁用与发送中的状态。
+   */
   const effectiveDisabled = useMemo(
     () => disabled || isSending || isLocalSending,
     [disabled, isSending, isLocalSending],
   );
 
+  /**
+   * 空内容提示提醒用户补充输入。
+   */
   const showEmptyContentWarning = useCallback(() => {
     Toast.show({
       icon: 'fail',
@@ -63,6 +72,9 @@ const Composer: React.FC<ComposerProps> = ({
     });
   }, []);
 
+  /**
+   * 文本变化时更新内部状态并透出给外部。
+   */
   const handleChange = useCallback(
     (next: string) => {
       setInternalValue(next);
@@ -71,6 +83,9 @@ const Composer: React.FC<ComposerProps> = ({
     [onChange],
   );
 
+  /**
+   * 提交发送逻辑，进行空值校验并处理异常 Toast。
+   */
   const handleSubmit = useCallback(async () => {
     if (effectiveDisabled) {
       return;
@@ -97,14 +112,21 @@ const Composer: React.FC<ComposerProps> = ({
     }
   }, [effectiveDisabled, handleChange, internalValue, onSubmit, showEmptyContentWarning]);
 
+  /**
+   * 键盘回车快捷提交，支持 Shift+Enter 换行。
+   */
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (effectiveDisabled) {
+        return;
+      }
+
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
         void handleSubmit();
       }
     },
-    [handleSubmit],
+    [effectiveDisabled, handleSubmit],
   );
 
   return (

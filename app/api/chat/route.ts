@@ -288,7 +288,10 @@ export const POST = async (req: Request) => {
       let lastFinishReason: string | undefined;
       let usageSummary: ChatCompletionChunk["usage"] | undefined;
 
-      const sendDone = () => {
+      const finalizeStream = (
+        finishReason?: string,
+        usage?: ChatCompletionChunk["usage"],
+      ) => {
         if (closed) {
           return;
         }
@@ -297,7 +300,10 @@ export const POST = async (req: Request) => {
         controller.enqueue(
           formatSseEvent({
             event: "done",
-            data: buildDonePayload(lastFinishReason, usageSummary),
+            data: buildDonePayload(
+              finishReason ?? lastFinishReason,
+              usage ?? usageSummary,
+            ),
           }),
         );
         controller.close();
@@ -308,14 +314,13 @@ export const POST = async (req: Request) => {
           return;
         }
 
-        closed = true;
         controller.enqueue(
           formatSseEvent({
             event: "error",
             data: { code, message },
           }),
         );
-        controller.close();
+        finalizeStream("error");
         aborter.abort();
       };
 
@@ -326,7 +331,7 @@ export const POST = async (req: Request) => {
           }
 
           if (message.data === "[DONE]") {
-            sendDone();
+            finalizeStream();
             return;
           }
 
@@ -359,7 +364,7 @@ export const POST = async (req: Request) => {
 
       streamOpenAIChunks(upstreamStream, parser)
         .then(() => {
-          sendDone();
+          finalizeStream();
         })
         .catch((error) => {
           sendError(

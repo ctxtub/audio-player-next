@@ -5,11 +5,13 @@ import React, { useCallback, useEffect, useMemo } from 'react';
 import { PageLoading } from '@/components/PageLoading';
 import { useTheme } from '@/components/ThemeProvider';
 import { useConfigStore } from '@/stores/configStore';
+import { useAuthStore } from '@/stores/authStore';
 import styles from './index.module.scss';
 import BasicConfigSection from './components/BasicConfigSection';
 import FloatingPlayerSection from './components/FloatingPlayerSection';
 import ThemeModeSection from './components/ThemeModeSection';
 import VoiceServiceSection from './components/VoiceServiceSection';
+import UserSection from './components/UserSection';
 
 /**
  * 设置页面组件，承载播放配置与主题切换。
@@ -21,6 +23,7 @@ const ConfigPage: React.FC = () => {
   const isConfigLoaded = useConfigStore(state => state.isLoaded);
   const voiceOptions = useConfigStore(state => state.voiceOptions);
   const { themeMode, setThemeMode } = useTheme();
+  const fetchAuthProfile = useAuthStore(state => state.fetchProfile);
 
   useEffect(() => {
     if (!isConfigLoaded || voiceOptions.length === 0) {
@@ -104,6 +107,10 @@ const ConfigPage: React.FC = () => {
     updateConfig({ floatingPlayerEnabled: enabled });
   }, [apiConfig.floatingPlayerEnabled, isConfigLoaded, updateConfig]);
 
+  useEffect(() => {
+    fetchAuthProfile();
+  }, [fetchAuthProfile]);
+
   if (!isConfigLoaded) {
     return <PageLoading message="页面加载中..." />;
   }
@@ -111,6 +118,7 @@ const ConfigPage: React.FC = () => {
   return (
     <div className={styles.configPage}>
       <div className={styles.configForm}>
+        <UserSection />
         <ThemeModeSection value={themeMode} onChange={setThemeMode} />
         <BasicConfigSection
           playDuration={playDuration}

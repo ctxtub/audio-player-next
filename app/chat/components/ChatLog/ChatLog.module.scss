@@ -6,12 +6,10 @@
 .scrollContainer {
   flex: 1;
   overflow-y: auto;
-  padding: 0 4px 140px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   scroll-behavior: smooth;
-  scroll-padding-bottom: 140px;
 
   &::-webkit-scrollbar {
     width: 6px;
@@ -27,6 +25,11 @@
   }
 }
 
+.scrollContainerEmpty {
+  padding-bottom: 0;
+  scroll-padding-bottom: 0;
+}
+
 .messagesList {
   display: flex;
   flex-direction: column;
@@ -34,14 +37,25 @@
 }
 
 .placeholder {
-  margin: 0 auto;
+  flex: 1;
+  margin: 0;
   padding: 24px 16px;
-  max-width: 320px;
-  text-align: center;
-  border-radius: 16px;
-  color: var(--secondary);
-  background: color-mix(in srgb, var(--foreground) 6%, transparent);
-  border: 1px dashed color-mix(in srgb, var(--foreground) 12%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  :global(.adm-empty) {
+    max-width: 320px;
+    width: 100%;
+    text-align: center;
+    gap: 12px;
+  }
+
+  :global(.adm-empty-description) {
+    color: var(--secondary);
+    font-size: 14px;
+  }
 }
 
 .loadingState {

@@ -1,5 +1,6 @@
 'use client';
 
+import { Empty } from 'antd-mobile';
 import {
   forwardRef,
   useCallback,
@@ -102,9 +103,21 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
   const hasMessages =
     messages.length > 0 || Boolean(resolvedPending) || Boolean(streamingMessage);
 
+  /** 滚动容器类名，根据空状态追加去除底部内边距的样式。 */
+  const scrollContainerClassName = useMemo(
+    () =>
+      [
+        styles.scrollContainer,
+        !hasMessages && !isLoading ? styles.scrollContainerEmpty : null,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    [hasMessages, isLoading],
+  );
+
   return (
     <div className={containerClassName}>
-      <div ref={scrollContainerRef} className={styles.scrollContainer}>
+      <div ref={scrollContainerRef} className={scrollContainerClassName}>
         {hasMessages ? (
           <div className={styles.messagesList}>
             {messages.map((message) => (
@@ -126,7 +139,9 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
             ) : null}
           </div>
         ) : !isLoading ? (
-          <div className={styles.placeholder}>{emptyHint ?? '暂未开始任何对话'}</div>
+          <div className={styles.placeholder}>
+            <Empty description={emptyHint ?? '暂未开始任何对话'} />
+          </div>
         ) : null}
         {isLoading ? (
           <div className={styles.loadingState}>{loadingHint ?? '正在加载历史记录...'}</div>

@@ -185,3 +185,7 @@ html, body, #root {
 :root[data-theme="light"] .adm-slider-thumb {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.18) !important;
 }
+
+.adm-text-area, .adm-input-element {
+ --placeholder-color: color-mix(in srgb, var(--secondary) 70%, transparent) !important;
+}

@@ -25,12 +25,15 @@ type HeaderSuggestion = {
 };
 
 /**
- * 默认推荐提问列表，覆盖故事主题与功能引导。 
+ * 默认推荐提问列表，提供多题材故事引导。 
  */
 const defaultSuggestions: HeaderSuggestion[] = [
-  { id: 'story-space', label: '来个星际冒险', value: '请讲一个温柔的星际冒险睡前故事。' },
+  { id: 'story-space', label: '星际冒险', value: '请讲一个温柔的星际冒险睡前故事。' },
   { id: 'story-animal', label: '动物好朋友', value: '给我一个关于动物朋友互相帮助的故事。' },
-  { id: 'story-study', label: '学习小助理', value: '帮我总结三条提升学习效率的小技巧。' },
+  { id: 'story-mentor', label: '奇幻学徒记', value: '讲一个初入魔法学院的新生如何在导师帮助下成长的故事。' },
+  { id: 'story-detective', label: '谜案侦探团', value: '来一段少年侦探与伙伴破解古堡谜案的故事。' },
+  { id: 'story-ocean', label: '深海探险家', value: '请讲述一位小潜航员在深海发现神秘文明的故事。' },
+  { id: 'story-forest', label: '森林守护队', value: '分享一个森林守护者与精灵联手拯救家园的故事。' },
 ];
 
 /**

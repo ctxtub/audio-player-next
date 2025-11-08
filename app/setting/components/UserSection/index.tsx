@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Input, NoticeBar, Toast } from 'antd-mobile';
+import { Button, Card, Form, Input, NoticeBar, Toast } from 'antd-mobile';
+import { LockOutline, UserOutline } from 'antd-mobile-icons';
 
 import Modal, { useModal } from '@/components/Modal';
 import { useAuthStore } from '@/stores/authStore';
@@ -94,6 +95,18 @@ const UserSection: React.FC = () => {
     setFormError(latestError || '登录失败，请稍后重试');
   }, [doLogin, handleCloseModal, password, resetError, username]);
 
+  /**
+   * 处理输入框按下回车键时的逻辑，阻止原生提交并执行登录。
+   * @param event 键盘事件对象。
+   */
+  const handleInputEnter = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      event.preventDefault();
+      void handleLogin();
+    },
+    [handleLogin],
+  );
+
   const handleLogout = useCallback(async () => {
     const success = await doLogout();
     if (success) {
@@ -137,37 +150,49 @@ const UserSection: React.FC = () => {
       </div>
 
       <Modal isShow={isShow} title="账号登录" onClose={handleCloseModal}>
-        <div className={styles.loginForm}>
+        <Card className={styles.loginCard} bodyClassName={styles.loginCardBody}>
           {formError && (
             <NoticeBar color="alert" className={styles.errorBar} content={formError} />
           )}
-          <div className={styles.formField}>
-            <label className={styles.formLabel} htmlFor="login-username">
-              账号
-            </label>
-            <Input
-              id="login-username"
-              placeholder="请输入账号"
-              value={username}
-              onChange={val => setUsername(val)}
-              clearable
-              disabled={submitting}
-            />
-          </div>
-          <div className={styles.formField}>
-            <label className={styles.formLabel} htmlFor="login-password">
-              密码
-            </label>
-            <Input
-              id="login-password"
-              type="password"
-              placeholder="请输入密码"
-              value={password}
-              onChange={val => setPassword(val)}
-              clearable
-              disabled={submitting}
-            />
-          </div>
+          <Form layout="vertical" className={styles.loginForm}>
+            <div className={styles.fieldGroup}>
+              <Form.Item className={styles.formItem} label="账号">
+                <div className={styles.fieldControl}>
+                  <UserOutline aria-hidden="true" className={styles.inputIcon} />
+                  <Input
+                    id="login-username"
+                    placeholder="Account"
+                    value={username}
+                    onChange={val => setUsername(val)}
+                    onEnterPress={handleInputEnter}
+                    clearable
+                    disabled={submitting}
+                    className={styles.textInput}
+                    aria-label="账号"
+                    autoComplete="username"
+                  />
+                </div>
+              </Form.Item>
+              <Form.Item className={styles.formItem} label="密码">
+                <div className={styles.fieldControl}>
+                  <LockOutline aria-hidden="true" className={styles.inputIcon} />
+                  <Input
+                    id="login-password"
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={val => setPassword(val)}
+                    onEnterPress={handleInputEnter}
+                    clearable
+                    disabled={submitting}
+                    className={styles.textInput}
+                    aria-label="密码"
+                    autoComplete="current-password"
+                  />
+                </div>
+              </Form.Item>
+            </div>
+          </Form>
           <div className={styles.formActions}>
             <Button
               color="primary"
@@ -177,11 +202,16 @@ const UserSection: React.FC = () => {
             >
               登录
             </Button>
-            <Button onClick={handleCloseModal} disabled={submitting}>
+            <Button
+              block
+              className={styles.cancelButton}
+              onClick={handleCloseModal}
+              disabled={submitting}
+            >
               取消
             </Button>
           </div>
-        </div>
+        </Card>
       </Modal>
     </>
   );

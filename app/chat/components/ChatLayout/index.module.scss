@@ -12,7 +12,7 @@
   display: flex;
   min-height: 0;
   overflow: hidden;
-  padding: 16px 8px;
+  padding: 16px 16px 0 16px;
   justify-content: center;
 }
 
@@ -38,7 +38,6 @@
 
 .inputContent {
   width: 100%;
-  max-width: 640px;
   pointer-events: auto;
 }
 
@@ -47,5 +46,4 @@
   min-height: 0;
   min-width: 0;
   width: 100%;
-  max-width: 720px;
 }

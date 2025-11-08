@@ -281,11 +281,12 @@ export const POST = async (req: Request) => {
     return buildErrorResponse(502, "UPSTREAM_NETWORK_ERROR", "调用 OpenAI 失败");
   }
 
+  let closed = false;
+
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let lastFinishReason: string | undefined;
       let usageSummary: ChatCompletionChunk["usage"] | undefined;
-      let closed = false;
 
       const sendDone = () => {
         if (closed) {
@@ -368,6 +369,7 @@ export const POST = async (req: Request) => {
         });
     },
     cancel() {
+      closed = true;
       aborter.abort();
     },
   });

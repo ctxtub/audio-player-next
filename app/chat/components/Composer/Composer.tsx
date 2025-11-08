@@ -37,7 +37,7 @@ const Composer: React.FC<ComposerProps> = ({
   onSubmit,
   disabled = false,
   isSending = false,
-  placeholder = 'Type a message...',
+  placeholder = '请输入内容...',
   leftSlot,
   submitText = '发送',
 }) => {

@@ -111,7 +111,6 @@
 .textInput {
   flex: 1;
   --background-color: transparent;
-  --placeholder-color: color-mix(in srgb, var(--secondary) 70%, transparent);
   --color: var(--foreground);
 }
 

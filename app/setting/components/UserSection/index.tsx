@@ -139,43 +139,45 @@ const UserSection: React.FC = () => {
 
       <Modal isShow={isShow} title="账号登录" onClose={handleCloseModal}>
         <Card className={styles.loginCard} bodyClassName={styles.loginCardBody}>
+          {formError && (
+            <NoticeBar color="alert" className={styles.errorBar} content={formError} />
+          )}
           <Form layout="vertical" className={styles.loginForm}>
-            {formError && (
-              <NoticeBar color="alert" className={styles.errorBar} content={formError} />
-            )}
-            <Form.Item className={styles.formItem} label="账号">
-              <div className={styles.fieldControl}>
-                <UserOutline aria-hidden="true" className={styles.inputIcon} />
-                <Input
-                  id="login-username"
-                  placeholder="Account"
-                  value={username}
-                  onChange={val => setUsername(val)}
-                  clearable
-                  disabled={submitting}
-                  className={styles.textInput}
-                  aria-label="账号"
-                  autoComplete="username"
-                />
-              </div>
-            </Form.Item>
-            <Form.Item className={styles.formItem} label="密码">
-              <div className={styles.fieldControl}>
-                <LockOutline aria-hidden="true" className={styles.inputIcon} />
-                <Input
-                  id="login-password"
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={val => setPassword(val)}
-                  clearable
-                  disabled={submitting}
-                  className={styles.textInput}
-                  aria-label="密码"
-                  autoComplete="current-password"
-                />
-              </div>
-            </Form.Item>
+            <div className={styles.fieldGroup}>
+              <Form.Item className={styles.formItem} label="账号">
+                <div className={styles.fieldControl}>
+                  <UserOutline aria-hidden="true" className={styles.inputIcon} />
+                  <Input
+                    id="login-username"
+                    placeholder="Account"
+                    value={username}
+                    onChange={val => setUsername(val)}
+                    clearable
+                    disabled={submitting}
+                    className={styles.textInput}
+                    aria-label="账号"
+                    autoComplete="username"
+                  />
+                </div>
+              </Form.Item>
+              <Form.Item className={styles.formItem} label="密码">
+                <div className={styles.fieldControl}>
+                  <LockOutline aria-hidden="true" className={styles.inputIcon} />
+                  <Input
+                    id="login-password"
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={val => setPassword(val)}
+                    clearable
+                    disabled={submitting}
+                    className={styles.textInput}
+                    aria-label="密码"
+                    autoComplete="current-password"
+                  />
+                </div>
+              </Form.Item>
+            </div>
           </Form>
           <div className={styles.formActions}>
             <Button
@@ -188,7 +190,6 @@ const UserSection: React.FC = () => {
             </Button>
             <Button
               block
-              fill="none"
               className={styles.cancelButton}
               onClick={handleCloseModal}
               disabled={submitting}

@@ -12,8 +12,9 @@
     color var(--transition-speed) var(--transition-timing);
 
   .content {
+    display: flex;
+    flex-direction: column;
     flex: 1 1 auto;
     overflow-y: auto;
-    padding-bottom: calc(var(--main-tab-bar-height, 56px) + 24px + env(safe-area-inset-bottom));
   }
 }

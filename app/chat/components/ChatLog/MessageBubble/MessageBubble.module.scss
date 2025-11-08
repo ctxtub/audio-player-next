@@ -1,5 +1,7 @@
 .row {
   display: flex;
+  align-items: flex-start;
+  gap: 12px;
   width: 100%;
 }
 
@@ -8,40 +10,73 @@
 }
 
 .rowUser {
-  justify-content: flex-end;
+  flex-direction: row-reverse;
 }
 
 .rowSystem {
   justify-content: center;
 }
 
+.avatar {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  box-shadow: 0 10px 20px color-mix(in srgb, var(--shadow-color) 35%, transparent);
+  font-weight: 600;
+  font-size: 16px;
+  color: #ffffff;
+}
+
 .bubbleWrapper {
   max-width: min(90%, 560px);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.rowAssistant .bubbleWrapper {
   align-items: flex-start;
+  gap: 8px;
 }
 
 .rowUser .bubbleWrapper {
   align-items: flex-end;
+  text-align: right;
 }
 
 .rowSystem .bubbleWrapper {
   align-items: center;
+  text-align: center;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--secondary) 70%, var(--foreground));
+}
+
+.rowUser .headerRow {
+  justify-content: flex-end;
+}
+
+.displayName {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.timestamp {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--secondary) 75%, var(--foreground));
 }
 
 .bubble {
-  position: relative;
-  padding: 12px 16px;
-  border-radius: 16px;
-  line-height: 1.6;
+  padding: 14px 18px;
+  border-radius: 20px;
+  line-height: 1.7;
   word-break: break-word;
   white-space: pre-wrap;
   border: 1px solid transparent;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--shadow-color) 18%, transparent);
   background: color-mix(in srgb, var(--foreground) 4%, transparent);
   color: var(--foreground);
 }
@@ -55,6 +90,7 @@
   border-color: var(--primary);
   background: var(--primary);
   color: #ffffff;
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
 .bubbleSystem {
@@ -62,9 +98,6 @@
   border-color: color-mix(in srgb, var(--secondary) 80%, transparent);
   color: color-mix(in srgb, var(--secondary) 92%, var(--foreground));
   background: color-mix(in srgb, var(--foreground) 4%, transparent);
-  &::after {
-    display: none;
-  }
 }
 
 .bubbleSending {
@@ -82,6 +115,11 @@
   align-items: center;
   gap: 8px;
   font-size: 12px;
+  color: color-mix(in srgb, var(--secondary) 85%, var(--foreground));
+}
+
+.rowUser .metaRow {
+  justify-content: flex-end;
 }
 
 .status {
@@ -105,13 +143,16 @@
   font-size: 12px;
   color: var(--primary);
   cursor: pointer;
-  transition: background-color var(--transition-speed) var(--transition-timing);
+  transition: background-color var(--transition-speed) var(--transition-timing),
+              transform var(--transition-speed) var(--transition-timing);
 }
 
 .retryButton:hover {
   background: color-mix(in srgb, var(--primary) 30%, transparent);
+  transform: translateY(-1px);
 }
 
 .retryButton:active {
   background: color-mix(in srgb, var(--primary) 45%, transparent);
+  transform: translateY(0);
 }

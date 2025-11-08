@@ -6,10 +6,32 @@ import { Toast } from 'antd-mobile';
 import { beginChatStream, cancelChatStream, retryChatStream } from '@/app/services/chatFlow';
 import { useChatStore } from '@/stores/chatStore';
 
+import HeaderArea from './HeaderArea';
 import InputArea from './InputArea';
 import MessageArea from './MessageArea';
 import styles from './index.module.scss';
 import type { ChatLayoutProps } from './types';
+
+/**
+ * 推荐提问按钮的配置项定义，包含展示文案与发送内容。 
+ */
+type HeaderSuggestion = {
+  /** 唯一标识，便于渲染列表时追踪。 */
+  id: string;
+  /** 按钮展示文案。 */
+  label: string;
+  /** 点击后填充到输入框的内容。 */
+  value: string;
+};
+
+/**
+ * 默认推荐提问列表，覆盖故事主题与功能引导。 
+ */
+const defaultSuggestions: HeaderSuggestion[] = [
+  { id: 'story-space', label: '来个星际冒险', value: '请讲一个温柔的星际冒险睡前故事。' },
+  { id: 'story-animal', label: '动物好朋友', value: '给我一个关于动物朋友互相帮助的故事。' },
+  { id: 'story-study', label: '学习小助理', value: '帮我总结三条提升学习效率的小技巧。' },
+];
 
 /**
  * 聊天页面布局组件，组织消息区与输入区。
@@ -23,6 +45,8 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
   const messages = useChatStore((state) => state.messages);
   const pendingMessage = useChatStore((state) => state.pendingMessage);
   const activeAssistantMessage = useChatStore((state) => state.activeAssistantMessage);
+  const inputValue = useChatStore((state) => state.inputValue);
+  const setInputValue = useChatStore((state) => state.setInputValue);
 
   /** 是否存在发送中的消息，用于控制输入区禁用状态。 */
   const isSending = useMemo(
@@ -61,6 +85,38 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
   }, []);
 
   /**
+   * 输入框内容变化时同步到 store，便于外部组件访问。 
+   * @param next 最新的输入内容。
+   */
+  const handleInputChange = useCallback(
+    (next: string) => {
+      setInputValue(next);
+    },
+    [setInputValue],
+  );
+
+  /**
+   * 点击推荐提问时快速填充输入框，如在发送中则提醒稍后再试。
+   * @param value 推荐文案内容。
+   */
+  const handleSuggestionSelect = useCallback(
+    (value: string) => {
+      if (isSending) {
+        Toast.show({ icon: 'fail', content: '正在生成回答，请稍后再试' });
+        return;
+      }
+      setInputValue(value);
+    },
+    [isSending, setInputValue],
+  );
+
+  /** 是否展示顶部欢迎区，根据是否存在历史消息决定。 */
+  const shouldShowHeader = useMemo(
+    () => messages.length === 0 && !pendingMessage && !activeAssistantMessage,
+    [messages.length, pendingMessage, activeAssistantMessage],
+  );
+
+  /**
    * 处理失败消息的重试逻辑，确保仅在待重试的消息上触发。
    * @param retryId 触发重试的消息 id。
    */
@@ -80,6 +136,11 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
 
   return (
     <div className={styles.chatLayout}>
+      <HeaderArea
+        visible={shouldShowHeader}
+        suggestions={defaultSuggestions}
+        onSuggestionSelect={handleSuggestionSelect}
+      />
       <MessageArea
         messages={resolvedMessages}
         pendingMessage={pendingMessage}
@@ -87,7 +148,13 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
         isLoading={false}
         onRetry={handleRetry}
       />
-      <InputArea onSubmit={handleSubmit} disabled={isSending} isSending={isSending} />
+      <InputArea
+        onSubmit={handleSubmit}
+        disabled={isSending}
+        isSending={isSending}
+        value={inputValue}
+        onChange={handleInputChange}
+      />
     </div>
   );
 };

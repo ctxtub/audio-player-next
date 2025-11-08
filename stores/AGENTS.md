@@ -11,6 +11,7 @@
 - `promptHistoryStore.ts`：提示词与历史记录。
 - `storyStore.ts`：故事生成状态。
 - `authStore.ts`：登录态状态管理，负责登录、登出与资料查询。
+- `chatStore.ts`：聊天页面的会话状态与流式消息管理。
 
 ## 关键协作与依赖
 - 与 `@/app/**` 页面及 `@/lib/**` 服务协作，提供实时状态。

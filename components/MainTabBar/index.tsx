@@ -2,45 +2,79 @@
 
 import React, { useCallback, useEffect } from 'react';
 import { TabBar } from 'antd-mobile';
-import { AppOutline, SoundOutline, SetOutline } from 'antd-mobile-icons';
+import { AppOutline, MessageOutline, SoundOutline, SetOutline } from 'antd-mobile-icons';
 import { usePathname, useRouter } from 'next/navigation';
 import styles from './index.module.scss';
 
 /**
  * 底部标签配置，定义导航目标与图标。
  */
-const TABS = [
+type TabConfig = {
+  /**
+   * 标签唯一 key，与 `TabBar.Item` 对应。
+   */
+  key: 'home' | 'chat' | 'player' | 'setting';
+  /**
+   * 标签展示名称。
+   */
+  title: string;
+  /**
+   * 标签使用的图标组件。
+   */
+  icon: React.ReactNode;
+  /**
+   * 对应的路由路径。
+   */
+  path: string;
+  /**
+   * 自定义激活判断逻辑。
+   */
+  isActive?: (pathname: string) => boolean;
+};
+
+/**
+ * 底部标签配置数组，提供渲染与路由跳转信息。
+ */
+const TABS: readonly TabConfig[] = [
   {
     key: 'home',
     title: '首页',
     icon: <AppOutline />,
     path: '/',
+    isActive: pathname => pathname === '/',
+  },
+  {
+    key: 'chat',
+    title: '聊天',
+    icon: <MessageOutline />,
+    path: '/chat',
+    isActive: pathname => pathname.startsWith('/chat'),
   },
   {
     key: 'player',
     title: '播放器',
     icon: <SoundOutline />,
     path: '/player',
+    isActive: pathname => pathname.startsWith('/player'),
   },
   {
     key: 'setting',
     title: '设置',
     icon: <SetOutline />,
     path: '/setting',
+    isActive: pathname => pathname.startsWith('/setting'),
   },
-] as const;
+];
 
 /**
  * 根据路径解析激活的标签键。
  * @param pathname 当前路由路径
  * @returns 对应的标签 key
  */
-const resolveActiveKey = (pathname: string): (typeof TABS)[number]['key'] => {
-  if (pathname.startsWith('/player')) {
-    return 'player';
-  }
-  if (pathname.startsWith('/setting')) {
-    return 'setting';
+const resolveActiveKey = (pathname: string): TabConfig['key'] => {
+  const matchedTab = TABS.find(tab => tab.isActive?.(pathname));
+  if (matchedTab) {
+    return matchedTab.key;
   }
   return 'home';
 };
@@ -54,8 +88,9 @@ const MainTabBar: React.FC = () => {
   const activeKey = resolveActiveKey(pathname);
 
   useEffect(() => {
-    router.prefetch('/player');
-    router.prefetch('/setting');
+    TABS.filter(tab => tab.path !== '/').forEach(tab => {
+      router.prefetch(tab.path);
+    });
   }, [router]);
 
   const handleTabChange = useCallback(

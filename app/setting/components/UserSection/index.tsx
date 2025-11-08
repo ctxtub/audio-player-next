@@ -95,6 +95,18 @@ const UserSection: React.FC = () => {
     setFormError(latestError || '登录失败，请稍后重试');
   }, [doLogin, handleCloseModal, password, resetError, username]);
 
+  /**
+   * 处理输入框按下回车键时的逻辑，阻止原生提交并执行登录。
+   * @param event 键盘事件对象。
+   */
+  const handleInputEnter = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      event.preventDefault();
+      void handleLogin();
+    },
+    [handleLogin],
+  );
+
   const handleLogout = useCallback(async () => {
     const success = await doLogout();
     if (success) {
@@ -152,6 +164,7 @@ const UserSection: React.FC = () => {
                     placeholder="Account"
                     value={username}
                     onChange={val => setUsername(val)}
+                    onEnterPress={handleInputEnter}
                     clearable
                     disabled={submitting}
                     className={styles.textInput}
@@ -169,6 +182,7 @@ const UserSection: React.FC = () => {
                     placeholder="Password"
                     value={password}
                     onChange={val => setPassword(val)}
+                    onEnterPress={handleInputEnter}
                     clearable
                     disabled={submitting}
                     className={styles.textInput}

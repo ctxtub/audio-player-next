@@ -76,6 +76,15 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry }) => {
   const isFailed = status === 'failed';
   const roleKey: ChatMessageRole = message.role;
 
+  /** 发送中助手消息的占位内容，避免空白气泡。 */
+  const bubbleContent = useMemo(() => {
+    if (roleKey === 'assistant' && isSending) {
+      const trimmedContent = message.content.trim();
+      return trimmedContent.length > 0 ? message.content : '思考中...';
+    }
+    return message.content;
+  }, [isSending, message.content, roleKey]);
+
   const rowClassName = [styles.row, roleRowClassMap[roleKey]].filter(Boolean).join(' ');
   const bubbleClassName = [
     styles.bubble,
@@ -127,10 +136,10 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry }) => {
           <span className={styles.displayName}>{displayName}</span>
           {formattedTime ? <time className={styles.timestamp}>{formattedTime}</time> : null}
         </div>
-        <div className={bubbleClassName}>{message.content}</div>
-        {(isSending || isFailed) && (
+        <div className={bubbleClassName}>{bubbleContent}</div>
+        {isFailed && (
           <div className={styles.metaRow}>
-            <span className={statusClassName}>{isSending ? '发送中...' : '发送失败'}</span>
+            <span className={statusClassName}>发送失败</span>
             {isFailed && onRetry ? (
               <button
                 type="button"

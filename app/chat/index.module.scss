@@ -1,10 +1,9 @@
 .chatPage {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - var(--main-tab-bar-height, 56px) - env(safe-area-inset-bottom, 0px));
+  flex: 1;
   background: var(--background);
   color: var(--foreground);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
   transition: background-color var(--transition-speed) var(--transition-timing),
               color var(--transition-speed) var(--transition-timing);
 }

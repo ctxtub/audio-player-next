@@ -33,6 +33,7 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
   const {
     messages,
     pendingMessage,
+    streamingMessage,
     isLoading = false,
     emptyHint,
     loadingHint,
@@ -68,7 +69,14 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, pendingMessage?.id, pendingMessage?.content, scrollToBottom]);
+  }, [
+    messages,
+    pendingMessage?.id,
+    pendingMessage?.content,
+    streamingMessage?.id,
+    streamingMessage?.content,
+    scrollToBottom,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -91,7 +99,8 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
     [className],
   );
 
-  const hasMessages = messages.length > 0 || Boolean(resolvedPending);
+  const hasMessages =
+    messages.length > 0 || Boolean(resolvedPending) || Boolean(streamingMessage);
 
   return (
     <div className={containerClassName}>
@@ -105,6 +114,13 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
               <MessageBubble
                 key={resolvedPending.id ?? 'pending'}
                 message={resolvedPending}
+                onRetry={onRetry}
+              />
+            ) : null}
+            {streamingMessage ? (
+              <MessageBubble
+                key={streamingMessage.id}
+                message={{ ...streamingMessage, status: streamingMessage.status ?? 'sending' }}
                 onRetry={onRetry}
               />
             ) : null}

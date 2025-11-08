@@ -4,11 +4,11 @@ import styles from './index.module.scss';
 import type { ChatLogProps } from '../ChatLog/types';
 
 /**
- * 消息区域组件的属性定义，复用 ChatLog 的主要入参。 
+ * 消息区域组件的属性定义，复用 ChatLog 的主要入参。
  */
 type MessageAreaProps = Pick<
   ChatLogProps,
-  'messages' | 'pendingMessage' | 'isLoading' | 'emptyHint' | 'loadingHint' | 'onRetry'
+  'messages' | 'pendingMessage' | 'streamingMessage' | 'isLoading' | 'emptyHint' | 'loadingHint' | 'onRetry'
 >;
 
 /**
@@ -18,6 +18,7 @@ type MessageAreaProps = Pick<
 const MessageArea: React.FC<MessageAreaProps> = ({
   messages,
   pendingMessage,
+  streamingMessage,
   isLoading,
   emptyHint,
   loadingHint,
@@ -29,6 +30,7 @@ const MessageArea: React.FC<MessageAreaProps> = ({
         className={styles.chatLogContainer}
         messages={messages}
         pendingMessage={pendingMessage}
+        streamingMessage={streamingMessage}
         isLoading={isLoading}
         emptyHint={emptyHint}
         loadingHint={loadingHint}

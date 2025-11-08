@@ -6,7 +6,7 @@ import type {
   ChatMessageDeliveryStatus,
   ChatMessageRole,
   ChatPendingMessage,
-} from '../types';
+} from '@/types/chat';
 import styles from './MessageBubble.module.scss';
 
 /**
@@ -26,6 +26,9 @@ const roleRowClassMap: Record<ChatMessageRole, string> = {
   assistant: styles.rowAssistant,
   user: styles.rowUser,
   system: styles.rowSystem,
+  developer: styles.rowSystem,
+  function: styles.rowSystem,
+  tool: styles.rowSystem,
 };
 
 /**
@@ -35,6 +38,9 @@ const roleBubbleClassMap: Record<ChatMessageRole, string> = {
   assistant: styles.bubbleAssistant,
   user: styles.bubbleUser,
   system: styles.bubbleSystem,
+  developer: styles.bubbleSystem,
+  function: styles.bubbleSystem,
+  tool: styles.bubbleSystem,
 };
 
 /**

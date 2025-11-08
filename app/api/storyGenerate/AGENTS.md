@@ -8,5 +8,5 @@
 - `route.ts`：API Route 实现。
 
 ## 关键协作与依赖
-- 调用 `@/lib/server/storyUpstream` 完成上游请求。
+- 调用 `@/lib/server/OpenAIUpstream` 完成上游请求。
 - 使用 `@/types/story` 统一请求与响应类型。

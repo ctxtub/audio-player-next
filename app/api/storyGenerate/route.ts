@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type OpenAI from "openai";
 
 import { ServiceError } from "@/lib/http/server/ErrorHandler";
-import { invokeChatCompletion } from "@/lib/server/storyUpstream";
+import { invokeChatCompletion } from "@/lib/server/OpenAIUpstream";
 import type { StoryApiResponse, StoryContinueRequest, StoryGenerateRequest } from "@/types/story";
 
 import { buildStoryMessages } from "./utils/buildStoryMessages";

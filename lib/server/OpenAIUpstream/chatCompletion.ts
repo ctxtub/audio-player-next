@@ -3,55 +3,31 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 
 import { ServiceError } from "@/lib/http/server/ErrorHandler";
 
-import { loadOpenAiEnvConfig } from "./config";
-import type { OpenAiEnvConfig } from "./config";
+import { getOrCreateOpenAiClient } from "./client";
+import { loadOpenAiEnvConfig } from "./env";
 
-/**
- * 对外暴露的消息类型，与 OpenAI SDK 定义保持一致。
- */
-export type StoryMessage = ChatCompletionMessageParam;
-
-/**
- * 复用的 OpenAI 客户端实例，避免重复初始化。
- */
-let cachedClient: OpenAI | null = null;
-
-/**
- * 根据配置创建或返回复用的 OpenAI 客户端。
- * @param config 已解析好的环境配置。
- */
-const getOrCreateClient = (config: OpenAiEnvConfig): OpenAI => {
-  if (cachedClient) {
-    return cachedClient;
-  }
-
-  cachedClient = new OpenAI({
-    apiKey: config.apiKey,
-    baseURL: config.baseUrl,
-  });
-
-  return cachedClient;
-};
+/** OpenAI Chat Completion 接口使用的消息结构，与官方 SDK 对齐。 */
+export type OpenAiChatMessage = ChatCompletionMessageParam;
 
 /**
  * 调用 OpenAI Chat Completions 接口，返回官方 SDK 的原始结构。
- * @param messages 已经在 BFF 层组装好的消息序列。
+ * @param messages BFF 层组装好的消息序列。
  * @returns OpenAI SDK 原样返回的 ChatCompletion 结果。
- * @throws ServiceError 当上游返回错误或网络异常时抛出。
+ * @throws ServiceError 当入参非法或上游返回错误时抛出。
  */
 export const invokeChatCompletion = async (
-  messages: StoryMessage[],
+  messages: OpenAiChatMessage[],
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> => {
   if (!Array.isArray(messages) || messages.length === 0) {
     throw new ServiceError({
-      message: "调用 OpenAI 需要至少一条消息", 
+      message: "调用 OpenAI 需要至少一条消息",
       status: 400,
       code: "INVALID_REQUEST",
     });
   }
 
   const config = loadOpenAiEnvConfig();
-  const client = getOrCreateClient(config);
+  const client = getOrCreateOpenAiClient(config);
 
   try {
     const payload: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
@@ -90,7 +66,7 @@ export const invokeChatCompletion = async (
     }
 
     throw new ServiceError({
-      message: error instanceof Error ? error.message : "OpenAI 请求失败", 
+      message: error instanceof Error ? error.message : "OpenAI 请求失败",
       status: 502,
       code: "UPSTREAM_NETWORK_ERROR",
       details: error,

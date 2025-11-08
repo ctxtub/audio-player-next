@@ -1,0 +1,94 @@
+.userSection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: 16px;
+  border: 1px solid var(--card-border);
+  background: var(--card-background);
+  box-shadow: 0 8px 16px var(--shadow-color);
+  backdrop-filter: blur(var(--blur-radius));
+  margin-bottom: 20px;
+}
+
+.userInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.nickname {
+  color: var(--foreground);
+  font-size: 18px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  color: var(--secondary);
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.loginButton {
+  min-width: 96px;
+}
+
+.logoutButton {
+  min-width: 96px;
+}
+
+.loginForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.formLabel {
+  color: var(--adm-color-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.formActions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.errorBar {
+  --adm-notice-bar-background-color: color-mix(in srgb, var(--adm-color-danger) 12%, transparent);
+  --adm-notice-bar-color: var(--adm-color-danger);
+}
+
+@media (max-width: 520px) {
+  .userSection {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .loginButton,
+  .logoutButton {
+    flex: 1;
+  }
+}

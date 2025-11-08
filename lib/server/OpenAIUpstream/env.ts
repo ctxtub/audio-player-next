@@ -68,7 +68,22 @@ export const loadOpenAiEnvConfig = (): OpenAiEnvConfig => {
 
   const model = String(process.env.OPENAI_MODEL).trim();
   const temperature = parseNumberFromEnv(process.env.OPENAI_TEMPERATURE);
+  if (temperature !== undefined && (temperature < 0 || temperature > 2)) {
+    throw new ServiceError({
+      message: "OPENAI_TEMPERATURE 必须在 0 到 2 之间",
+      status: 500,
+      code: "SERVER_CONFIG_ERROR",
+    });
+  }
+
   const maxTokens = parseNumberFromEnv(process.env.OPENAI_MAX_TOKENS);
+  if (maxTokens !== undefined && (!Number.isInteger(maxTokens) || maxTokens <= 0)) {
+    throw new ServiceError({
+      message: "OPENAI_MAX_TOKENS 必须是正整数",
+      status: 500,
+      code: "SERVER_CONFIG_ERROR",
+    });
+  }
 
   const resolvedConfig: OpenAiEnvConfig = {
     apiKey,

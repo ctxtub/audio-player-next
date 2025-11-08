@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Input, NoticeBar, Toast } from 'antd-mobile';
+import { Button, Card, Form, Input, NoticeBar, Toast } from 'antd-mobile';
+import { LockOutline, UserOutline } from 'antd-mobile-icons';
 
 import Modal, { useModal } from '@/components/Modal';
 import { useAuthStore } from '@/stores/authStore';
@@ -137,37 +138,45 @@ const UserSection: React.FC = () => {
       </div>
 
       <Modal isShow={isShow} title="账号登录" onClose={handleCloseModal}>
-        <div className={styles.loginForm}>
-          {formError && (
-            <NoticeBar color="alert" className={styles.errorBar} content={formError} />
-          )}
-          <div className={styles.formField}>
-            <label className={styles.formLabel} htmlFor="login-username">
-              账号
-            </label>
-            <Input
-              id="login-username"
-              placeholder="请输入账号"
-              value={username}
-              onChange={val => setUsername(val)}
-              clearable
-              disabled={submitting}
-            />
-          </div>
-          <div className={styles.formField}>
-            <label className={styles.formLabel} htmlFor="login-password">
-              密码
-            </label>
-            <Input
-              id="login-password"
-              type="password"
-              placeholder="请输入密码"
-              value={password}
-              onChange={val => setPassword(val)}
-              clearable
-              disabled={submitting}
-            />
-          </div>
+        <Card className={styles.loginCard} bodyClassName={styles.loginCardBody}>
+          <Form layout="vertical" className={styles.loginForm}>
+            {formError && (
+              <NoticeBar color="alert" className={styles.errorBar} content={formError} />
+            )}
+            <Form.Item className={styles.formItem} label="账号">
+              <div className={styles.fieldControl}>
+                <UserOutline aria-hidden="true" className={styles.inputIcon} />
+                <Input
+                  id="login-username"
+                  placeholder="Account"
+                  value={username}
+                  onChange={val => setUsername(val)}
+                  clearable
+                  disabled={submitting}
+                  className={styles.textInput}
+                  aria-label="账号"
+                  autoComplete="username"
+                />
+              </div>
+            </Form.Item>
+            <Form.Item className={styles.formItem} label="密码">
+              <div className={styles.fieldControl}>
+                <LockOutline aria-hidden="true" className={styles.inputIcon} />
+                <Input
+                  id="login-password"
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={val => setPassword(val)}
+                  clearable
+                  disabled={submitting}
+                  className={styles.textInput}
+                  aria-label="密码"
+                  autoComplete="current-password"
+                />
+              </div>
+            </Form.Item>
+          </Form>
           <div className={styles.formActions}>
             <Button
               color="primary"
@@ -177,11 +186,17 @@ const UserSection: React.FC = () => {
             >
               登录
             </Button>
-            <Button onClick={handleCloseModal} disabled={submitting}>
+            <Button
+              block
+              fill="none"
+              className={styles.cancelButton}
+              onClick={handleCloseModal}
+              disabled={submitting}
+            >
               取消
             </Button>
           </div>
-        </div>
+        </Card>
       </Modal>
     </>
   );

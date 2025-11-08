@@ -47,22 +47,88 @@
   min-width: 96px;
 }
 
+.loginCard {
+  width: min(420px, 90vw);
+  margin: 0 auto;
+  border-radius: 20px;
+  border: 1px solid color-mix(in srgb, var(--card-border) 85%, transparent);
+  background: color-mix(in srgb, var(--card-background) 96%, transparent);
+  box-shadow: 0 18px 44px color-mix(in srgb, var(--shadow-color) 70%, transparent);
+  backdrop-filter: blur(var(--blur-radius));
+  -webkit-backdrop-filter: blur(var(--blur-radius));
+}
+
+.loginCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+}
+
 .loginForm {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.formField {
+.formItem {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.formLabel {
-  color: var(--adm-color-text);
+.formItem :global(.adm-form-item-label) {
+  color: var(--foreground);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
+}
+
+.formItem :global(.adm-form-item-child) {
+  margin-top: 0;
+}
+
+.fieldControl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--card-border) 88%, transparent);
+  background: color-mix(in srgb, var(--card-background) 95%, transparent);
+  transition: border-color var(--transition-speed) var(--transition-timing),
+    box-shadow var(--transition-speed) var(--transition-timing),
+    background-color var(--transition-speed) var(--transition-timing);
+}
+
+.fieldControl:focus-within {
+  border-color: color-mix(in srgb, var(--primary) 70%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+  background: color-mix(in srgb, var(--card-background) 98%, transparent);
+}
+
+.textInput {
+  flex: 1;
+  --background-color: transparent;
+  --placeholder-color: color-mix(in srgb, var(--secondary) 70%, transparent);
+  --color: var(--foreground);
+}
+
+.textInput :global(.adm-input-element) {
+  font-size: 16px;
+  color: var(--foreground);
+}
+
+.textInput :global(.adm-input-clear) {
+  color: color-mix(in srgb, var(--secondary) 60%, transparent);
+}
+
+.textInput :global(.adm-input-clear:active) {
+  color: var(--primary);
+}
+
+.inputIcon {
+  font-size: 18px;
+  color: color-mix(in srgb, var(--secondary) 55%, var(--foreground));
 }
 
 .formActions {
@@ -71,9 +137,26 @@
   gap: 12px;
 }
 
+.formActions :global(.adm-button) {
+  --adm-button-border-radius: 14px;
+  font-size: 16px;
+  padding: 14px 0;
+}
+
+.cancelButton {
+  --adm-button-text-color: color-mix(in srgb, var(--secondary) 70%, var(--foreground));
+  --adm-button-border-width: 0px;
+}
+
+.cancelButton:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 40%, transparent);
+  outline-offset: 2px;
+}
+
 .errorBar {
   --adm-notice-bar-background-color: color-mix(in srgb, var(--adm-color-danger) 12%, transparent);
   --adm-notice-bar-color: var(--adm-color-danger);
+  border-radius: 12px;
 }
 
 @media (max-width: 520px) {
@@ -90,5 +173,14 @@
   .loginButton,
   .logoutButton {
     flex: 1;
+  }
+
+  .loginCardBody {
+    padding: 20px;
+    gap: 20px;
+  }
+
+  .fieldControl {
+    padding: 10px 14px;
   }
 }

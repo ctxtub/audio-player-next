@@ -1,7 +1,6 @@
 .chatLog {
   display: flex;
   flex-direction: column;
-  height: 100%;
 }
 
 .scrollContainer {
@@ -13,13 +12,6 @@
   gap: 16px;
   scroll-behavior: smooth;
   scroll-padding-bottom: 140px;
-
-  background: radial-gradient(
-      120% 60% at 50% 0%,
-      color-mix(in srgb, var(--primary) 8%, transparent) 0%,
-      transparent 70%
-    )
-    no-repeat;
 
   &::-webkit-scrollbar {
     width: 6px;
@@ -39,7 +31,6 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 0 12px;
 }
 
 .placeholder {

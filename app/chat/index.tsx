@@ -26,14 +26,6 @@ const ChatPage = async () => {
       displayName: '故事助手',
       avatar: '/icons/avatar-assistant.svg',
     },
-    {
-      id: 'user-preference',
-      role: 'user',
-      content: '我想听一段关于太空旅行的睡前故事。',
-      createdAt: new Date().toISOString(),
-      displayName: '我',
-      avatar: '/icons/avatar-user.svg',
-    },
   ];
 
   return (

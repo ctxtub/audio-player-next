@@ -46,6 +46,10 @@ export type ChatMessage = {
   status?: ChatMessageDeliveryStatus;
   /** 消息创建时间戳，ISO 字符串格式。 */
   createdAt?: string;
+  /** 展示使用的昵称，默认基于角色生成。 */
+  displayName?: string;
+  /** 展示使用的头像地址，默认基于角色生成。 */
+  avatar?: string;
   /** 额外元数据，例如结束原因与 token 统计。 */
   metadata?: ChatMessageMetadata;
 };
@@ -64,6 +68,10 @@ export type ChatPendingMessage = {
   status?: Extract<ChatMessageDeliveryStatus, 'sending' | 'failed'>;
   /** 创建时间戳，供展示和排序使用。 */
   createdAt?: string;
+  /** 展示使用的昵称，默认基于角色生成。 */
+  displayName?: string;
+  /** 展示使用的头像地址，默认基于角色生成。 */
+  avatar?: string;
 };
 
 /**

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, TextArea, Toast } from 'antd-mobile';
+import { SendOutline } from 'antd-mobile-icons';
 
 import styles from './Composer.module.scss';
 
@@ -36,7 +37,7 @@ const Composer: React.FC<ComposerProps> = ({
   onSubmit,
   disabled = false,
   isSending = false,
-  placeholder = '输入你想说的话...\n支持 Shift+Enter 换行',
+  placeholder = 'Type a message...',
   leftSlot,
   submitText = '发送',
 }) => {
@@ -132,7 +133,7 @@ const Composer: React.FC<ComposerProps> = ({
   return (
     <div className={styles.container}>
       {leftSlot ? <div className={styles.leftSlot}>{leftSlot}</div> : null}
-      <div className={styles.inputArea}>
+      <div className={styles.editorArea}>
         <div className={styles.textAreaWrapper}>
           <TextArea
             value={internalValue}
@@ -140,23 +141,25 @@ const Composer: React.FC<ComposerProps> = ({
             onKeyDown={handleKeyDown}
             disabled={effectiveDisabled}
             placeholder={placeholder}
-            autoSize
+            autoSize={{ minRows: 1, maxRows: 5 }}
             maxLength={5000}
             className={styles.textArea}
           />
+          <Button
+            color="primary"
+            fill="solid"
+            shape="rounded"
+            loading={isSending || isLocalSending}
+            disabled={effectiveDisabled}
+            aria-label={submitText}
+            className={styles.sendButton}
+            onClick={() => {
+              void handleSubmit();
+            }}
+          >
+            <SendOutline />
+          </Button>
         </div>
-        <Button
-          color="primary"
-          loading={isSending || isLocalSending}
-          disabled={effectiveDisabled}
-          onClick={() => {
-            void handleSubmit();
-          }}
-          className={styles.submitButton}
-          fill="solid"
-        >
-          {submitText}
-        </Button>
       </div>
     </div>
   );

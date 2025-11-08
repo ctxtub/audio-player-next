@@ -4,7 +4,15 @@
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
-  background: var(--background);
+  gap: 20px;
+  padding: 24px var(--page-padding, 20px)
+    calc(var(--main-tab-bar-height, 56px) + env(safe-area-inset-bottom, 0px) + 24px);
+  background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--primary) 12%, transparent) 0%,
+      color-mix(in srgb, var(--background) 90%, transparent) 40%,
+      var(--background) 100%
+    );
   color: var(--foreground);
   transition: background-color var(--transition-speed) var(--transition-timing),
               color var(--transition-speed) var(--transition-timing);
@@ -15,28 +23,42 @@
   display: flex;
   min-height: 0;
   overflow: hidden;
-  padding: 0 var(--page-padding, 16px);
+  justify-content: center;
 }
 
 .inputArea {
   position: sticky;
-  bottom: calc(var(--main-tab-bar-height, 56px) + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--main-tab-bar-height, 56px) + env(safe-area-inset-bottom, 0px) + 12px);
   z-index: 10;
   flex: 0 0 auto;
-  padding: 16px var(--page-padding, 16px);
-  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  border-top: 1px solid color-mix(in srgb, var(--card-border) 90%, transparent);
-  background: var(--card-background);
-  backdrop-filter: blur(var(--blur-radius));
-  -webkit-backdrop-filter: blur(var(--blur-radius));
-  box-shadow: 0 -8px 24px color-mix(in srgb, var(--shadow-color) 20%, transparent);
-  transition: background-color var(--transition-speed) var(--transition-timing),
-              border-color var(--transition-speed) var(--transition-timing),
-              box-shadow var(--transition-speed) var(--transition-timing);
+  display: flex;
+  justify-content: center;
+  padding: 0;
+  pointer-events: none;
+}
+
+.inputArea::before {
+  content: '';
+  position: absolute;
+  inset: -32px 0 100%;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--background) 0%, transparent) 0%,
+    color-mix(in srgb, var(--background) 92%, transparent) 100%
+  );
+  pointer-events: none;
+}
+
+.inputContent {
+  width: 100%;
+  max-width: 640px;
+  pointer-events: auto;
 }
 
 .chatLogContainer {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
+  width: 100%;
+  max-width: 720px;
 }

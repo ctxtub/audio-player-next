@@ -1,10 +1,15 @@
 .chatPage {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - var(--main-tab-bar-height, 56px) - env(safe-area-inset-bottom, 0px));
-  background: var(--background);
+  min-height: 100vh;
+  background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--primary) 12%, transparent) 0%,
+      color-mix(in srgb, var(--background) 90%, transparent) 45%,
+      var(--background) 100%
+    );
   color: var(--foreground);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: calc(var(--main-tab-bar-height, 56px) + env(safe-area-inset-bottom, 0px));
   transition: background-color var(--transition-speed) var(--transition-timing),
               color var(--transition-speed) var(--transition-timing);
 }

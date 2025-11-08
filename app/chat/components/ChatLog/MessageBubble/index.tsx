@@ -1,6 +1,8 @@
 'use client';
 
-import type { FC } from 'react';
+import { Avatar } from 'antd-mobile';
+import { useMemo, type FC } from 'react';
+
 import type {
   ChatMessage,
   ChatMessageDeliveryStatus,
@@ -44,6 +46,25 @@ const roleBubbleClassMap: Record<ChatMessageRole, string> = {
 };
 
 /**
+ * 角色对应的默认展示信息，避免缺失头像或昵称。 
+ */
+const fallbackPersonaMap: Record<ChatMessageRole, { name: string; avatar: string; fallback: string }> = {
+  assistant: { name: '故事助手', avatar: '/icons/avatar-assistant.svg', fallback: '助' },
+  user: { name: '我', avatar: '/icons/avatar-user.svg', fallback: '我' },
+  system: { name: '系统提示', avatar: '/icons/avatar-assistant.svg', fallback: '系' },
+  developer: { name: '系统提示', avatar: '/icons/avatar-assistant.svg', fallback: '系' },
+  function: { name: '函数输出', avatar: '/icons/avatar-assistant.svg', fallback: '函' },
+  tool: { name: '工具消息', avatar: '/icons/avatar-assistant.svg', fallback: '工' },
+};
+
+/**
+ * 判断角色是否需要隐藏头像展示。 
+ * @param role 当前消息角色。
+ */
+const shouldHideAvatar = (role: ChatMessageRole) =>
+  role === 'system' || role === 'developer' || role === 'function' || role === 'tool';
+
+/**
  * 单条聊天消息的气泡组件，负责处理角色样式与发送状态提示。
  * @param props.message 聊天消息实体
  * @param props.onRetry 失败重试回调
@@ -72,12 +93,41 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry }) => {
     .filter(Boolean)
     .join(' ');
 
+  const persona = fallbackPersonaMap[roleKey];
+  const displayName = message.displayName ?? persona.name;
+  const avatarSrc = message.avatar ?? persona.avatar;
+  const avatarFallback = persona.fallback;
+
+  const formattedTime = useMemo(() => {
+    if (!message.createdAt) {
+      return '';
+    }
+    try {
+      return new Intl.DateTimeFormat('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(message.createdAt));
+    } catch {
+      return '';
+    }
+  }, [message.createdAt]);
+
   return (
     <div className={rowClassName}>
+      {shouldHideAvatar(roleKey) ? null : (
+        <Avatar
+          className={styles.avatar}
+          src={avatarSrc}
+          fallback={avatarFallback}
+          aria-label={`${displayName}头像`}
+        />
+      )}
       <div className={styles.bubbleWrapper}>
-        <div className={bubbleClassName}>
-          {message.content}
+        <div className={styles.headerRow}>
+          <span className={styles.displayName}>{displayName}</span>
+          {formattedTime ? <time className={styles.timestamp}>{formattedTime}</time> : null}
         </div>
+        <div className={bubbleClassName}>{message.content}</div>
         {(isSending || isFailed) && (
           <div className={styles.metaRow}>
             <span className={statusClassName}>{isSending ? '发送中...' : '发送失败'}</span>

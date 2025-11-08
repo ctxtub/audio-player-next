@@ -7,11 +7,19 @@
 .scrollContainer {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 0 4px 140px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   scroll-behavior: smooth;
+  scroll-padding-bottom: 140px;
+
+  background: radial-gradient(
+      120% 60% at 50% 0%,
+      color-mix(in srgb, var(--primary) 8%, transparent) 0%,
+      transparent 70%
+    )
+    no-repeat;
 
   &::-webkit-scrollbar {
     width: 6px;
@@ -30,7 +38,8 @@
 .messagesList {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 18px;
+  padding: 0 12px;
 }
 
 .placeholder {

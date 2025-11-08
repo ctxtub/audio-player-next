@@ -22,6 +22,8 @@ type ChatStoreBaseState = {
   currentAbortController: AbortController | null;
   /** 已同步到上游的对话上下文。 */
   conversationContext: ChatConversationMessage[];
+  /** 输入框中的实时内容，供建议快捷填充。 */
+  inputValue: string;
 };
 
 /**
@@ -44,6 +46,8 @@ type ChatStoreActions = {
   resetActiveSession: () => void;
   /** 记录或清空当前的 AbortController。 */
   setAbortController: (controller: AbortController | null) => void;
+  /** 更新输入框的实时内容。 */
+  setInputValue: (nextValue: string) => void;
 };
 
 /**
@@ -98,6 +102,52 @@ const isSupportedConversationRole = (
   (supportedConversationRoles as ReadonlyArray<string>).includes(role);
 
 /**
+ * 不同角色对应的展示昵称与头像配置。 
+ */
+const messagePersonaMap: Record<ChatMessage['role'], { displayName: string; avatar: string }> = {
+  assistant: {
+    displayName: '故事助手',
+    avatar: '/icons/avatar-assistant.svg',
+  },
+  user: {
+    displayName: '我',
+    avatar: '/icons/avatar-user.svg',
+  },
+  system: {
+    displayName: '系统提示',
+    avatar: '/icons/avatar-assistant.svg',
+  },
+  developer: {
+    displayName: '系统提示',
+    avatar: '/icons/avatar-assistant.svg',
+  },
+  function: {
+    displayName: '函数输出',
+    avatar: '/icons/avatar-assistant.svg',
+  },
+  tool: {
+    displayName: '工具消息',
+    avatar: '/icons/avatar-assistant.svg',
+  },
+};
+
+/**
+ * 为消息补全展示用的头像与昵称信息。 
+ * @param message 待补全的消息实体。
+ */
+const withPersona = <T extends ChatMessage | ChatPendingMessage>(message: T): T => {
+  const persona = messagePersonaMap[message.role];
+  if (!persona) {
+    return message;
+  }
+  return {
+    ...message,
+    displayName: message.displayName ?? persona.displayName,
+    avatar: message.avatar ?? persona.avatar,
+  };
+};
+
+/**
  * 将历史消息映射为上游所需的 ChatCompletionMessageParam 数组。
  * @param messages 已确认的聊天消息列表。
  */
@@ -136,23 +186,25 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
   activeAssistantMessage: null,
   currentAbortController: null,
   conversationContext: [],
+  inputValue: '',
   hydrateInitialMessages: (initialMessages) => {
     set({
-      messages: initialMessages,
+      messages: initialMessages.map((item) => withPersona(item)),
       pendingMessage: null,
       activeAssistantMessage: null,
       conversationContext: mapMessagesToContext(initialMessages),
+      inputValue: '',
     });
   },
   prepareNewSubmission: (content) => {
-    const pendingMessage: ChatPendingMessage = {
+    const pendingMessage = withPersona<ChatPendingMessage>({
       id: createTempMessageId('user'),
       role: 'user',
       content,
       status: 'sending',
       createdAt: createTimestamp(),
-    };
-    const assistantMessage = createAssistantPlaceholder();
+    });
+    const assistantMessage = withPersona(createAssistantPlaceholder());
     const baseContext = mapMessagesToContext(get().messages);
     const context: ChatConversationMessage[] = [
       ...baseContext,
@@ -162,6 +214,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
       pendingMessage,
       activeAssistantMessage: assistantMessage,
       conversationContext: context,
+      inputValue: '',
     });
     return { pendingMessage, assistantMessage, context };
   },
@@ -170,12 +223,12 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     if (!existing) {
       throw new Error('当前没有可重试的消息');
     }
-    const pendingMessage: ChatPendingMessage = {
+    const pendingMessage = withPersona<ChatPendingMessage>({
       ...existing,
       status: 'sending',
       createdAt: existing.createdAt ?? createTimestamp(),
-    };
-    const assistantMessage = createAssistantPlaceholder();
+    });
+    const assistantMessage = withPersona(createAssistantPlaceholder());
     const baseContext = mapMessagesToContext(get().messages);
     const context: ChatConversationMessage[] = [
       ...baseContext,
@@ -211,6 +264,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
           content: state.pendingMessage.content,
           status: 'delivered',
           createdAt: state.pendingMessage.createdAt ?? createTimestamp(),
+          displayName: state.pendingMessage.displayName,
+          avatar: state.pendingMessage.avatar,
         });
       }
       if (state.activeAssistantMessage) {
@@ -229,6 +284,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
         pendingMessage: null,
         activeAssistantMessage: null,
         conversationContext: mapMessagesToContext(nextMessages),
+        inputValue: '',
       };
     });
   },
@@ -258,10 +314,14 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
       activeAssistantMessage: null,
       currentAbortController: null,
       conversationContext: mapMessagesToContext(state.messages),
+      inputValue: state.inputValue,
     }));
   },
   setAbortController: (controller) => {
     set({ currentAbortController: controller });
+  },
+  setInputValue: (nextValue) => {
+    set({ inputValue: nextValue });
   },
 });
 

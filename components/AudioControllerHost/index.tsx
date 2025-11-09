@@ -47,6 +47,14 @@ const AudioControllerHost: React.FC = () => {
   const hasTriggeredPreload = useRef(false);
   const unlockPromiseRef = useRef<Promise<void> | null>(null);
   const isUnlockedRef = useRef(false);
+  /**
+   * 标记当前是否处于解锁流程，避免事件监听器误触发业务逻辑。
+   */
+  const isUnlockingRef = useRef(false);
+  /**
+   * 标记是否需要忽略下一次 ended 事件（解锁使用的静音片段）。
+   */
+  const shouldIgnoreNextEndedRef = useRef(false);
   const playbackRate = usePlaybackStore((state) => state.playbackRate);
   const registerAudioController = usePlaybackStore((state) => state.registerAudioController);
 
@@ -77,6 +85,8 @@ const AudioControllerHost: React.FC = () => {
     };
 
     const unlockPromise = (async () => {
+      isUnlockingRef.current = true;
+      shouldIgnoreNextEndedRef.current = true;
       audioEl.muted = true;
       audioEl.volume = 0;
       audioEl.preload = 'auto';
@@ -105,6 +115,10 @@ const AudioControllerHost: React.FC = () => {
         } else {
           audioEl.removeAttribute('src');
           audioEl.load();
+        }
+        isUnlockingRef.current = false;
+        if (shouldIgnoreNextEndedRef.current) {
+          shouldIgnoreNextEndedRef.current = false;
         }
       }
     })();
@@ -246,6 +260,9 @@ const AudioControllerHost: React.FC = () => {
     }
 
     const handleTimeUpdate = () => {
+      if (isUnlockingRef.current) {
+        return;
+      }
       const currentTime = audioEl.currentTime;
       const duration = Number.isFinite(audioEl.duration) ? audioEl.duration : 0;
       updatePlaybackProgress({ currentTime, duration });
@@ -261,12 +278,19 @@ const AudioControllerHost: React.FC = () => {
     };
 
     const handleLoadedMetadata = () => {
+      if (isUnlockingRef.current) {
+        return;
+      }
       hasTriggeredPreload.current = false;
       const duration = Number.isFinite(audioEl.duration) ? audioEl.duration : 0;
       updatePlaybackProgress({ currentTime: 0, duration });
     };
 
     const handleEnded = async () => {
+      if (shouldIgnoreNextEndedRef.current) {
+        shouldIgnoreNextEndedRef.current = false;
+        return;
+      }
       handlePlaybackPause();
       try {
         const nextSegment = await handleSegmentEnded();

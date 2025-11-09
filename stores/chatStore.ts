@@ -256,29 +256,32 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
   },
   finalizeAssistantMessage: (payload) => {
     set((state) => {
+      if (
+        !state.pendingMessage ||
+        !state.activeAssistantMessage ||
+        !state.activeAssistantMessage.content.trim()
+      ) {
+        return state;
+      }
       const nextMessages = [...state.messages];
-      if (state.pendingMessage) {
-        nextMessages.push({
-          id: state.pendingMessage.id ?? createTempMessageId('user'),
-          role: state.pendingMessage.role,
-          content: state.pendingMessage.content,
-          status: 'delivered',
-          createdAt: state.pendingMessage.createdAt ?? createTimestamp(),
-          displayName: state.pendingMessage.displayName,
-          avatar: state.pendingMessage.avatar,
-        });
-      }
-      if (state.activeAssistantMessage) {
-        nextMessages.push({
-          ...state.activeAssistantMessage,
-          status: 'delivered',
-          metadata: {
-            finishReason: payload.finishReason,
-            usage: payload.usage,
-          },
-          createdAt: state.activeAssistantMessage.createdAt ?? createTimestamp(),
-        });
-      }
+      nextMessages.push({
+        id: state.pendingMessage.id ?? createTempMessageId('user'),
+        role: state.pendingMessage.role,
+        content: state.pendingMessage.content,
+        status: 'delivered',
+        createdAt: state.pendingMessage.createdAt ?? createTimestamp(),
+        displayName: state.pendingMessage.displayName,
+        avatar: state.pendingMessage.avatar,
+      });
+      nextMessages.push({
+        ...state.activeAssistantMessage,
+        status: 'delivered',
+        metadata: {
+          finishReason: payload.finishReason,
+          usage: payload.usage,
+        },
+        createdAt: state.activeAssistantMessage.createdAt ?? createTimestamp(),
+      });
       return {
         messages: nextMessages,
         pendingMessage: null,

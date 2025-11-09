@@ -287,7 +287,24 @@ export const POST = async (req: Request) => {
     start(controller) {
       let lastFinishReason: string | undefined;
       let usageSummary: ChatCompletionChunk["usage"] | undefined;
+      let receivedDone = false;
 
+      /**
+       * 关闭底层 ReadableStream，避免重复入队事件。
+       */
+      const closeStream = () => {
+        if (closed) {
+          return;
+        }
+        closed = true;
+        controller.close();
+      };
+
+      /**
+       * 在确认收到 [DONE] 后发送完成事件并关闭流。
+       * @param finishReason OpenAI 返回的结束原因。
+       * @param usage OpenAI 返回的 tokens 统计信息。
+       */
       const finalizeStream = (
         finishReason?: string,
         usage?: ChatCompletionChunk["usage"],
@@ -296,7 +313,6 @@ export const POST = async (req: Request) => {
           return;
         }
 
-        closed = true;
         controller.enqueue(
           formatSseEvent({
             event: "done",
@@ -306,9 +322,14 @@ export const POST = async (req: Request) => {
             ),
           }),
         );
-        controller.close();
+        closeStream();
       };
 
+      /**
+       * 推送错误事件并终止上游连接。
+       * @param code 业务错误码。
+       * @param message 错误描述。
+       */
       const sendError = (code: string, message: string) => {
         if (closed) {
           return;
@@ -320,8 +341,15 @@ export const POST = async (req: Request) => {
             data: { code, message },
           }),
         );
-        finalizeStream("error");
+        closeStream();
         aborter.abort();
+      };
+
+      /**
+       * 处理未收到 [DONE] 即结束的异常情况。
+       */
+      const terminateWithUnexpectedEof = () => {
+        sendError("STREAM_UNEXPECTED_EOF", "聊天通道在未完成时断开");
       };
 
       const parser = createOpenAIParser({
@@ -331,6 +359,7 @@ export const POST = async (req: Request) => {
           }
 
           if (message.data === "[DONE]") {
+            receivedDone = true;
             finalizeStream();
             return;
           }
@@ -364,7 +393,9 @@ export const POST = async (req: Request) => {
 
       streamOpenAIChunks(upstreamStream, parser)
         .then(() => {
-          finalizeStream();
+          if (!receivedDone) {
+            terminateWithUnexpectedEof();
+          }
         })
         .catch((error) => {
           sendError(

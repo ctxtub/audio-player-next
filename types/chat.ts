@@ -90,7 +90,7 @@ export type ChatStreamMessageEvent = {
 export type ChatStreamDoneEvent = {
   /** 事件类型恒为 done。 */
   type: 'done';
-  /** 上游给出的结束原因，默认 stop。 */
+  /** 上游给出的结束原因，常见值包含 stop 与 error。 */
   finishReason: string;
   /** 上游回传的 token 统计，可选字段。 */
   usage?: ChatUsageSummary;
@@ -102,7 +102,7 @@ export type ChatStreamDoneEvent = {
 export type ChatStreamErrorEvent = {
   /** 事件类型恒为 error。 */
   type: 'error';
-  /** 业务错误码，便于区分异常场景。 */
+  /** 业务错误码，常见值包含 STREAM_PARSE_ERROR、STREAM_UNEXPECTED_EOF 等。 */
   code: string;
   /** 具体的错误描述信息。 */
   message: string;

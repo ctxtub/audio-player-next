@@ -43,10 +43,28 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<vo
           }
           if (event.type === 'error') {
             streamErrored = true;
-            lastErrorMessage = event.message;
+            lastErrorMessage =
+              event.code === 'STREAM_UNEXPECTED_EOF'
+                ? '聊天通道在未完成时断开，请重试'
+                : event.message;
             useChatStore.getState().markFailure();
             return;
           }
+          if (event.finishReason === 'error') {
+            streamErrored = true;
+            lastErrorMessage = '聊天生成失败，请稍后重试';
+            useChatStore.getState().markFailure();
+            return;
+          }
+
+          const assistantMessage = useChatStore.getState().activeAssistantMessage;
+          if (!assistantMessage || !assistantMessage.content.trim()) {
+            streamErrored = true;
+            lastErrorMessage = '助手没有返回有效内容，请重试';
+            useChatStore.getState().markFailure();
+            return;
+          }
+
           if (!streamErrored) {
             useChatStore.getState().finalizeAssistantMessage(event);
           }

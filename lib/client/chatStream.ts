@@ -124,6 +124,7 @@ export const createChatStreamClient = () => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let streamTerminated = false;
+      let hasReceivedDone = false;
 
       const parser = createParser({
         onEvent: (event) => {
@@ -159,13 +160,17 @@ export const createChatStreamClient = () => {
                 finishReason: parsed.finishReason ?? 'stop',
                 usage: parsed.usage,
               });
-            } catch {
+            } catch (error) {
+              streamTerminated = true;
               options.onEvent({
-                type: 'done',
-                finishReason: 'stop',
+                type: 'error',
+                code: 'STREAM_PARSE_ERROR',
+                message: error instanceof Error ? error.message : '解析 done 事件失败',
               });
+              return;
             }
             streamTerminated = true;
+            hasReceivedDone = true;
             return;
           }
 
@@ -185,6 +190,7 @@ export const createChatStreamClient = () => {
               });
             }
             streamTerminated = true;
+            return;
           }
         },
         onError: (parseError) => {
@@ -215,6 +221,14 @@ export const createChatStreamClient = () => {
           const remaining = decoder.decode();
           if (remaining) {
             parser.feed(remaining);
+          }
+          if (!hasReceivedDone && !streamTerminated) {
+            streamTerminated = true;
+            options.onEvent({
+              type: 'error',
+              code: 'STREAM_UNEXPECTED_EOF',
+              message: '聊天通道在未完成时断开',
+            });
           }
         }
       } finally {

@@ -41,6 +41,7 @@ type PlaybackStoreActions = {
   advanceSegment: () => void;
   reset: () => void;
   registerAudioController: (controller: AudioControllerHandle | null) => void;
+  ensureUnlocked: () => Promise<void>;
   playAudio: (audioUrl: string) => Promise<void>;
   resumeAudio: () => Promise<void>;
   pauseAudioPlayback: () => void;
@@ -248,6 +249,17 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
       }
     },
     /**
+     * 解锁音频播放能力，确保后续播放不会因手势限制失败。
+     * @returns Promise<void>
+     */
+    ensureUnlocked: async () => {
+      const controller = get().audioController;
+      if (!controller) {
+        throw new Error('音频播放器尚未注册');
+      }
+      await controller.unlock();
+    },
+    /**
      * 播放指定音频地址，若控制器尚未注册则抛出异常。
      * @param audioUrl string 音频文件地址
      * @returns Promise<void>
@@ -306,6 +318,7 @@ export const usePlaybackStore = create<PlaybackStore>()(devtools(playbackStoreCr
  * @returns 浮动播放器控制方法集合
  */
 export const useFloatingPlayer = () => {
+  const ensureUnlocked = usePlaybackStore((state) => state.ensureUnlocked);
   const playAudio = usePlaybackStore((state) => state.playAudio);
   const resumeAudio = usePlaybackStore((state) => state.resumeAudio);
   const pauseAudioPlayback = usePlaybackStore((state) => state.pauseAudioPlayback);
@@ -330,6 +343,7 @@ export const useFloatingPlayer = () => {
   }, [pauseAudioPlayback]);
 
   return {
+    ensureUnlocked,
     play,
     resume,
     pause,

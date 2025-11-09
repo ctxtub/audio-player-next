@@ -13,6 +13,12 @@ import { usePlaybackStore } from '@/stores/playbackStore';
 import type { AudioControllerHandle } from '@/types/audioPlayer';
 
 /**
+ * 静音音频资源（空 WAV），用于在 iOS 等平台解锁播放权限。
+ */
+const SILENT_AUDIO_DATA_URL =
+  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA=';
+
+/**
  * 判断播放请求因暂停而被中断的异常类型，避免重复弹出错误提示。
  * @param error 未处理的异常对象
  * @returns 是否属于暂停触发的中断错误
@@ -39,8 +45,78 @@ const isPlayInterruptedError = (error: unknown): boolean => {
 const AudioControllerHost: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hasTriggeredPreload = useRef(false);
+  const unlockPromiseRef = useRef<Promise<void> | null>(null);
+  const isUnlockedRef = useRef(false);
   const playbackRate = usePlaybackStore((state) => state.playbackRate);
   const registerAudioController = usePlaybackStore((state) => state.registerAudioController);
+
+  /**
+   * 解锁音频播放能力，避免移动端受限于未授权的用户手势。
+   * @returns Promise<void>
+   */
+  const handleUnlock = useCallback(async () => {
+    if (isUnlockedRef.current) {
+      return;
+    }
+    if (unlockPromiseRef.current) {
+      await unlockPromiseRef.current;
+      return;
+    }
+
+    const audioEl = audioRef.current;
+    if (!audioEl) {
+      throw new Error('音频播放器尚未就绪');
+    }
+
+    const previousState = {
+      src: audioEl.src,
+      currentTime: audioEl.currentTime,
+      preload: audioEl.preload,
+      muted: audioEl.muted,
+      volume: audioEl.volume,
+    };
+
+    const unlockPromise = (async () => {
+      audioEl.muted = true;
+      audioEl.volume = 0;
+      audioEl.preload = 'auto';
+      audioEl.src = SILENT_AUDIO_DATA_URL;
+      audioEl.currentTime = 0;
+
+      try {
+        await audioEl.play();
+        audioEl.pause();
+        isUnlockedRef.current = true;
+      } catch (error) {
+        console.error('解锁音频播放能力失败:', error);
+        throw error instanceof Error ? error : new Error('音频播放解锁失败');
+      } finally {
+        audioEl.muted = previousState.muted;
+        audioEl.volume = previousState.volume;
+        audioEl.preload = previousState.preload;
+
+        if (previousState.src) {
+          audioEl.src = previousState.src;
+          try {
+            audioEl.currentTime = previousState.currentTime;
+          } catch (seekError) {
+            console.error('还原音频播放进度失败:', seekError);
+          }
+        } else {
+          audioEl.removeAttribute('src');
+          audioEl.load();
+        }
+      }
+    })();
+
+    unlockPromiseRef.current = unlockPromise;
+
+    try {
+      await unlockPromise;
+    } finally {
+      unlockPromiseRef.current = null;
+    }
+  }, []);
 
   /**
    * 启动新音频播放，负责重置状态与触发播放开始回调。
@@ -136,6 +212,7 @@ const AudioControllerHost: React.FC = () => {
 
   useEffect(() => {
     const controller: AudioControllerHandle = {
+      unlock: handleUnlock,
       play: handlePlay,
       resume: handleResume,
       pause: handlePause,
@@ -146,7 +223,15 @@ const AudioControllerHost: React.FC = () => {
     return () => {
       registerAudioController(null);
     };
-  }, [handlePause, handlePlay, handleResume, handleSeek, handleSetPlaybackRate, registerAudioController]);
+  }, [
+    handlePause,
+    handlePlay,
+    handleResume,
+    handleSeek,
+    handleSetPlaybackRate,
+    handleUnlock,
+    registerAudioController,
+  ]);
 
   useEffect(() => {
     if (audioRef.current) {

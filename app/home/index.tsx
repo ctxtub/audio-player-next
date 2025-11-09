@@ -22,7 +22,7 @@ import styles from './index.module.scss';
  */
 const HomePage: React.FC = () => {
   const router = useRouter();
-  const { play: playAudio, pause: pauseAudio } = useFloatingPlayer();
+  const { ensureUnlocked, play: playAudio, pause: pauseAudio } = useFloatingPlayer();
 
   // 配置初始化与校验能力
   const isConfigLoaded = useConfigStore(state => state.isLoaded);
@@ -46,6 +46,8 @@ const HomePage: React.FC = () => {
       try {
         pauseAudio();
 
+        await ensureUnlocked();
+
         const { audioUrl } = await beginStorySession(shortcutText);
 
         await playAudio(audioUrl);
@@ -56,7 +58,7 @@ const HomePage: React.FC = () => {
         resetStoryFlow();
       }
     },
-    [pauseAudio, playAudio, router]
+    [ensureUnlocked, pauseAudio, playAudio, router]
   );
 
   return (

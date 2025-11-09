@@ -3,6 +3,11 @@
  */
 export interface AudioControllerHandle {
   /**
+   * 解锁音频播放能力，解决移动端首次播放的手势限制。
+   * @returns 完成解锁动作的 Promise
+   */
+  unlock: () => Promise<void>;
+  /**
    * 播放指定音频资源，并在内部完成加载与重置。
    * @param audioUrl 音频文件的访问地址
    * @returns 代表异步播放过程的 Promise

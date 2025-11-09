@@ -150,18 +150,6 @@ const UserSection: React.FC = () => {
     setFormError('请检查账号与密码填写是否完整');
   }, []);
 
-  /**
-   * 捕获原生 form 提交事件并交由 antd-mobile 表单处理。
-   * @param event 原生提交事件对象。
-   */
-  const handleSubmit = useCallback(
-    (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      form.submit();
-    },
-    [form],
-  );
-
   const handleLogout = useCallback(async () => {
     const success = await doLogout();
     if (success) {
@@ -206,7 +194,7 @@ const UserSection: React.FC = () => {
 
       <Modal isShow={isShow} title="账号登录" onClose={handleCloseModal}>
         <Card className={styles.loginCard} bodyClassName={styles.loginCardBody}>
-          <form className={styles.formWrapper} onSubmit={handleSubmit} noValidate>
+          <div className={styles.formWrapper}>
             {formError && (
               <ErrorBlock className={styles.errorBlock} status="default" title={formError} />
             )}
@@ -227,7 +215,13 @@ const UserSection: React.FC = () => {
               }}
               footer={
                 <div className={styles.formFooter}>
-                  <Button color="primary" block loading={submitting} type="submit">
+                  <Button
+                    color="primary"
+                    block
+                    loading={submitting}
+                    type="button"
+                    onClick={() => form.submit()}
+                  >
                     登录
                   </Button>
                   <Button
@@ -280,7 +274,7 @@ const UserSection: React.FC = () => {
                 </div>
               </Form.Item>
             </Form>
-          </form>
+          </div>
         </Card>
       </Modal>
     </>

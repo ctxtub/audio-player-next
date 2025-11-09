@@ -1,13 +1,29 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, Form, Input, NoticeBar, Toast } from 'antd-mobile';
+import { Button, Card, ErrorBlock, Form, Input, Toast } from 'antd-mobile';
+import type { ValidateErrorEntity } from 'rc-field-form/lib/interface';
 import { LockOutline, UserOutline } from 'antd-mobile-icons';
 
 import Modal, { useModal } from '@/components/Modal';
 import { useAuthStore } from '@/stores/authStore';
 
 import styles from './index.module.scss';
+
+/**
+ * 登录表单字段结构。
+ * - username：用户账号。
+ * - password：用户密码。
+ */
+interface LoginFormValues {
+  username: string;
+  password: string;
+}
+
+/**
+ * antd-mobile 登录表单校验失败时返回的结构体类型。
+ */
+type LoginFormFailed = ValidateErrorEntity<LoginFormValues>;
 
 /**
  * 设置页顶部的用户信息模块组件。
@@ -25,8 +41,7 @@ const UserSection: React.FC = () => {
 
   const { isShow, showModal, closeModal } = useModal();
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [form] = Form.useForm<LoginFormValues>();
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,58 +69,86 @@ const UserSection: React.FC = () => {
   }, [initialized, isLogin]);
 
   const handleOpenModal = useCallback(() => {
-    setUsername('');
-    setPassword('');
+    form.resetFields();
     setSubmitting(false);
     setFormError(null);
     resetError();
     showModal();
-  }, [resetError, showModal]);
+  }, [form, resetError, showModal]);
 
   const handleCloseModal = useCallback(() => {
     closeModal();
     setSubmitting(false);
     setFormError(null);
     resetError();
-  }, [closeModal, resetError]);
-
-  const handleLogin = useCallback(async () => {
-    const trimmedUsername = username.trim();
-    const trimmedPassword = password.trim();
-
-    if (!trimmedUsername || !trimmedPassword) {
-      setFormError('请输入账号和密码');
-      return;
-    }
-
-    setSubmitting(true);
-    setFormError(null);
-    resetError();
-
-    const success = await doLogin(trimmedUsername, trimmedPassword);
-    setSubmitting(false);
-
-    if (success) {
-      Toast.show({ icon: 'success', content: '登录成功' });
-      handleCloseModal();
-      return;
-    }
-
-    const latestError = useAuthStore.getState().error;
-    setFormError(latestError || '登录失败，请稍后重试');
-  }, [doLogin, handleCloseModal, password, resetError, username]);
+    form.resetFields();
+  }, [closeModal, form, resetError]);
 
   /**
-   * 处理输入框按下回车键时的逻辑，阻止原生提交并执行登录。
-   * @param event 键盘事件对象。
+   * 处理登录表单完成时的登录逻辑。
+   * @param values 表单输入的账号与密码。
    */
-  const handleInputEnter = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
-      event.preventDefault();
-      void handleLogin();
+  const handleFinish = useCallback(
+    async (values: LoginFormValues) => {
+      const trimmedUsername = values.username?.trim() ?? '';
+      const trimmedPassword = values.password?.trim() ?? '';
+
+      form.setFieldsValue({
+        username: trimmedUsername,
+        password: trimmedPassword,
+      });
+
+      if (!trimmedUsername || !trimmedPassword) {
+        setFormError('请输入账号和密码');
+        form.setFields([
+          {
+            name: 'username',
+            errors: trimmedUsername ? [] : ['请输入账号'],
+          },
+          {
+            name: 'password',
+            errors: trimmedPassword ? [] : ['请输入密码'],
+          },
+        ]);
+        return;
+      }
+
+      setSubmitting(true);
+      setFormError(null);
+      resetError();
+
+      try {
+        const success = await doLogin(trimmedUsername, trimmedPassword);
+
+        if (success) {
+          Toast.show({ icon: 'success', content: '登录成功' });
+          handleCloseModal();
+          return;
+        }
+
+        const latestError = useAuthStore.getState().error;
+        setFormError(latestError || '登录失败，请稍后重试');
+      } catch {
+        setFormError('登录失败，请稍后重试');
+      } finally {
+        setSubmitting(false);
+      }
     },
-    [handleLogin],
+    [doLogin, form, handleCloseModal, resetError],
   );
+
+  /**
+   * 处理登录表单校验失败时的提示。
+   * @param errors antd-mobile 表单返回的错误信息。
+   */
+  const handleFinishFailed = useCallback((errors: LoginFormFailed) => {
+    const firstError = errors.errorFields?.[0]?.errors?.[0];
+    if (firstError) {
+      setFormError(firstError);
+      return;
+    }
+    setFormError('请检查账号与密码填写是否完整');
+  }, []);
 
   const handleLogout = useCallback(async () => {
     const success = await doLogout();
@@ -151,20 +194,58 @@ const UserSection: React.FC = () => {
 
       <Modal isShow={isShow} title="账号登录" onClose={handleCloseModal}>
         <Card className={styles.loginCard} bodyClassName={styles.loginCardBody}>
-          {formError && (
-            <NoticeBar color="alert" className={styles.errorBar} content={formError} />
-          )}
-          <Form layout="vertical" className={styles.loginForm}>
-            <div className={styles.fieldGroup}>
-              <Form.Item className={styles.formItem} label="账号">
-                <div className={styles.fieldControl}>
+          <div className={styles.formWrapper}>
+            {formError && (
+              <ErrorBlock className={styles.errorBlock} status="default" title={formError} />
+            )}
+            <Form
+              form={form}
+              layout="vertical"
+              className={styles.loginForm}
+              onFinish={handleFinish}
+              onFinishFailed={handleFinishFailed}
+              onValuesChange={() => {
+                if (formError) {
+                  setFormError(null);
+                }
+              }}
+              initialValues={{
+                username: '',
+                password: '',
+              }}
+              footer={
+                <div className={styles.formFooter}>
+                  <Button
+                    color="primary"
+                    block
+                    loading={submitting}
+                    type="button"
+                    onClick={() => form.submit()}
+                  >
+                    登录
+                  </Button>
+                  <Button
+                    block
+                    className={styles.cancelButton}
+                    onClick={handleCloseModal}
+                    disabled={submitting}
+                    type="button"
+                  >
+                    取消
+                  </Button>
+                </div>
+              }
+            >
+              <Form.Item
+                label="账号"
+                name="username"
+                rules={[{ required: true, message: '请输入账号' }]}
+              >
+                <div className={styles.inputRow}>
                   <UserOutline aria-hidden="true" className={styles.inputIcon} />
                   <Input
                     id="login-username"
                     placeholder="Account"
-                    value={username}
-                    onChange={val => setUsername(val)}
-                    onEnterPress={handleInputEnter}
                     clearable
                     disabled={submitting}
                     className={styles.textInput}
@@ -173,16 +254,17 @@ const UserSection: React.FC = () => {
                   />
                 </div>
               </Form.Item>
-              <Form.Item className={styles.formItem} label="密码">
-                <div className={styles.fieldControl}>
+              <Form.Item
+                label="密码"
+                name="password"
+                rules={[{ required: true, message: '请输入密码' }]}
+              >
+                <div className={styles.inputRow}>
                   <LockOutline aria-hidden="true" className={styles.inputIcon} />
                   <Input
                     id="login-password"
                     type="password"
                     placeholder="Password"
-                    value={password}
-                    onChange={val => setPassword(val)}
-                    onEnterPress={handleInputEnter}
                     clearable
                     disabled={submitting}
                     className={styles.textInput}
@@ -191,25 +273,7 @@ const UserSection: React.FC = () => {
                   />
                 </div>
               </Form.Item>
-            </div>
-          </Form>
-          <div className={styles.formActions}>
-            <Button
-              color="primary"
-              block
-              loading={submitting}
-              onClick={handleLogin}
-            >
-              登录
-            </Button>
-            <Button
-              block
-              className={styles.cancelButton}
-              onClick={handleCloseModal}
-              disabled={submitting}
-            >
-              取消
-            </Button>
+            </Form>
           </div>
         </Card>
       </Modal>

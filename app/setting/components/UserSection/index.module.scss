@@ -62,48 +62,47 @@
   padding: 24px 0 32px;
 }
 
+.formWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
 .loginForm {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding: 0;
+  gap: 12px;
 }
 
-.fieldGroup {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.formItem {
-  display: flex;
-  flex-direction: column;
+.loginForm :global(.adm-form-item) {
   margin: 0;
 }
 
-.formItem :global(.adm-form-item-label) {
+.loginForm :global(.adm-form-item-label) {
   color: var(--foreground);
   font-size: 14px;
   font-weight: 600;
   padding: 0 24px;
 }
 
-.formItem :global(.adm-form-item-child) {
+.loginForm :global(.adm-form-item-control) {
   margin-top: 0;
 }
 
-.fieldControl {
+.inputRow {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 14px 24px;
-  border-radius: 0;
-  background: transparent;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--card-background) 94%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--card-border) 85%, transparent);
   transition: box-shadow var(--transition-speed) var(--transition-timing),
     background-color var(--transition-speed) var(--transition-timing);
 }
 
-.fieldControl:focus-within {
+.inputRow:focus-within {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 32%, transparent);
   background: color-mix(in srgb, var(--card-background) 98%, transparent);
 }
@@ -111,12 +110,15 @@
 .textInput {
   flex: 1;
   --background-color: transparent;
-  --color: var(--foreground);
 }
 
 .textInput :global(.adm-input-element) {
-  font-size: 16px;
   color: var(--foreground);
+  font-size: 16px;
+}
+
+.textInput :global(.adm-input-element::placeholder) {
+  color: color-mix(in srgb, var(--secondary) 65%, transparent);
 }
 
 .textInput :global(.adm-input-clear) {
@@ -127,19 +129,24 @@
   color: var(--primary);
 }
 
+.textInput :global(.adm-input-prefix) {
+  display: flex;
+  align-items: center;
+}
+
 .inputIcon {
   font-size: 18px;
   color: color-mix(in srgb, var(--secondary) 55%, var(--foreground));
 }
 
-.formActions {
+.formFooter {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 24px 0 0;
+  padding: 12px 0 0;
 }
 
-.formActions :global(.adm-button) {
+.formFooter :global(.adm-button) {
   --adm-button-border-radius: 14px;
   font-size: 16px;
   padding: 16px 24px;
@@ -155,9 +162,10 @@
   outline-offset: 2px;
 }
 
-.errorBar {
-  --adm-notice-bar-background-color: color-mix(in srgb, var(--adm-color-danger) 12%, transparent);
-  --adm-notice-bar-color: var(--adm-color-danger);
-  --adm-notice-bar-padding: 12px 24px;
-  border-radius: 0;
+.errorBlock {
+  padding: 12px 24px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--adm-color-danger) 14%, transparent);
+  color: var(--adm-color-danger);
 }
+

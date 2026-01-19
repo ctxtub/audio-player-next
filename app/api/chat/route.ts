@@ -6,10 +6,10 @@ import type {
 
 import { ServiceError } from "@/lib/http/server/ErrorHandler";
 import {
-  invokeStreamingChatCompletion,
-  loadOpenAiEnvConfig,
-  type OpenAiEnvConfig,
-} from "@/lib/server/OpenAIUpstream";
+  chatCompletionStream,
+  getOpenAIConfig,
+  type OpenAIConfig,
+} from "@/lib/server/openai";
 
 import {
   createOpenAIParser,
@@ -106,7 +106,7 @@ const parseOptionalNumber = (
  */
 const normalizeChatPayload = (
   payload: unknown,
-  config: OpenAiEnvConfig,
+  config: OpenAIConfig,
 ): NormalizedChatRequest => {
   if (!payload || typeof payload !== "object") {
     throw new ServiceError({
@@ -240,9 +240,9 @@ export const POST = async (req: Request) => {
     );
   }
 
-  let config: OpenAiEnvConfig;
+  let config: OpenAIConfig;
   try {
-    config = loadOpenAiEnvConfig();
+    config = getOpenAIConfig();
   } catch (error) {
     if (error instanceof ServiceError) {
       return buildErrorResponse(error.status, error.code, error.message);
@@ -265,7 +265,7 @@ export const POST = async (req: Request) => {
   const aborter = new AbortController();
   let upstreamStream: ReadableStream<Uint8Array>;
   try {
-    upstreamStream = await invokeStreamingChatCompletion({
+    upstreamStream = await chatCompletionStream({
       controller: aborter,
       messages: normalized.messages,
       model: normalized.model,

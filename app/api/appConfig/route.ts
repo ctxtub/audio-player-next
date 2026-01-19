@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { loadTtsConfig } from '@/lib/server/ttsUpstream/config';
+import { getTtsConfig } from "@/lib/server/openai";
 import { ServiceError } from '@/lib/http/server/ErrorHandler';
 import type { AppConfigResponse } from '@/types/appConfig';
 
@@ -14,7 +14,7 @@ const DEFAULT_PLAY_DURATION = 30;
  */
 export const GET = async () => {
   try {
-    const { voicesList, voiceId } = loadTtsConfig();
+    const { voicesList, voiceId } = getTtsConfig();
 
     const payload: AppConfigResponse = {
       voicesList,

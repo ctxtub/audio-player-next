@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { ServiceError } from "@/lib/http/server/ErrorHandler";
-import { loadTtsConfig, synthesizeSpeech } from "@/lib/server/ttsUpstream";
+import { getTtsConfig, synthesizeSpeech } from "@/lib/server/openai";
 import type { TtsGeneratePayload, VoiceOption } from "@/types/ttsGenerate";
 
 /**
@@ -46,7 +46,7 @@ const isVoiceAllowed = (voiceId: string, voices: VoiceOption[]): boolean =>
  * @throws ServiceError 当文本非法或参数缺失时抛出。
  */
 const normalizeRequest = (payload: unknown): { text: string; voiceId: string } => {
-  const config = loadTtsConfig();
+  const config = getTtsConfig();
 
   if (!payload || typeof payload !== "object") {
     throw new ServiceError({
@@ -125,10 +125,10 @@ export const POST = async (req: Request) => {
   }
 
   try {
-    const result = await synthesizeSpeech({
-      text: normalized.text,
-      voiceId: normalized.voiceId,
-    });
+    const result = await synthesizeSpeech(
+      normalized.text,
+      normalized.voiceId,
+    );
 
     const audioBuffer = Buffer.from(result.audioData);
     const headers = new Headers({

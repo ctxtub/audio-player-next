@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type OpenAI from "openai";
 
 import { ServiceError } from "@/lib/http/server/ErrorHandler";
-import { invokeChatCompletion } from "@/lib/server/OpenAIUpstream";
+import { chatCompletion } from "@/lib/server/openai";
 import type { StoryApiResponse, StoryContinueRequest, StoryGenerateRequest } from "@/types/story";
 
 import { buildStoryMessages } from "./utils/buildStoryMessages";
@@ -109,7 +109,7 @@ const normalizeRequest = (payload: unknown): NormalizedStoryRequest => {
         shouldSummarize = false;
       } else {
         throw new ServiceError({
-          message: "withSummary 只能是布尔值", 
+          message: "withSummary 只能是布尔值",
           status: 400,
           code: "INVALID_REQUEST",
         });
@@ -140,7 +140,7 @@ const requestStoryContent = async (
   messageOptions: BuildStoryMessagesOptions,
 ): Promise<string> => {
   const messages = buildStoryMessages(messageOptions);
-  const completion = await invokeChatCompletion(messages);
+  const completion = await chatCompletion(messages);
   const story = pickFirstChoiceText(completion);
 
   if (!story) {

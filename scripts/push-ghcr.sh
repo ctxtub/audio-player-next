@@ -21,7 +21,7 @@ fi
 TAG="${1:-latest}"
 USERNAME="${2:-ctxtub}"
 IMAGE_NAME="${3:-audio-player-next}"
-PLATFORMS="${4:-linux/amd64,linux/arm64}"
+PLATFORMS="${4:-linux/amd64}"
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GHCR_IMAGE="ghcr.io/${USERNAME}/${IMAGE_NAME}:${TAG}"

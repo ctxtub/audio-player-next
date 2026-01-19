@@ -136,10 +136,6 @@ export const POST = async (req: Request) => {
       "Cache-Control": "no-store",
     });
 
-    if (result.requestId) {
-      headers.set("x-azure-request-id", result.requestId);
-    }
-
     return new NextResponse(audioBuffer, {
       status: 200,
       headers,

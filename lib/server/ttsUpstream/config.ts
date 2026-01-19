@@ -2,25 +2,18 @@ import { ServiceError } from "@/lib/http/server/ErrorHandler";
 import type { VoiceOption, VoiceId, VoiceGender } from "@/types/ttsGenerate";
 
 /**
- * Azure TTS 服务所需的环境变量配置。
+ * OpenAI TTS 服务所需的环境变量配置。
  */
 export type TtsEnvConfig = {
-  /** Azure 语音服务的订阅密钥。 */
+  /** OpenAI API 密钥。 */
   apiKey: string;
-  /** Azure 语音服务所属的区域标识。 */
-  region: string;
+  /** TTS 模型名称，如 tts-1 或 tts-1-hd。 */
+  model: string;
   /** 默认使用的语音 ID。 */
   voiceId: VoiceId;
   /** 允许客户端选择的语音白名单。 */
   voicesList: VoiceOption[];
-  /** 期望的音频输出格式描述。 */
-  outputFormat: string;
 };
-
-/**
- * 默认的音频输出格式，匹配 SDK 中的 Audio24Khz160KBitRateMonoMp3。
- */
-const DEFAULT_OUTPUT_FORMAT = "audio-24khz-160kbitrate-mono-mp3";
 
 /**
  * 是否处于生产环境，用于决定缓存策略。
@@ -85,67 +78,58 @@ const parseVoiceAllowList = (raw: string | undefined): VoiceOption[] => {
 
     return voicesList;
   } catch (error) {
-    console.warn("[tts] Failed to parse AZURE_TTS_VOICE_ALLOW_LIST:", error);
+    console.warn("[tts] Failed to parse OPENAI_TTS_VOICE_LIST:", error);
     return [];
   }
 };
 
 /**
- * 获取 Azure 语音服务的订阅密钥
+ * 默认的 TTS 模型名称。
  */
-const resolveSpeechKey = (): string | undefined =>
-  process.env.AZURE_SPEECH_KEY?.trim();
+const DEFAULT_TTS_MODEL = "tts-1";
 
 /**
- * 获取 Azure 语音服务的区域配置
+ * 获取 OpenAI API 密钥
  */
-const resolveSpeechRegion = (): string | undefined =>
-  process.env.AZURE_SPEECH_REGION?.trim();
+const resolveApiKey = (): string | undefined =>
+  process.env.OPENAI_API_KEY?.trim();
 
 /**
  * 从环境变量构造 TTS 配置对象。
  * @returns 解析后的配置结果
  */
 const buildConfigFromEnv = (): TtsEnvConfig => {
-  const apiKey = resolveSpeechKey();
-  const region = resolveSpeechRegion();
+  const apiKey = resolveApiKey();
 
   if (!apiKey) {
     throw new ServiceError({
-      message: "缺少 AZURE_SPEECH_KEY 环境变量",
+      message: "缺少 OPENAI_API_KEY 环境变量",
       status: 500,
       code: "SERVER_CONFIG_ERROR",
     });
   }
 
-  if (!region) {
-    throw new ServiceError({
-      message: "缺少 AZURE_SPEECH_REGION 环境变量",
-      status: 500,
-      code: "SERVER_CONFIG_ERROR",
-    });
-  }
-
-  const voiceList = parseVoiceAllowList(process.env.AZURE_TTS_VOICE_ALLOW_LIST);
+  const voiceList = parseVoiceAllowList(process.env.OPENAI_TTS_VOICE_LIST);
   if (voiceList.length === 0) {
     throw new ServiceError({
-      message: "缺少 AZURE_TTS_VOICE_ALLOW_LIST 配置或内容为空",
+      message: "缺少 OPENAI_TTS_VOICE_LIST 配置或内容为空",
       status: 500,
       code: "SERVER_CONFIG_ERROR",
     });
   }
 
-  let voiceId = process.env.AZURE_TTS_DEFAULT_VOICE?.trim();
+  let voiceId = process.env.OPENAI_TTS_DEFAULT_VOICE?.trim();
   if (!voiceId || !voiceList.some((voice) => voice.value === voiceId)) {
     voiceId = voiceList[0].value;
   }
 
+  const model = process.env.OPENAI_TTS_MODEL?.trim() || DEFAULT_TTS_MODEL;
+
   return {
     apiKey,
-    region,
+    model,
     voiceId,
     voicesList: voiceList,
-    outputFormat: DEFAULT_OUTPUT_FORMAT,
   };
 };
 

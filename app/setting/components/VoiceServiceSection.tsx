@@ -162,7 +162,7 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
         </div>
       ) : (
         <div className={styles.voiceEmptyState}>
-          暂无可用声音，请联系管理员配置 AZURE_TTS_VOICE_ALLOW_LIST。
+          暂无可用声音，请联系管理员配置 OPENAI_TTS_VOICE_LIST。
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { createChatStreamClient, ChatStreamError } from '@/lib/client/chatStream';
+import { createChatStreamClient } from '@/lib/client/chatStream';
 import { useChatStore } from '@/stores/chatStore';
 import type { ChatConversationMessage } from '@/types/chat';
 
@@ -65,7 +65,7 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<vo
     if (!streamErrored) {
       useChatStore.getState().markFailure();
     }
-    const normalized = error instanceof ChatStreamError ? new Error(error.message) : normalizeError(error);
+    const normalized = normalizeError(error);
     throw normalized;
   } finally {
     useChatStore.getState().setAbortController(null);

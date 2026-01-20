@@ -4,7 +4,6 @@ import {
   fetchProfile as fetchProfileRequest,
   login as loginRequest,
   logout as logoutRequest,
-  AuthClientError,
 } from '@/lib/client/auth';
 
 /**
@@ -75,12 +74,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         error: undefined,
       });
     } catch (error) {
-      const message =
-        error instanceof AuthClientError
-          ? error.message
-          : error instanceof Error
-          ? error.message
-          : '获取登录状态失败';
+      const message = error instanceof Error ? error.message : '获取登录状态失败';
 
       set({
         isLogin: false,
@@ -105,12 +99,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       });
       return true;
     } catch (error) {
-      const message =
-        error instanceof AuthClientError
-          ? error.message
-          : error instanceof Error
-          ? error.message
-          : '登录失败，请稍后重试';
+      const message = error instanceof Error ? error.message : '登录失败，请稍后重试';
 
       set({
         loading: false,
@@ -136,12 +125,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       });
       return true;
     } catch (error) {
-      const message =
-        error instanceof AuthClientError
-          ? error.message
-          : error instanceof Error
-          ? error.message
-          : '登出失败，请稍后重试';
+      const message = error instanceof Error ? error.message : '登出失败，请稍后重试';
 
       set({
         loading: false,

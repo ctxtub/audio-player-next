@@ -88,7 +88,7 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
     });
 
     try {
-      const response = await generateStory(prompt);
+      const response = await generateStory({ mode: 'generate', prompt });
       const story = response.storyContent;
 
       if (get().inputText !== prompt) {

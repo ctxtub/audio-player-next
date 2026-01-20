@@ -7,8 +7,8 @@
 
 import OpenAI, { APIError } from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { TRPCError } from "@trpc/server";
 
-import { ServiceError } from "@/lib/http/server/ErrorHandler";
 import type { VoiceOption, VoiceGender } from "@/types/ttsGenerate";
 
 // ============================================================================
@@ -99,7 +99,7 @@ const parseEnvNumber = (raw: string | undefined): number | undefined => {
 
 /**
  * 加载并缓存 OpenAI Chat API 配置。
- * @throws ServiceError 当必须的环境变量缺失时。
+ * @throws TRPCError 当必须的环境变量缺失时。
  */
 export const getOpenAIConfig = (): OpenAIConfig => {
     if (cachedOpenAIConfig) return cachedOpenAIConfig;
@@ -108,10 +108,9 @@ export const getOpenAIConfig = (): OpenAIConfig => {
     const model = process.env.OPENAI_MODEL?.trim();
 
     if (!apiKey || !model) {
-        throw new ServiceError({
+        throw new TRPCError({
             message: `缺少必要的环境变量: ${!apiKey ? "OPENAI_API_KEY" : ""}${!apiKey && !model ? ", " : ""}${!model ? "OPENAI_MODEL" : ""}`,
-            status: 500,
-            code: "SERVER_CONFIG_ERROR",
+            code: "INTERNAL_SERVER_ERROR",
         });
     }
 
@@ -120,19 +119,17 @@ export const getOpenAIConfig = (): OpenAIConfig => {
 
     const temperature = parseEnvNumber(process.env.OPENAI_TEMPERATURE);
     if (temperature !== undefined && (temperature < 0 || temperature > 2)) {
-        throw new ServiceError({
+        throw new TRPCError({
             message: "OPENAI_TEMPERATURE 必须在 0 到 2 之间",
-            status: 500,
-            code: "SERVER_CONFIG_ERROR",
+            code: "INTERNAL_SERVER_ERROR",
         });
     }
 
     const maxTokens = parseEnvNumber(process.env.OPENAI_MAX_TOKENS);
     if (maxTokens !== undefined && (!Number.isInteger(maxTokens) || maxTokens <= 0)) {
-        throw new ServiceError({
+        throw new TRPCError({
             message: "OPENAI_MAX_TOKENS 必须是正整数",
-            status: 500,
-            code: "SERVER_CONFIG_ERROR",
+            code: "INTERNAL_SERVER_ERROR",
         });
     }
 
@@ -175,17 +172,16 @@ const parseVoiceList = (raw: string | undefined): VoiceOption[] => {
 
 /**
  * 加载并缓存 TTS 配置。
- * @throws ServiceError 当必须的环境变量缺失时。
+ * @throws TRPCError 当必须的环境变量缺失时。
  */
 export const getTtsConfig = (): TtsConfig => {
     // 非生产环境不缓存，便于开发调试
     if (process.env.NODE_ENV !== "production" || !cachedTtsConfig) {
         const voicesList = parseVoiceList(process.env.OPENAI_TTS_VOICE_LIST);
         if (voicesList.length === 0) {
-            throw new ServiceError({
+            throw new TRPCError({
                 message: "缺少 OPENAI_TTS_VOICE_LIST 配置或内容为空",
-                status: 500,
-                code: "SERVER_CONFIG_ERROR",
+                code: "INTERNAL_SERVER_ERROR",
             });
         }
 
@@ -234,16 +230,15 @@ export const resetCache = (): void => {
  * 非流式 Chat Completion 调用。
  * @param messages 消息列表。
  * @returns OpenAI ChatCompletion 完整响应。
- * @throws ServiceError 当请求失败时。
+ * @throws TRPCError 当请求失败时。
  */
 export const chatCompletion = async (
     messages: ChatCompletionMessageParam[],
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> => {
     if (!Array.isArray(messages) || messages.length === 0) {
-        throw new ServiceError({
+        throw new TRPCError({
             message: "调用 OpenAI 需要至少一条消息",
-            status: 400,
-            code: "INVALID_REQUEST",
+            code: "BAD_REQUEST",
         });
     }
 
@@ -261,22 +256,19 @@ export const chatCompletion = async (
 
         return await client.chat.completions.create(payload);
     } catch (error) {
-        if (error instanceof ServiceError) throw error;
+        if (error instanceof TRPCError) throw error;
 
         if (error instanceof APIError) {
-            throw new ServiceError({
+            throw new TRPCError({
                 message: error.message,
-                status: typeof error.status === "number" && error.status > 0 ? error.status : 502,
-                code: "UPSTREAM_ERROR",
-                details: { type: error.type, param: error.param, code: error.code },
+                code: "BAD_GATEWAY",
                 cause: error,
             });
         }
 
-        throw new ServiceError({
+        throw new TRPCError({
             message: error instanceof Error ? error.message : "OpenAI 请求失败",
-            status: 502,
-            code: "UPSTREAM_NETWORK_ERROR",
+            code: "BAD_GATEWAY",
             cause: error,
         });
     }
@@ -286,16 +278,15 @@ export const chatCompletion = async (
  * 流式 Chat Completion 调用，返回原始 SSE 流。
  * @param options 流式调用参数。
  * @returns 可被 ReadableStream 消费的字节流。
- * @throws ServiceError 当请求失败时。
+ * @throws TRPCError 当请求失败时。
  */
 export const chatCompletionStream = async (
     options: StreamingChatOptions,
 ): Promise<ReadableStream<Uint8Array>> => {
     if (!Array.isArray(options.messages) || options.messages.length === 0) {
-        throw new ServiceError({
+        throw new TRPCError({
             message: "调用 OpenAI 需要至少一条消息",
-            status: 400,
-            code: "INVALID_REQUEST",
+            code: "BAD_REQUEST",
         });
     }
 
@@ -342,31 +333,28 @@ export const chatCompletionStream = async (
                 errorBody = await response.text();
             }
 
-            throw new ServiceError({
+            throw new TRPCError({
                 message: `OpenAI 返回错误: ${response.statusText || response.status}`,
-                status: response.status || 502,
-                code: "UPSTREAM_ERROR",
-                details: errorBody,
+                code: "BAD_GATEWAY",
+                cause: errorBody,
             });
         }
 
         const stream = response.body;
         if (!stream) {
-            throw new ServiceError({
+            throw new TRPCError({
                 message: "OpenAI 响应不包含可读流",
-                status: 502,
-                code: "UPSTREAM_BAD_RESPONSE",
+                code: "BAD_GATEWAY",
             });
         }
 
         return stream;
     } catch (error) {
-        if (error instanceof ServiceError) throw error;
+        if (error instanceof TRPCError) throw error;
 
-        throw new ServiceError({
+        throw new TRPCError({
             message: error instanceof Error ? error.message : "OpenAI 请求失败",
-            status: 502,
-            code: "UPSTREAM_NETWORK_ERROR",
+            code: "BAD_GATEWAY",
             cause: error,
         });
     }
@@ -384,7 +372,7 @@ type OpenAIVoice = "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer";
  * @param text 已经过业务裁剪的文本内容。
  * @param voiceId 白名单中的语音标识。
  * @returns 音频二进制数据。
- * @throws ServiceError 当请求失败时。
+ * @throws TRPCError 当请求失败时。
  */
 export const synthesizeSpeech = async (
     text: string,
@@ -406,31 +394,27 @@ export const synthesizeSpeech = async (
         const audioBuffer = await response.arrayBuffer();
 
         if (!audioBuffer || audioBuffer.byteLength === 0) {
-            throw new ServiceError({
+            throw new TRPCError({
                 message: "OpenAI TTS 返回空音频",
-                status: 502,
-                code: "UPSTREAM_INVALID_RESPONSE",
+                code: "BAD_GATEWAY",
             });
         }
 
         return { audioData: audioBuffer, requestId: "" };
     } catch (error) {
-        if (error instanceof ServiceError) throw error;
+        if (error instanceof TRPCError) throw error;
 
         if (error instanceof OpenAI.APIError) {
-            throw new ServiceError({
+            throw new TRPCError({
                 message: `OpenAI TTS 请求失败: ${error.message}`,
-                status: error.status ?? 502,
-                code: "UPSTREAM_API_ERROR",
-                details: { type: error.type, code: error.code },
+                code: "BAD_GATEWAY",
                 cause: error,
             });
         }
 
-        throw new ServiceError({
+        throw new TRPCError({
             message: error instanceof Error ? error.message : "OpenAI TTS 调用失败",
-            status: 502,
-            code: "UPSTREAM_NETWORK_ERROR",
+            code: "BAD_GATEWAY",
             cause: error,
         });
     }

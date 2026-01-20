@@ -3,7 +3,7 @@ import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import type { APIConfig } from '@/types/appConfig';
 import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
 import type { VoiceOption } from '@/types/ttsGenerate';
-import { fetchAppConfig, AppConfigClientError } from '@/lib/client/appConfig';
+import { fetchAppConfig } from '@/lib/client/appConfig';
 
 /**
  * 配置 store 的基础状态结构：记录当前配置、加载标记及可选语音列表。
@@ -189,9 +189,6 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
 
       return { config: mergedConfig, voiceOptions };
     } catch (error) {
-      if (error instanceof AppConfigClientError) {
-        throw error;
-      }
       throw new Error(
         error instanceof Error ? error.message : 'FAILED_TO_FETCH_REMOTE_CONFIG'
       );

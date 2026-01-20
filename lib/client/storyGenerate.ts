@@ -1,107 +1,41 @@
-import type {
-  StoryApiRequest,
-  StoryApiResponse,
-  StoryContinueOptions,
-} from '@/types/story';
-import { browserHttp } from '@/lib/http/browser';
-import { HttpError } from '@/lib/http/common/ErrorHandler';
+/**
+ * 故事生成客户端
+ *
+ * 使用 tRPC 请求故事生成与续写。
+ */
+
+import { trpc } from '@/lib/trpc/client';
+import type { StoryApiRequest, StoryApiResponse } from '@/types/story';
 
 /**
- * 故事 API 客户端错误，用于在前端统一处理异常。
+ * 生成或续写故事。
+ * @param request 故事请求参数。
+ * @returns 故事内容与可选的摘要。
  */
-export class StoryApiError extends Error {
-  public readonly status: number;
-  public readonly code: string;
-
-  constructor(message: string, status: number, code: string) {
-    super(message);
-    this.name = 'StoryApiError';
-    this.status = status;
-    this.code = code;
-  }
-}
-
-/**
- * 调用统一的故事服务端代理。
- * @param payload Story API 请求体。
- * @returns 服务端返回的故事结果。
- * @throws StoryApiError
- */
-const callStoryApi = async (payload: StoryApiRequest): Promise<StoryApiResponse> => {
-  try {
-    const response = await browserHttp.post<StoryApiResponse>('/api/storyGenerate', payload, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const data = response.data;
-    if (!data || typeof data !== 'object') {
-      throw new StoryApiError(
-        '故事服务返回结果无法解析',
-        502,
-        'STORY_API_INVALID_RESPONSE'
-      );
-    }
-
-    if (typeof (data as StoryApiResponse).storyContent !== 'string') {
-      throw new StoryApiError(
-        '故事内容缺失',
-        502,
-        'STORY_API_INVALID_RESPONSE'
-      );
-    }
-
-    return data as StoryApiResponse;
-  } catch (error) {
-    if (error instanceof StoryApiError) {
-      throw error;
-    }
-
-    if (error instanceof HttpError) {
-      throw new StoryApiError(
-        error.message,
-        error.status,
-        error.code || 'STORY_API_ERROR'
-      );
-    }
-
-    throw new StoryApiError(
-      error instanceof Error ? error.message : '网络错误',
-      0,
-      'NETWORK_ERROR'
-    );
-  }
+export const generateStory = async (request: StoryApiRequest): Promise<StoryApiResponse> => {
+  const result = await trpc.story.generate.mutate(request);
+  return {
+    storyContent: result.storyContent,
+    summaryContent: result.summaryContent ?? undefined,
+  };
 };
 
 /**
- * 请求生成首段故事。
- * @param prompt 用户输入的提示词。
- * @returns 故事结果。
- */
-export const generateStory = async (prompt: string): Promise<StoryApiResponse> => {
-  return callStoryApi({
-    mode: 'generate',
-    prompt,
-  });
-};
-
-/**
- * 请求续写故事。
- * @param prompt 原始提示词。
- * @param storyContent 已生成的故事文本。
- * @param options.withSummary 是否让服务端先生成摘要。
- * @returns 新的故事片段。
+ * 续写故事（便捷方法）。
+ * @param prompt 故事主题。
+ * @param storyContent 已有故事内容。
+ * @param options 可选配置。
+ * @returns 续写的故事内容。
  */
 export const continueStory = async (
   prompt: string,
   storyContent: string,
-  options: StoryContinueOptions = {}
+  options?: { withSummary?: boolean }
 ): Promise<StoryApiResponse> => {
-  return callStoryApi({
+  return generateStory({
     mode: 'continue',
     prompt,
     storyContent,
-    withSummary: options.withSummary ?? false,
+    withSummary: options?.withSummary,
   });
 };

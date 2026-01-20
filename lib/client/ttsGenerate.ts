@@ -1,57 +1,28 @@
-import type { TtsGeneratePayload, VoiceId } from '@/types/ttsGenerate';
-import { browserHttp } from '@/lib/http/browser';
-import { HttpError } from '@/lib/http/common/ErrorHandler';
-
 /**
- * 前端语音 API 客户端错误类型。
+ * TTS 语音合成客户端
+ *
+ * 使用 tRPC 请求语音合成并返回音频 URL。
  */
-export class TtsApiClientError extends Error {
-  public readonly status: number;
-  public readonly code: string;
 
-  constructor(message: string, status: number, code: string) {
-    super(message);
-    this.name = 'TtsApiClientError';
-    this.status = status;
-    this.code = code;
-  }
-}
+import { trpc } from '@/lib/trpc/client';
+import type { VoiceId } from '@/types/ttsGenerate';
 
 /**
- * 通过服务端代理请求语音音频。
+ * 通过 tRPC 请求语音音频。
  * @param text 待合成的文本。
  * @param voiceId 可选的语音标识。
  * @returns 指向生成音频的临时 URL。
- * @throws TtsApiClientError
  */
 export const fetchAudio = async (text: string, voiceId?: VoiceId): Promise<string> => {
-  const payload: TtsGeneratePayload = {
-    text,
-    voiceId,
-  };
+  const result = await trpc.tts.synthesize.mutate({ text, voiceId });
 
-  try {
-    const response = await browserHttp.post<Blob>('/api/ttsGenerate', payload, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      responseType: 'blob',
-    });
-
-    return URL.createObjectURL(response.data);
-  } catch (error) {
-    if (error instanceof HttpError) {
-      throw new TtsApiClientError(
-        error.message,
-        error.status,
-        error.code || 'TTS_API_ERROR'
-      );
-    }
-
-    throw new TtsApiClientError(
-      error instanceof Error ? error.message : '网络错误',
-      0,
-      'NETWORK_ERROR'
-    );
+  // 将 base64 转换为 Blob URL
+  const binaryString = atob(result.audioBase64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
   }
+  const blob = new Blob([bytes], { type: result.contentType });
+
+  return URL.createObjectURL(blob);
 };

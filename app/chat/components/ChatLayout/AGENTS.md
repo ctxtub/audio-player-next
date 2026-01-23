@@ -5,10 +5,12 @@
 - 提供容器化子组件以承载后续业务实现。
 
 ## 子目录结构
-- `index.module.scss`：布局样式，定义列布局与滚动行为。
 - `index.tsx`：布局主组件，拼装头部、消息与输入区域。
+- `index.module.scss`：布局样式，定义列布局与滚动行为。
+- `HeaderArea.tsx` / `HeaderArea.module.scss`：顶部导航栏区域，展示对方昵称等信息。
 - `MessageArea.tsx`：消息展示容器，负责滚动区域占位。
 - `InputArea.tsx`：输入区容器，承载消息输入操作占位。
+- `types.ts`：组件 Props 与相关类型定义。
 
 ## 关键协作与依赖
 - 接收 `app/chat/index.tsx` 传入的用户昵称与会话 ID。

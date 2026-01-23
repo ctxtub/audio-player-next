@@ -9,7 +9,8 @@
 - `playbackStore.ts`：播放进度、音频控制器与倒计时状态。
 - `preloadStore.ts`：音频预加载状态。
 - `promptHistoryStore.ts`：提示词与历史记录。
-- `storyStore.ts`：故事生成状态。
+- `storyStore.ts`：故事生成状态（输入草稿、会话控制）。
+- `generationStore.ts`：生成过程状态（流式文本、生成阶段 phase）。
 - `authStore.ts`：登录态状态管理，负责登录、登出与资料查询。
 - `chatStore.ts`：聊天页面的会话状态与流式消息管理。
 

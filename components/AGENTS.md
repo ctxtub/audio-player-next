@@ -7,14 +7,16 @@
 ## 子目录结构
 - `AntdMobileCompat/`：适配 antd-mobile 在 Next.js 中的运行环境。
 - `AudioControllerHost/`：隐藏音频宿主，注册播放控制器并调度故事流程。
+- `AudioWaveAnimation/`：音频生成的波形动画组件。
+- `ConfigInitializer/`：统一触发配置加载并提供加载态。
 - `FloatingPlayer/`：悬浮播放器 Provider 与 UI。
-- `PlaybackStatusBoard/`：播放倒计时与预加载状态展示。
+- `GenerationPreview/`：流式生成内容的实时预览组件（文本打字机 + 音频波形）。
 - `MainTabBar/`：底部主导航组件。
 - `Modal/`：通用模态框。
 - `PageLoading/`：页面级加载组件。
+- `PlaybackStatusBoard/`：播放倒计时与预加载状态展示。
 - `StoryViewer/`：故事文本预览与弹窗展示。
 - `ThemeProvider/`：主题上下文与脚本注入。
-- `ConfigInitializer/`：统一触发配置加载并提供加载态。
 
 ## 关键协作与依赖
 - 组件依赖 `@/stores/**`、`@/utils/**` 提供的状态与工具。

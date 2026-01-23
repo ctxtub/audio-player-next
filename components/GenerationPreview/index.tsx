@@ -24,7 +24,7 @@ const GenerationPreview: React.FC = () => {
 
     // 仅在生成阶段显示（文本或音频）
     const isVisible = phase === 'generating_text' || phase === 'generating_audio';
-    if (!isVisible || !streamingText) {
+    if (!isVisible) {
         return null;
     }
 

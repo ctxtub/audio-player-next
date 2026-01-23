@@ -7,6 +7,7 @@ import { useStoryStore } from '@/stores/storyStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useConfigStore } from '@/stores/configStore';
+import { useGenerationStore } from '@/stores/generationStore';
 
 import styles from './index.module.scss';
 
@@ -48,6 +49,9 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
   const preloadRetryCount = usePreloadStore((state) => state.retryCount);
   /** 已缓存的语音地址，提示资源可用。 */
   const preloadAudioUrl = usePreloadStore((state) => state.cachedAudioUrl);
+
+  /** 生成阶段状态 */
+  const generationPhase = useGenerationStore((state) => state.phase);
 
   const remainingTime = useMemo(() => {
     if (playbackRemainingMs === null) {
@@ -104,6 +108,35 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
       phase: 'loading',
       message: `故事加载中${retryInfo}`,
     });
+  }
+
+  // 如果处于打字机/音波生成阶段，覆盖或添加状态
+  if (generationPhase === 'generating_text') {
+    // 移除通用的 story-loading（如果已存在），用更具体的替换
+    // 不过上面的 isStoryLoading判断依赖 storySegments.length === 0
+    // 在 generating_text 阶段，segments 确实为 0。
+    // 我们简单过滤掉上面的 'story-loading'，或者直接在这里处理。
+    const existingIndex = statusItems.findIndex(i => i.key === 'story-loading');
+    if (existingIndex !== -1) {
+      statusItems[existingIndex].message = '正在创作故事...';
+    } else {
+      statusItems.push({
+        key: 'story-generating-text',
+        phase: 'loading',
+        message: '正在创作故事...',
+      });
+    }
+  } else if (generationPhase === 'generating_audio') {
+    const existingIndex = statusItems.findIndex(i => i.key === 'story-loading');
+    if (existingIndex !== -1) {
+      statusItems[existingIndex].message = '正在生成语音...';
+    } else {
+      statusItems.push({
+        key: 'story-generating-audio',
+        phase: 'loading',
+        message: '正在生成语音...',
+      });
+    }
   }
 
   if (hasPreloadedAudio) {

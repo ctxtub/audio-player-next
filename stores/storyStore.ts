@@ -18,6 +18,7 @@ type StoryStoreBaseState = {
  */
 type StoryStoreActions = {
   startSession: (prompt: string) => Promise<string>;
+  prepareSession: (prompt: string) => void;
   continueSession: () => Promise<string>;
   appendSegment: (segment: string) => void;
   reset: () => void;
@@ -119,6 +120,19 @@ const storyStoreCreator: StateCreator<StoryStore> = (set, get) => ({
 
       throw handledError;
     }
+  },
+  /**
+   * 准备新的故事会话（不自动请求生成），用于流式生成场景。
+   * @param prompt 用户输入的提示词
+   */
+  prepareSession: (prompt) => {
+    const sessionId = createSessionId();
+    set({
+      sessionId,
+      inputText: prompt,
+      segments: [],
+      lastError: undefined,
+    });
   },
   /**
    * 续写当前故事：在已有文本基础上请求下一段内容。

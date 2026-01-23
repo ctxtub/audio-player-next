@@ -9,6 +9,7 @@ import { authRouter } from './auth';
 import { chatRouter } from './chat';
 import { configRouter } from './config';
 import { storyRouter } from './story';
+import { storyStreamRouter } from './storyStream';
 import { ttsRouter } from './tts';
 
 /**
@@ -19,6 +20,7 @@ export const appRouter = router({
     chat: chatRouter,
     config: configRouter,
     story: storyRouter,
+    storyStream: storyStreamRouter,
     tts: ttsRouter,
 });
 

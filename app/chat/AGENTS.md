@@ -9,6 +9,7 @@
 - `components/`：存放聊天页面私有组件与布局拆分。
 - `index.tsx`：聊天页面的 Server Component 壳，加载布局并传递服务端数据。
 - `page.tsx`：Next.js 路由入口，仅转发至 `index.tsx`。
+- `index.module.scss`：聊天页面容器样式。
 
 ## 关键协作与依赖
 - 将会话元数据传入 `components/ChatLayout` 完成 UI 组织。

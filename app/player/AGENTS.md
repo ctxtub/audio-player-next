@@ -6,6 +6,8 @@
 
 ## 子目录结构
 - `page.tsx`：播放器页面入口。
+- `index.tsx`：播放器页面主组件实现。
+- `index.module.scss`：播放器页面样式。
 - `components/`：播放器页面私有组件集合。
 
 ## 关键协作与依赖

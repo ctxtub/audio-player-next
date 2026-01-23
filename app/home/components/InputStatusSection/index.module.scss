@@ -3,14 +3,13 @@
   box-shadow: 0 8px 16px var(--shadow-color);
   transition: transform var(--transition-speed) var(--transition-timing);
   padding: 15px;
-  margin-bottom: 10px;
+  margin-bottom: 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
   background-color: var(--card-background);
   border-radius: 16px;
   overflow: hidden;
-  
+
   .inputContent {
     display: flex;
     flex-direction: column;
@@ -56,17 +55,17 @@
           opacity: 0.5;
           cursor: not-allowed;
         }
-        
+
         &.historyButton {
           background-color: color-mix(in srgb, var(--process) 10%, transparent);
           border: 1px dashed color-mix(in srgb, var(--process) 30%, transparent);
           font-weight: 600;
-          
+
           &:hover:not(:disabled) {
             background-color: color-mix(in srgb, var(--process) 20%, transparent);
             box-shadow: 0 4px 8px color-mix(in srgb, var(--process) 15%, transparent);
           }
-          
+
           &:active:not(:disabled) {
             background-color: color-mix(in srgb, var(--process) 25%, transparent);
             box-shadow: 0 2px 4px color-mix(in srgb, var(--process) 15%, transparent);

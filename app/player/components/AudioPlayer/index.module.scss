@@ -6,7 +6,7 @@
   background-color: var(--card-background);
   transition: transform var(--transition-speed) var(--transition-timing);
   padding: 20px;
-  margin: 0 auto 10px auto;
+  margin: 0 auto 20px auto;
   width: 100%;
 
   .recordDisc {
@@ -145,12 +145,10 @@
       &::-webkit-slider-runnable-track {
         border-radius: 3px;
         height: 6px;
-        background: linear-gradient(
-          to right,
-          var(--primary) 0%,
-          var(--primary) var(--progress-percent, 0%),
-          var(--border) var(--progress-percent, 0%)
-        );
+        background: linear-gradient(to right,
+            var(--primary) 0%,
+            var(--primary) var(--progress-percent, 0%),
+            var(--border) var(--progress-percent, 0%));
       }
 
       &::-webkit-slider-thumb {
@@ -170,7 +168,7 @@
         }
       }
     }
-    
+
     .speedControl {
       position: relative;
 
@@ -281,6 +279,7 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }

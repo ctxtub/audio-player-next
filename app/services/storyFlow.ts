@@ -3,6 +3,8 @@ import { useConfigStore } from '@/stores/configStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useStoryStore } from '@/stores/storyStore';
+import { useGenerationStore } from '@/stores/generationStore';
+import { generateStoryStream } from '@/lib/client/storyGenerateStream';
 
 /**
  * 可播放段落对象，包含音频地址与文本内容，并标注来源（首段/预加载/即时生成）。
@@ -82,25 +84,61 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
   const playbackStore = usePlaybackStore.getState();
   const preloadStore = usePreloadStore.getState();
   const storyStore = useStoryStore.getState();
+  const generationStore = useGenerationStore.getState();
 
+  // 重置状态
   preloadStore.reset();
   clearPreloadRetryTimer();
   playbackStore.reset();
+  generationStore.reset();
 
-  const firstSegment = await storyStore.startSession(prompt);
-  const audioUrl = await fetchAudio(firstSegment, apiConfig.voiceId);
-  storyStore.appendSegment(firstSegment);
+  // 1. 设置生成中文本阶段
+  generationStore.setPhase('generating_text');
 
-  const latestSessionId = useStoryStore.getState().sessionId;
-  if (latestSessionId) {
-    playbackStore.markSessionStart(latestSessionId, apiConfig.playDuration);
+  // 2. 准备故事会话（不发请求）
+  storyStore.prepareSession(prompt);
+
+  // 3. 流式请求故事文本
+  const firstSegment = await new Promise<string>((resolve, reject) => {
+    let fullContent = '';
+    const unsubscribe = generateStoryStream(prompt, {
+      onChunk: (chunk) => {
+        fullContent += chunk;
+        useGenerationStore.getState().appendText(chunk);
+      },
+      onComplete: (content) => {
+        resolve(content);
+      },
+      onError: (error) => {
+        reject(error);
+      },
+    });
+  });
+
+  // 4. 文本生成完成，进入音频生成阶段
+  generationStore.setPhase('generating_audio');
+
+  try {
+    const audioUrl = await fetchAudio(firstSegment, apiConfig.voiceId);
+    storyStore.appendSegment(firstSegment);
+
+    const latestSessionId = useStoryStore.getState().sessionId;
+    if (latestSessionId) {
+      playbackStore.markSessionStart(latestSessionId, apiConfig.playDuration);
+    }
+
+    // 5. 生成完成
+    generationStore.setPhase('ready');
+
+    return {
+      audioUrl,
+      segment: firstSegment,
+      source: 'initial',
+    };
+  } catch (error) {
+    generationStore.setError(error instanceof Error ? error.message : '音频生成失败');
+    throw error;
   }
-
-  return {
-    audioUrl,
-    segment: firstSegment,
-    source: 'initial',
-  };
 };
 
 /**
@@ -207,5 +245,8 @@ export const resetStoryFlow = () => {
   usePlaybackStore.getState().reset();
   usePreloadStore.getState().reset();
   useStoryStore.getState().reset();
+  usePreloadStore.getState().reset();
+  useStoryStore.getState().reset();
+  useGenerationStore.getState().reset();
   clearPreloadRetryTimer();
 };

@@ -19,13 +19,14 @@ export const generateStoryStream = async (
         onChunk: (chunk: string) => void;
         onComplete: (fullContent: string) => void;
         onError: (error: Error) => void;
-    }
+    },
+    previousStory?: { summarizedStory: string }
 ) => {
     const controller = new AbortController();
 
     try {
         const stream = await trpc.storyStream.generate.mutate(
-            { prompt },
+            { prompt, previousStory },
             { signal: controller.signal }
         );
 

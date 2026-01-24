@@ -44,6 +44,9 @@ const STORY_SYSTEM_PROMPT = `
  */
 const storyStreamInputSchema = z.object({
     prompt: z.string().min(1, 'prompt 不能为空'),
+    previousStory: z.object({
+        summarizedStory: z.string(),
+    }).optional(),
 });
 
 /**
@@ -171,7 +174,13 @@ export const storyStreamRouter = router({
 
             const messages = [
                 { role: 'system' as const, content: STORY_SYSTEM_PROMPT },
-                { role: 'user' as const, content: JSON.stringify({ storyPrompt: input.prompt, summarizedStory: '' }) },
+                {
+                    role: 'user' as const,
+                    content: JSON.stringify({
+                        storyPrompt: input.prompt,
+                        summarizedStory: input.previousStory?.summarizedStory || ''
+                    })
+                },
             ];
 
             const stream = await chatCompletionStream({

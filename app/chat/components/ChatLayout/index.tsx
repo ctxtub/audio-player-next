@@ -75,6 +75,11 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
     useChatStore.getState().hydrateInitialMessages(initialMessages);
   }, [initialMessages]);
 
+  useEffect(() => {
+    // 组件挂载或更新时，标记已读
+    useChatStore.getState().markAsRead();
+  }, [messages.length]);
+
 
 
   /**

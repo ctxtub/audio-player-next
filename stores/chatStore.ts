@@ -27,6 +27,8 @@ type ChatStoreBaseState = {
   inputValue: string;
   /** 记录是否已经完成初始消息加载，避免 Tab 切换时覆盖状态。 */
   hasHydrated: boolean;
+  /** 是否有未读消息（用于 TabBar 小红点）。 */
+  hasUnread: boolean;
 };
 
 /**
@@ -65,6 +67,10 @@ type ChatStoreActions = {
    * 根据当前消息 ID，查找下一段可播放的故事内容。
    */
   getNextStorySegmentByMessageId: (currentMessageId: string) => { audioUrl: string; storyText: string; messageId: string } | null;
+  /**
+   * 标记当前会话为已读，清除未读红点。
+   */
+  markAsRead: () => void;
 };
 
 /**
@@ -217,6 +223,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
   conversationContext: [],
   inputValue: '',
   hasHydrated: false,
+  hasUnread: false,
   hydrateInitialMessages: (initialMessages) => {
     // 仅在未初始化时允许覆盖，防止状态丢失
     if (get().hasHydrated) {
@@ -230,6 +237,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
       conversationContext: mapMessagesToContext(initialMessages),
       inputValue: '',
       hasHydrated: true,
+      hasUnread: false,
     });
   },
   prepareNewSubmission: (content) => {
@@ -374,6 +382,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
         activeAssistantMessage: null,
         conversationContext: mapMessagesToContext(nextMessages),
         inputValue: '',
+        hasUnread: true,
       };
     });
   },
@@ -450,6 +459,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
         activeAssistantMessage: null,
         conversationContext: mapMessagesToContext(nextMessages),
         inputValue: '',
+        hasUnread: true,
       };
     });
   },
@@ -527,6 +537,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     }
 
     return null;
+  },
+  markAsRead: () => {
+    set({ hasUnread: false });
   },
 });
 

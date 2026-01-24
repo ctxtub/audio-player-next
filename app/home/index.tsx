@@ -66,14 +66,14 @@ const HomePage: React.FC = () => {
         <PlaybackStatusBoard
         />
 
+        <GenerationPreview />
+
         <InputStatusSection
           inputText={storyInputText}
           handleSubmit={handleInputSubmit}
         />
 
         <AudioPlayer />
-
-        <GenerationPreview />
       </div>
     </div>
   );

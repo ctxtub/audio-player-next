@@ -57,7 +57,7 @@ const HomePage: React.FC = () => {
         resetStoryFlow();
       }
     },
-    [ensureUnlocked, pauseAudio, playAudio, router]
+    [ensureUnlocked, pauseAudio, playAudio]
   );
 
   return (

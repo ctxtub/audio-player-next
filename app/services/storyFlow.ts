@@ -179,7 +179,7 @@ export const handleNearEnd = async (): Promise<void> => {
     if (error instanceof Error && error.message === 'PRELOAD_IN_PROGRESS') {
       return;
     }
-    // schedulePreloadRetry(); // 暂时屏蔽重试，避免复杂化 debugging
+    schedulePreloadRetry();
   }
 };
 

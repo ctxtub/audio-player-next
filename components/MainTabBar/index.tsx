@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useCallback, useEffect } from 'react';
-import { TabBar } from 'antd-mobile';
+import { TabBar, Badge } from 'antd-mobile';
 import { AppOutline, MessageOutline, SoundOutline, SetOutline } from 'antd-mobile-icons';
 import { usePathname, useRouter } from 'next/navigation';
+import { useChatStore } from '@/stores/chatStore';
 import styles from './index.module.scss';
 
 /**
@@ -45,7 +46,7 @@ const TABS: readonly TabConfig[] = [
   },
   {
     key: 'chat',
-    title: '聊天',
+    title: '创作',
     icon: <MessageOutline />,
     path: '/chat',
     isActive: pathname => pathname.startsWith('/chat'),
@@ -104,9 +105,17 @@ const MainTabBar: React.FC = () => {
   return (
     <div className={styles.tabBarContainer}>
       <TabBar activeKey={activeKey} onChange={handleTabChange} safeArea>
-        {TABS.map(({ key, title, icon }) => (
-          <TabBar.Item key={key} icon={icon} title={title} />
-        ))}
+        {TABS.map(({ key, title, icon }) => {
+          const isChat = key === 'chat';
+          const showBadge = isChat && useChatStore(state => state.hasUnread);
+          return (
+            <TabBar.Item
+              key={key}
+              icon={showBadge ? <Badge content={Badge.dot}>{icon}</Badge> : icon}
+              title={title}
+            />
+          );
+        })}
       </TabBar>
     </div>
   );

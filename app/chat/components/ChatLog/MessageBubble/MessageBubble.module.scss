@@ -7,14 +7,17 @@
 
 .rowAssistant {
   justify-content: flex-start;
+  margin-bottom: 18px;
 }
 
 .rowUser {
   flex-direction: row-reverse;
+  margin-bottom: 18px;
 }
 
 .rowSystem {
   justify-content: center;
+  margin-bottom: 18px;
 }
 
 .avatar {
@@ -144,7 +147,7 @@
   color: var(--primary);
   cursor: pointer;
   transition: background-color var(--transition-speed) var(--transition-timing),
-              transform var(--transition-speed) var(--transition-timing);
+    transform var(--transition-speed) var(--transition-timing);
 }
 
 .retryButton:hover {

@@ -162,7 +162,7 @@ export const storyStreamRouter = router({
      */
     generate: publicProcedure
         .input(storyStreamInputSchema)
-        .subscription(async function* ({ input, signal }) {
+        .mutation(async function* ({ input, signal }) {
             const config = getOpenAIConfig();
             const controller = new AbortController();
 

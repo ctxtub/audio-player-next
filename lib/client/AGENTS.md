@@ -9,7 +9,7 @@
 - `appConfig.ts`：获取应用运行时配置。
 - `chatStream.ts`：聊天流式生成调用封装。
 - `storyGenerate.ts`：故事生成调用。
-- `storyGenerateStream.ts`：故事生成流式调用封装（Server-Sent Events）。
+- `storyGenerateStream.ts`：故事生成流式调用封装（Mutation Stream）。
 - `ttsGenerate.ts`：语音合成调用。
 
 ## 关键协作与依赖

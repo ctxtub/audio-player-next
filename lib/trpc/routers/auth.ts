@@ -62,7 +62,7 @@ export const authRouter = router({
     /**
      * 获取当前登录状态。
      */
-    profile: publicProcedure.query(async ({ ctx }) => {
+    profile: publicProcedure.mutation(async ({ ctx }) => {
         if (ctx.session) {
             return {
                 isLogin: true as const,

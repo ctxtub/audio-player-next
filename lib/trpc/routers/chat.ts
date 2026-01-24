@@ -138,7 +138,7 @@ export const chatRouter = router({
      */
     stream: publicProcedure
         .input(chatInputSchema)
-        .subscription(async function* ({ input, signal }) {
+        .mutation(async function* ({ input, signal }) {
             const config = getOpenAIConfig();
             const controller = new AbortController();
 

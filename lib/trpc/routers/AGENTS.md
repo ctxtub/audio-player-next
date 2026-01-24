@@ -8,8 +8,6 @@
 - `index.ts`：路由合并入口，导出 `appRouter`。
 - `auth.ts`：认证相关路由（Mutation 登录/登出/用户信息）。
 - `chat.ts`：对话相关路由（Mutation + Async Generator 对话流）。
-- `story.ts`：故事生成相关路由。
-- `storyStream.ts`：故事生成的流式响应路由（Mutation + Async Generator）。
 - `tts.ts`：语音合成相关路由。
 - `config.ts`：配置获取路由。
 

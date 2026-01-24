@@ -111,12 +111,6 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
     const taskToken = Symbol('active-preload');
     const preloadTask = (async () => {
       // 切换为从 chatStore 获取上下文
-      const { prompt, storyContent } = useChatStore.getState().getStoryContext();
-
-      if (!prompt || !storyContent) {
-        // 如果没有上下文，可能是会话还没开始，或者数据异常
-        throw new Error('无法获取故事上下文，预加载跳过');
-      }
 
       // 1. 在 ChatStore 中准备续写占位
       useChatStore.getState().prepareFollowUpStorySubmission();
@@ -127,17 +121,12 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
       useGenerationStore.getState().setPhase('generating_text');
 
       // 请求续写 - 使用流式生成以获得打字机效果
-      const { prompt: finalPrompt, storyContent: finalStoryContent } = {
-        prompt,
-        storyContent,
-      };
-
       const { segment, audioUrl } = await new Promise<{ segment: string; audioUrl: string }>((resolve, reject) => {
         let accumulatedText = '';
         const msgId = generatedMessageId;
 
         generateStoryStream(
-          finalPrompt,
+          '请继续故事',
           {
             onChunk: (chunk) => {
               // 检查任务是否仍有效 (通过闭包中的 taskToken 检查在外部做有点难，这里假设由 abort controller 控制)
@@ -163,8 +152,7 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
             onError: (err) => {
               reject(err);
             }
-          },
-          { summarizedStory: finalStoryContent } // 传入上文作为 context
+          }
         ).then(({ unsubscribe }) => {
           // 将 unsubscribe 绑定到 promise 或者 state 上？
           // 当前架构 _activePreloadTask 只有 promise。

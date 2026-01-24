@@ -11,6 +11,7 @@ import BasicConfigSection from './components/BasicConfigSection';
 import FloatingPlayerSection from './components/FloatingPlayerSection';
 import ThemeModeSection from './components/ThemeModeSection';
 import VoiceServiceSection from './components/VoiceServiceSection';
+import SpeedConfigSection from './components/SpeedConfigSection';
 import UserSection from './components/UserSection';
 
 /**
@@ -97,6 +98,15 @@ const ConfigPage: React.FC = () => {
     [apiConfig.voiceId, isConfigLoaded, updateConfig, voiceOptions]
   );
 
+  const handleSpeedChange = useCallback(
+    (speed: number) => {
+      if (!isConfigLoaded) return;
+      if (speed === apiConfig.speed) return;
+      updateConfig({ speed });
+    },
+    [apiConfig.speed, isConfigLoaded, updateConfig]
+  );
+
   const handleFloatingPlayerToggle = useCallback((enabled: boolean) => {
     if (!isConfigLoaded) {
       return;
@@ -123,6 +133,10 @@ const ConfigPage: React.FC = () => {
         <BasicConfigSection
           playDuration={playDuration}
           onPlayDurationChange={handlePlayDurationChange}
+        />
+        <SpeedConfigSection
+          speed={apiConfig.speed}
+          onSpeedChange={handleSpeedChange}
         />
         <FloatingPlayerSection
           value={isFloatingPlayerEnabled}

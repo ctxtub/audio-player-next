@@ -125,7 +125,7 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
   generationStore.setPhase('generating_audio');
 
   try {
-    const audioUrl = await fetchAudio(firstSegment, apiConfig.voiceId);
+    const audioUrl = await fetchAudio(firstSegment, apiConfig.voiceId, apiConfig.speed);
 
     // 5. 更新 ChatStore，将 StoryCard 标记为完成（附带音频）
     useChatStore.getState().finalizeStoryMessage({

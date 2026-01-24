@@ -22,7 +22,7 @@ export const ttsRouter = router({
                 ? input.voiceId
                 : config.voiceId;
 
-            const result = await synthesizeSpeech(input.text, voiceId);
+            const result = await synthesizeSpeech(input.text, voiceId, input.speed);
 
             return {
                 audioBase64: Buffer.from(result.audioData).toString('base64'),

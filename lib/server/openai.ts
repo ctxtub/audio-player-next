@@ -377,6 +377,7 @@ type OpenAIVoice = "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer";
 export const synthesizeSpeech = async (
     text: string,
     voiceId: string,
+    speed?: number,
 ): Promise<SynthesizeSpeechResult> => {
     const openAIConfig = getOpenAIConfig();
     const ttsConfig = getTtsConfig();
@@ -388,6 +389,7 @@ export const synthesizeSpeech = async (
             model: ttsConfig.model,
             voice: voiceId as OpenAIVoice,
             input: text,
+            speed,
             response_format: "mp3",
         });
 

@@ -15,5 +15,5 @@ export type AppConfigResponse = Awaited<ReturnType<typeof fetchAppConfig>>;
  * 获取应用配置。
  */
 export const fetchAppConfig = async () => {
-  return trpc.config.get.query();
+  return trpc.config.get.mutate();
 };

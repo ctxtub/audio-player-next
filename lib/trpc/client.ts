@@ -6,9 +6,7 @@
 
 import {
     createTRPCClient,
-    httpBatchLink,
-    splitLink,
-    httpSubscriptionLink,
+    httpBatchStreamLink,
 } from '@trpc/client';
 import superjson from 'superjson';
 
@@ -31,18 +29,9 @@ const getBaseUrl = () => {
  */
 export const trpc = createTRPCClient<AppRouter>({
     links: [
-        splitLink({
-            // 订阅请求使用 SSE 链接
-            condition: (op) => op.type === 'subscription',
-            true: httpSubscriptionLink({
-                url: `${getBaseUrl()}/api/trpc`,
-                transformer: superjson,
-            }),
-            // 其他请求使用批量链接
-            false: httpBatchLink({
-                url: `${getBaseUrl()}/api/trpc`,
-                transformer: superjson,
-            }),
+        httpBatchStreamLink({
+            url: `${getBaseUrl()}/api/trpc`,
+            transformer: superjson,
         }),
     ],
 });

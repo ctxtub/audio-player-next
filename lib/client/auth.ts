@@ -42,5 +42,5 @@ export const logout = async () => {
  * 获取当前登录状态。
  */
 export const fetchProfile = async () => {
-  return trpc.auth.profile.query();
+  return trpc.auth.profile.mutate();
 };

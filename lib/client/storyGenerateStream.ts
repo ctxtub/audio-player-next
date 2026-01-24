@@ -13,7 +13,7 @@ import type { StoryStreamEvent } from '@/lib/trpc/routers/storyStream';
  * @param handlers 回调处理函数。
  * @returns 用于取消订阅的 unsubscribe 函数。
  */
-export const generateStoryStream = (
+export const generateStoryStream = async (
     prompt: string,
     handlers: {
         onChunk: (chunk: string) => void;
@@ -21,23 +21,28 @@ export const generateStoryStream = (
         onError: (error: Error) => void;
     }
 ) => {
-    const subscription = trpc.storyStream.generate.subscribe(
-        { prompt },
-        {
-            onData(event: StoryStreamEvent) {
-                if (event.type === 'chunk') {
-                    handlers.onChunk(event.delta);
-                } else if (event.type === 'done') {
-                    handlers.onComplete(event.fullContent);
-                } else if (event.type === 'error') {
-                    handlers.onError(new Error(event.message));
-                }
-            },
-            onError(err) {
-                handlers.onError(err);
-            },
-        }
-    );
+    const controller = new AbortController();
 
-    return subscription;
+    try {
+        const stream = await trpc.storyStream.generate.mutate(
+            { prompt },
+            { signal: controller.signal }
+        );
+
+        for await (const event of stream) {
+            if (event.type === 'chunk') {
+                handlers.onChunk(event.delta);
+            } else if (event.type === 'done') {
+                handlers.onComplete(event.fullContent);
+            } else if (event.type === 'error') {
+                handlers.onError(new Error(event.message));
+            }
+        }
+    } catch (err) {
+        handlers.onError(err instanceof Error ? err : new Error('Unknown error'));
+    }
+
+    return {
+        unsubscribe: () => controller.abort(),
+    };
 };

@@ -31,8 +31,17 @@ export const createChatStreamClient = () => {
       payload: ChatCompletionPayload,
       options: StartStreamOptions,
     ): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        const subscription = trpc.chat.stream.subscribe(
+      const controller = new AbortController();
+
+      // 连接外部信号到内部控制器
+      if (options.signal) {
+        options.signal.addEventListener('abort', () => {
+          controller.abort();
+        });
+      }
+
+      try {
+        const stream = await trpc.chat.stream.mutate(
           {
             model: payload.model,
             messages: payload.messages.map((m) => ({
@@ -43,31 +52,19 @@ export const createChatStreamClient = () => {
             top_p: payload.top_p,
             max_tokens: payload.max_tokens,
           },
-          {
-            onData: (event) => {
-              options.onEvent(event as ChatStreamEvent);
-
-              if (event.type === 'done' || event.type === 'error') {
-                subscription.unsubscribe();
-                resolve();
-              }
-            },
-            onError: (error) => {
-              subscription.unsubscribe();
-              reject(error);
-            },
-            onComplete: () => {
-              resolve();
-            },
-          }
+          { signal: controller.signal }
         );
 
-        // 处理取消信号
-        options.signal?.addEventListener('abort', () => {
-          subscription.unsubscribe();
-          reject(new DOMException('Aborted', 'AbortError'));
-        });
-      });
+        for await (const event of stream) {
+          options.onEvent(event as ChatStreamEvent);
+        }
+      } catch (error) {
+        if (options.signal?.aborted) {
+          // 如果是因为外部取消导致的错误，可以选择忽略或抛出特定错误
+          throw new DOMException('Aborted', 'AbortError');
+        }
+        throw error;
+      }
     },
   };
 };

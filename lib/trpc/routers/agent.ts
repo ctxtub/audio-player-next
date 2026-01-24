@@ -42,6 +42,11 @@ export const agentRouter = router({
                 });
 
                 for await (const event of eventStream) {
+                    // 记录节点开始 (on_chain_start 且属于 Graph 节点)
+                    if (event.event === "on_chain_start" && ["Supervisor", "StoryAgent", "ChatAgent", "AudioGenerator"].includes(event.name)) {
+                        console.log(`--- Executing Node: ${event.name} (Start) ---`);
+                    }
+
                     // on_chat_model_stream: LLM 生成的 token 流
                     if (event.event === "on_chat_model_stream") {
                         const chunk = event.data.chunk;
@@ -61,6 +66,28 @@ export const agentRouter = router({
                                 intent: event.data.output.user_intent,
                             };
                         }
+                    }
+
+                    // on_chain_start: AudioGenerator 开始生成
+                    if (event.event === "on_chain_start" && event.name === "AudioGenerator") {
+                        yield {
+                            type: "audio_start",
+                        };
+                    }
+
+                    // on_chain_end: AudioGenerator 生成音频完成
+                    if (event.event === "on_chain_end" && event.name === "AudioGenerator") {
+                        if (event.data.output && event.data.output.audio_data) {
+                            yield {
+                                type: "audio",
+                                content: event.data.output.audio_data,
+                            };
+                        }
+                    }
+
+                    // 记录节点结束 (on_chain_end 且属于 Graph 节点)
+                    if (event.event === "on_chain_end" && ["Supervisor", "StoryAgent", "ChatAgent", "AudioGenerator"].includes(event.name)) {
+                        console.log(`--- Executing Node: ${event.name} (End) ---`);
                     }
                 }
             } catch (error) {

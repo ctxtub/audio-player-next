@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { Toast } from 'antd-mobile';
 import PlaybackStatusBoard from '@/app/home/components/PlaybackStatusBoard';
 import GenerationPreview from '@/app/home/components/GenerationPreview';
-import { useFloatingPlayer } from '@/components/FloatingPlayer';
 import AudioPlayer from '@/app/home/components/AudioPlayer';
 
 import { useConfigStore } from '@/stores/configStore';
@@ -23,7 +22,14 @@ import styles from './index.module.scss';
  */
 const HomePage: React.FC = () => {
   const router = useRouter();
-  const { ensureUnlocked, play: playAudio, pause: pauseAudio } = useFloatingPlayer();
+
+  // 故事状态
+  const storyInputText = useChatStore((state) => state.getStoryContext().prompt);
+
+  // 初始化 ChatStore，防止首次访问首页时状态未就绪
+  useEffect(() => {
+    useChatStore.getState().hydrateInitialMessages([]);
+  }, []);
 
   // 配置初始化与校验能力
   const isConfigLoaded = useConfigStore(state => state.isLoaded);
@@ -38,33 +44,24 @@ const HomePage: React.FC = () => {
     }
   }, [isConfigLoaded, configIsValid, router]);
 
-  // 故事状态
-  const storyInputText = useChatStore((state) => state.getStoryContext().prompt);
-
   // 输入框模块：提交生成故事请求
   const handleInputSubmit = useCallback(
     async (shortcutText: string) => {
       try {
-        pauseAudio();
-
-        await ensureUnlocked();
-
-        const { audioUrl, messageId } = await beginStorySession(shortcutText);
-        await playAudio(audioUrl, messageId);
+        await beginStorySession(shortcutText);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : '发生未知错误';
         Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
         resetStoryFlow();
       }
     },
-    [ensureUnlocked, pauseAudio, playAudio]
+    []
   );
 
   return (
     <div className={styles.homePage}>
       <div className={styles.pageSection}>
-        <PlaybackStatusBoard
-        />
+        <PlaybackStatusBoard />
 
         <GenerationPreview />
 

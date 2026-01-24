@@ -16,6 +16,6 @@ export const getAgentModel = () => {
             baseURL: config.baseUrl,
         },
         // 如果需要更详细的 tracing，可以开启 verbose
-        verbose: process.env.NODE_ENV === "development",
+        // verbose: process.env.NODE_ENV === "development",
     });
 };

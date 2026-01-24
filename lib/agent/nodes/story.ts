@@ -37,7 +37,6 @@ export const storyNode = async (state: AgentState) => {
 
     return {
         messages: [response],
-        // 标记当前步骤完成
         next_step: "FINISH"
     };
 };

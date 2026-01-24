@@ -8,6 +8,7 @@
 - `AntdMobileCompat/`：适配 antd-mobile 在 Next.js 中的运行环境。
 - `AudioControllerHost/`：隐藏音频宿主，注册播放控制器并调度故事流程。
 - `AudioWaveAnimation/`：音频生成的波形动画组件。
+- `AudioPlayer/`：黑胶唱片样式播放器控制组件。
 - `ConfigInitializer/`：统一触发配置加载并提供加载态。
 - `FloatingPlayer/`：悬浮播放器 Provider 与 UI。
 - `GenerationPreview/`：流式生成内容的实时预览组件（文本打字机 + 音频波形）。

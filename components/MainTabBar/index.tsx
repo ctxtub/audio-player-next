@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect } from 'react';
 import { TabBar, Badge } from 'antd-mobile';
-import { AppOutline, MessageOutline, SoundOutline, SetOutline } from 'antd-mobile-icons';
+import { AppOutline, MessageOutline, SetOutline } from 'antd-mobile-icons';
 import { usePathname, useRouter } from 'next/navigation';
 import { useChatStore } from '@/stores/chatStore';
 import styles from './index.module.scss';
@@ -102,12 +102,14 @@ const MainTabBar: React.FC = () => {
     [pathname, router],
   );
 
+  const hasUnread = useChatStore(state => state.hasUnread);
+
   return (
     <div className={styles.tabBarContainer}>
       <TabBar activeKey={activeKey} onChange={handleTabChange} safeArea>
         {TABS.map(({ key, title, icon }) => {
           const isChat = key === 'chat';
-          const showBadge = isChat && useChatStore(state => state.hasUnread);
+          const showBadge = isChat && hasUnread;
           return (
             <TabBar.Item
               key={key}

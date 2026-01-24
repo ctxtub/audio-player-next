@@ -5,7 +5,6 @@
  */
 
 import { trpc } from '@/lib/trpc/client';
-import type { StoryStreamEvent } from '@/lib/trpc/routers/storyStream';
 
 /**
  * 流式生成故事。

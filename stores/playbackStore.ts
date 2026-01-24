@@ -27,6 +27,10 @@ type PlaybackStoreBaseState = {
    * 浮动播放器是否展示。
    */
   isFloatingVisible: boolean;
+  /**
+   * 当前播放的音频地址。
+   */
+  currentAudioUrl: string | null;
 };
 
 /**
@@ -79,6 +83,7 @@ const INITIAL_STATE: PlaybackStoreBaseState = {
   _lastTickAt: null,
   audioController: null,
   isFloatingVisible: false,
+  currentAudioUrl: null,
 };
 
 /**
@@ -165,6 +170,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         _tickIntervalId: null,
         _lastTickAt: null,
         isFloatingVisible: false,
+        currentAudioUrl: null,
       });
     },
     /**
@@ -232,6 +238,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
       const controller = get().audioController;
       set({
         ...INITIAL_STATE,
+        currentAudioUrl: null,
         audioController: controller,
       });
     },
@@ -269,7 +276,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
       if (!controller) {
         throw new Error('音频播放器尚未注册');
       }
-      set({ isFloatingVisible: true });
+      set({ isFloatingVisible: true, currentAudioUrl: audioUrl });
       await controller.play(audioUrl);
     },
     /**

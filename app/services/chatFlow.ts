@@ -51,7 +51,6 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
           generatedContent += delta;
         },
         onIntentDetected: (intent) => {
-          console.log('Detected Intent in ChatFlow:', intent);
           if (intent === "Story") {
             generationStore.setPhase('generating_text');
           }

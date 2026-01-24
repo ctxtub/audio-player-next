@@ -21,7 +21,7 @@ export type ChatLogProps = {
   /** 失败消息重试回调，传入消息 id。 */
   onRetry?: (messageId?: string) => void;
   /** 故事播放回调，由故事卡片触发。 */
-  onPlayStory?: (audioUrl: string) => void;
+  onPlayStory?: (audioUrl: string, messageId: string) => void;
   /** 自定义外层容器的 className。 */
   className?: string;
 };

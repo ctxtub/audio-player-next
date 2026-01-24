@@ -21,7 +21,7 @@ type MessageBubbleProps = {
   /** 失败时的重试回调。 */
   onRetry?: (messageId?: string) => void;
   /** 播放故事的回调，由 StoryCardPart 触发。 */
-  onPlayStory?: (audioUrl: string) => void;
+  onPlayStory?: (audioUrl: string, messageId: string) => void;
 };
 
 /**
@@ -162,7 +162,8 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
               <MessagePartRenderer
                 key={index}
                 part={part}
-                onPlayStory={onPlayStory}
+                // 确保将当前消息 ID 传递出去，用于播放时的 ID 追踪
+                onPlayStory={(url) => onPlayStory?.(url, message.id || '')}
               />
             ))
           )}

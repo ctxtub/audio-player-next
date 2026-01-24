@@ -141,22 +141,26 @@ const AudioControllerHost: React.FC = () => {
    */
 
   const handlePlay = useCallback(
-    async (audioUrl: string) => {
+    async (audioUrl: string, messageId?: string) => {
       const audioEl = audioRef.current;
       if (!audioEl) {
         throw new Error('音频播放器尚未就绪');
       }
 
-      // 修复：如果用户手动点击播放的是当前预加载就绪的音频，
-      // 说明该预加载内容被消费了，需要重置 PreloadStore 状态，
-      // 否则 handleNearEnd 会因为 status === 'ready' 而拒绝发起下一段的预加载。
+      // 修复：若播放的是最新预加载的段落，需重置 PreloadStore 状态，
+      // 否则 handleNearEnd 会因 status === 'ready' 而跳过下一次预加载。
       const preloadStore = usePreloadStore.getState();
-      if (preloadStore.status === 'ready' && preloadStore.cachedAudioUrl === audioUrl) {
-        preloadStore.consume();
+      // 使用 messageId 进行精准匹配
+      if (messageId && useChatStore.getState().isLastMessageId(messageId)) {
+        if (preloadStore.status === 'ready') {
+          preloadStore.consume();
+        }
       }
 
       // 同步当前播放地址到 Store，确保 StoryCard UI 状态正确
-      usePlaybackStore.getState().setCurrentAudioUrl(audioUrl);
+      // 注意：使用 syncPlaybackState 而不是 playAudio，避免递归调用 controller.play
+      usePlaybackStore.getState().syncPlaybackState(audioUrl, messageId);
+
 
       audioEl.src = audioUrl;
       audioEl.currentTime = 0;
@@ -287,7 +291,10 @@ const AudioControllerHost: React.FC = () => {
         if (!hasTriggeredPreload.current && remaining <= 120) {
           // 额外安全检查：只有当前播放的是最后一段音频时，才自动触发预加载。
           // 避免用户回听旧片段时，错误地触发了后续生成。
-          const isLast = useChatStore.getState().isLastAudioUrl(audioEl.src);
+          const currentMessageId = usePlaybackStore.getState().currentMessageId;
+          const isLast = currentMessageId
+            ? useChatStore.getState().isLastMessageId(currentMessageId)
+            : false; // 如果没有 ID，保守起见不自动触发
 
           if (isLast) {
             hasTriggeredPreload.current = true;
@@ -319,7 +326,7 @@ const AudioControllerHost: React.FC = () => {
         if (!nextSegment) {
           return;
         }
-        await handlePlay(nextSegment.audioUrl);
+        await handlePlay(nextSegment.audioUrl, nextSegment.messageId);
       } catch (error) {
         const message = error instanceof Error ? error.message : '无法播放下一段音频';
         Toast.show({ icon: 'fail', content: message, duration: 3000 });

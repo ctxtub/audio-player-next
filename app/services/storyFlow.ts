@@ -13,6 +13,7 @@ type PlayableSegment = {
   audioUrl: string;
   segment: string;
   source: 'initial' | 'preloaded' | 'generated';
+  messageId?: string;
 };
 
 /**
@@ -144,6 +145,7 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
       audioUrl,
       segment: firstSegment,
       source: 'initial',
+      messageId: assistantMessage.id, // 核心修复：返回消息 ID 用于后续追踪
     };
   } catch (error) {
     generationStore.setError(error instanceof Error ? error.message : '音频生成失败');
@@ -196,38 +198,88 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
     return null;
   }
 
-  let source: PlayableSegment['source'] = 'preloaded';
-  let result = usePreloadStore.getState().consume();
+  // 优先从 ChatStore 获取下一段（支持手动切到旧段落后继续顺序播放）
+  // 变更：不再使用 currentAudioUrl，而是使用 currentMessageId 确保唯一性和准确性
+  const currentMessageId = playbackStore.currentMessageId;
 
-  if (!result) {
-    source = 'generated';
-    try {
-      // 如果没有缓存，尝试即时请求
-      await usePreloadStore.getState().requestPreload();
-      result = usePreloadStore.getState().consume();
-    } catch (error) {
-      if (error instanceof Error && error.message === 'PRELOAD_IN_PROGRESS') {
-        return null;
+  if (currentMessageId) {
+    const nextFromChat = useChatStore.getState().getNextStorySegmentByMessageId(currentMessageId);
+    if (nextFromChat) {
+      // 若聊天记录中存在下一段，且是“最新”的一段（即系统自动预加载生成的），
+      // 则需释放 PreloadStore 的 ready 锁，允许后续继续触发新的预加载。
+      if (useChatStore.getState().isLastMessageId(nextFromChat.messageId)) {
+        usePreloadStore.getState().consume();
       }
+
+      usePlaybackStore.getState().advanceSegment();
+      clearPreloadRetryTimer();
+
+      // 更新播放器状态：如果是通过 ID 跳转的，需要重新将新 ID 设置进去
+      // 注意：playAudio 内部会设置 currentMessageId，但这里我们只是返回数据给组件层播放
+      // 组件层 playAudio 会被调用吗？handleSegmentEnded 返回值被 AudioControllerHost 用来调用 handlePlay。
+      // 所以我们除了由 handlePlay 调用 playAudio(url) 设置 url 外，
+      // 还需要确保 handlePlay 能传递新的 messageId？
+      // 在 AudioControllerHost 中 handlePlay 签名只接收 url。
+      // 如果我们只传 url，那 handlePlay 内部也只能根据 url 来。
+      // 这里的冲突点：AudioControllerHost 的 handlePlay 需要知道 messageId。
+      // 方案：让 handleSegmentEnded 返回 { audioUrl, segment, messageId }。
+      // 然后 AudioControllerHost 接收并传递给 handlePlay。
+      // 但 handlePlay 的签名是 (url: string) => ...。
+      // 需要修改 AudioControllerHost 的 handlePlay 支持可选的 messageId。
+
+      return {
+        audioUrl: nextFromChat.audioUrl,
+        segment: nextFromChat.storyText,
+        source: 'preloaded', // 视为已就绪资源
+        messageId: nextFromChat.messageId, // 这是一个扩展字段
+      };
+    }
+  }
+
+  // 彻底废弃：不再使用 currentAudioUrl 进行回退查找，
+  // 因为 Blob URL 不稳定会导致错误匹配。
+  // 如果没有 messageId，则视为无法定位，直接尝试生成新段落。
+
+  // 走到这里说明 ChatStore 里没有下一段了（当前是最后一段，或者没找到）。
+  // 这时必须使用 PreloadStore 来生成/获取下一段。
+
+  const source: PlayableSegment['source'] = 'generated';
+  let result: { segment: string; audioUrl: string; messageId?: string } | null = null;
+  const preloadState = usePreloadStore.getState();
+
+  try {
+    // 即便状态为 ready，也强制请求以确保获取数据或触发必要操作。
+    // 注意：在新逻辑中，ready 状态不应阻塞必要的生成请求，除非确实在进行中。
+    if (preloadState.status === 'ready') {
+      usePreloadStore.getState().consume();
+    }
+
+    result = await usePreloadStore.getState().requestPreload();
+  } catch (error) {
+    if (error instanceof Error && error.message === 'PRELOAD_IN_PROGRESS') {
       return null;
     }
+    return null;
   }
 
   if (!result) {
     return null;
   }
 
-  // 注意：不再需要在此处追加 ChatStore 消息，
-  // 因为 preloadStore.requestPreload 已经在生成过程中完成了消息的创建与更新。
-  // 我们只需要处理播放器的状态推进。
+  // 消费本次生成产生的 ready 锁，避免阻塞下次预加载
+  usePreloadStore.getState().consume();
 
   usePlaybackStore.getState().advanceSegment();
   clearPreloadRetryTimer();
 
   return {
-    ...result,
+    audioUrl: result.audioUrl,
+    segment: result.segment,
     source,
+    messageId: result.messageId,
   };
+
+
 };
 
 /**

@@ -31,6 +31,10 @@ type PlaybackStoreBaseState = {
    * 当前播放的音频地址。
    */
   currentAudioUrl: string | null;
+  /**
+   * 当前播放的故事消息 ID（用于追踪“下一段”）。
+   */
+  currentMessageId: string | null;
 };
 
 /**
@@ -46,7 +50,7 @@ type PlaybackStoreActions = {
   reset: () => void;
   registerAudioController: (controller: AudioControllerHandle | null) => void;
   ensureUnlocked: () => Promise<void>;
-  playAudio: (audioUrl: string) => Promise<void>;
+  playAudio: (audioUrl: string, messageId?: string) => Promise<void>;
   resumeAudio: () => Promise<void>;
   pauseAudioPlayback: () => void;
   seekAudio: (time: number) => void;
@@ -61,6 +65,7 @@ type PlaybackStoreActions = {
    */
   hideFloatingPlayer: () => void;
   setCurrentAudioUrl: (url: string | null) => void;
+  syncPlaybackState: (url: string, messageId?: string) => void;
 };
 
 /**
@@ -85,6 +90,7 @@ const INITIAL_STATE: PlaybackStoreBaseState = {
   audioController: null,
   isFloatingVisible: false,
   currentAudioUrl: null,
+  currentMessageId: null,
 };
 
 /**
@@ -168,10 +174,10 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         currentTime: 0,
         duration: 0,
         isPlaying: false,
-        _tickIntervalId: null,
         _lastTickAt: null,
         isFloatingVisible: false,
         currentAudioUrl: null,
+        currentMessageId: null,
       });
     },
     /**
@@ -240,6 +246,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
       set({
         ...INITIAL_STATE,
         currentAudioUrl: null,
+        currentMessageId: null,
         audioController: controller,
       });
     },
@@ -270,15 +277,20 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     /**
      * 播放指定音频地址，若控制器尚未注册则抛出异常。
      * @param audioUrl string 音频文件地址
+     * @param messageId string (可选) 关联的故事消息 ID
      * @returns Promise<void>
      */
-    playAudio: async (audioUrl: string) => {
+    playAudio: async (audioUrl: string, messageId?: string) => {
       const controller = get().audioController;
       if (!controller) {
         throw new Error('音频播放器尚未注册');
       }
-      set({ isFloatingVisible: true, currentAudioUrl: audioUrl });
-      await controller.play(audioUrl);
+      set({
+        isFloatingVisible: true,
+        currentAudioUrl: audioUrl,
+        currentMessageId: messageId ?? null,
+      });
+      await controller.play(audioUrl, messageId);
     },
     /**
      * 恢复暂停的音频播放。
@@ -320,6 +332,13 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     setCurrentAudioUrl: (url: string | null) => {
       set({ currentAudioUrl: url });
     },
+    syncPlaybackState: (url: string, messageId?: string) => {
+      set({
+        isFloatingVisible: true,
+        currentAudioUrl: url,
+        currentMessageId: messageId ?? null,
+      });
+    },
   };
 };
 
@@ -341,9 +360,9 @@ export const useFloatingPlayer = () => {
   const hideFloatingPlayer = usePlaybackStore((state) => state.hideFloatingPlayer);
 
   const play = useCallback(
-    async (audioUrl: string) => {
+    async (audioUrl: string, messageId?: string) => {
       showFloatingPlayer();
-      await playAudio(audioUrl);
+      await playAudio(audioUrl, messageId);
     },
     [playAudio, showFloatingPlayer]
   );

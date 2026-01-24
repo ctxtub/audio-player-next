@@ -4,6 +4,7 @@ import { AgentState } from "./state";
 import { supervisorNode } from "./nodes/supervisor";
 import { storyNode } from "./nodes/story";
 import { chatNode } from "./nodes/chat";
+import { audioNode } from "./nodes/audio";
 
 // 定义 StateGraph
 const workflow = new StateGraph<AgentState>({
@@ -27,6 +28,8 @@ const workflow = new StateGraph<AgentState>({
 workflow.addNode("Supervisor", supervisorNode);
 workflow.addNode("StoryAgent", storyNode);
 workflow.addNode("ChatAgent", chatNode);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+workflow.addNode("AudioGenerator", audioNode as any);
 
 // 添加边 (Edges)
 // 1. 起点 -> Supervisor
@@ -49,10 +52,16 @@ workflow.addConditionalEdges(
     } as any
 );
 
-// 3. Agents -> END
-// 目前 Agent 执行完就结束，未来可以在这里添加循环（比如 HumanFeedback）
+// 3. Agents -> END/Next
+// StoryAgent 完成后进入 AudioGenerator
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-workflow.addEdge("StoryAgent" as any, END);
+workflow.addEdge("StoryAgent" as any, "AudioGenerator" as any);
+
+// AudioGenerator -> END
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+workflow.addEdge("AudioGenerator" as any, END);
+
+// ChatAgent -> END
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 workflow.addEdge("ChatAgent" as any, END);
 

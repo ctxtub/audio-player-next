@@ -36,11 +36,11 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
 
   // 预设故事类型及其描述
   const storyTypes = [
-    { label: '自然冥想', content: '意象冥想，放松身心，呼吸引导' },
-    { label: '奇幻童话', content: '魔法世界，可爱角色，神奇冒险，正义战胜邪恶' },
-    { label: '太空科幻', content: '未来科技，宇宙飞船，星际探险，未知星球' },
-    { label: '睡前治愈', content: '温柔语速，温馨情节，抚慰心灵' },
-    { label: '冒险悬疑', content: '紧张节奏，神秘事件，线索推理，反转结局' },
+    { label: '自然冥想', content: '意象冥想，放松身心，呼吸引导，生成以此为主题的故事' },
+    { label: '奇幻童话', content: '魔法世界，可爱角色，神奇冒险，正义战胜邪恶，生成以此为主题的故事' },
+    { label: '太空科幻', content: '未来科技，宇宙飞船，星际探险，未知星球，生成以此为主题的故事' },
+    { label: '睡前治愈', content: '温柔语速，温馨情节，抚慰心灵，生成以此为主题的故事' },
+    { label: '冒险悬疑', content: '紧张节奏，神秘事件，线索推理，反转结局，生成以此为主题的故事' },
     // 将最后一个按钮替换为历史记录按钮
   ];
 
@@ -69,7 +69,7 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
     }
     handleSubmitWithHistory(prompt);
   };
-  
+
   // 处理input提交
   const onSubmit = () => {
     if (isSubmitting) {
@@ -117,7 +117,7 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
               {type.label}
             </button>
           ))}
-          <button 
+          <button
             className={`${styles.quickButton} ${styles.historyButton}`}
             onClick={handleHistoryButtonClick}
             disabled={isSubmitting}

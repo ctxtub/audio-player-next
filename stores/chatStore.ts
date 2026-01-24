@@ -71,6 +71,10 @@ type ChatStoreActions = {
    * 标记当前会话为已读，清除未读红点。
    */
   markAsRead: () => void;
+  /**
+   * 根据检测到的意图，切换当前正在生成的助手消息的类型。
+   */
+  switchAssistantMessageType: (intent: 'Story' | 'Chat' | 'Guidance') => void;
 };
 
 /**
@@ -334,19 +338,53 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
         return state;
       }
       const newContent = `${state.activeAssistantMessage.content}${delta}`;
-      // 如果有 StoryCardPart，同步更新其 storyText
+
+      // 动态更新第一个 Part 中的主要文本字段
       let newParts = state.activeAssistantMessage.parts;
-      if (newParts && newParts.length > 0 && newParts[0].type === 'storyCard') {
-        newParts = [
-          { ...newParts[0], storyText: newContent },
-          ...newParts.slice(1),
-        ];
+      if (newParts && newParts.length > 0) {
+        const firstPart = newParts[0];
+        if (firstPart.type === 'storyCard') {
+          newParts = [{ ...firstPart, storyText: newContent }, ...newParts.slice(1)];
+        } else if (firstPart.type === 'guidance') {
+          newParts = [{ ...firstPart, content: newContent }, ...newParts.slice(1)];
+        }
       }
+
       return {
         activeAssistantMessage: {
           ...state.activeAssistantMessage,
           content: newContent,
           parts: newParts,
+        },
+      };
+    });
+  },
+  switchAssistantMessageType: (intent) => {
+    set((state) => {
+      if (!state.activeAssistantMessage) {
+        return state;
+      }
+
+      const currentContent = state.activeAssistantMessage.content;
+      let newParts: any[] = [];
+
+      switch (intent) {
+        case 'Story':
+          newParts = [{ type: 'storyCard', storyText: currentContent, audioUrl: '' }];
+          break;
+        case 'Guidance':
+          newParts = [{ type: 'guidance', content: currentContent }];
+          break;
+        default:
+          // 'Chat' 类型通常不使用特定的 Parts，保持默认即可
+          newParts = [];
+          break;
+      }
+
+      return {
+        activeAssistantMessage: {
+          ...state.activeAssistantMessage,
+          parts: newParts.length > 0 ? newParts : undefined,
         },
       };
     });

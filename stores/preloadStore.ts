@@ -1,12 +1,7 @@
 import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import { fetchAudio } from '@/lib/client/ttsGenerate';
-
-import { interactWithAgent, type AgentMessage } from '@/app/services/agentFlow';
-import { useConfigStore } from './configStore';
-import { useChatStore } from './chatStore';
-import { useGenerationStore } from './generationStore';
+import { beginChatStream } from '@/app/services/chatFlow';
 
 /**
  * 预加载阶段的状态枚举：
@@ -86,79 +81,17 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
    * 请求下一段故事与音频，带去重能力；若已有缓存则直接返回。
    * @returns Promise，resolve 为故事文本与音频地址
    */
-  /**
-   * 请求下一段故事与音频，带去重能力；若已有缓存则直接返回。
-   * @returns Promise，resolve 为故事文本与音频地址
-   */
   requestPreload: async () => {
     const state = get();
     if (state.status === 'loading' && state._activePreloadTask) {
       return state._activePreloadTask.promise;
     }
 
-    const configState = useConfigStore.getState();
-    if (!configState.isConfigValid()) {
-      const error = new Error('配置未就绪，无法预加载故事');
-      set((prev) => ({
-        status: 'error',
-        error: error.message,
-        retryCount: prev.retryCount + 1,
-        _activePreloadTask: null,
-      }));
-      return Promise.reject(error);
-    }
-
     const taskToken = Symbol('active-preload');
     const preloadTask = (async () => {
-      // 1. 在 ChatStore 中准备续写占位
-      useChatStore.getState().prepareFollowUpStorySubmission();
-      const generatedMessageId = useChatStore.getState().activeAssistantMessage?.id;
+      const { messageId: generatedId, audioUrl, content: generatedContent } = await beginChatStream('请继续故事');
+      let nextSegment = generatedContent;
 
-      // 2. 准备 Agent 上下文：历史记录 + 续写指令
-      const chatContext = useChatStore.getState().conversationContext;
-      const messages: AgentMessage[] = [
-        ...(chatContext as unknown as AgentMessage[]),
-        { role: 'user', content: '请继续故事' }
-      ];
-
-      // 3. 重置生成状态
-      useGenerationStore.getState().reset();
-      useGenerationStore.getState().setPhase('generating_text');
-
-      // 4. 请求 Agent 生成
-      const { segment, audioUrl } = await new Promise<{ segment: string; audioUrl: string }>((resolve, reject) => {
-        let accumulatedText = '';
-
-        interactWithAgent(
-          messages,
-          {
-            onTextDelta: (chunk) => {
-              // 检查 token 略困难，这里简化处理，依靠 store 状态
-              accumulatedText += chunk;
-              useGenerationStore.getState().appendText(chunk);
-              useChatStore.getState().appendAssistantDelta(chunk);
-            },
-            onComplete: () => {
-              // 文本生成完成，开始生成音频
-              useGenerationStore.getState().setPhase('generating_audio');
-              const fullContent = accumulatedText || useChatStore.getState().activeAssistantMessage?.content || "";
-
-              fetchAudio(fullContent, configState.apiConfig.voiceId, configState.apiConfig.speed)
-                .then((url) => {
-                  resolve({ segment: fullContent, audioUrl: url });
-                })
-                .catch((err) => {
-                  reject(err);
-                });
-            },
-            onError: (err) => {
-              reject(err);
-            }
-          }
-        ).catch(reject);
-      });
-
-      const nextSegment = segment;
       const currentState = get();
 
       // 并发检查
@@ -166,18 +99,9 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
         return {
           segment: nextSegment,
           audioUrl,
-          messageId: generatedMessageId,
+          messageId: generatedId,
         };
       }
-
-      // 生成完成
-      useGenerationStore.getState().setPhase('ready');
-
-      // 标记 ChatStore 消息完成
-      useChatStore.getState().finalizeStoryMessage({
-        storyText: nextSegment,
-        audioUrl,
-      });
 
       set({
         status: 'ready',
@@ -187,14 +111,12 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
       return {
         segment: nextSegment,
         audioUrl,
-        messageId: generatedMessageId,
+        messageId: generatedId,
       };
     })()
       .catch((error) => {
         const handledError = normalizeError(error);
         const currentState = get();
-
-        useChatStore.getState().markFailure();
 
         if (currentState._activePreloadTask?.token === taskToken) {
           set((prev) => ({

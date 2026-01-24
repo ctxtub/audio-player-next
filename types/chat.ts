@@ -60,10 +60,20 @@ export type StoryCardPart = {
 };
 
 /**
+ * 指导片段，用于 Guidance 行为。
+ */
+export type GuidancePart = {
+  /** 片段类型标识。 */
+  type: 'guidance';
+  /** 指导内容。 */
+  content: string;
+};
+
+/**
  * 消息片段联合类型，支持多种消息内容形态。
  * 扩展时在此添加新的片段类型。
  */
-export type MessagePart = TextPart | StoryCardPart;
+export type MessagePart = TextPart | StoryCardPart | GuidancePart;
 
 /**
  * 类型守卫：判断片段是否为文本类型。
@@ -78,6 +88,12 @@ export const isStoryCardPart = (part: MessagePart): part is StoryCardPart =>
   part.type === 'storyCard';
 
 /**
+ * 类型守卫：判断片段是否为指导类型。
+ */
+export const isGuidancePart = (part: MessagePart): part is GuidancePart =>
+  part.type === 'guidance';
+
+/**
  * 从消息片段数组中提取纯文本内容，用于上下文传递。
  * @param parts 消息片段数组
  * @returns 拼接后的文本内容
@@ -87,6 +103,7 @@ export const extractTextFromParts = (parts: MessagePart[]): string =>
     .map((part) => {
       if (isTextPart(part)) return part.content;
       if (isStoryCardPart(part)) return part.storyText;
+      if (isGuidancePart(part)) return part.content;
       return '';
     })
     .join('');

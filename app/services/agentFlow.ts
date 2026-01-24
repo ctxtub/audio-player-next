@@ -28,6 +28,14 @@ export interface AgentStreamCallbacks {
      * 发生错误。
      */
     onError: (error: Error) => void;
+    /**
+     * 开始生成语音。
+     */
+    onAudioStart?: () => void;
+    /**
+     * 接收到的语音音频数据 (Blob URL)。
+     */
+    onAudioComplete?: (audioUrl: string) => void;
 }
 
 /**
@@ -53,7 +61,22 @@ export const interactWithAgent = async (
             if (event.type === 'token') {
                 callbacks.onTextDelta(event.content);
             } else if (event.type === 'meta') {
+                console.log('Detected Intent in AgentFlow:', event.intent);
                 callbacks.onIntentDetected?.(event.intent as "Story" | "Chat" | "Guidance");
+            } else if (event.type === 'audio_start') {
+                callbacks.onAudioStart?.();
+            } else if (event.type === 'audio') {
+                if (callbacks.onAudioComplete) {
+                    // Base64 -> Blob URL
+                    const binaryString = atob(event.content);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    const blob = new Blob([bytes], { type: 'audio/mpeg' });
+                    const url = URL.createObjectURL(blob);
+                    callbacks.onAudioComplete(url);
+                }
             }
         }
 

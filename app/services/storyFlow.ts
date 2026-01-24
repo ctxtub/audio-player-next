@@ -1,10 +1,9 @@
-import { fetchAudio } from '@/lib/client/ttsGenerate';
 import { useConfigStore } from '@/stores/configStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
-import { interactWithAgent, type AgentMessage } from './agentFlow';
+import { beginChatStream } from './chatFlow';
 
 /**
  * 可播放段落对象，包含音频地址与文本内容，并标注来源（首段/预加载/即时生成）。
@@ -12,7 +11,6 @@ import { interactWithAgent, type AgentMessage } from './agentFlow';
 type PlayableSegment = {
   audioUrl: string;
   segment: string;
-  source: 'initial' | 'preloaded' | 'generated';
   messageId?: string;
 };
 
@@ -76,89 +74,40 @@ const ensureConfigReady = () => {
 };
 
 /**
- * 启动新的故事会话：清空旧状态、生成首段文本与音频，并初始化播放会话。
- * @param prompt 用户输入的故事提示词
- * @returns 包含首段故事文本、音频地址及来源标记的对象
+ * 启动故事播放会话：停止当前播放、重置状态并开始播放指定的故事音频。
+ * @param messageId 故事对应的消息 ID
+ * @param audioUrl 音频地址
  */
-export const beginStorySession = async (prompt: string): Promise<PlayableSegment> => {
-  const apiConfig = ensureConfigReady();
+export const startStoryPlayback = async (messageId: string, audioUrl: string): Promise<void> => {
   const playbackStore = usePlaybackStore.getState();
   const preloadStore = usePreloadStore.getState();
-  const chatStore = useChatStore.getState();
-  const generationStore = useGenerationStore.getState();
+  const apiConfig = useConfigStore.getState().apiConfig;
+
+  // 1. 确保音频播放器已解锁（应对移动端浏览器自动播放限制）
+  await playbackStore.ensureUnlocked();
+
+  // 2. 停止当前正在播放的音频（如有）
+  playbackStore.pauseAudioPlayback();
 
   // 重置状态
   preloadStore.reset();
   clearPreloadRetryTimer();
   playbackStore.reset();
-  generationStore.reset();
-  // 注意：不再调用 storyStore.reset，也不重置 chatStore (保留聊天记录)
 
-  // 1. 设置生成中文本阶段
-  generationStore.setPhase('generating_text');
+  // 启动播放器会话
+  playbackStore.markSessionStart(messageId, apiConfig.playDuration);
 
-  // 2. 准备故事会话：在 ChatStore 中创建 用户消息 + 助手占位
-  const { assistantMessage } = chatStore.prepareStorySubmission(prompt);
+  // 3. 自动开始播放生成的音频
+  await playbackStore.playAudio(audioUrl, messageId);
+};
 
-  // 3. 流式请求故事文本
-  const firstSegment = await new Promise<string>((resolve, reject) => {
-    // 构造单条消息作为新的故事 Prompt
-    const messages: AgentMessage[] = [{ role: 'user', content: prompt }];
-
-    interactWithAgent(
-      messages,
-      {
-        onTextDelta: (chunk) => {
-          // 同步更新 UI 状态与 Chat 消息
-          useGenerationStore.getState().appendText(chunk);
-          useChatStore.getState().appendAssistantDelta(chunk);
-        },
-        onComplete: () => {
-          // 这里的 Complete 不包含文本，需要在外部捕获累积文本
-          // 由于 appendAssistantDelta 已经即时更新了 store，
-          // 可以直接从 store 或通过闭包累积获取。
-          // 简化起见，我们信任 store 中的最新内容。
-          const fullContent = useChatStore.getState().activeAssistantMessage?.content || "";
-          resolve(fullContent);
-        },
-        onError: (error) => {
-          // 失败时标记 chatStore
-          useChatStore.getState().markFailure();
-          reject(error);
-        },
-      }
-    ).catch(reject); // Catch init errors
-  });
-
-  // 4. 文本生成完成，进入音频生成阶段
-  generationStore.setPhase('generating_audio');
-
-  try {
-    const audioUrl = await fetchAudio(firstSegment, apiConfig.voiceId, apiConfig.speed);
-
-    // 5. 更新 ChatStore，将 StoryCard 标记为完成（附带音频）
-    useChatStore.getState().finalizeStoryMessage({
-      storyText: firstSegment,
-      audioUrl,
-    });
-
-    // 启动播放器会话
-    playbackStore.markSessionStart(assistantMessage.id, apiConfig.playDuration);
-
-    // 6. 生成完成
-    generationStore.setPhase('ready');
-
-    return {
-      audioUrl,
-      segment: firstSegment,
-      source: 'initial',
-      messageId: assistantMessage.id,
-    };
-  } catch (error) {
-    generationStore.setError(error instanceof Error ? error.message : '音频生成失败');
-    useChatStore.getState().markFailure();
-    throw error;
-  }
+/**
+ * 启动新的故事会话：清空旧状态、生成首段文本与音频，并初始化播放会话及启动播放。
+ * @param prompt 用户输入的故事提示词
+ */
+export const beginStorySession = async (prompt: string) => {
+  const { messageId, audioUrl } = await beginChatStream(prompt);
+  await startStoryPlayback(messageId, audioUrl);
 };
 
 /**
@@ -206,7 +155,6 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
   }
 
   // 优先从 ChatStore 获取下一段（支持手动切到旧段落后继续顺序播放）
-  // 变更：不再使用 currentAudioUrl，而是使用 currentMessageId 确保唯一性和准确性
   const currentMessageId = playbackStore.currentMessageId;
 
   if (currentMessageId) {
@@ -221,42 +169,22 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
       usePlaybackStore.getState().advanceSegment();
       clearPreloadRetryTimer();
 
-      // 更新播放器状态：如果是通过 ID 跳转的，需要重新将新 ID 设置进去
-      // 注意：playAudio 内部会设置 currentMessageId，但这里我们只是返回数据给组件层播放
-      // 组件层 playAudio 会被调用吗？handleSegmentEnded 返回值被 AudioControllerHost 用来调用 handlePlay。
-      // 所以我们除了由 handlePlay 调用 playAudio(url) 设置 url 外，
-      // 还需要确保 handlePlay 能传递新的 messageId？
-      // 在 AudioControllerHost 中 handlePlay 签名只接收 url。
-      // 如果我们只传 url，那 handlePlay 内部也只能根据 url 来。
-      // 这里的冲突点：AudioControllerHost 的 handlePlay 需要知道 messageId。
-      // 方案：让 handleSegmentEnded 返回 { audioUrl, segment, messageId }。
-      // 然后 AudioControllerHost 接收并传递给 handlePlay。
-      // 但 handlePlay 的签名是 (url: string) => ...。
-      // 需要修改 AudioControllerHost 的 handlePlay 支持可选的 messageId。
-
       return {
         audioUrl: nextFromChat.audioUrl,
         segment: nextFromChat.storyText,
-        source: 'preloaded', // 视为已就绪资源
-        messageId: nextFromChat.messageId, // 这是一个扩展字段
+        messageId: nextFromChat.messageId,
       };
     }
   }
 
-  // 彻底废弃：不再使用 currentAudioUrl 进行回退查找，
-  // 因为 Blob URL 不稳定会导致错误匹配。
-  // 如果没有 messageId，则视为无法定位，直接尝试生成新段落。
-
   // 走到这里说明 ChatStore 里没有下一段了（当前是最后一段，或者没找到）。
   // 这时必须使用 PreloadStore 来生成/获取下一段。
 
-  const source: PlayableSegment['source'] = 'generated';
   let result: { segment: string; audioUrl: string; messageId?: string } | null = null;
   const preloadState = usePreloadStore.getState();
 
   try {
     // 即便状态为 ready，也强制请求以确保获取数据或触发必要操作。
-    // 注意：在新逻辑中，ready 状态不应阻塞必要的生成请求，除非确实在进行中。
     if (preloadState.status === 'ready') {
       usePreloadStore.getState().consume();
     }
@@ -282,11 +210,8 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
   return {
     audioUrl: result.audioUrl,
     segment: result.segment,
-    source,
     messageId: result.messageId,
   };
-
-
 };
 
 /**

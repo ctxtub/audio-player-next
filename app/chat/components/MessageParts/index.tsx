@@ -4,6 +4,7 @@ import type { FC } from 'react';
 import type { MessagePart } from '@/types/chat';
 import TextPartRenderer from './TextPart';
 import StoryCardPartRenderer from './StoryCardPart';
+import { GuidancePartComponent } from './GuidancePart';
 
 /**
  * 片段渲染器的通用 Props 定义。
@@ -23,6 +24,7 @@ export type PartRendererProps<T extends MessagePart = MessagePart> = {
 const partRenderers: Record<string, FC<any>> = {
     text: TextPartRenderer,
     storyCard: StoryCardPartRenderer,
+    guidance: GuidancePartComponent,
 };
 
 /**

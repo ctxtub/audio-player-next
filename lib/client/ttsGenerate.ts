@@ -11,10 +11,11 @@ import type { VoiceId } from '@/types/ttsGenerate';
  * 通过 tRPC 请求语音音频。
  * @param text 待合成的文本。
  * @param voiceId 可选的语音标识。
+ * @param speed 可选的语速 (0.25 - 4.0)。
  * @returns 指向生成音频的临时 URL。
  */
-export const fetchAudio = async (text: string, voiceId?: VoiceId): Promise<string> => {
-  const result = await trpc.tts.synthesize.mutate({ text, voiceId });
+export const fetchAudio = async (text: string, voiceId?: VoiceId, speed?: number): Promise<string> => {
+  const result = await trpc.tts.synthesize.mutate({ text, voiceId, speed });
 
   // 将 base64 转换为 Blob URL
   const binaryString = atob(result.audioBase64);

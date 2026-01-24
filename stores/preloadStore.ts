@@ -140,7 +140,7 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
       useChatStore.getState().appendAssistantDelta(nextSegment);
 
       // 生成音频
-      const audioUrl = await fetchAudio(nextSegment, configState.apiConfig.voiceId);
+      const audioUrl = await fetchAudio(nextSegment, configState.apiConfig.voiceId, configState.apiConfig.speed);
 
       const currentState = get();
 

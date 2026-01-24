@@ -6,7 +6,7 @@
 
 ## 子目录结构
 - `configStore.ts`：应用配置状态（播放时长、首选语音、浮动播放器开关）。
-- `playbackStore.ts`：播放进度、音频控制器与倒计时状态。
+- `playbackStore.ts`：播放进度、当前音频地址、音频控制器与倒计时状态。
 - `preloadStore.ts`：音频预加载状态。
 - `promptHistoryStore.ts`：提示词与历史记录。
 - `generationStore.ts`：生成过程状态（流式文本、生成阶段 phase）。

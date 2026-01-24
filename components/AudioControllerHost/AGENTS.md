@@ -8,5 +8,5 @@
 - `index.tsx`：音频控制宿主组件，实现音频播放与事件回调。
 
 ## 关键协作与依赖
-- 调用 `@/stores/playbackStore` 注册控制器并同步进度。
+- 调用 `@/stores/playbackStore` 注册控制器并同步进度与当前音频地址。
 - 借助 `@/app/services/storyFlow` 管理预加载、段落推进与播放状态。

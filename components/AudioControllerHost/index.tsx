@@ -139,6 +139,7 @@ const AudioControllerHost: React.FC = () => {
    * @param audioUrl 音频文件地址
    * @returns Promise<void>
    */
+
   const handlePlay = useCallback(
     async (audioUrl: string) => {
       const audioEl = audioRef.current;
@@ -153,6 +154,9 @@ const AudioControllerHost: React.FC = () => {
       if (preloadStore.status === 'ready' && preloadStore.cachedAudioUrl === audioUrl) {
         preloadStore.consume();
       }
+
+      // 同步当前播放地址到 Store，确保 StoryCard UI 状态正确
+      usePlaybackStore.getState().setCurrentAudioUrl(audioUrl);
 
       audioEl.src = audioUrl;
       audioEl.currentTime = 0;

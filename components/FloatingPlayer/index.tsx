@@ -164,9 +164,9 @@ export const FloatingPlayer: React.FC = () => {
   // 浮窗标题展示内容，依据播放状态切换默认文案与倒计时
   const floatingTitleLabel = useMemo(() => {
     if (isPlaying && remainingTimeLabel) {
-      return `${remainingTimeLabel} 后停止`;
+      return `${remainingTimeLabel}`;
     }
-    return '快来首页创作吧';
+    return '待创作';
   }, [isPlaying, remainingTimeLabel]);
 
   const floatingPanelClassName = [

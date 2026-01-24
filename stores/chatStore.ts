@@ -75,6 +75,10 @@ type ChatStoreActions = {
    * 根据检测到的意图，切换当前正在生成的助手消息的类型。
    */
   switchAssistantMessageType: (intent: 'Story' | 'Chat' | 'Guidance') => void;
+  /**
+   * 更新当前正在生成的助手消息的展示名称。
+   */
+  setAssistantDisplayName: (name: string) => void;
 };
 
 /**
@@ -133,7 +137,7 @@ const isSupportedConversationRole = (
  */
 const messagePersonaMap: Record<ChatMessage['role'], { displayName: string; avatar: string }> = {
   assistant: {
-    displayName: '故事助手',
+    displayName: 'Agent',
     avatar: '/icons/avatar-assistant.svg',
   },
   user: {
@@ -385,6 +389,19 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
         activeAssistantMessage: {
           ...state.activeAssistantMessage,
           parts: newParts.length > 0 ? newParts : undefined,
+        },
+      };
+    });
+  },
+  setAssistantDisplayName: (name) => {
+    set((state) => {
+      if (!state.activeAssistantMessage) {
+        return state;
+      }
+      return {
+        activeAssistantMessage: {
+          ...state.activeAssistantMessage,
+          displayName: name,
         },
       };
     });

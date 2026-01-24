@@ -7,7 +7,7 @@ import { AgentState } from "../state";
  * Supervisor 的输出结构定义
  */
 const supervisorSchema = z.object({
-    next: z.enum(["StoryAgent", "ChatAgent"]).describe("下一步应该交给哪个 Agent 处理。StoryAgent负责故事生成与续写，ChatAgent负责普通对话。"),
+    next: z.enum(["StoryAgent", "ChatAgent", "GuidanceAgent"]).describe("下一步应该交给哪个 Agent 处理。StoryAgent负责故事生成与续写，ChatAgent负责普通对话，GuidanceAgent负责处理剧情干预或引导。"),
     intent: z.enum(["Story", "Chat", "Guidance"]).describe("用户的意图分类。Story:创作/生成/听故事; Chat:闲聊/打招呼; Guidance:在故事背景下修改或引导剧情。")
 });
 
@@ -24,10 +24,12 @@ export const supervisorNode = async (state: AgentState) => {
 专家列表：
 1. StoryAgent: 专业的文学创作者。擅长根据提示词创作新故事，或者根据用户的修改建议（如"把主角改成小猫"）续写/重写故事。
 2. ChatAgent: 接待员。擅长处理日常闲聊、问候、或者回答关于系统功能的问题。
+3. GuidanceAgent: 剧情引导员。擅长处理用户对故事走向的宏观干预、强行指令（如"把主角写死"、"强制进入下一关"、"我要修改设定"）。
 
 判断逻辑：
-- 如果用户想听故事、写故事、或者针对当前故事提出修改意见，请选择 StoryAgent。
+- 如果用户想听故事、写故事，请选择 StoryAgent。
 - 如果用户只是打招呼 (Hello/Hi) 或闲聊，请选择 ChatAgent。
+- 如果用户试图对当前故事进行“上帝视角”的干预、修改规则、或发出强烈的剧情引导指令，请选择 GuidanceAgent。
 
 请输出 JSON 格式的决策结果。`
     );

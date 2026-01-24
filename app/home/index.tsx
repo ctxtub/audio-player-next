@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Toast } from 'antd-mobile';
-import StoryViewer from '@/components/StoryViewer';
 import PlaybackStatusBoard from '@/components/PlaybackStatusBoard';
 import GenerationPreview from '@/components/GenerationPreview';
 import { useFloatingPlayer } from '@/components/FloatingPlayer';
@@ -72,8 +71,6 @@ const HomePage: React.FC = () => {
           inputText={storyInputText}
           handleSubmit={handleInputSubmit}
         />
-
-        <StoryViewer />
 
         <AudioPlayer />
 

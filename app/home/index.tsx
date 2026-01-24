@@ -7,6 +7,7 @@ import StoryViewer from '@/components/StoryViewer';
 import PlaybackStatusBoard from '@/components/PlaybackStatusBoard';
 import GenerationPreview from '@/components/GenerationPreview';
 import { useFloatingPlayer } from '@/components/FloatingPlayer';
+import AudioPlayer from '@/components/AudioPlayer';
 
 import { useConfigStore } from '@/stores/configStore';
 import { useChatStore } from '@/stores/chatStore';
@@ -52,7 +53,6 @@ const HomePage: React.FC = () => {
         const { audioUrl } = await beginStorySession(shortcutText);
 
         await playAudio(audioUrl);
-        router.push('/player');
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : '发生未知错误';
         Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
@@ -74,6 +74,8 @@ const HomePage: React.FC = () => {
         />
 
         <StoryViewer />
+
+        <AudioPlayer />
 
         <GenerationPreview />
       </div>

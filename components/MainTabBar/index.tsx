@@ -50,13 +50,7 @@ const TABS: readonly TabConfig[] = [
     path: '/chat',
     isActive: pathname => pathname.startsWith('/chat'),
   },
-  {
-    key: 'player',
-    title: '播放器',
-    icon: <SoundOutline />,
-    path: '/player',
-    isActive: pathname => pathname.startsWith('/player'),
-  },
+
   {
     key: 'setting',
     title: '设置',

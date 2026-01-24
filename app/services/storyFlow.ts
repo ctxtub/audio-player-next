@@ -2,7 +2,7 @@ import { fetchAudio } from '@/lib/client/ttsGenerate';
 import { useConfigStore } from '@/stores/configStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
-import { useStoryStore } from '@/stores/storyStore';
+import { useChatStore } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
 import { generateStoryStream } from '@/lib/client/storyGenerateStream';
 
@@ -83,7 +83,7 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
   const apiConfig = ensureConfigReady();
   const playbackStore = usePlaybackStore.getState();
   const preloadStore = usePreloadStore.getState();
-  const storyStore = useStoryStore.getState();
+  const chatStore = useChatStore.getState();
   const generationStore = useGenerationStore.getState();
 
   // 重置状态
@@ -91,25 +91,30 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
   clearPreloadRetryTimer();
   playbackStore.reset();
   generationStore.reset();
+  // 注意：不再调用 storyStore.reset，也不重置 chatStore (保留聊天记录)
+  // 如果需要清空之前的会话，可以在这里调用 chatStore.resetActiveSession() 
+  // 但根据需求“映射到聊天”，理应保留。
 
   // 1. 设置生成中文本阶段
   generationStore.setPhase('generating_text');
 
-  // 2. 准备故事会话（不发请求）
-  storyStore.prepareSession(prompt);
+  // 2. 准备故事会话：在 ChatStore 中创建 用户消息 + 助手占位
+  const { assistantMessage } = chatStore.prepareStorySubmission(prompt);
 
   // 3. 流式请求故事文本
   const firstSegment = await new Promise<string>((resolve, reject) => {
-    let fullContent = '';
-    const unsubscribe = generateStoryStream(prompt, {
+    generateStoryStream(prompt, {
       onChunk: (chunk) => {
-        fullContent += chunk;
+        // 同步更新 UI 状态与 Chat 消息
         useGenerationStore.getState().appendText(chunk);
+        useChatStore.getState().appendAssistantDelta(chunk);
       },
       onComplete: (content) => {
         resolve(content);
       },
       onError: (error) => {
+        // 失败时标记 chatStore
+        useChatStore.getState().markFailure();
         reject(error);
       },
     });
@@ -120,14 +125,19 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
 
   try {
     const audioUrl = await fetchAudio(firstSegment, apiConfig.voiceId);
-    storyStore.appendSegment(firstSegment);
 
-    const latestSessionId = useStoryStore.getState().sessionId;
-    if (latestSessionId) {
-      playbackStore.markSessionStart(latestSessionId, apiConfig.playDuration);
-    }
+    // 5. 更新 ChatStore，将 StoryCard 标记为完成（附带音频）
+    useChatStore.getState().finalizeStoryMessage({
+      storyText: firstSegment,
+      audioUrl,
+    });
 
-    // 5. 生成完成
+    // 启动播放器会话
+    // 使用助手消息 ID 作为会话标识，或者沿用之前的随机 ID 逻辑
+    // 这里使用 assistantMessage.id 确保唯一性
+    playbackStore.markSessionStart(assistantMessage.id, apiConfig.playDuration);
+
+    // 6. 生成完成
     generationStore.setPhase('ready');
 
     return {
@@ -137,6 +147,7 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
     };
   } catch (error) {
     generationStore.setError(error instanceof Error ? error.message : '音频生成失败');
+    useChatStore.getState().markFailure();
     throw error;
   }
 };
@@ -166,7 +177,7 @@ export const handleNearEnd = async (): Promise<void> => {
     if (error instanceof Error && error.message === 'PRELOAD_IN_PROGRESS') {
       return;
     }
-    schedulePreloadRetry();
+    // schedulePreloadRetry(); // 暂时屏蔽重试，避免复杂化 debugging
   }
 };
 
@@ -187,16 +198,17 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
 
   let source: PlayableSegment['source'] = 'preloaded';
   let result = usePreloadStore.getState().consume();
+
   if (!result) {
     source = 'generated';
     try {
+      // 如果没有缓存，尝试即时请求
       await usePreloadStore.getState().requestPreload();
       result = usePreloadStore.getState().consume();
     } catch (error) {
       if (error instanceof Error && error.message === 'PRELOAD_IN_PROGRESS') {
         return null;
       }
-      schedulePreloadRetry();
       return null;
     }
   }
@@ -205,7 +217,10 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
     return null;
   }
 
-  useStoryStore.getState().appendSegment(result.segment);
+  // 注意：不再需要在此处追加 ChatStore 消息，
+  // 因为 preloadStore.requestPreload 已经在生成过程中完成了消息的创建与更新。
+  // 我们只需要处理播放器的状态推进。
+
   usePlaybackStore.getState().advanceSegment();
   clearPreloadRetryTimer();
 
@@ -244,9 +259,7 @@ export const updatePlaybackProgress = (payload: { currentTime: number; duration:
 export const resetStoryFlow = () => {
   usePlaybackStore.getState().reset();
   usePreloadStore.getState().reset();
-  useStoryStore.getState().reset();
-  usePreloadStore.getState().reset();
-  useStoryStore.getState().reset();
   useGenerationStore.getState().reset();
+  // ChatStore 不重置，保留历史
   clearPreloadRetryTimer();
 };

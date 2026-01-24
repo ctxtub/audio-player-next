@@ -7,7 +7,7 @@
 - `appConfig.ts`：应用运行时配置类型。
 - `audioPlayer.ts`：全局音频控制器方法签名。
 - `auth.ts`：登录、登出与登录态查询相关类型。
-- `chat.ts`：聊天模块相关类型定义（消息接口）。
+- `chat.ts`：聊天模块相关类型定义，包含消息片段类型系统（`MessagePart`、`TextPart`、`StoryCardPart`）。
 - `story.ts`：故事生成与续写相关类型。
 - `theme.ts`：主题配置类型。
 - `ttsGenerate.ts`：语音合成请求与响应类型。

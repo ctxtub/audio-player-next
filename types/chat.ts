@@ -32,6 +32,65 @@ export type ChatMessageMetadata = {
   usage?: ChatUsageSummary;
 };
 
+// ============================================================================
+// 消息片段类型系统（Message Parts）
+// 采用联合类型实现可扩展的消息内容结构，新增类型只需扩展此联合
+// ============================================================================
+
+/**
+ * 文本片段，用于普通对话消息。
+ */
+export type TextPart = {
+  /** 片段类型标识。 */
+  type: 'text';
+  /** 文本内容。 */
+  content: string;
+};
+
+/**
+ * 故事卡片片段，用于故事生成消息，包含故事文本与音频地址。
+ */
+export type StoryCardPart = {
+  /** 片段类型标识。 */
+  type: 'storyCard';
+  /** 故事文本内容。 */
+  storyText: string;
+  /** 生成的音频地址。 */
+  audioUrl: string;
+};
+
+/**
+ * 消息片段联合类型，支持多种消息内容形态。
+ * 扩展时在此添加新的片段类型。
+ */
+export type MessagePart = TextPart | StoryCardPart;
+
+/**
+ * 类型守卫：判断片段是否为文本类型。
+ */
+export const isTextPart = (part: MessagePart): part is TextPart =>
+  part.type === 'text';
+
+/**
+ * 类型守卫：判断片段是否为故事卡片类型。
+ */
+export const isStoryCardPart = (part: MessagePart): part is StoryCardPart =>
+  part.type === 'storyCard';
+
+/**
+ * 从消息片段数组中提取纯文本内容，用于上下文传递。
+ * @param parts 消息片段数组
+ * @returns 拼接后的文本内容
+ */
+export const extractTextFromParts = (parts: MessagePart[]): string =>
+  parts
+    .map((part) => {
+      if (isTextPart(part)) return part.content;
+      if (isStoryCardPart(part)) return part.storyText;
+      return '';
+    })
+    .join('');
+
 /**
  * 会话中已确认的消息结构体，包含内容、角色与可选状态。
  */
@@ -40,8 +99,16 @@ export type ChatMessage = {
   id: string;
   /** 消息的角色身份，影响展示位置。 */
   role: ChatMessageRole;
-  /** 文本内容，支持多行展示。 */
+  /**
+   * 文本内容，用于向后兼容和上下文传递。
+   * 渲染时优先使用 parts，若 parts 不存在则回退到 content。
+   */
   content: string;
+  /**
+   * 消息片段数组，支持多种内容形态（文本、故事卡片等）。
+   * 新消息应使用 parts 替代 content。
+   */
+  parts?: MessagePart[];
   /** 消息状态，未设置时视为已成功送达。 */
   status?: ChatMessageDeliveryStatus;
   /** 消息创建时间戳，ISO 字符串格式。 */
@@ -64,6 +131,8 @@ export type ChatPendingMessage = {
   role: 'user';
   /** 文本内容，通常来自输入框。 */
   content: string;
+  /** 消息片段数组，与 ChatMessage 保持一致。 */
+  parts?: MessagePart[];
   /** 当前投递状态，仅支持发送中与失败。 */
   status?: Extract<ChatMessageDeliveryStatus, 'sending' | 'failed'>;
   /** 创建时间戳，供展示和排序使用。 */

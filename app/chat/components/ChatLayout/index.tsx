@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { Toast } from 'antd-mobile';
 
-import { beginChatStream, cancelChatStream, retryChatStream } from '@/app/services/chatFlow';
+import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
+import { beginChatStoryStream } from '@/app/services/chatStoryFlow';
 import { useChatStore } from '@/stores/chatStore';
+import { useFloatingPlayer } from '@/components/FloatingPlayer';
+import { detectStoryIntent } from '../../utils/intentDetector';
 
 import HeaderArea from './HeaderArea';
 import InputArea from './InputArea';
@@ -42,14 +45,17 @@ const defaultSuggestions: HeaderSuggestion[] = [
  * @returns 布局结构 JSX。
  */
 const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
-  /** 记录是否已经完成 store 初始化，避免重复写入。 */
-  const hasHydratedRef = useRef(false);
+  /** 读取 store 中的初始化状态。 */
+  const hasHydrated = useChatStore((state) => state.hasHydrated);
 
   const messages = useChatStore((state) => state.messages);
   const pendingMessage = useChatStore((state) => state.pendingMessage);
   const activeAssistantMessage = useChatStore((state) => state.activeAssistantMessage);
   const inputValue = useChatStore((state) => state.inputValue);
   const setInputValue = useChatStore((state) => state.setInputValue);
+
+  /** 悬浮播放器控制。 */
+  const { play: playAudio } = useFloatingPlayer();
 
   /** 是否存在发送中的消息，用于控制输入区禁用状态。 */
   const isSending = useMemo(
@@ -59,33 +65,40 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
 
   /** 将 store 与初始消息融合，避免首屏出现空白。 */
   const resolvedMessages = useMemo(() => {
-    if (!hasHydratedRef.current && messages.length === 0) {
+    if (!hasHydrated && messages.length === 0) {
       return initialMessages;
     }
     return messages;
-  }, [initialMessages, messages]);
+  }, [initialMessages, messages, hasHydrated]);
 
   useEffect(() => {
-    if (hasHydratedRef.current) {
-      return;
-    }
     useChatStore.getState().hydrateInitialMessages(initialMessages);
-    hasHydratedRef.current = true;
   }, [initialMessages]);
 
-  useEffect(() => {
-    return () => {
-      cancelChatStream();
-    };
-  }, []);
+
 
   /**
-   * 输入区提交回调，触发聊天流式流程。
+   * 输入区提交回调，根据意图选择普通聊天流或故事生成流。
    * @param content 用户输入的文本内容。
    */
   const handleSubmit = useCallback(async (content: string) => {
-    await beginChatStream(content);
-  }, []);
+    const isStoryRequest = detectStoryIntent(content);
+
+    if (isStoryRequest) {
+      // 故事生成流程
+      try {
+        const { audioUrl } = await beginChatStoryStream(content);
+        // 自动播放生成的故事
+        await playAudio(audioUrl);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '故事生成失败';
+        Toast.show({ icon: 'fail', content: message });
+      }
+    } else {
+      // 普通聊天流程
+      await beginChatStream(content);
+    }
+  }, [playAudio]);
 
   /**
    * 输入框内容变化时同步到 store，便于外部组件访问。 
@@ -150,6 +163,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
         streamingMessage={activeAssistantMessage}
         isLoading={false}
         onRetry={handleRetry}
+        onPlayStory={playAudio}
       />
       <InputArea
         onSubmit={handleSubmit}

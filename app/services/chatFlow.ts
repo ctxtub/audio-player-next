@@ -56,7 +56,16 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
             generationStore.setPhase('generating_text');
           }
           useChatStore.getState().switchAssistantMessageType(intent);
-
+        },
+        onAgentActive: (name) => {
+          // 将英文名转换为更友好的中文显示
+          const displayNames: Record<string, string> = {
+            "StoryAgent": "故事作家",
+            "ChatAgent": "聊天助手",
+            "GuidanceAgent": "系统指令",
+          };
+          const displayName = displayNames[name] || name;
+          useChatStore.getState().setAssistantDisplayName(displayName);
         },
         onAudioStart: () => {
           generationStore.setPhase('generating_audio');

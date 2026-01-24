@@ -5,6 +5,7 @@ import { supervisorNode } from "./nodes/supervisor";
 import { storyNode } from "./nodes/story";
 import { chatNode } from "./nodes/chat";
 import { audioNode } from "./nodes/audio";
+import { guidanceNode } from "./nodes/guidance";
 
 // 定义 StateGraph
 const workflow = new StateGraph<AgentState>({
@@ -28,6 +29,7 @@ const workflow = new StateGraph<AgentState>({
 workflow.addNode("Supervisor", supervisorNode);
 workflow.addNode("StoryAgent", storyNode);
 workflow.addNode("ChatAgent", chatNode);
+workflow.addNode("GuidanceAgent", guidanceNode);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 workflow.addNode("AudioGenerator", audioNode as any);
 
@@ -48,6 +50,7 @@ workflow.addConditionalEdges(
     {
         StoryAgent: "StoryAgent",
         ChatAgent: "ChatAgent",
+        GuidanceAgent: "GuidanceAgent",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any
 );
@@ -64,6 +67,10 @@ workflow.addEdge("AudioGenerator" as any, END);
 // ChatAgent -> END
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 workflow.addEdge("ChatAgent" as any, END);
+
+// GuidanceAgent -> END
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+workflow.addEdge("GuidanceAgent" as any, END);
 
 // 编译图
 export const graph = workflow.compile();

@@ -8,6 +8,7 @@
 - `index.tsx`：分发器组件与渲染器注册表。
 - `TextPart.tsx`：文本片段渲染器。
 - `StoryCardPart.tsx`：故事卡片片段渲染器，支持多阶段展示（生成文本/音频/播放）。
+- `GuidancePart.tsx`：指令确认片段渲染器，展示系统生成的引导或确认指令。
 - `index.module.scss`：共享样式，复用 GenerationPreview 视觉风格。
 
 ## 关键协作与依赖

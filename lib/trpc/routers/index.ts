@@ -9,6 +9,7 @@ import { authRouter } from './auth';
 import { chatRouter } from './chat';
 import { configRouter } from './config';
 import { ttsRouter } from './tts';
+import { agentRouter } from './agent';
 
 /**
  * 应用根 Router。
@@ -18,6 +19,7 @@ export const appRouter = router({
     chat: chatRouter,
     config: configRouter,
     tts: ttsRouter,
+    agent: agentRouter,
 });
 
 /**

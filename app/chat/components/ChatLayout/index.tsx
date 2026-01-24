@@ -3,11 +3,9 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { Toast } from 'antd-mobile';
 
-import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
-import { beginStorySession } from '@/app/services/storyFlow';
+import { interactWithAgent } from '@/app/services/agentFlow';
 import { useChatStore } from '@/stores/chatStore';
 import { useFloatingPlayer } from '@/components/FloatingPlayer';
-import { detectStoryIntent } from '../../utils/intentDetector';
 
 import HeaderArea from './HeaderArea';
 import InputArea from './InputArea';
@@ -87,24 +85,13 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
    * @param content 用户输入的文本内容。
    */
   const handleSubmit = useCallback(async (content: string) => {
-    const isStoryRequest = detectStoryIntent(content);
-
-    if (isStoryRequest) {
-      // 故事生成流程
-      try {
-        // 使用统一的故事通过流，它会负责初始化 PlaybackStore 会话
-        const { audioUrl, messageId } = await beginStorySession(content);
-        // 自动播放生成的故事，传递 messageId 以便后续能关联到正确的故事段落
-        await playAudio(audioUrl, messageId);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : '故事生成失败';
-        Toast.show({ icon: 'fail', content: message });
-      }
-    } else {
-      // 普通聊天流程
-      await beginChatStream(content);
+    try {
+      await interactWithAgent(content);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '发送失败，请稍后重试';
+      Toast.show({ icon: 'fail', content: message });
     }
-  }, [playAudio]);
+  }, []);
 
   /**
    * 输入框内容变化时同步到 store，便于外部组件访问。 
@@ -148,7 +135,13 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
       return;
     }
     try {
-      await retryChatStream();
+      // TODO: Retry logic needs to be adapted for agent flow
+      // Currently, agentFlow doesn't export a retry function directly, 
+      // but we can reuse the logic if we extract it. 
+      // For now, let's just re-submit the pending content if possible
+      if (currentPending.content) {
+        await interactWithAgent(currentPending.content);
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : '重试失败，请稍后再试';

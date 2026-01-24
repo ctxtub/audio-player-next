@@ -59,6 +59,8 @@ type ChatStoreActions = {
   finalizeStoryMessage: (payload: { storyText: string; audioUrl: string }) => void;
   /** 获取当前上下文中的故事 Prompt 和已生成内容（用于续写）。 */
   getStoryContext: () => { prompt: string; storyContent: string };
+  /** 判断给定的音频 URL 是否属于最后一条包含音频的故事卡片。 */
+  isLastAudioUrl: (url: string) => boolean;
 };
 
 /**
@@ -486,6 +488,20 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     }).join('');
 
     return { prompt, storyContent };
+  },
+  isLastAudioUrl: (url) => {
+    const messages = get().messages;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role !== 'assistant' || !msg.parts) {
+        continue;
+      }
+      const storyPart = msg.parts.find((p) => p.type === 'storyCard') as StoryCardPart | undefined;
+      if (storyPart && storyPart.audioUrl) {
+        return storyPart.audioUrl === url;
+      }
+    }
+    return false;
   },
 });
 

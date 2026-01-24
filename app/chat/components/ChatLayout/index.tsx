@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { Toast } from 'antd-mobile';
 
-import { interactWithAgent } from '@/app/services/agentFlow';
+import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
 import { useChatStore } from '@/stores/chatStore';
 import { useFloatingPlayer } from '@/components/FloatingPlayer';
 
@@ -86,7 +86,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
    */
   const handleSubmit = useCallback(async (content: string) => {
     try {
-      await interactWithAgent(content);
+      await beginChatStream(content);
     } catch (error) {
       const message = error instanceof Error ? error.message : '发送失败，请稍后重试';
       Toast.show({ icon: 'fail', content: message });
@@ -135,13 +135,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
       return;
     }
     try {
-      // TODO: Retry logic needs to be adapted for agent flow
-      // Currently, agentFlow doesn't export a retry function directly, 
-      // but we can reuse the logic if we extract it. 
-      // For now, let's just re-submit the pending content if possible
-      if (currentPending.content) {
-        await interactWithAgent(currentPending.content);
-      }
+      await retryChatStream();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : '重试失败，请稍后再试';

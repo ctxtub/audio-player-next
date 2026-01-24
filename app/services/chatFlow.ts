@@ -1,11 +1,6 @@
-import { createChatStreamClient } from '@/lib/client/chatStream';
 import { useChatStore } from '@/stores/chatStore';
 import type { ChatConversationMessage } from '@/types/chat';
-
-/**
- * 聊天客户端单例，用于复用底层 fetch 与解析逻辑。
- */
-const chatStreamClient = createChatStreamClient();
+import { interactWithAgent, type AgentMessage } from './agentFlow';
 
 /**
  * 将未知异常标准化为 Error，便于上层展示 Toast。
@@ -29,30 +24,34 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<vo
   let streamErrored = false;
   let lastErrorMessage: string | undefined;
 
+  // 转换 ChatConversationMessage 到 AgentMessage
+  const agentMessages = context as unknown as AgentMessage[];
+
   try {
-    await chatStreamClient.startStream(
+    await interactWithAgent(
+      agentMessages,
       {
-        messages: context,
-      },
-      {
-        signal: abortController.signal,
-        onEvent: (event) => {
-          if (event.type === 'message') {
-            useChatStore.getState().appendAssistantDelta(event.delta);
-            return;
-          }
-          if (event.type === 'error') {
-            streamErrored = true;
-            lastErrorMessage = event.message;
-            useChatStore.getState().markFailure();
-            return;
-          }
+        onTextDelta: (delta) => {
+          useChatStore.getState().appendAssistantDelta(delta);
+        },
+        onIntentDetected: (intent) => {
+          console.log('Detected Intent in Chat:', intent);
+          // TODO: 如果意图是 Story，可以在这里触发 UI 变更，例如显示“正在转换模式...”
+        },
+        onComplete: () => {
           if (!streamErrored) {
-            useChatStore.getState().finalizeAssistantMessage(event);
+            useChatStore.getState().finalizeAssistantMessage({ type: 'done', finishReason: 'stop' });
           }
         },
+        onError: (error) => {
+          streamErrored = true;
+          lastErrorMessage = error.message;
+          useChatStore.getState().markFailure();
+        },
       },
+      abortController.signal
     );
+
     if (streamErrored) {
       throw new Error(lastErrorMessage ?? '聊天请求失败，请稍后再试');
     }

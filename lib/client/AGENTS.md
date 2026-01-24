@@ -7,8 +7,8 @@
 ## 子目录结构
 - `auth.ts`：身份验证相关操作。
 - `appConfig.ts`：获取应用运行时配置。
-- `chatStream.ts`：聊天流式生成调用封装。
-- `storyGenerateStream.ts`：故事生成流式调用封装（Mutation Stream），内含上下文注入逻辑。
+- `chatStream.ts`：【已废弃】原聊天流式生成调用封装，请使用 `agentFlow.ts`。
+- `storyGenerateStream.ts`：【已废弃】原故事生成流式调用封装，请使用 `agentFlow.ts`。
 - `ttsGenerate.ts`：语音合成调用。
 
 ## 关键协作与依赖

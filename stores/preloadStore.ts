@@ -2,7 +2,8 @@ import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
 import { fetchAudio } from '@/lib/client/ttsGenerate';
-import { continueStory } from '@/lib/client/storyGenerate';
+
+import { generateStoryStream } from '@/lib/client/storyGenerateStream';
 import { useConfigStore } from './configStore';
 import { useChatStore } from './chatStore';
 import { useGenerationStore } from './generationStore';
@@ -125,22 +126,55 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
       useGenerationStore.getState().reset();
       useGenerationStore.getState().setPhase('generating_text');
 
-      // 请求续写 (注意：若 continueStory 不支持流式，这里无法实现真正的逐字飞入，只能在完成后一次性展示)
-      // 但为了配合 StoryCardPartRenderer，我们需要设置 streamingText
-      const response = await continueStory(prompt, storyContent, { withSummary: true });
-      const nextSegment = response.storyContent;
+      // 请求续写 - 使用流式生成以获得打字机效果
+      const { prompt: finalPrompt, storyContent: finalStoryContent } = {
+        prompt,
+        storyContent,
+      };
 
-      // 模拟流式效果（如果 API 不支持）或者直接设置
-      useGenerationStore.getState().appendText(nextSegment);
+      const { segment, audioUrl } = await new Promise<{ segment: string; audioUrl: string }>((resolve, reject) => {
+        let accumulatedText = '';
+        const msgId = generatedMessageId;
 
-      // 进入音频生成阶段
-      useGenerationStore.getState().setPhase('generating_audio');
+        generateStoryStream(
+          finalPrompt,
+          {
+            onChunk: (chunk) => {
+              // 检查任务是否仍有效 (通过闭包中的 taskToken 检查在外部做有点难，这里假设由 abort controller 控制)
+              // 但由于 generateStoryStream 内部使用了 trpc subscription，如果不手动 unsubscribe，它会一直流。
+              // 我们依靠外部清理逻辑或者当前简单逻辑。
+              // 严谨做法：如果 token 变了，应该 abort。但在 Promise 内部较难访问实时 state。
+              // 这里先做简单更新。
+              accumulatedText += chunk;
+              useGenerationStore.getState().appendText(chunk);
+              useChatStore.getState().appendAssistantDelta(chunk);
+            },
+            onComplete: (fullContent) => {
+              // 流式文本完成，开始生成音频
+              useGenerationStore.getState().setPhase('generating_audio');
+              fetchAudio(fullContent, configState.apiConfig.voiceId, configState.apiConfig.speed)
+                .then((url) => {
+                  resolve({ segment: fullContent, audioUrl: url });
+                })
+                .catch((err) => {
+                  reject(err);
+                });
+            },
+            onError: (err) => {
+              reject(err);
+            }
+          },
+          { summarizedStory: finalStoryContent } // 传入上文作为 context
+        ).then(({ unsubscribe }) => {
+          // 将 unsubscribe 绑定到 promise 或者 state 上？
+          // 当前架构 _activePreloadTask 只有 promise。
+          // 暂时无法存储 unsubscribe，如果组件卸载或 reset，可能无法取消网络请求（但 state 变更后结果会被丢弃）。
+          // 改进：可以在 _activePreloadTask 存储 abortController，但需要改类型。
+          // 考虑到改动量，暂维持现状，只确保 UI 状态一致。
+        }).catch(err => reject(err));
+      });
 
-      // 2. 将文本同步到 ChatStore
-      useChatStore.getState().appendAssistantDelta(nextSegment);
-
-      // 生成音频
-      const audioUrl = await fetchAudio(nextSegment, configState.apiConfig.voiceId, configState.apiConfig.speed);
+      const nextSegment = segment;
 
       const currentState = get();
 

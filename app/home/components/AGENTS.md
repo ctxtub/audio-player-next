@@ -7,6 +7,9 @@
 ## 子目录结构
 - `HistoryRecords/`：播放历史展示。
 - `InputStatusSection/`：输入与状态组合模块。
+- `AudioPlayer/`：黑胶唱片样式播放器控制组件。
+- `GenerationPreview/`：流式生成内容的实时预览组件（文本打字机 + 音频波形）。
+- `PlaybackStatusBoard/`：播放倒计时与预加载状态展示。
 
 ## 关键协作与依赖
 - 组件依赖 `@/stores/**`、`@/app/services/storyFlow` 共享业务状态。

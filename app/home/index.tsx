@@ -3,10 +3,10 @@
 import React, { useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Toast } from 'antd-mobile';
-import PlaybackStatusBoard from '@/components/PlaybackStatusBoard';
-import GenerationPreview from '@/components/GenerationPreview';
+import PlaybackStatusBoard from '@/app/home/components/PlaybackStatusBoard';
+import GenerationPreview from '@/app/home/components/GenerationPreview';
 import { useFloatingPlayer } from '@/components/FloatingPlayer';
-import AudioPlayer from '@/components/AudioPlayer';
+import AudioPlayer from '@/app/home/components/AudioPlayer';
 
 import { useConfigStore } from '@/stores/configStore';
 import { useChatStore } from '@/stores/chatStore';

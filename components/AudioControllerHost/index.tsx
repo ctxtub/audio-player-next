@@ -10,6 +10,8 @@ import {
   updatePlaybackProgress,
 } from '@/app/services/storyFlow';
 import { usePlaybackStore } from '@/stores/playbackStore';
+import { usePreloadStore } from '@/stores/preloadStore';
+import { useChatStore } from '@/stores/chatStore';
 import type { AudioControllerHandle } from '@/types/audioPlayer';
 
 /**
@@ -143,6 +145,15 @@ const AudioControllerHost: React.FC = () => {
       if (!audioEl) {
         throw new Error('音频播放器尚未就绪');
       }
+
+      // 修复：如果用户手动点击播放的是当前预加载就绪的音频，
+      // 说明该预加载内容被消费了，需要重置 PreloadStore 状态，
+      // 否则 handleNearEnd 会因为 status === 'ready' 而拒绝发起下一段的预加载。
+      const preloadStore = usePreloadStore.getState();
+      if (preloadStore.status === 'ready' && preloadStore.cachedAudioUrl === audioUrl) {
+        preloadStore.consume();
+      }
+
       audioEl.src = audioUrl;
       audioEl.currentTime = 0;
       audioEl.playbackRate = playbackRate;
@@ -268,11 +279,18 @@ const AudioControllerHost: React.FC = () => {
       updatePlaybackProgress({ currentTime, duration });
       if (duration > 0) {
         const remaining = duration - currentTime;
+        // 仅当剩余时间不足且尚未触发过建议时尝试预加载
         if (!hasTriggeredPreload.current && remaining <= 120) {
-          hasTriggeredPreload.current = true;
-          handleNearEnd().catch((error) => {
-            console.error('预加载下一段音频失败:', error);
-          });
+          // 额外安全检查：只有当前播放的是最后一段音频时，才自动触发预加载。
+          // 避免用户回听旧片段时，错误地触发了后续生成。
+          const isLast = useChatStore.getState().isLastAudioUrl(audioEl.src);
+
+          if (isLast) {
+            hasTriggeredPreload.current = true;
+            handleNearEnd().catch((error) => {
+              console.error('预加载下一段音频失败:', error);
+            });
+          }
         }
       }
     };

@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   ChatPendingMessage,
   ChatStreamDoneEvent,
+  StoryCardPart,
 } from '@/types/chat';
 
 /**
@@ -24,6 +25,8 @@ type ChatStoreBaseState = {
   conversationContext: ChatConversationMessage[];
   /** 输入框中的实时内容，供建议快捷填充。 */
   inputValue: string;
+  /** 记录是否已经完成初始消息加载，避免 Tab 切换时覆盖状态。 */
+  hasHydrated: boolean;
 };
 
 /**
@@ -48,6 +51,14 @@ type ChatStoreActions = {
   setAbortController: (controller: AbortController | null) => void;
   /** 更新输入框的实时内容。 */
   setInputValue: (nextValue: string) => void;
+  /** 准备故事类型的消息提交，助手消息从一开始就是 StoryCardPart。 */
+  prepareStorySubmission: (content: string) => ChatSubmissionSnapshot;
+  /** 准备故事续写（无用户消息），仅创建助手消息。 */
+  prepareFollowUpStorySubmission: () => ChatSubmissionSnapshot;
+  /** 完成故事消息，更新 StoryCardPart 的音频地址。 */
+  finalizeStoryMessage: (payload: { storyText: string; audioUrl: string }) => void;
+  /** 获取当前上下文中的故事 Prompt 和已生成内容（用于续写）。 */
+  getStoryContext: () => { prompt: string; storyContent: string };
 };
 
 /**
@@ -178,6 +189,18 @@ const createAssistantPlaceholder = (): ChatMessage => ({
 });
 
 /**
+ * 构造一个故事类型的助手占位消息，从一开始就使用 StoryCardPart。
+ */
+const createStoryAssistantPlaceholder = (): ChatMessage => ({
+  id: createTempMessageId('assistant'),
+  role: 'assistant',
+  content: '',
+  parts: [{ type: 'storyCard', storyText: '', audioUrl: '' }],
+  status: 'sending',
+  createdAt: createTimestamp(),
+});
+
+/**
  * 聊天 store 的创建器，封装状态初始化与动作实现。
  */
 const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
@@ -187,13 +210,20 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
   currentAbortController: null,
   conversationContext: [],
   inputValue: '',
+  hasHydrated: false,
   hydrateInitialMessages: (initialMessages) => {
+    // 仅在未初始化时允许覆盖，防止状态丢失
+    if (get().hasHydrated) {
+      return;
+    }
+
     set({
       messages: initialMessages.map((item) => withPersona(item)),
       pendingMessage: null,
       activeAssistantMessage: null,
       conversationContext: mapMessagesToContext(initialMessages),
       inputValue: '',
+      hasHydrated: true,
     });
   },
   prepareNewSubmission: (content) => {
@@ -241,15 +271,68 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     });
     return { pendingMessage, assistantMessage, context };
   },
+  prepareStorySubmission: (content) => {
+    const pendingMessage = withPersona<ChatPendingMessage>({
+      id: createTempMessageId('user'),
+      role: 'user',
+      content,
+      status: 'sending',
+      createdAt: createTimestamp(),
+    });
+    // 使用故事类型的助手占位，从一开始就是 StoryCardPart
+    const assistantMessage = withPersona(createStoryAssistantPlaceholder());
+    const baseContext = mapMessagesToContext(get().messages);
+    const context: ChatConversationMessage[] = [
+      ...baseContext,
+      { role: 'user', content },
+    ];
+    set({
+      pendingMessage,
+      activeAssistantMessage: assistantMessage,
+      conversationContext: context,
+      inputValue: '',
+      hasHydrated: true,
+    });
+    return { pendingMessage, assistantMessage, context };
+  },
+  prepareFollowUpStorySubmission: () => {
+    // 仅创建助手占位，用于故事续写
+    const assistantMessage = withPersona(createStoryAssistantPlaceholder());
+
+    // 上下文基于当前已有消息（续写不需要再插入用户消息）
+    const baseContext = mapMessagesToContext(get().messages);
+
+    set({
+      pendingMessage: null, // 续写没有新的用户消息
+      activeAssistantMessage: assistantMessage,
+      conversationContext: baseContext,
+    });
+
+    return {
+      pendingMessage: { role: 'user', content: '', status: 'sending' } as ChatPendingMessage, // 占位返回，实际为空
+      assistantMessage,
+      context: baseContext
+    };
+  },
   appendAssistantDelta: (delta) => {
     set((state) => {
       if (!state.activeAssistantMessage) {
         return state;
       }
+      const newContent = `${state.activeAssistantMessage.content}${delta}`;
+      // 如果有 StoryCardPart，同步更新其 storyText
+      let newParts = state.activeAssistantMessage.parts;
+      if (newParts && newParts.length > 0 && newParts[0].type === 'storyCard') {
+        newParts = [
+          { ...newParts[0], storyText: newContent },
+          ...newParts.slice(1),
+        ];
+      }
       return {
         activeAssistantMessage: {
           ...state.activeAssistantMessage,
-          content: `${state.activeAssistantMessage.content}${delta}`,
+          content: newContent,
+          parts: newParts,
         },
       };
     });
@@ -291,6 +374,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
   markFailure: () => {
     set((state) => {
       if (!state.pendingMessage) {
+        // 如果是续写失败（没有 pendingMessage），也需要清理 activeAssistantMessage
+        // 简单处理：重置会话
         return {
           activeAssistantMessage: null,
           currentAbortController: null,
@@ -322,6 +407,85 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
   },
   setInputValue: (nextValue) => {
     set({ inputValue: nextValue });
+  },
+  finalizeStoryMessage: (payload) => {
+    set((state) => {
+      const nextMessages = [...state.messages];
+      // 添加用户消息 (如果有)
+      if (state.pendingMessage) {
+        nextMessages.push({
+          id: state.pendingMessage.id ?? createTempMessageId('user'),
+          role: state.pendingMessage.role,
+          content: state.pendingMessage.content,
+          status: 'delivered',
+          createdAt: state.pendingMessage.createdAt ?? createTimestamp(),
+          displayName: state.pendingMessage.displayName,
+          avatar: state.pendingMessage.avatar,
+        });
+      }
+      // 添加助手故事卡片消息
+      if (state.activeAssistantMessage) {
+        const storyPart: StoryCardPart = {
+          type: 'storyCard',
+          storyText: payload.storyText,
+          audioUrl: payload.audioUrl,
+        };
+        nextMessages.push({
+          ...state.activeAssistantMessage,
+          content: payload.storyText, // 保留 content 用于上下文
+          parts: [storyPart],
+          status: 'delivered',
+          createdAt: state.activeAssistantMessage.createdAt ?? createTimestamp(),
+        });
+      }
+      return {
+        messages: nextMessages,
+        pendingMessage: null,
+        activeAssistantMessage: null,
+        conversationContext: mapMessagesToContext(nextMessages),
+        inputValue: '',
+      };
+    });
+  },
+  getStoryContext: () => {
+    const messages = get().messages;
+    if (messages.length === 0) {
+      return { prompt: '', storyContent: '' };
+    }
+
+    // 反向查找最后一条用户消息
+    let lastUserIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        lastUserIndex = i;
+        break;
+      }
+    }
+
+    if (lastUserIndex === -1 && get().pendingMessage?.role === 'user') {
+      return {
+        prompt: get().pendingMessage!.content,
+        storyContent: '',
+      };
+    }
+
+    if (lastUserIndex === -1) {
+      return { prompt: '', storyContent: '' };
+    }
+
+    const prompt = messages[lastUserIndex].content;
+    const assistantMessages = messages.slice(lastUserIndex + 1).filter(m => m.role === 'assistant');
+
+    const storyContent = assistantMessages.map(m => {
+      // 优先取 StoryCardPart
+      const storyPart = m.parts?.find(p => p.type === 'storyCard') as StoryCardPart | undefined;
+      if (storyPart) {
+        return storyPart.storyText;
+      }
+      return m.content;
+    }).join('');
+
+    return { prompt, storyContent };
   },
 });
 

@@ -9,7 +9,7 @@ import GenerationPreview from '@/components/GenerationPreview';
 import { useFloatingPlayer } from '@/components/FloatingPlayer';
 
 import { useConfigStore } from '@/stores/configStore';
-import { useStoryStore } from '@/stores/storyStore';
+import { useChatStore } from '@/stores/chatStore';
 import {
   beginStorySession,
   resetStoryFlow,
@@ -39,7 +39,7 @@ const HomePage: React.FC = () => {
   }, [isConfigLoaded, configIsValid, router]);
 
   // 故事状态
-  const storyInputText = useStoryStore((state) => state.inputText);
+  const storyInputText = useChatStore((state) => state.getStoryContext().prompt);
 
   // 输入框模块：提交生成故事请求
   const handleInputSubmit = useCallback(
@@ -73,9 +73,9 @@ const HomePage: React.FC = () => {
           handleSubmit={handleInputSubmit}
         />
 
-        <GenerationPreview />
-
         <StoryViewer />
+
+        <GenerationPreview />
       </div>
     </div>
   );

@@ -2,8 +2,10 @@ import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
 import { fetchAudio } from '@/lib/client/ttsGenerate';
+import { continueStory } from '@/lib/client/storyGenerate';
 import { useConfigStore } from './configStore';
-import { useStoryStore } from './storyStore';
+import { useChatStore } from './chatStore';
+import { useGenerationStore } from './generationStore';
 
 /**
  * 预加载阶段的状态枚举：
@@ -115,8 +117,36 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
 
     const taskToken = Symbol('active-preload');
     const preloadTask = (async () => {
-      const storyStore = useStoryStore.getState();
-      const nextSegment = await storyStore.continueSession();
+      // 切换为从 chatStore 获取上下文
+      const { prompt, storyContent } = useChatStore.getState().getStoryContext();
+
+      if (!prompt || !storyContent) {
+        // 如果没有上下文，可能是会话还没开始，或者数据异常
+        throw new Error('无法获取故事上下文，预加载跳过');
+      }
+
+      // 1. 在 ChatStore 中准备续写占位
+      useChatStore.getState().prepareFollowUpStorySubmission();
+
+      // 1. 重置生成状态，准备展示动效
+      useGenerationStore.getState().reset();
+      useGenerationStore.getState().setPhase('generating_text');
+
+      // 请求续写 (注意：若 continueStory 不支持流式，这里无法实现真正的逐字飞入，只能在完成后一次性展示)
+      // 但为了配合 StoryCardPartRenderer，我们需要设置 streamingText
+      const response = await continueStory(prompt, storyContent, { withSummary: true });
+      const nextSegment = response.storyContent;
+
+      // 模拟流式效果（如果 API 不支持）或者直接设置
+      useGenerationStore.getState().appendText(nextSegment);
+
+      // 进入音频生成阶段
+      useGenerationStore.getState().setPhase('generating_audio');
+
+      // 2. 将文本同步到 ChatStore
+      useChatStore.getState().appendAssistantDelta(nextSegment);
+
+      // 生成音频
       const audioUrl = await fetchAudio(nextSegment, configState.apiConfig.voiceId);
 
       const currentState = get();
@@ -126,6 +156,15 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
           audioUrl,
         };
       }
+
+      // 生成完成
+      useGenerationStore.getState().setPhase('ready');
+
+      // 3. 标记 ChatStore 消息完成
+      useChatStore.getState().finalizeStoryMessage({
+        storyText: nextSegment,
+        audioUrl,
+      });
 
       set({
         status: 'ready',
@@ -142,6 +181,9 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
       .catch((error) => {
         const handledError = normalizeError(error);
         const currentState = get();
+
+        // 失败时同步 ChatStore 状态
+        useChatStore.getState().markFailure();
 
         if (currentState._activePreloadTask?.token === taskToken) {
           set((prev) => ({

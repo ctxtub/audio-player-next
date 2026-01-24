@@ -3,7 +3,6 @@ import ClockIcon from '@/public/icons/playstatus-clock.svg';
 import LoadingIcon from '@/public/icons/playstatus-loading.svg';
 import WarningIcon from '@/public/icons/playstatus-warning.svg';
 import CheckIcon from '@/public/icons/playstatus-check.svg';
-import { useStoryStore } from '@/stores/storyStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useConfigStore } from '@/stores/configStore';
@@ -30,15 +29,8 @@ interface PlaybackStatusBoardProps {
  * @returns 播放状态展示 JSX
  */
 const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) => {
-  /** 故事文本列表，用于判断首段生成是否完成。 */
-  const storySegments = useStoryStore((state) => state.segments);
-  /** 当前故事会话标识，判定是否已有会话。 */
-  const storySessionId = useStoryStore((state) => state.sessionId);
-
   /** 播放剩余毫秒数，用于倒计时展示。 */
   const playbackRemainingMs = usePlaybackStore((state) => state.remainingMs);
-  /** 播放会话标识，结合故事会话判断首段进度。 */
-  const playbackSessionId = usePlaybackStore((state) => state.sessionId);
 
   /** 当前配置项，提供默认播放时长。 */
   const apiConfig = useConfigStore((state) => state.apiConfig);
@@ -60,12 +52,9 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
     return Math.max(0, playbackRemainingMs / 60000);
   }, [apiConfig.playDuration, playbackRemainingMs]);
 
-  /** 是否仍有首段故事文本或音频待生成。 */
-  const hasPendingInitialRequest =
-    Boolean(storySessionId) &&
-    (storySegments.length === 0 || playbackSessionId !== storySessionId);
-  /** 故事生成流程是否处于进行状态（文本或音频请求）。 */
-  const isStoryLoading = hasPendingInitialRequest || preloadStatus === 'loading';
+  /** 是否处于初始生成阶段（非空闲且非完成/错误），或者处于预加载状态。 */
+  const isInitialGenerating = generationPhase === 'generating_text' || generationPhase === 'generating_audio';
+  const isStoryLoading = isInitialGenerating || preloadStatus === 'loading';
   /** 是否已有已缓存的语音资源，可提示预加载成功。 */
   const hasPreloadedAudio = Boolean(preloadAudioUrl);
 

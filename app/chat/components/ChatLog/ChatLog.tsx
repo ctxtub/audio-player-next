@@ -39,6 +39,7 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
     emptyHint,
     loadingHint,
     onRetry,
+    onPlayStory,
     className,
   } = props;
 
@@ -121,13 +122,14 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
         {hasMessages ? (
           <div className={styles.messagesList}>
             {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} onRetry={onRetry} />
+              <MessageBubble key={message.id} message={message} onRetry={onRetry} onPlayStory={onPlayStory} />
             ))}
             {resolvedPending ? (
               <MessageBubble
                 key={resolvedPending.id ?? 'pending'}
                 message={resolvedPending}
                 onRetry={onRetry}
+                onPlayStory={onPlayStory}
               />
             ) : null}
             {streamingMessage ? (
@@ -135,6 +137,7 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
                 key={streamingMessage.id}
                 message={{ ...streamingMessage, status: streamingMessage.status ?? 'sending' }}
                 onRetry={onRetry}
+                onPlayStory={onPlayStory}
               />
             ) : null}
           </div>

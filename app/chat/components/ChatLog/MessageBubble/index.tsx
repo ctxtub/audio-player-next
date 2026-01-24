@@ -9,16 +9,19 @@ import type {
   ChatMessageRole,
   ChatPendingMessage,
 } from '@/types/chat';
+import MessagePartRenderer from '../../MessageParts';
 import styles from './MessageBubble.module.scss';
 
 /**
- * 消息气泡组件的入参定义，包含消息内容与重试回调。
+ * 消息气泡组件的入参定义，包含消息内容与回调。
  */
 type MessageBubbleProps = {
   /** 需要展示的消息内容，支持历史消息与待发送消息。 */
   message: ChatMessage | ChatPendingMessage;
   /** 失败时的重试回调。 */
   onRetry?: (messageId?: string) => void;
+  /** 播放故事的回调，由 StoryCardPart 触发。 */
+  onPlayStory?: (audioUrl: string) => void;
 };
 
 /**
@@ -68,22 +71,37 @@ const shouldHideAvatar = (role: ChatMessageRole) =>
  * 单条聊天消息的气泡组件，负责处理角色样式与发送状态提示。
  * @param props.message 聊天消息实体
  * @param props.onRetry 失败重试回调
+ * @param props.onPlayStory 播放故事回调
  * @returns JSX.Element 消息气泡
  */
-const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry }) => {
+const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }) => {
   const status = (message.status ?? 'delivered') as ChatMessageDeliveryStatus;
   const isSending = status === 'sending';
   const isFailed = status === 'failed';
   const roleKey: ChatMessageRole = message.role;
 
-  /** 发送中助手消息的占位内容，避免空白气泡。 */
-  const bubbleContent = useMemo(() => {
-    if (roleKey === 'assistant' && isSending) {
-      const trimmedContent = message.content.trim();
-      return trimmedContent.length > 0 ? message.content : '思考中...';
+  /** 消息片段，优先使用 parts，回退到 content。 */
+  const messageParts = useMemo(() => {
+    // 优先使用 parts
+    if ('parts' in message && message.parts && message.parts.length > 0) {
+      return message.parts;
     }
-    return message.content;
-  }, [isSending, message.content, roleKey]);
+    // 回退到 content，包装为 TextPart
+    return [{ type: 'text' as const, content: message.content }];
+  }, [message]);
+
+  /** 发送中助手消息的占位内容，避免空白气泡。 */
+  const isEmptyAssistant = useMemo(() => {
+    if (roleKey === 'assistant' && isSending) {
+      const hasContent = messageParts.some((part) => {
+        if (part.type === 'text') return part.content.trim().length > 0;
+        if (part.type === 'storyCard') return part.storyText.trim().length > 0;
+        return false;
+      });
+      return !hasContent;
+    }
+    return false;
+  }, [isSending, messageParts, roleKey]);
 
   const rowClassName = [styles.row, roleRowClassMap[roleKey]].filter(Boolean).join(' ');
   const bubbleClassName = [
@@ -136,7 +154,19 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry }) => {
           <span className={styles.displayName}>{displayName}</span>
           {formattedTime ? <time className={styles.timestamp}>{formattedTime}</time> : null}
         </div>
-        <div className={bubbleClassName}>{bubbleContent}</div>
+        <div className={bubbleClassName}>
+          {isEmptyAssistant ? (
+            '思考中...'
+          ) : (
+            messageParts.map((part, index) => (
+              <MessagePartRenderer
+                key={index}
+                part={part}
+                onPlayStory={onPlayStory}
+              />
+            ))
+          )}
+        </div>
         {isFailed && (
           <div className={styles.metaRow}>
             <span className={statusClassName}>发送失败</span>

@@ -12,6 +12,6 @@
 
 ## 关键协作与依赖
 - 依赖 `@/types/chat` 中的 `MessagePart` 联合类型。
-- `StoryCardPart` 订阅 `@/stores/generationStore` 获取当前生成阶段。
+- `StoryCardPart` 订阅 `@/stores/generationStore` 获取当前生成阶段，订阅 `@/stores/playbackStore` 实时响应播放状态（图标切换/高亮）。
 - 被 `MessageBubble` 组件调用进行消息内容渲染。
-- 故事播放通过 `onPlayStory` 回调触发 `FloatingPlayer`。
+- 故事播放通过 `onPlayStory` 回调触发 `FloatingPlayer`，或直接调用 store 方法暂停。

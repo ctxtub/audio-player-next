@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import type { StoryCardPart } from '@/types/chat';
 import { useGenerationStore } from '@/stores/generationStore';
+import { usePlaybackStore } from '@/stores/playbackStore';
 import StoryViewer from '@/components/StoryViewer';
 import type { PartRendererProps } from './index';
 import styles from './index.module.scss';
@@ -28,6 +29,13 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
     // 订阅生成状态，用于展示不同阶段 UI
     const phase = useGenerationStore((state) => state.phase);
     const streamingText = useGenerationStore((state) => state.streamingText);
+
+    // 订阅播放状态
+    const currentAudioUrl = usePlaybackStore((state) => state.currentAudioUrl);
+    const isPlaybackPlaying = usePlaybackStore((state) => state.isPlaying);
+    const pauseAudioPlayback = usePlaybackStore((state) => state.pauseAudioPlayback);
+
+    const isThisCardPlaying = isPlaybackPlaying && currentAudioUrl === part.audioUrl;
 
     // 判断是否处于生成中状态（需要展示动效）
     // 只有当全局处于生成状态，且当前卡片没有音频地址（说明是正在生成的卡片）时，才展示动效
@@ -69,7 +77,11 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
 
     /** 处理播放按钮点击。 */
     const handlePlay = () => {
-        onPlayStory?.(part.audioUrl);
+        if (isThisCardPlaying) {
+            pauseAudioPlayback();
+        } else {
+            onPlayStory?.(part.audioUrl);
+        }
     };
 
     /** 打开全文弹窗。 */
@@ -90,7 +102,7 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
     }, [isGeneratingText, isGeneratingAudio]);
 
     return (
-        <div className={styles.storyCard}>
+        <div className={`${styles.storyCard} ${isThisCardPlaying ? styles.playing : ''}`}>
             {/* 生成中的状态头部 */}
             {isGenerating && (
                 <div className={styles.storyHeader}>
@@ -142,7 +154,7 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
                         className={styles.playButton}
                         onClick={handlePlay}
                     >
-                        🎧 播放故事
+                        {isThisCardPlaying ? '⏸ 暂停播放' : '🎧 播放故事'}
                     </button>
                 </div>
             )}

@@ -103,15 +103,26 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
     return false;
   }, [isSending, messageParts, roleKey]);
 
+  /** 是否包含 StoryCardPart，如有则移除气泡包裹样式 */
+  const hasStoryCard = useMemo(() => {
+    return messageParts.some((part) => part.type === 'storyCard');
+  }, [messageParts]);
+
   const rowClassName = [styles.row, roleRowClassMap[roleKey]].filter(Boolean).join(' ');
-  const bubbleClassName = [
-    styles.bubble,
-    roleBubbleClassMap[roleKey],
-    isSending ? styles.bubbleSending : '',
-    isFailed ? styles.bubbleFailed : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+
+  // 如果包含 StoryCard 且不是显示“思考中...”占位符时，则不使用 bubble 样式
+  const shouldRemoveBubble = hasStoryCard && !isEmptyAssistant;
+
+  const bubbleClassName = shouldRemoveBubble
+    ? ''
+    : [
+      styles.bubble,
+      roleBubbleClassMap[roleKey],
+      isSending ? styles.bubbleSending : '',
+      isFailed ? styles.bubbleFailed : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
   const statusClassName = [
     styles.status,
     isSending ? styles.statusSending : '',

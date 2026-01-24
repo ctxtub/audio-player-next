@@ -60,6 +60,7 @@ type PlaybackStoreActions = {
    * @returns void
    */
   hideFloatingPlayer: () => void;
+  setCurrentAudioUrl: (url: string | null) => void;
 };
 
 /**
@@ -311,6 +312,13 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     },
     hideFloatingPlayer: () => {
       set({ isFloatingVisible: false });
+    },
+    /**
+     * 直接设置当前的音频 URL，用于同步播放状态（例如自动切歌时）。
+     * @param url 音频地址或 null
+     */
+    setCurrentAudioUrl: (url: string | null) => {
+      set({ currentAudioUrl: url });
     },
   };
 };

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import type { StoryCardPart } from '@/types/chat';
 import { useGenerationStore } from '@/stores/generationStore';
+import StoryViewer from '@/components/StoryViewer';
 import type { PartRendererProps } from './index';
 import styles from './index.module.scss';
 
@@ -21,7 +22,7 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
     part,
     onPlayStory,
 }) => {
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [showFullText, setShowFullText] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
 
     // 订阅生成状态，用于展示不同阶段 UI
@@ -59,20 +60,26 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
         if (isGenerating) {
             return currentText;
         }
-        if (!needsTruncation || isExpanded) {
+        if (!needsTruncation) {
             return currentText;
         }
+        // 始终截断
         return `${currentText.slice(0, PREVIEW_MAX_LENGTH)}...`;
-    }, [isGenerating, isExpanded, needsTruncation, currentText]);
+    }, [isGenerating, needsTruncation, currentText]);
 
     /** 处理播放按钮点击。 */
     const handlePlay = () => {
         onPlayStory?.(part.audioUrl);
     };
 
-    /** 切换展开/收起状态。 */
-    const toggleExpand = () => {
-        setIsExpanded((prev) => !prev);
+    /** 打开全文弹窗。 */
+    const handleOpenFullText = () => {
+        setShowFullText(true);
+    };
+
+    /** 关闭全文弹窗。 */
+    const handleCloseFullText = () => {
+        setShowFullText(false);
     };
 
     /** 获取状态头部文案。 */
@@ -125,9 +132,9 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
                         <button
                             type="button"
                             className={styles.expandButton}
-                            onClick={toggleExpand}
+                            onClick={handleOpenFullText}
                         >
-                            {isExpanded ? '收起' : '展开全文'}
+                            查看全文
                         </button>
                     )}
                     <button
@@ -139,6 +146,12 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
                     </button>
                 </div>
             )}
+
+            <StoryViewer
+                isOpen={showFullText}
+                onClose={handleCloseFullText}
+                content={currentText}
+            />
         </div>
     );
 };

@@ -49,9 +49,8 @@ const HomePage: React.FC = () => {
 
         await ensureUnlocked();
 
-        const { audioUrl } = await beginStorySession(shortcutText);
-
-        await playAudio(audioUrl);
+        const { audioUrl, messageId } = await beginStorySession(shortcutText);
+        await playAudio(audioUrl, messageId);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : '发生未知错误';
         Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });

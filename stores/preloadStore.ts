@@ -21,7 +21,7 @@ type PreloadStatus = 'idle' | 'loading' | 'ready' | 'error';
  */
 type ActivePreloadTask = {
   token: symbol;
-  promise: Promise<{ segment: string; audioUrl: string }>;
+  promise: Promise<{ segment: string; audioUrl: string; messageId?: string }>;
 };
 
 /**
@@ -29,8 +29,6 @@ type ActivePreloadTask = {
  */
 type PreloadStoreBaseState = {
   status: PreloadStatus;
-  cachedSegment: string | null;
-  cachedAudioUrl: string | null;
   error?: string;
   retryCount: number;
   /**
@@ -43,8 +41,8 @@ type PreloadStoreBaseState = {
  * 预加载 store 对外暴露的动作。
  */
 type PreloadStoreActions = {
-  requestPreload: () => Promise<{ segment: string; audioUrl: string }>;
-  consume: () => { segment: string; audioUrl: string } | null;
+  requestPreload: () => Promise<{ segment: string; audioUrl: string; messageId?: string }>;
+  consume: () => void;
   reset: () => void;
 };
 
@@ -58,8 +56,6 @@ export type PreloadStore = PreloadStoreBaseState & PreloadStoreActions;
  */
 const INITIAL_STATE: PreloadStoreBaseState = {
   status: 'idle',
-  cachedSegment: null,
-  cachedAudioUrl: null,
   error: undefined,
   retryCount: 0,
   _activePreloadTask: null,
@@ -94,12 +90,10 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
     if (state.status === 'loading' && state._activePreloadTask) {
       return state._activePreloadTask.promise;
     }
-    if (state.status === 'ready' && state.cachedSegment && state.cachedAudioUrl) {
-      return Promise.resolve({
-        segment: state.cachedSegment,
-        audioUrl: state.cachedAudioUrl,
-      });
-    }
+
+    // 如果处于 ready 状态，说明前一次预加载已完成但未被外部消费（consume）。
+    // 此时继续请求虽然不符合常规流转，但为了保证 Promise 签名返回值，
+    // 我们允许直接向下执行重新生成逻辑（调用者应在请求前自行判断或消费）。
 
     const configState = useConfigStore.getState();
     if (!configState.isConfigValid()) {
@@ -108,8 +102,6 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
         status: 'error',
         error: error.message,
         retryCount: prev.retryCount + 1,
-        cachedSegment: null,
-        cachedAudioUrl: null,
         _activePreloadTask: null,
       }));
       return Promise.reject(error);
@@ -127,6 +119,7 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
 
       // 1. 在 ChatStore 中准备续写占位
       useChatStore.getState().prepareFollowUpStorySubmission();
+      const generatedMessageId = useChatStore.getState().activeAssistantMessage?.id;
 
       // 1. 重置生成状态，准备展示动效
       useGenerationStore.getState().reset();
@@ -150,10 +143,14 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
       const audioUrl = await fetchAudio(nextSegment, configState.apiConfig.voiceId);
 
       const currentState = get();
+
+      // 这里是生成过程内部的并发检查。
+      // 如果 token 不匹配，说明任务被取消或覆盖，只需返回当前结果即可（虽然可能没人接收）。
       if (currentState._activePreloadTask?.token !== taskToken) {
         return {
           segment: nextSegment,
           audioUrl,
+          messageId: generatedMessageId, // 即使被放弃，最好也返回正确结构
         };
       }
 
@@ -168,14 +165,13 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
 
       set({
         status: 'ready',
-        cachedSegment: nextSegment,
-        cachedAudioUrl: audioUrl,
         retryCount: 0,
       });
 
       return {
         segment: nextSegment,
         audioUrl,
+        messageId: generatedMessageId,
       };
     })()
       .catch((error) => {
@@ -190,8 +186,7 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
             status: 'error',
             error: handledError.message,
             retryCount: prev.retryCount + 1,
-            cachedSegment: null,
-            cachedAudioUrl: null,
+            _activePreloadTask: null,
           }));
         }
 
@@ -217,26 +212,19 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
   },
   /**
    * 消费已缓存的预加载结果，并重置状态。
-   * @returns 若存在缓存则返回对应段落与音频，否则返回 null
+   * (不再返回数据，只负责重置状态锁)
    */
   consume: () => {
-    const { status, cachedSegment, cachedAudioUrl } = get();
-    if (status !== 'ready' || !cachedSegment || !cachedAudioUrl) {
-      return null;
+    const { status } = get();
+    if (status !== 'ready') {
+      return;
     }
 
     set({
       status: 'idle',
-      cachedSegment: null,
-      cachedAudioUrl: null,
       retryCount: 0,
       error: undefined,
     });
-
-    return {
-      segment: cachedSegment,
-      audioUrl: cachedAudioUrl,
-    };
   },
   /**
    * 重置预加载状态，通常在启动新会话或取消播放时调用。

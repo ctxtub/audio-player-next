@@ -59,8 +59,12 @@ type ChatStoreActions = {
   finalizeStoryMessage: (payload: { storyText: string; audioUrl: string }) => void;
   /** 获取当前上下文中的故事 Prompt 和已生成内容（用于续写）。 */
   getStoryContext: () => { prompt: string; storyContent: string };
-  /** 判断给定的音频 URL 是否属于最后一条包含音频的故事卡片。 */
-  isLastAudioUrl: (url: string) => boolean;
+  /** 判断给定的消息 ID 是否属于最后一条包含音频的故事卡片。 */
+  isLastMessageId: (id: string) => boolean;
+  /**
+   * 根据当前消息 ID，查找下一段可播放的故事内容。
+   */
+  getNextStorySegmentByMessageId: (currentMessageId: string) => { audioUrl: string; storyText: string; messageId: string } | null;
 };
 
 /**
@@ -489,19 +493,40 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
 
     return { prompt, storyContent };
   },
-  isLastAudioUrl: (url) => {
+  isLastMessageId: (id) => {
     const messages = get().messages;
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
-      if (msg.role !== 'assistant' || !msg.parts) {
-        continue;
-      }
-      const storyPart = msg.parts.find((p) => p.type === 'storyCard') as StoryCardPart | undefined;
-      if (storyPart && storyPart.audioUrl) {
-        return storyPart.audioUrl === url;
+      if (msg.role === 'assistant' && msg.parts?.some(p => p.type === 'storyCard')) {
+        return msg.id === id;
       }
     }
     return false;
+  },
+  getNextStorySegmentByMessageId: (currentMessageId) => {
+    const messages = get().messages;
+    const currentIndex = messages.findIndex((m) => m.id === currentMessageId);
+
+    if (currentIndex === -1 || currentIndex === messages.length - 1) {
+      return null;
+    }
+
+    // 从当前消息的下一条开始查找助手消息（包含故事卡片）
+    for (let i = currentIndex + 1; i < messages.length; i++) {
+      const msg = messages[i];
+      if (msg.role === 'assistant' && msg.parts) {
+        const storyPart = msg.parts.find((p) => p.type === 'storyCard') as StoryCardPart | undefined;
+        if (storyPart && storyPart.audioUrl && storyPart.storyText) {
+          return {
+            audioUrl: storyPart.audioUrl,
+            storyText: storyPart.storyText,
+            messageId: msg.id,
+          };
+        }
+      }
+    }
+
+    return null;
   },
 });
 

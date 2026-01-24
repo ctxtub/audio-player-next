@@ -39,8 +39,6 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
   const preloadStatus = usePreloadStore((state) => state.status);
   /** 预加载重试次数，用于提示重试进度。 */
   const preloadRetryCount = usePreloadStore((state) => state.retryCount);
-  /** 已缓存的语音地址，提示资源可用。 */
-  const preloadAudioUrl = usePreloadStore((state) => state.cachedAudioUrl);
 
   /** 生成阶段状态 */
   const generationPhase = useGenerationStore((state) => state.phase);
@@ -56,7 +54,7 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
   const isInitialGenerating = generationPhase === 'generating_text' || generationPhase === 'generating_audio';
   const isStoryLoading = isInitialGenerating || preloadStatus === 'loading';
   /** 是否已有已缓存的语音资源，可提示预加载成功。 */
-  const hasPreloadedAudio = Boolean(preloadAudioUrl);
+  const hasPreloadedAudio = preloadStatus === 'ready';
 
   const containerClassName = className
     ? `${styles.statusContainer} ${className}`

@@ -163,7 +163,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
         streamingMessage={activeAssistantMessage}
         isLoading={false}
         onRetry={handleRetry}
-        onPlayStory={playAudio}
+        onPlayStory={(url, id) => playAudio(url, id)}
       />
       <InputArea
         onSubmit={handleSubmit}

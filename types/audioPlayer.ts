@@ -10,9 +10,10 @@ export interface AudioControllerHandle {
   /**
    * 播放指定音频资源，并在内部完成加载与重置。
    * @param audioUrl 音频文件的访问地址
+   * @param messageId 可选：关联的消息 ID
    * @returns 代表异步播放过程的 Promise
    */
-  play: (audioUrl: string) => Promise<void>;
+  play: (audioUrl: string, messageId?: string) => Promise<void>;
   /**
    * 恢复暂停的音频播放。
    * @returns 代表异步恢复过程的 Promise

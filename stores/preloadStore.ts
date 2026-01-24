@@ -3,7 +3,7 @@ import { devtools } from 'zustand/middleware';
 
 import { fetchAudio } from '@/lib/client/ttsGenerate';
 
-import { generateStoryStream } from '@/lib/client/storyGenerateStream';
+import { interactWithAgent, type AgentMessage } from '@/app/services/agentFlow';
 import { useConfigStore } from './configStore';
 import { useChatStore } from './chatStore';
 import { useGenerationStore } from './generationStore';
@@ -86,15 +86,15 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
    * 请求下一段故事与音频，带去重能力；若已有缓存则直接返回。
    * @returns Promise，resolve 为故事文本与音频地址
    */
+  /**
+   * 请求下一段故事与音频，带去重能力；若已有缓存则直接返回。
+   * @returns Promise，resolve 为故事文本与音频地址
+   */
   requestPreload: async () => {
     const state = get();
     if (state.status === 'loading' && state._activePreloadTask) {
       return state._activePreloadTask.promise;
     }
-
-    // 如果处于 ready 状态，说明前一次预加载已完成但未被外部消费（consume）。
-    // 此时继续请求虽然不符合常规流转，但为了保证 Promise 签名返回值，
-    // 我们允许直接向下执行重新生成逻辑（调用者应在请求前自行判断或消费）。
 
     const configState = useConfigStore.getState();
     if (!configState.isConfigValid()) {
@@ -110,37 +110,39 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
 
     const taskToken = Symbol('active-preload');
     const preloadTask = (async () => {
-      // 切换为从 chatStore 获取上下文
-
       // 1. 在 ChatStore 中准备续写占位
       useChatStore.getState().prepareFollowUpStorySubmission();
       const generatedMessageId = useChatStore.getState().activeAssistantMessage?.id;
 
-      // 1. 重置生成状态，准备展示动效
+      // 2. 准备 Agent 上下文：历史记录 + 续写指令
+      const chatContext = useChatStore.getState().conversationContext;
+      const messages: AgentMessage[] = [
+        ...(chatContext as unknown as AgentMessage[]),
+        { role: 'user', content: '请继续故事' }
+      ];
+
+      // 3. 重置生成状态
       useGenerationStore.getState().reset();
       useGenerationStore.getState().setPhase('generating_text');
 
-      // 请求续写 - 使用流式生成以获得打字机效果
+      // 4. 请求 Agent 生成
       const { segment, audioUrl } = await new Promise<{ segment: string; audioUrl: string }>((resolve, reject) => {
         let accumulatedText = '';
-        const msgId = generatedMessageId;
 
-        generateStoryStream(
-          '请继续故事',
+        interactWithAgent(
+          messages,
           {
-            onChunk: (chunk) => {
-              // 检查任务是否仍有效 (通过闭包中的 taskToken 检查在外部做有点难，这里假设由 abort controller 控制)
-              // 但由于 generateStoryStream 内部使用了 trpc subscription，如果不手动 unsubscribe，它会一直流。
-              // 我们依靠外部清理逻辑或者当前简单逻辑。
-              // 严谨做法：如果 token 变了，应该 abort。但在 Promise 内部较难访问实时 state。
-              // 这里先做简单更新。
+            onTextDelta: (chunk) => {
+              // 检查 token 略困难，这里简化处理，依靠 store 状态
               accumulatedText += chunk;
               useGenerationStore.getState().appendText(chunk);
               useChatStore.getState().appendAssistantDelta(chunk);
             },
-            onComplete: (fullContent) => {
-              // 流式文本完成，开始生成音频
+            onComplete: () => {
+              // 文本生成完成，开始生成音频
               useGenerationStore.getState().setPhase('generating_audio');
+              const fullContent = accumulatedText || useChatStore.getState().activeAssistantMessage?.content || "";
+
               fetchAudio(fullContent, configState.apiConfig.voiceId, configState.apiConfig.speed)
                 .then((url) => {
                   resolve({ segment: fullContent, audioUrl: url });
@@ -153,33 +155,25 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
               reject(err);
             }
           }
-        ).then(({ unsubscribe }) => {
-          // 将 unsubscribe 绑定到 promise 或者 state 上？
-          // 当前架构 _activePreloadTask 只有 promise。
-          // 暂时无法存储 unsubscribe，如果组件卸载或 reset，可能无法取消网络请求（但 state 变更后结果会被丢弃）。
-          // 改进：可以在 _activePreloadTask 存储 abortController，但需要改类型。
-          // 考虑到改动量，暂维持现状，只确保 UI 状态一致。
-        }).catch(err => reject(err));
+        ).catch(reject);
       });
 
       const nextSegment = segment;
-
       const currentState = get();
 
-      // 这里是生成过程内部的并发检查。
-      // 如果 token 不匹配，说明任务被取消或覆盖，只需返回当前结果即可（虽然可能没人接收）。
+      // 并发检查
       if (currentState._activePreloadTask?.token !== taskToken) {
         return {
           segment: nextSegment,
           audioUrl,
-          messageId: generatedMessageId, // 即使被放弃，最好也返回正确结构
+          messageId: generatedMessageId,
         };
       }
 
       // 生成完成
       useGenerationStore.getState().setPhase('ready');
 
-      // 3. 标记 ChatStore 消息完成
+      // 标记 ChatStore 消息完成
       useChatStore.getState().finalizeStoryMessage({
         storyText: nextSegment,
         audioUrl,
@@ -200,7 +194,6 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
         const handledError = normalizeError(error);
         const currentState = get();
 
-        // 失败时同步 ChatStore 状态
         useChatStore.getState().markFailure();
 
         if (currentState._activePreloadTask?.token === taskToken) {

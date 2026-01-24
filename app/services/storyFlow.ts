@@ -4,7 +4,7 @@ import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
-import { generateStoryStream } from '@/lib/client/storyGenerateStream';
+import { interactWithAgent, type AgentMessage } from './agentFlow';
 
 /**
  * 可播放段落对象，包含音频地址与文本内容，并标注来源（首段/预加载/即时生成）。
@@ -93,8 +93,6 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
   playbackStore.reset();
   generationStore.reset();
   // 注意：不再调用 storyStore.reset，也不重置 chatStore (保留聊天记录)
-  // 如果需要清空之前的会话，可以在这里调用 chatStore.resetActiveSession() 
-  // 但根据需求“映射到聊天”，理应保留。
 
   // 1. 设置生成中文本阶段
   generationStore.setPhase('generating_text');
@@ -104,21 +102,32 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
 
   // 3. 流式请求故事文本
   const firstSegment = await new Promise<string>((resolve, reject) => {
-    generateStoryStream(prompt, {
-      onChunk: (chunk) => {
-        // 同步更新 UI 状态与 Chat 消息
-        useGenerationStore.getState().appendText(chunk);
-        useChatStore.getState().appendAssistantDelta(chunk);
-      },
-      onComplete: (content) => {
-        resolve(content);
-      },
-      onError: (error) => {
-        // 失败时标记 chatStore
-        useChatStore.getState().markFailure();
-        reject(error);
-      },
-    });
+    // 构造单条消息作为新的故事 Prompt
+    const messages: AgentMessage[] = [{ role: 'user', content: prompt }];
+
+    interactWithAgent(
+      messages,
+      {
+        onTextDelta: (chunk) => {
+          // 同步更新 UI 状态与 Chat 消息
+          useGenerationStore.getState().appendText(chunk);
+          useChatStore.getState().appendAssistantDelta(chunk);
+        },
+        onComplete: () => {
+          // 这里的 Complete 不包含文本，需要在外部捕获累积文本
+          // 由于 appendAssistantDelta 已经即时更新了 store，
+          // 可以直接从 store 或通过闭包累积获取。
+          // 简化起见，我们信任 store 中的最新内容。
+          const fullContent = useChatStore.getState().activeAssistantMessage?.content || "";
+          resolve(fullContent);
+        },
+        onError: (error) => {
+          // 失败时标记 chatStore
+          useChatStore.getState().markFailure();
+          reject(error);
+        },
+      }
+    ).catch(reject); // Catch init errors
   });
 
   // 4. 文本生成完成，进入音频生成阶段
@@ -134,8 +143,6 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
     });
 
     // 启动播放器会话
-    // 使用助手消息 ID 作为会话标识，或者沿用之前的随机 ID 逻辑
-    // 这里使用 assistantMessage.id 确保唯一性
     playbackStore.markSessionStart(assistantMessage.id, apiConfig.playDuration);
 
     // 6. 生成完成
@@ -145,7 +152,7 @@ export const beginStorySession = async (prompt: string): Promise<PlayableSegment
       audioUrl,
       segment: firstSegment,
       source: 'initial',
-      messageId: assistantMessage.id, // 核心修复：返回消息 ID 用于后续追踪
+      messageId: assistantMessage.id,
     };
   } catch (error) {
     generationStore.setError(error instanceof Error ? error.message : '音频生成失败');

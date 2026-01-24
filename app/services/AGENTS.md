@@ -7,7 +7,7 @@
 ## 子目录结构
 - `storyFlow.ts`：管理故事生成与音频播放的流程方法（首页使用）。
 - `chatFlow.ts`：管理对话交互的流程，负责用户消息发送与 AI 回复状态流转。
-- `chatStoryFlow.ts`：聊天页面的故事生成流程，融合对话上下文与故事生成能力。
+- `agentFlow.ts`：【核心】统一的 Agent 交互服务，连接前端业务与后端 LangGraph 能力。
 
 ## 关键协作与依赖
 - 深度依赖 `@/lib/client/**`、`@/lib/server/**` 与 `@/stores/**`。

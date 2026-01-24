@@ -1,73 +1,64 @@
 import { trpc } from '@/lib/trpc/client';
-import { useChatStore } from '@/stores/chatStore';
-import { useConfigStore } from '@/stores/configStore';
-import { fetchAudio } from '@/lib/client/ttsGenerate';
 
 /**
- * 统一 Agent 交互服务。
- * 替代原有的 chatFlow 和 storyFlow 的请求部分。
+ * 标准消息结构，遵循 OpenAI API 风格。
  */
-export const interactWithAgent = async (content: string) => {
-    const chatStore = useChatStore.getState();
+export interface AgentMessage {
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+}
 
-    // 1. 准备提交
-    const { context } = chatStore.prepareNewSubmission(content);
+/**
+ * Agent 流式回调接口。
+ */
+export interface AgentStreamCallbacks {
+    /**
+     * 接收到的新文本片段 (Token)。
+     */
+    onTextDelta: (delta: string) => void;
+    /**
+     * 识别到的用户意图。
+     */
+    onIntentDetected?: (intent: "Story" | "Chat" | "Guidance") => void;
+    /**
+     * 流式传输完成。
+     */
+    onComplete: () => void;
+    /**
+     * 发生错误。
+     */
+    onError: (error: Error) => void;
+}
 
-    // 2. 将 context 转换为 Agent 需要的 { role, content } 格式
-    const history = context.map((c) => ({
-        role: c.role,
-        content: String(c.content || ""),
-    }));
-
+/**
+ * 统一 Agent 交互接口。
+ * 负责发起 TRPC 请求并分发流式事件，不依赖任何 Store 状态。
+ *
+ * @param messages 完整的对话历史（含当前用户输入）。
+ * @param callbacks 事件回调集合。
+ * @param signal AbortSignal 用于取消请求。
+ */
+export const interactWithAgent = async (
+    messages: AgentMessage[],
+    callbacks: AgentStreamCallbacks,
+    signal?: AbortSignal
+): Promise<void> => {
     try {
-        // 3. 发起请求
-        const subscription = await trpc.agent.interact.mutate({
-            content,
-            history,
-        });
+        const subscription = await trpc.agent.interact.mutate(
+            { messages },
+            { signal }
+        );
 
-        let currentIntent: "Story" | "Chat" | "Guidance" | null = null;
-
-        // 4. 处理流式事件
         for await (const event of subscription) {
-            if (event.type === 'meta') {
-                currentIntent = event.intent as "Story" | "Chat" | "Guidance";
-                console.log('Detected Intent:', currentIntent);
-            } else if (event.type === 'token') {
-                // 追加文本
-                chatStore.appendAssistantDelta(event.content);
+            if (event.type === 'token') {
+                callbacks.onTextDelta(event.content);
+            } else if (event.type === 'meta') {
+                callbacks.onIntentDetected?.(event.intent as "Story" | "Chat" | "Guidance");
             }
         }
 
-        // 5. 结束处理
-        // 如果是故事模式，尝试自动生成音频
-        const fullText = chatStore.activeAssistantMessage?.content || "";
-        if (currentIntent === 'Story' && fullText) {
-            // 异步生成音频，不阻塞当前流程
-            triggerStoryPostProcessing(fullText, chatStore.activeAssistantMessage?.id);
-        }
-
-        // Finalize message
-        chatStore.finalizeAssistantMessage({ type: 'done', finishReason: 'stop' });
-
+        callbacks.onComplete();
     } catch (error) {
-        console.error('Agent interaction failed:', error);
-        chatStore.markFailure();
-        throw error;
-    }
-};
-
-/**
- * 故事后处理：生成音频
- */
-const triggerStoryPostProcessing = async (text: string, messageId?: string) => {
-    if (!text || !messageId) return;
-    const config = useConfigStore.getState().apiConfig;
-    try {
-        const audioUrl = await fetchAudio(text, config.voiceId, config.speed);
-        console.log('Audio generated:', audioUrl);
-        // TODO: Update ChatStore message with audioUrl (Needs new action in ChatStore)
-    } catch (error) {
-        console.error('TTS failed:', error);
+        callbacks.onError(error instanceof Error ? error : new Error('Agent interaction failed'));
     }
 };

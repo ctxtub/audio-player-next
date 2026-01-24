@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo } from 'react';
 import { Toast } from 'antd-mobile';
 
 import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
-import { beginChatStoryStream } from '@/app/services/chatStoryFlow';
+import { beginStorySession } from '@/app/services/storyFlow';
 import { useChatStore } from '@/stores/chatStore';
 import { useFloatingPlayer } from '@/components/FloatingPlayer';
 import { detectStoryIntent } from '../../utils/intentDetector';
@@ -87,9 +87,10 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
     if (isStoryRequest) {
       // 故事生成流程
       try {
-        const { audioUrl } = await beginChatStoryStream(content);
-        // 自动播放生成的故事
-        await playAudio(audioUrl);
+        // 使用统一的故事通过流，它会负责初始化 PlaybackStore 会话
+        const { audioUrl, messageId } = await beginStorySession(content);
+        // 自动播放生成的故事，传递 messageId 以便后续能关联到正确的故事段落
+        await playAudio(audioUrl, messageId);
       } catch (error) {
         const message = error instanceof Error ? error.message : '故事生成失败';
         Toast.show({ icon: 'fail', content: message });

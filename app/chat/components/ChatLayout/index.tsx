@@ -5,6 +5,7 @@ import { Toast } from 'antd-mobile';
 
 import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
 import { useChatStore } from '@/stores/chatStore';
+import { usePlaybackStore } from '@/stores/playbackStore';
 import { useFloatingPlayer } from '@/components/FloatingPlayer';
 
 import HeaderArea from './HeaderArea';
@@ -87,6 +88,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
    */
   const handleSubmit = useCallback(async (content: string) => {
     try {
+      await usePlaybackStore.getState().ensureUnlocked();
       await beginChatStream(content);
     } catch (error) {
       const message = error instanceof Error ? error.message : '发送失败，请稍后重试';

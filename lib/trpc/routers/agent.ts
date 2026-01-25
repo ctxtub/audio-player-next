@@ -47,14 +47,6 @@ export const agentRouter = router({
                     // 记录节点开始 (on_chain_start 且属于 Graph 节点)
                     if (event.event === "on_chain_start" && ["Supervisor", "StoryAgent", "ChatAgent", "GuidanceAgent", "AudioGenerator"].includes(event.name)) {
                         console.log(`--- Executing Node: ${event.name} (Start) ---`);
-
-                        // 只有实际的 Agent (不含 Supervisor 和 AudioGenerator) 才需要通知前端更改名称
-                        if (["StoryAgent", "ChatAgent", "GuidanceAgent"].includes(event.name)) {
-                            yield {
-                                type: "agent_active",
-                                name: event.name,
-                            };
-                        }
                     }
 
                     // on_chat_model_stream: LLM 生成的 token 流

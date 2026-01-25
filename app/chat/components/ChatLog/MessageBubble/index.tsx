@@ -51,13 +51,13 @@ const roleBubbleClassMap: Record<ChatMessageRole, string> = {
 /**
  * 角色对应的默认展示信息，避免缺失头像或昵称。 
  */
-const fallbackPersonaMap: Record<ChatMessageRole, { name: string; avatar: string; fallback: string }> = {
-  assistant: { name: 'Agent助手', avatar: '/icons/avatar-assistant.svg', fallback: '助' },
-  user: { name: '我', avatar: '/icons/avatar-user.svg', fallback: '我' },
-  system: { name: '系统提示', avatar: '/icons/avatar-assistant.svg', fallback: '系' },
-  developer: { name: '系统提示', avatar: '/icons/avatar-assistant.svg', fallback: '系' },
-  function: { name: '函数输出', avatar: '/icons/avatar-assistant.svg', fallback: '函' },
-  tool: { name: '工具消息', avatar: '/icons/avatar-assistant.svg', fallback: '工' },
+const fallbackPersonaMap: Record<ChatMessageRole, { name: string; avatar: string }> = {
+  assistant: { name: 'Agent助手', avatar: '/icons/avatar-assistant.svg' },
+  user: { name: '我', avatar: '/icons/avatar-user.svg' },
+  system: { name: '系统提示', avatar: '/icons/avatar-assistant.svg' },
+  developer: { name: '系统提示', avatar: '/icons/avatar-assistant.svg' },
+  function: { name: '函数输出', avatar: '/icons/avatar-assistant.svg' },
+  tool: { name: '工具消息', avatar: '/icons/avatar-assistant.svg' },
 };
 
 /**
@@ -66,6 +66,17 @@ const fallbackPersonaMap: Record<ChatMessageRole, { name: string; avatar: string
  */
 const shouldHideAvatar = (role: ChatMessageRole) =>
   role === 'system' || role === 'developer' || role === 'function' || role === 'tool';
+
+
+/**
+ * Agent 身份配置表
+ */
+const agentPersonaMap: Record<string, { name: string; avatar: string }> = {
+  'story_agent': { name: '创作Agent', avatar: '/icons/avatar-assistant.svg' },
+  'chat_agent': { name: '聊天Agent', avatar: '/icons/avatar-assistant.svg' },
+  'guidance_agent': { name: '指令Agent', avatar: '/icons/avatar-assistant.svg' },
+  'summary_agent': { name: '摘要Agent', avatar: '/icons/avatar-assistant.svg' },
+};
 
 /**
  * 单条聊天消息的气泡组件，负责处理角色样式与发送状态提示。
@@ -79,23 +90,26 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
   const isSending = status === 'sending';
   const isFailed = status === 'failed';
   const roleKey: ChatMessageRole = message.role;
+  const agentType = 'metadata' in message ? message.metadata?.agentType : undefined;
 
   /** 消息片段，优先使用 parts，回退到 content。 */
   const messageParts = useMemo(() => {
-    // 优先使用 parts
-    if ('parts' in message && message.parts && message.parts.length > 0) {
-      return message.parts;
+    const parts = message.parts;
+
+    if (!parts || parts.length === 0) {
+      return [{ type: 'text' as const, content: message.content }];
     }
-    // 回退到 content，包装为 TextPart
-    return [{ type: 'text' as const, content: message.content }];
+
+    return parts;
   }, [message]);
 
   /** 发送中助手消息的占位内容，避免空白气泡。 */
   const isEmptyAssistant = useMemo(() => {
     if (roleKey === 'assistant' && isSending) {
+      // 检查是否有实质内容
       const hasContent = messageParts.some((part) => {
-        if (part.type === 'text') return part.content.trim().length > 0;
-        if (part.type === 'storyCard') return part.storyText.trim().length > 0;
+        if ('content' in part && typeof part.content === 'string') return part.content.trim().length > 0;
+        if ('storyText' in part) return part.storyText.trim().length > 0;
         return false;
       });
       return !hasContent;
@@ -103,25 +117,17 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
     return false;
   }, [isSending, messageParts, roleKey]);
 
-  /** 是否包含 StoryCardPart，如有则移除气泡包裹样式 */
-  const hasStoryCard = useMemo(() => {
-    return messageParts.some((part) => part.type === 'storyCard');
-  }, [messageParts]);
-
-  /** 是否包含 GuidancePart，如有则移除气泡包裹样式 */
-  const hasGuidance = useMemo(() => {
-    return messageParts.some((part) => part.type === 'guidance');
-  }, [messageParts]);
-
-  /** 是否包含 SummaryPart，如有则移除气泡包裹样式 */
-  const hasSummary = useMemo(() => {
-    return messageParts.some((part) => part.type === 'summary');
+  /** 是否为卡片类视图（Story/Guidance/Summary），此类视图不展示气泡背景 */
+  const isCardView = useMemo(() => {
+    return messageParts.some((part) =>
+      ['storyCard', 'guidance', 'summary'].includes(part.type)
+    );
   }, [messageParts]);
 
   const rowClassName = [styles.row, roleRowClassMap[roleKey]].filter(Boolean).join(' ');
 
-  // 如果包含 StoryCard/Guidance/Summary 且不是显示“思考中...”占位符时，则不使用 bubble 样式
-  const shouldRemoveBubble = (hasStoryCard || hasGuidance || hasSummary) && !isEmptyAssistant;
+  // 如果是卡片视图且不是显示“思考中...”占位符时，移除以 bubble 样式
+  const shouldRemoveBubble = isCardView && !isEmptyAssistant;
 
   const bubbleClassName = shouldRemoveBubble
     ? ''
@@ -141,10 +147,11 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
     .filter(Boolean)
     .join(' ');
 
-  const persona = fallbackPersonaMap[roleKey];
-  const displayName = message.displayName ?? persona.name;
-  const avatarSrc = message.avatar ?? persona.avatar;
-  const avatarFallback = persona.fallback;
+  const defaultPersona = fallbackPersonaMap[roleKey];
+  const currentPersona = (agentType ? agentPersonaMap[agentType] : undefined) ?? defaultPersona;
+
+  const displayName = currentPersona.name;
+  const avatarSrc = currentPersona.avatar;
 
   const formattedTime = useMemo(() => {
     if (!message.createdAt) {
@@ -166,7 +173,6 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
         <Avatar
           className={styles.avatar}
           src={avatarSrc}
-          fallback={avatarFallback}
           aria-label={`${displayName}头像`}
         />
       )}

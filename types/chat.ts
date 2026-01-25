@@ -1,3 +1,4 @@
+import type { AgentType } from './agent';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 
 /**
@@ -30,8 +31,8 @@ export type ChatMessageMetadata = {
   finishReason?: string;
   /** OpenAI 返回的 token 统计。 */
   usage?: ChatUsageSummary;
-  /** 标识该消息是否为上下文总结消息。 */
-  isSummary?: boolean;
+  /** 标识该消息所属的 Agent 类型。 */
+  agentType?: AgentType;
 };
 
 // ============================================================================

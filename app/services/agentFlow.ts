@@ -31,10 +31,6 @@ export interface AgentStreamCallbacks {
      * 接收到的语音音频数据 (Blob URL)。
      */
     onAudioComplete?: (audioUrl: string) => void;
-    /**
-     * 激活的 Agent 名称。
-     */
-    onAgentActive?: (name: string) => void;
 }
 
 /**
@@ -64,8 +60,6 @@ export const interactWithAgent = async (
             } else if (event.type === 'meta') {
                 console.log('Detected Intent in AgentFlow:', event.intent);
                 callbacks.onIntentDetected?.(event.intent as "Story" | "Chat" | "Guidance");
-            } else if (event.type === 'agent_active' && event.name) {
-                callbacks.onAgentActive?.(event.name);
             } else if (event.type === 'audio_start') {
                 callbacks.onAudioStart?.();
             } else if (event.type === 'audio') {

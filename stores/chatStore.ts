@@ -7,6 +7,7 @@ import type {
   ChatStreamDoneEvent,
   StoryCardPart,
 } from '@/types/chat';
+import type { AgentType } from '@/types/agent';
 import {
   createAssistantPlaceholder,
   createTempMessageId,
@@ -25,7 +26,6 @@ export type ChatStoreAction =
   // 流式更新
   | { type: 'stream.delta'; content: string }          // 追加内容
   | { type: 'stream.intent'; intent: 'Story' | 'Chat' | 'Guidance' } // 更新意图
-  | { type: 'stream.persona'; name: string }           // 更新角色名
   | { type: 'stream.finish'; payload: ChatStreamDoneEvent } // 普通对话完成
   | { type: 'stream.story_finish'; storyText: string; audioUrl: string } // 故事生成完成
   | { type: 'stream.fail'; error?: string }            // 失败
@@ -201,34 +201,42 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
 
           const msg = messages[lastAssistantIndex];
           const currentContent = msg.content;
-          let newParts: any[] = [];
+          let newParts = msg.parts;
 
+          let agentType: AgentType | undefined;
           switch (action.intent) {
             case 'Story':
-              newParts = [{ type: 'storyCard', storyText: currentContent, audioUrl: '' }];
+              agentType = 'story_agent';
+              // 转换消息片段为 StoryCardPart
+              newParts = [{
+                type: 'storyCard',
+                storyText: currentContent,
+                audioUrl: '', // 初始为空
+              }];
+              break;
+            case 'Chat':
+              agentType = 'chat_agent';
               break;
             case 'Guidance':
-              newParts = [{ type: 'guidance', content: currentContent }];
-              break;
-            default:
-              newParts = [];
+              agentType = 'guidance_agent';
+              // 转换消息片段为 GuidancePart
+              newParts = [{
+                type: 'guidance',
+                content: currentContent,
+              } as any];
               break;
           }
 
-          messages[lastAssistantIndex] = {
-            ...msg,
-            parts: newParts.length > 0 ? newParts : undefined,
-          };
-          return { messages };
-        }
-        case 'stream.persona': {
-          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
-          if (lastAssistantIndex === -1) return state;
-
-          messages[lastAssistantIndex] = {
-            ...messages[lastAssistantIndex],
-            displayName: action.name,
-          };
+          if (agentType) {
+            messages[lastAssistantIndex] = {
+              ...msg,
+              parts: newParts,
+              metadata: {
+                ...msg.metadata,
+                agentType,
+              },
+            };
+          }
           return { messages };
         }
         case 'stream.finish': {
@@ -241,6 +249,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
               ...messages[lastAssistantIndex],
               status: 'delivered',
               metadata: {
+                ...messages[lastAssistantIndex].metadata,
                 finishReason: action.payload.finishReason,
                 usage: action.payload.usage,
               },
@@ -312,11 +321,12 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
             id: createTempMessageId('system'),
             role: 'assistant',
             content: action.summaryText,
-            displayName: '摘要Agent',
+            // View 层根据 agentType 决定 displayName
+            // displayName: '摘要Agent',
             parts: [{ type: 'summary', content: action.summaryText }],
             createdAt: createTimestamp(),
             status: 'delivered',
-            metadata: { isSummary: true }
+            metadata: { agentType: 'summary_agent' }
           };
 
           // 3. 找到插入索引
@@ -352,13 +362,13 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
 
     // 2. 找到所有非 Summary、非 System 的普通消息（User/Assistant）
     // 以及现有的 Summary 消息
-    const summaryMsgIndex = messages.findIndex(m => m.metadata?.isSummary);
+    const summaryMsgIndex = messages.findIndex(m => m.metadata?.agentType === 'summary_agent');
     const existingSummaryMsg = summaryMsgIndex !== -1 ? messages[summaryMsgIndex] : null;
 
     // 确定普通消息的起始点：如果存在 Summary，则从 Summary 之后开始找；否则从头开始
     const normalMessagesStartIndex = summaryMsgIndex !== -1 ? summaryMsgIndex + 1 : 0;
     const normalMessages = messages.slice(normalMessagesStartIndex).filter(m =>
-      ['user', 'assistant'].includes(m.role) && !m.metadata?.isSummary
+      ['user', 'assistant'].includes(m.role) && m.metadata?.agentType !== 'summary_agent'
     );
 
     // 3. 检查数量是否超过触发阈值
@@ -384,7 +394,6 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     ] as any[]; // cast to AgentMessage[]
 
     try {
-      console.log('[SummaryAgent] Triggering summary...', contextForSummary);
       const { summarizeContext } = await import('@/app/services/agentFlow');
       const summaryText = await summarizeContext(contextForSummary);
 
@@ -460,7 +469,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
       const messages = get().messages;
       // 过滤逻辑：
       // 1. 找到最后一条 Summary 消息。
-      const lastSummaryIndex = messages.findLastIndex(m => m.metadata?.isSummary);
+      const lastSummaryIndex = messages.findLastIndex(m => m.metadata?.agentType === 'summary_agent');
 
       // 2. 如果存在，则截取 [Summary ... 结尾] 的片段。
       //    如果不存在，则使用全量消息。

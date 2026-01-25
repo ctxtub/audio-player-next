@@ -1,5 +1,5 @@
 import { SystemMessage } from "@langchain/core/messages";
-import { getAgentModel } from "../model";
+import { getStoryModel } from "../model";
 import { AgentState } from "../state";
 
 // 复用原有的 Prompt，稍微调整以适应 Agent 上下文
@@ -23,7 +23,7 @@ const STORY_SYSTEM_PROMPT = `
  * StoryAgent 节点逻辑
  */
 export const storyNode = async (state: AgentState) => {
-    const model = getAgentModel();
+    const model = getStoryModel();
 
     // 这里的 messages 包含了用户的 Prompt 和历史
     // LangGraph 会自动处理 messages 传递

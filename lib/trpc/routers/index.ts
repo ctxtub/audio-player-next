@@ -6,7 +6,6 @@
 
 import { router } from '../init';
 import { authRouter } from './auth';
-import { chatRouter } from './chat';
 import { configRouter } from './config';
 import { ttsRouter } from './tts';
 import { agentRouter } from './agent';
@@ -16,7 +15,6 @@ import { agentRouter } from './agent';
  */
 export const appRouter = router({
     auth: authRouter,
-    chat: chatRouter,
     config: configRouter,
     tts: ttsRouter,
     agent: agentRouter,

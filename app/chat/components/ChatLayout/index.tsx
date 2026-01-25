@@ -8,6 +8,7 @@ import { useChatStore } from '@/stores/chatStore';
 import { useFloatingPlayer } from '@/components/FloatingPlayer';
 
 import HeaderArea from './HeaderArea';
+import OnboardingModal from '../OnboardingModal';
 import InputArea from './InputArea';
 import MessageArea from './MessageArea';
 import styles from './index.module.scss';
@@ -145,6 +146,8 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
 
   return (
     <div className={styles.chatLayout}>
+      <OnboardingModal />
+
       <HeaderArea
         visible={shouldShowHeader}
         suggestions={defaultSuggestions}

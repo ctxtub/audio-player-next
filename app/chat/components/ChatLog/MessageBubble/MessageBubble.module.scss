@@ -73,7 +73,6 @@
 }
 
 .bubble {
-  padding: 14px 18px;
   border-radius: 20px;
   line-height: 1.7;
   word-break: break-word;
@@ -85,11 +84,13 @@
 }
 
 .bubbleAssistant {
+  padding: 12px;
   border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
   background: color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
 .bubbleUser {
+  padding: 14px 18px;
   border-color: var(--primary);
   background: var(--primary);
   color: #ffffff;
@@ -97,6 +98,7 @@
 }
 
 .bubbleSystem {
+  padding: 12px;
   border-style: dashed;
   border-color: color-mix(in srgb, var(--secondary) 80%, transparent);
   color: color-mix(in srgb, var(--secondary) 92%, var(--foreground));
@@ -104,7 +106,105 @@
 }
 
 .bubbleSending {
+  /* 移除通用阴影，避免用户消息出现光晕 */
+}
+
+.bubbleAssistant.bubbleSending {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 10%, transparent);
+  }
+}
+
+.loadingContainer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.shimmerText {
+  font-weight: 500;
+  background: linear-gradient(90deg,
+      var(--foreground) 0%,
+      var(--primary) 50%,
+      var(--foreground) 100%);
+  background-size: 200% auto;
+  color: transparent;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: shimmer 3s linear infinite;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: 200% center;
+  }
+}
+
+.dotFlashing {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background-color: var(--primary);
+  color: var(--primary);
+  animation: dotFlashing 1s infinite linear alternate;
+  animation-delay: 0.5s;
+  margin: 0 12px;
+}
+
+.dotFlashing::before,
+.dotFlashing::after {
+  content: '';
+  display: inline-block;
+  position: absolute;
+  top: 0;
+}
+
+.dotFlashing::before {
+  left: -12px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background-color: var(--primary);
+  color: var(--primary);
+  animation: dotFlashing 1s infinite linear alternate;
+  animation-delay: 0s;
+}
+
+.dotFlashing::after {
+  left: 12px;
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background-color: var(--primary);
+  color: var(--primary);
+  animation: dotFlashing 1s infinite linear alternate;
+  animation-delay: 1s;
+}
+
+@keyframes dotFlashing {
+  0% {
+    background-color: var(--primary);
+  }
+
+  50%,
+  100% {
+    background-color: color-mix(in srgb, var(--primary) 20%, transparent);
+  }
 }
 
 .bubbleFailed {

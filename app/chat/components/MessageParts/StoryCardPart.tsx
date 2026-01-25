@@ -9,7 +9,7 @@ import type { PartRendererProps } from './index';
 import styles from './index.module.scss';
 
 /** 故事预览的最大字符数。 */
-const PREVIEW_MAX_LENGTH = 200;
+const PREVIEW_MAX_LENGTH = 100;
 
 /**
  * 故事卡片片段渲染器

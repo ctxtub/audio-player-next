@@ -8,7 +8,7 @@ import styles from './index.module.scss';
  */
 type InputAreaProps = Pick<
   ComposerProps,
-  'onSubmit' | 'disabled' | 'isSending' | 'value' | 'onChange'
+  'onSubmit' | 'disabled' | 'isSending' | 'value' | 'onChange' | 'onClear'
 >;
 
 /**
@@ -21,6 +21,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   isSending,
   value,
   onChange,
+  onClear,
 }) => {
   return (
     <div className={styles.inputArea}>
@@ -31,6 +32,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           isSending={isSending}
           value={value}
           onChange={onChange}
+          onClear={onClear}
         />
       </div>
     </div>

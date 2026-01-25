@@ -35,7 +35,7 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
     let audioUrl: string = '';
     let generatedContent: string = '';
 
-    // 2. 重置状态并设置生成文本阶段
+    // 重置状态并设置生成文本阶段
     generationStore.reset();
     generationStore.setPhase('generating_text');
 
@@ -73,7 +73,7 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
           audioUrl = url;
         },
         onComplete: () => {
-          // 3. 生成完成 & 更新 ChatStore
+          // 生成完成 & 更新 ChatStore
           generationStore.setPhase('ready');
 
           if (!streamErrored) {

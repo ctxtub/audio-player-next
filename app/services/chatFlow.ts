@@ -77,16 +77,6 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
           }
           useChatStore.getState().dispatch({ type: 'stream.intent', intent });
         },
-        onAgentActive: (name) => {
-          // 将英文名转换为更友好的中文显示
-          const displayNames: Record<string, string> = {
-            "StoryAgent": "创作Agent",
-            "ChatAgent": "聊天Agent",
-            "GuidanceAgent": "指令Agent",
-          };
-          const displayName = displayNames[name] || name;
-          useChatStore.getState().dispatch({ type: 'stream.persona', name: displayName });
-        },
         onAudioStart: () => {
           generationStore.setPhase('generating_audio');
         },

@@ -23,6 +23,11 @@ export interface AgentConfig {
     [key: string]: any;
 }
 
+/**
+ * Agent 类型定义，对应不同的业务能力与角色。
+ */
+export type AgentType = 'story_agent' | 'chat_agent' | 'guidance_agent' | 'summary_agent';
+
 import { BaseMessage } from "@langchain/core/messages";
 
 /**

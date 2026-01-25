@@ -11,6 +11,20 @@ export const interactSchema = z.object({
             content: z.string(),
         })
     ),
+    /**
+     * Agent 配置参数，支持按命名空间扩展。
+     */
+    agentConfig: z
+        .object({
+            audio: z
+                .object({
+                    speed: z.number().optional(),
+                    voiceId: z.string().optional(),
+                })
+                .optional(),
+        })
+        .and(z.record(z.string(), z.any()))
+        .optional(),
 });
 
 export type InteractInput = z.infer<typeof interactSchema>;

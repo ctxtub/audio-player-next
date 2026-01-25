@@ -1,6 +1,6 @@
 import { SystemMessage } from "@langchain/core/messages";
 import { getAgentModel } from "../model";
-import { AgentState } from "../state";
+import type { AgentState } from "@/types/agent";
 
 const GUIDANCE_SYSTEM_PROMPT = `
 ## 角色

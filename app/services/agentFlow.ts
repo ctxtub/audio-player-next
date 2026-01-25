@@ -1,12 +1,7 @@
 import { trpc } from '@/lib/trpc/client';
+import type { AgentMessage, AgentConfig } from '@/types/agent';
 
-/**
- * 标准消息结构，遵循 OpenAI API 风格。
- */
-export interface AgentMessage {
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-}
+export type { AgentMessage, AgentConfig };
 
 /**
  * Agent 流式回调接口。
@@ -49,15 +44,17 @@ export interface AgentStreamCallbacks {
  * @param messages 完整的对话历史（含当前用户输入）。
  * @param callbacks 事件回调集合。
  * @param signal AbortSignal 用于取消请求。
+ * @param config Agent 配置参数。
  */
 export const interactWithAgent = async (
     messages: AgentMessage[],
     callbacks: AgentStreamCallbacks,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    config?: AgentConfig
 ): Promise<void> => {
     try {
         const subscription = await trpc.agent.interact.mutate(
-            { messages },
+            { messages, agentConfig: config },
             { signal }
         );
 

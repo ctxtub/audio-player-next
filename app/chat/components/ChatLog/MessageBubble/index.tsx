@@ -172,7 +172,10 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
         </div>
         <div className={bubbleClassName}>
           {isEmptyAssistant ? (
-            '思考中...'
+            <div className={styles.loadingContainer}>
+              <span className={styles.shimmerText}>正在为您构思</span>
+              <div className={styles.dotFlashing}></div>
+            </div>
           ) : (
             messageParts.map((part, index) => (
               <MessagePartRenderer

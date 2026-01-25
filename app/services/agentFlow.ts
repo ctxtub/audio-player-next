@@ -88,3 +88,18 @@ export const interactWithAgent = async (
         callbacks.onError(error instanceof Error ? error : new Error('Agent interaction failed'));
     }
 };
+
+/**
+ * 触发历史消息总结。
+ * @param messages 需要总结的消息列表
+ * @returns 总结后的文本
+ */
+export const summarizeContext = async (messages: AgentMessage[]): Promise<string> => {
+    try {
+        const summary = await trpc.agent.summarize.mutate({ messages });
+        return summary;
+    } catch (error) {
+        console.error("Failed to summarize context:", error);
+        throw error;
+    }
+};

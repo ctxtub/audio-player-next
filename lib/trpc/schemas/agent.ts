@@ -27,4 +27,14 @@ export const interactSchema = z.object({
         .optional(),
 });
 
+export const summarizeContextSchema = z.object({
+    messages: z.array(
+        z.object({
+            role: z.enum(["user", "assistant", "system"]),
+            content: z.string(),
+        })
+    ),
+});
+
 export type InteractInput = z.infer<typeof interactSchema>;
+export type SummarizeContextInput = z.infer<typeof summarizeContextSchema>;

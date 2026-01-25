@@ -16,7 +16,7 @@ import {
 } from '@/utils/chatUtils';
 
 /**
- * 聊天 Store 的 Action 定义，统一管理所有对消息状态的变更操作。
+ * 聊天 Store 的 Action 定义，统一管理所有对单条目消息状态的变更操作。
  */
 export type ChatStoreAction =
   // 用户触发
@@ -28,7 +28,13 @@ export type ChatStoreAction =
   | { type: 'stream.persona'; name: string }           // 更新角色名
   | { type: 'stream.finish'; payload: ChatStreamDoneEvent } // 普通对话完成
   | { type: 'stream.story_finish'; storyText: string; audioUrl: string } // 故事生成完成
-  | { type: 'stream.fail'; error?: string };           // 失败
+  | { type: 'stream.fail'; error?: string }            // 失败
+  | {
+    type: 'summary.update';
+    summaryText: string;
+    insertAfterMessageId?: string;
+    oldSummaryId?: string
+  }; // 总结更新
 
 /**
  * 聊天 Store 的计算属性与选择器接口。
@@ -76,6 +82,9 @@ type ChatStoreBaseState = {
  * 聊天 store 暴露的动作集合。
  */
 type ChatStoreActions = {
+
+  /** 触发历史消息总结逻辑 (Frontend Trigger)。 */
+  checkAndSummarize: () => Promise<void>;
 
   /** 主动取消时清理占位消息与上下文。 */
   resetActiveSession: () => void;
@@ -294,10 +303,103 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
 
           return { messages };
         }
+        case 'summary.update': {
+          // 1. 仅移除旧的总结消息
+          const messagesWithoutOldSummary = messages.filter(m => m.id !== action.oldSummaryId);
+
+          // 2. 创建新的总结消息
+          const summaryMsg: ChatMessage = {
+            id: createTempMessageId('system'),
+            role: 'assistant',
+            content: action.summaryText,
+            displayName: '摘要Agent',
+            parts: [{ type: 'summary', content: action.summaryText }],
+            createdAt: createTimestamp(),
+            status: 'delivered',
+            metadata: { isSummary: true }
+          };
+
+          // 3. 找到插入索引
+          // 我们希望将新总结插入到“被总结的最后一条消息”之后
+          const insertIndex = messagesWithoutOldSummary.findIndex(m => m.id === action.insertAfterMessageId);
+
+          const newMessages = [...messagesWithoutOldSummary];
+          if (insertIndex !== -1) {
+            newMessages.splice(insertIndex + 1, 0, summaryMsg);
+          } else {
+            // 兜底：如果未找到目标消息（例如初始空上下文被总结？），则插在头部
+            newMessages.unshift(summaryMsg);
+          }
+
+          return {
+            messages: newMessages
+          };
+        }
         default:
           return state;
       }
     });
+  },
+
+  checkAndSummarize: async () => {
+    const { messages, dispatch } = get();
+    // 定义阈值：
+    // TRIGGER_THRESHOLD: 当普通消息积累超过 4 条 (2轮对话) 时触发检查
+    // RETAIN_THRESHOLD: 触发总结后，仅保留最近 2 条 (1轮对话) 普通消息，其余归档
+    // 这种"高水位-低水位"机制（Hysteresis）可以实现每 2 轮对话触发一次批量总结，避免过于频繁
+    const TRIGGER_THRESHOLD = 4;
+    const RETAIN_THRESHOLD = 2;
+
+    // 2. 找到所有非 Summary、非 System 的普通消息（User/Assistant）
+    // 以及现有的 Summary 消息
+    const summaryMsgIndex = messages.findIndex(m => m.metadata?.isSummary);
+    const existingSummaryMsg = summaryMsgIndex !== -1 ? messages[summaryMsgIndex] : null;
+
+    // 确定普通消息的起始点：如果存在 Summary，则从 Summary 之后开始找；否则从头开始
+    const normalMessagesStartIndex = summaryMsgIndex !== -1 ? summaryMsgIndex + 1 : 0;
+    const normalMessages = messages.slice(normalMessagesStartIndex).filter(m =>
+      ['user', 'assistant'].includes(m.role) && !m.metadata?.isSummary
+    );
+
+    // 3. 检查数量是否超过触发阈值
+    if (normalMessages.length <= TRIGGER_THRESHOLD) {
+      return;
+    }
+
+    // 4. 准备需要总结的消息：现存 Summary (作为上下文) + 待归档的普通消息
+    // 待归档消息 = 所有普通消息 - 最近保留的 RETAIN_THRESHOLD 条
+    const messagesToArchive = normalMessages.slice(0, -RETAIN_THRESHOLD);
+
+    if (messagesToArchive.length === 0) return;
+
+    // 记录最后一条被总结的消息 ID，新总结将插在它之后
+    const lastArchivedMsgId = messagesToArchive[messagesToArchive.length - 1].id;
+
+    // 构造请求 payload
+    // 注意：这里需要转换为 AgentMessage 格式 (简单的 role/content 对象)
+    // 且只取这部分作为 summarize 的输入
+    const contextForSummary = [
+      ...(existingSummaryMsg ? [{ role: existingSummaryMsg.role, content: existingSummaryMsg.content }] : []),
+      ...messagesToArchive.map(m => ({ role: m.role, content: m.content }))
+    ] as any[]; // cast to AgentMessage[]
+
+    try {
+      console.log('[SummaryAgent] Triggering summary...', contextForSummary);
+      const { summarizeContext } = await import('@/app/services/agentFlow');
+      const summaryText = await summarizeContext(contextForSummary);
+
+      // 5. 更新 Store
+      // 这里的逻辑已调整：不删除历史消息，只替换 Summary 节点的位置
+      dispatch({
+        type: 'summary.update',
+        summaryText,
+        insertAfterMessageId: lastArchivedMsgId,
+        oldSummaryId: existingSummaryMsg?.id
+      } as any);
+
+    } catch (error) {
+      console.error('[SummaryAgent] Failed to summarize:', error);
+    }
   },
 
   resetActiveSession: () => {
@@ -355,7 +457,18 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
       return null;
     },
     conversationMessages: () => {
-      return mapMessagesToContext(get().messages);
+      const messages = get().messages;
+      // 过滤逻辑：
+      // 1. 找到最后一条 Summary 消息。
+      const lastSummaryIndex = messages.findLastIndex(m => m.metadata?.isSummary);
+
+      // 2. 如果存在，则截取 [Summary ... 结尾] 的片段。
+      //    如果不存在，则使用全量消息。
+      const effectiveMessages = lastSummaryIndex !== -1
+        ? messages.slice(lastSummaryIndex)
+        : messages;
+
+      return mapMessagesToContext(effectiveMessages);
     },
     latestMessage: () => {
       const messages = get().messages;

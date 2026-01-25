@@ -113,10 +113,15 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
     return messageParts.some((part) => part.type === 'guidance');
   }, [messageParts]);
 
+  /** 是否包含 SummaryPart，如有则移除气泡包裹样式 */
+  const hasSummary = useMemo(() => {
+    return messageParts.some((part) => part.type === 'summary');
+  }, [messageParts]);
+
   const rowClassName = [styles.row, roleRowClassMap[roleKey]].filter(Boolean).join(' ');
 
-  // 如果包含 StoryCard/Guidance 且不是显示“思考中...”占位符时，则不使用 bubble 样式
-  const shouldRemoveBubble = (hasStoryCard || hasGuidance) && !isEmptyAssistant;
+  // 如果包含 StoryCard/Guidance/Summary 且不是显示“思考中...”占位符时，则不使用 bubble 样式
+  const shouldRemoveBubble = (hasStoryCard || hasGuidance || hasSummary) && !isEmptyAssistant;
 
   const bubbleClassName = shouldRemoveBubble
     ? ''

@@ -123,6 +123,9 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
                 payload: { type: 'done', finishReason: 'stop' }
               });
             }
+
+            // 触发历史总结检查 (异步执行，不阻塞 UI)
+            useChatStore.getState().checkAndSummarize().catch(console.error);
           }
         },
         onError: (error) => {

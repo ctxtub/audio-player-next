@@ -2,7 +2,8 @@ import { router, publicProcedure } from "../init";
 import { graph } from "@/lib/agent/graph";
 import { HumanMessage, AIMessage, SystemMessage, BaseMessage } from "@langchain/core/messages";
 import { TRPCError } from "@trpc/server";
-import { interactSchema } from "../schemas/agent";
+import { interactSchema, summarizeContextSchema } from "../schemas/agent";
+import { summarizeContext } from "@/lib/agent/nodes/summary";
 
 export const agentRouter = router({
     /**
@@ -26,7 +27,7 @@ export const agentRouter = router({
                 if (msg.role === "user") return new HumanMessage(msg.content);
                 if (msg.role === "assistant") return new AIMessage(msg.content);
                 if (msg.role === "system") return new SystemMessage(msg.content);
-                return new HumanMessage(msg.content); // Default fallback
+                return new HumanMessage(msg.content); // 默认回退到 HumanMessage
             });
 
             // 2. 构造初始状态
@@ -104,6 +105,39 @@ export const agentRouter = router({
                 throw new TRPCError({
                     code: "INTERNAL_SERVER_ERROR",
                     message: error instanceof Error ? error.message : "Agent 运行失败",
+                });
+            }
+        }),
+
+    /**
+     * 总结上下文接口。
+     * 用于前端触发的历史消息折叠与总结。
+     */
+    summarize: publicProcedure
+        .input(summarizeContextSchema)
+        .mutation(async ({ input }) => {
+            const { messages } = input;
+
+            if (messages.length === 0) {
+                return "";
+            }
+
+            // 转换消息格式
+            const validMessages: BaseMessage[] = messages.map((msg) => {
+                if (msg.role === "user") return new HumanMessage(msg.content);
+                if (msg.role === "assistant") return new AIMessage(msg.content);
+                if (msg.role === "system") return new SystemMessage(msg.content);
+                return new HumanMessage(msg.content);
+            });
+
+            try {
+                const summary = await summarizeContext(validMessages);
+                return summary;
+            } catch (error) {
+                console.error("Context summarization failed:", error);
+                throw new TRPCError({
+                    code: "INTERNAL_SERVER_ERROR",
+                    message: "总结生成失败",
                 });
             }
         }),

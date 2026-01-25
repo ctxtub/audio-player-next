@@ -1,6 +1,7 @@
 .app {
   max-width: 800px;
-  min-height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   margin: 0 auto;
   background-color: var(--initial-background, var(--background, #000000));
   color: var(--initial-foreground, var(--foreground, #ffffff));

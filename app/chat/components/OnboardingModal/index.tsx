@@ -12,17 +12,17 @@ const ONBOARDING_CONFIG = {
     agents: [
         {
             icon: '📚',
-            name: '故事作家',
+            name: '创作Agent',
             desc: '专业的连载故事创作者，为您构思精彩情节与宏大世界观。',
         },
         {
             icon: '💬',
-            name: '聊天助手',
+            name: '聊天Agent',
             desc: '解答使用疑问，陪你轻松闲聊，或协助开启新的故事篇章。',
         },
         {
             icon: '⚙️',
-            name: '系统指令',
+            name: '指令Agent',
             desc: '响应您的剧情干预请求，生成明确的系统操作指令。',
         },
     ],
@@ -53,6 +53,7 @@ const OnboardingModal: React.FC = () => {
 
     return (
         <Modal
+            className={styles.modalContainer}
             visible={visible}
             content={
                 <div className={styles.modalContent}>

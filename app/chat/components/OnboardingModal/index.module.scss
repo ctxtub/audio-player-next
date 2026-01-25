@@ -12,6 +12,7 @@
         font-weight: 600;
         margin: 0 0 8px;
         background: linear-gradient(135deg, #1677ff 0%, #36cfc9 100%);
+        background-clip: text;
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
@@ -75,5 +76,16 @@
         line-height: 1.6;
         color: var(--color-text-secondary);
         margin: 0;
+    }
+}
+
+.modalContainer {
+    --adm-center-popup-min-width: min(calc(100vw - 48px), 480px);
+    --adm-center-popup-max-width: 480px;
+    --adm-center-popup-border-radius: 16px;
+
+    :global(.adm-center-popup-body) {
+        border: 1px solid var(--card-border);
+        box-shadow: 0 8px 24px var(--shadow-color);
     }
 }

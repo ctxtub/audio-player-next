@@ -6,7 +6,6 @@
  */
 
 import OpenAI, { APIError } from "openai";
-import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { TRPCError } from "@trpc/server";
 
 import type { VoiceOption, VoiceGender } from "@/types/ttsGenerate";
@@ -23,8 +22,10 @@ export type OpenAIConfig = {
     apiKey: string;
     /** 可选的自定义 Base URL（代理场景）。 */
     baseUrl?: string;
-    /** Chat Completion 使用的模型名称。 */
-    model: string;
+    /** 故事生成专用模型。 */
+    storyModel: string;
+    /** Agent 流程专用模型。 */
+    agentModel: string;
     /** 默认采样温度。 */
     temperature?: number;
     /** 默认最大输出 token 数。 */
@@ -44,24 +45,6 @@ export type TtsConfig = {
 };
 
 /**
- * 流式 Chat Completion 调用参数。
- */
-export type StreamingChatOptions = {
-    /** 用于取消请求的 AbortController。 */
-    controller: AbortController;
-    /** 发送给 OpenAI 的消息列表。 */
-    messages: ChatCompletionMessageParam[];
-    /** 可选的模型名称覆盖。 */
-    model?: string;
-    /** 可选的温度值覆盖。 */
-    temperature?: number;
-    /** 可选的 nucleus sampling 阈值。 */
-    topP?: number;
-    /** 可选的最大输出 token 数覆盖。 */
-    maxTokens?: number;
-};
-
-/**
  * 语音合成返回结构。
  */
 export type SynthesizeSpeechResult = {
@@ -70,9 +53,6 @@ export type SynthesizeSpeechResult = {
     /** 请求标识（保留字段）。 */
     requestId: string;
 };
-
-/** OpenAI Chat Completion 消息类型别名。 */
-export type OpenAIChatMessage = ChatCompletionMessageParam;
 
 // ============================================================================
 // 配置加载与客户端管理
@@ -105,11 +85,26 @@ export const getOpenAIConfig = (): OpenAIConfig => {
     if (cachedOpenAIConfig) return cachedOpenAIConfig;
 
     const apiKey = process.env.OPENAI_API_KEY?.trim();
-    const model = process.env.OPENAI_MODEL?.trim();
+    const storyModel = process.env.OPENAI_MODEL_STORY?.trim();
+    const agentModel = process.env.OPENAI_MODEL_AGENT?.trim();
 
-    if (!apiKey || !model) {
+    if (!apiKey) {
         throw new TRPCError({
-            message: `缺少必要的环境变量: ${!apiKey ? "OPENAI_API_KEY" : ""}${!apiKey && !model ? ", " : ""}${!model ? "OPENAI_MODEL" : ""}`,
+            message: "缺少必要的环境变量: OPENAI_API_KEY",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+
+    if (!storyModel) {
+        throw new TRPCError({
+            message: "缺少必要的环境变量: OPENAI_MODEL_STORY",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+
+    if (!agentModel) {
+        throw new TRPCError({
+            message: "缺少必要的环境变量: OPENAI_MODEL_AGENT",
             code: "INTERNAL_SERVER_ERROR",
         });
     }
@@ -133,7 +128,7 @@ export const getOpenAIConfig = (): OpenAIConfig => {
         });
     }
 
-    cachedOpenAIConfig = { apiKey, baseUrl, model, temperature, maxTokens };
+    cachedOpenAIConfig = { apiKey, baseUrl, storyModel, agentModel, temperature, maxTokens };
     return cachedOpenAIConfig;
 };
 
@@ -220,144 +215,6 @@ export const resetCache = (): void => {
     cachedOpenAIConfig = null;
     cachedTtsConfig = null;
     cachedClient = null;
-};
-
-// ============================================================================
-// Chat Completion API
-// ============================================================================
-
-/**
- * 非流式 Chat Completion 调用。
- * @param messages 消息列表。
- * @returns OpenAI ChatCompletion 完整响应。
- * @throws TRPCError 当请求失败时。
- */
-export const chatCompletion = async (
-    messages: ChatCompletionMessageParam[],
-): Promise<OpenAI.Chat.Completions.ChatCompletion> => {
-    if (!Array.isArray(messages) || messages.length === 0) {
-        throw new TRPCError({
-            message: "调用 OpenAI 需要至少一条消息",
-            code: "BAD_REQUEST",
-        });
-    }
-
-    const config = getOpenAIConfig();
-    const client = getOpenAIClient();
-
-    try {
-        const payload: OpenAI.Chat.Completions.ChatCompletionCreateParams = {
-            model: config.model,
-            messages,
-        };
-
-        if (config.temperature !== undefined) payload.temperature = config.temperature;
-        if (config.maxTokens !== undefined) payload.max_tokens = config.maxTokens;
-
-        return await client.chat.completions.create(payload);
-    } catch (error) {
-        if (error instanceof TRPCError) throw error;
-
-        if (error instanceof APIError) {
-            throw new TRPCError({
-                message: error.message,
-                code: "BAD_GATEWAY",
-                cause: error,
-            });
-        }
-
-        throw new TRPCError({
-            message: error instanceof Error ? error.message : "OpenAI 请求失败",
-            code: "BAD_GATEWAY",
-            cause: error,
-        });
-    }
-};
-
-/**
- * 流式 Chat Completion 调用，返回原始 SSE 流。
- * @param options 流式调用参数。
- * @returns 可被 ReadableStream 消费的字节流。
- * @throws TRPCError 当请求失败时。
- */
-export const chatCompletionStream = async (
-    options: StreamingChatOptions,
-): Promise<ReadableStream<Uint8Array>> => {
-    if (!Array.isArray(options.messages) || options.messages.length === 0) {
-        throw new TRPCError({
-            message: "调用 OpenAI 需要至少一条消息",
-            code: "BAD_REQUEST",
-        });
-    }
-
-    const config = getOpenAIConfig();
-    const endpointBase = config.baseUrl ?? "https://api.openai.com/v1";
-    const endpoint = `${endpointBase}/chat/completions`;
-
-    const payload: Record<string, unknown> = {
-        model: options.model ?? config.model,
-        messages: options.messages,
-        stream: true,
-    };
-
-    if (options.temperature !== undefined) {
-        payload.temperature = options.temperature;
-    } else if (config.temperature !== undefined) {
-        payload.temperature = config.temperature;
-    }
-
-    if (options.topP !== undefined) payload.top_p = options.topP;
-
-    if (options.maxTokens !== undefined) {
-        payload.max_tokens = options.maxTokens;
-    } else if (config.maxTokens !== undefined) {
-        payload.max_tokens = config.maxTokens;
-    }
-
-    try {
-        const response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${config.apiKey}`,
-            },
-            body: JSON.stringify(payload),
-            signal: options.controller.signal,
-        });
-
-        if (!response.ok) {
-            let errorBody: unknown;
-            try {
-                errorBody = await response.json();
-            } catch {
-                errorBody = await response.text();
-            }
-
-            throw new TRPCError({
-                message: `OpenAI 返回错误: ${response.statusText || response.status}`,
-                code: "BAD_GATEWAY",
-                cause: errorBody,
-            });
-        }
-
-        const stream = response.body;
-        if (!stream) {
-            throw new TRPCError({
-                message: "OpenAI 响应不包含可读流",
-                code: "BAD_GATEWAY",
-            });
-        }
-
-        return stream;
-    } catch (error) {
-        if (error instanceof TRPCError) throw error;
-
-        throw new TRPCError({
-            message: error instanceof Error ? error.message : "OpenAI 请求失败",
-            code: "BAD_GATEWAY",
-            cause: error,
-        });
-    }
 };
 
 // ============================================================================

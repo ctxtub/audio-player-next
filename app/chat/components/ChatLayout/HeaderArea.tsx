@@ -34,8 +34,7 @@ const HeaderArea: React.FC<HeaderAreaProps> = ({ visible, suggestions, onSuggest
       <div className={styles.heroRow}>
         <Avatar
           className={styles.avatar}
-          src="/icons/avatar-assistant.svg"
-          fallback="助"
+          src="/icons/avatar-assistant.jpeg"
           aria-label="Agent助手头像"
         />
         <div className={styles.textBlock}>

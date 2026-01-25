@@ -12,7 +12,7 @@
     - `supervisor.ts`：路由节点，分析用户意图并分发任务。
     - `story.ts`：故事创作 Agent。
     - `chat.ts`：闲聊服务 Agent。
-    - `guidance.ts`：剧情引导 Agent，处理用户干预指令。
+    - `guidance.ts`：系统指令/剧情引导 Agent，处理用户干预指令或描述性设定。
     - `audio.ts`：音频生成节点（非 LLM）。
 
 ## 关键协作与依赖

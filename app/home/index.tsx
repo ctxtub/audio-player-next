@@ -9,6 +9,7 @@ import AudioPlayer from '@/app/home/components/AudioPlayer';
 
 import { useConfigStore } from '@/stores/configStore';
 import { useChatStore } from '@/stores/chatStore';
+import { usePlaybackStore } from '@/stores/playbackStore';
 import {
   beginStorySession,
   resetStoryFlow,
@@ -48,6 +49,7 @@ const HomePage: React.FC = () => {
   const handleInputSubmit = useCallback(
     async (shortcutText: string) => {
       try {
+        await usePlaybackStore.getState().ensureUnlocked();
         await beginStorySession(shortcutText);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : '发生未知错误';

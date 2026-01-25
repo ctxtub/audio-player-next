@@ -62,18 +62,6 @@ const schedulePreloadRetry = () => {
 };
 
 /**
- * 确保配置已经加载并合法，否则抛出错误。
- * @returns 当前有效的配置对象
- */
-const ensureConfigReady = () => {
-  const configState = useConfigStore.getState();
-  if (!configState.isConfigValid()) {
-    throw new Error('请先完成配置，再开始生成故事');
-  }
-  return configState.apiConfig;
-};
-
-/**
  * 启动故事播放会话：停止当前播放、重置状态并开始播放指定的故事音频。
  * @param messageId 故事对应的消息 ID
  * @param audioUrl 音频地址
@@ -83,8 +71,7 @@ export const startStoryPlayback = async (messageId: string, audioUrl: string): P
   const preloadStore = usePreloadStore.getState();
   const apiConfig = useConfigStore.getState().apiConfig;
 
-  // 1. 确保音频播放器已解锁（应对移动端浏览器自动播放限制）
-  await playbackStore.ensureUnlocked();
+
 
   // 2. 停止当前正在播放的音频（如有）
   playbackStore.pauseAudioPlayback();

@@ -102,14 +102,17 @@ const MainTabBar: React.FC = () => {
     [pathname, router],
   );
 
-  const hasUnread = useChatStore(state => state.hasUnread);
+  const hasUnviewedResponse = useChatStore(state => state.hasUnviewedResponse);
 
   return (
     <div className={styles.tabBarContainer}>
       <TabBar activeKey={activeKey} onChange={handleTabChange} safeArea>
         {TABS.map(({ key, title, icon }) => {
           const isChat = key === 'chat';
-          const showBadge = isChat && hasUnread;
+          // 如果当前就在聊天页面 (chat tab 激活)，则强制不显示红点
+          // 否则才根据 store 状态判断
+          const isChatActive = activeKey === 'chat';
+          const showBadge = isChat && !isChatActive && hasUnviewedResponse;
           return (
             <TabBar.Item
               key={key}

@@ -36,11 +36,11 @@ const HeaderArea: React.FC<HeaderAreaProps> = ({ visible, suggestions, onSuggest
           className={styles.avatar}
           src="/icons/avatar-assistant.svg"
           fallback="助"
-          aria-label="故事助手头像"
+          aria-label="Agent助手头像"
         />
         <div className={styles.textBlock}>
-          <h2 className={styles.title}>你好，我是故事助手</h2>
-          <p className={styles.subtitle}>告诉我你感兴趣的主题，马上为你定制专属故事与灵感。</p>
+          <h2 className={styles.title}>你好，我是Agent助手</h2>
+          <p className={styles.subtitle}>告诉我你感兴趣的主题，马上为你定制专属故事剧集。</p>
         </div>
       </div>
       {suggestions.length > 0 ? (

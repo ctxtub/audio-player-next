@@ -26,7 +26,7 @@ const ONBOARDING_CONFIG = {
             desc: '响应您的剧情干预请求，生成明确的系统操作指令。',
         },
     ],
-    triggerGuide: '无需复杂指令，直接在这个页面与我对话，我会自动识别你的意图并召唤最合适的助手。',
+    triggerGuide: '无需复杂操作，直接在这个页面与我对话，我会自动识别你的意图并召唤最合适的Agent。',
     confirmButtonText: '开始体验',
 };
 

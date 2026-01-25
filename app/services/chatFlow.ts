@@ -1,7 +1,9 @@
 import { useChatStore } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
+import { useConfigStore } from '@/stores/configStore';
 import type { ChatConversationMessage } from '@/types/chat';
-import { interactWithAgent, type AgentMessage } from './agentFlow';
+import type { AgentMessage } from '@/types/agent';
+import { interactWithAgent } from './agentFlow';
 import { startStoryPlayback } from './storyFlow';
 
 /**
@@ -48,6 +50,15 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
     // 重置状态并设置生成文本阶段
     generationStore.reset();
     generationStore.setPhase('generating_text');
+
+    // 获取当前配置
+    const { speed, voiceId } = useConfigStore.getState().apiConfig;
+    const agentConfig = {
+      audio: {
+        speed,
+        voiceId,
+      },
+    };
 
     await interactWithAgent(
       agentMessages,
@@ -120,7 +131,8 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
           useChatStore.getState().dispatch({ type: 'stream.fail', error: error.message });
         },
       },
-      globalAbortController.signal
+      globalAbortController.signal,
+      agentConfig
     );
 
     if (streamErrored) {

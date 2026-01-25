@@ -1,24 +1,24 @@
 import { SystemMessage } from "@langchain/core/messages";
+import type { AgentState } from "@/types/agent";
 import { getAgentModel } from "../model";
 import { z } from "zod";
-import { AgentState } from "../state";
 
 /**
  * Supervisor 的输出结构定义
  */
 const supervisorSchema = z.object({
-    next: z.enum(["StoryAgent", "ChatAgent", "GuidanceAgent"]).describe("下一步应该交给哪个 Agent 处理。StoryAgent负责故事生成与续写，ChatAgent负责普通对话，GuidanceAgent负责处理剧情干预或引导。"),
-    intent: z.enum(["Story", "Chat", "Guidance"]).describe("用户的意图分类。Story:创作/生成/听故事; Chat:闲聊/打招呼; Guidance:在故事背景下修改或引导剧情。")
+  next: z.enum(["StoryAgent", "ChatAgent", "GuidanceAgent"]).describe("下一步应该交给哪个 Agent 处理。StoryAgent负责故事生成与续写，ChatAgent负责普通对话，GuidanceAgent负责处理剧情干预或引导。"),
+  intent: z.enum(["Story", "Chat", "Guidance"]).describe("用户的意图分类。Story:创作/生成/听故事; Chat:闲聊/打招呼; Guidance:在故事背景下修改或引导剧情。")
 });
 
 /**
  * Supervisor 节点逻辑
  */
 export const supervisorNode = async (state: AgentState) => {
-    const model = getAgentModel();
+  const model = getAgentModel();
 
-    const systemPrompt = new SystemMessage(
-        `你是整个系统的路由主管 (Supervisor)。
+  const systemPrompt = new SystemMessage(
+    `你是整个系统的路由主管 (Supervisor)。
 你的职责是根据用户的输入和对话历史，判断用户的意图，并将任务分发给最合适的专家 (Agent)。
 
 专家列表：
@@ -38,21 +38,21 @@ export const supervisorNode = async (state: AgentState) => {
   - 如果只是简单的打招呼 (Hello/Hi) 且没有后续故事相关内容。
 
 请输出 JSON 格式的决策结果。`
-    );
+  );
 
-    // 使用 withStructuredOutput 强制输出 JSON
-    // method: "functionCalling" 兼容性更好，避免 LLM 不支持 json_schema 的问题
-    const runnable = model.withStructuredOutput(supervisorSchema, {
-        method: "functionCalling"
-    });
+  // 使用 withStructuredOutput 强制输出 JSON
+  // method: "functionCalling" 兼容性更好，避免 LLM 不支持 json_schema 的问题
+  const runnable = model.withStructuredOutput(supervisorSchema, {
+    method: "functionCalling"
+  });
 
-    const result = await runnable.invoke([
-        systemPrompt,
-        ...state.messages
-    ]);
+  const result = await runnable.invoke([
+    systemPrompt,
+    ...state.messages
+  ]);
 
-    return {
-        next_step: result.next,
-        user_intent: result.intent
-    };
+  return {
+    next_step: result.next,
+    user_intent: result.intent
+  };
 };

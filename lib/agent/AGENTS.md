@@ -6,7 +6,6 @@
 
 ## 子目录结构
 - `graph.ts`：定义状态图（StateGraph）与工作流拓扑，注册节点与边。
-- `state.ts`：定义 AgentState 图状态结构。
 - `model.ts`：统一获取 LLM 模型实例，提供 `getAgentModel` 与 `getStoryModel` 分别对应不同配置。
 - `nodes/`：具体节点的业务逻辑实现。
     - `supervisor.ts`：路由节点，分析用户意图并分发任务。

@@ -32,6 +32,7 @@ export const agentRouter = router({
             // 2. 构造初始状态
             const initialState = {
                 messages: validMessages,
+                agentConfig: input.agentConfig,
             };
 
             try {

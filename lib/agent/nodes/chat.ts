@@ -1,6 +1,7 @@
+
 import { SystemMessage } from "@langchain/core/messages";
 import { getAgentModel } from "../model";
-import { AgentState } from "../state";
+import type { AgentState } from "@/types/agent";
 
 const CHAT_SYSTEM_PROMPT = `
 你是一个友好的故事工坊助手。

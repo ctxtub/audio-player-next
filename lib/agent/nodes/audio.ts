@@ -1,5 +1,5 @@
 import { AIMessage } from "@langchain/core/messages";
-import { AgentState } from "../state";
+import type { AgentState } from "@/types/agent";
 import { synthesizeSpeech, getTtsConfig } from "@/lib/server/openai";
 
 /**
@@ -40,8 +40,14 @@ export const audioNode = async (state: AgentState) => {
 
     try {
         const config = getTtsConfig();
-        // 使用默认配置生成音频
-        const result = await synthesizeSpeech(text, config.voiceId);
+        const { speed, voiceId } = state.agentConfig?.audio || {};
+
+        // 使用配置或默认值生成音频
+        const result = await synthesizeSpeech(
+            text,
+            voiceId || config.voiceId,
+            speed
+        );
 
         const base64Data = Buffer.from(result.audioData).toString('base64');
 

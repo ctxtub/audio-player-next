@@ -1,6 +1,6 @@
 import { StateGraph, END } from "@langchain/langgraph";
 import { BaseMessage } from "@langchain/core/messages";
-import { AgentState } from "./state";
+import type { AgentState } from "@/types/agent";
 import { supervisorNode } from "./nodes/supervisor";
 import { storyNode } from "./nodes/story";
 import { chatNode } from "./nodes/chat";
@@ -21,6 +21,10 @@ const workflow = new StateGraph<AgentState>({
         next_step: {
             value: (x: string | undefined, y: string | undefined) => y ?? x,
             default: () => "Supervisor",
+        },
+        agentConfig: {
+            value: (x: any, y: any) => y ?? x,
+            default: () => ({}),
         },
     },
 });

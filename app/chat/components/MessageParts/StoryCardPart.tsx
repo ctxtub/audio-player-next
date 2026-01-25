@@ -163,6 +163,7 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
                 isOpen={showFullText}
                 onClose={handleCloseFullText}
                 content={currentText}
+                title="故事文本"
             />
         </div>
     );

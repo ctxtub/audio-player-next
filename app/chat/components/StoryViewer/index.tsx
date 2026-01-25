@@ -9,14 +9,16 @@ export interface StoryViewerProps {
   isOpen: boolean;
   /** 关闭弹窗的回调 */
   onClose: () => void;
-  /** 故事全文本内容 */
+  /** 文本内容 */
   content: string;
+  /** 弹窗标题 */
+  title?: string;
 }
 
 /**
- * 故事全文展示组件（弹窗）。
+ * 文本展示弹窗组件（弹窗）。
  */
-const StoryViewer: React.FC<StoryViewerProps> = ({ isOpen, onClose, content }) => {
+const StoryViewer: React.FC<StoryViewerProps> = ({ isOpen, onClose, content, title = '文本内容' }) => {
   // 按换行符分割段落
   const paragraphs = useMemo(() => {
     if (!content) return [];
@@ -34,7 +36,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ isOpen, onClose, content }) =
   return (
     <Modal
       isShow={isOpen}
-      title="故事全文"
+      title={title}
       onClose={onClose}
     >
       {renderStoryContent()}

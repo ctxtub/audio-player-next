@@ -5,6 +5,7 @@ import type { MessagePart } from '@/types/chat';
 import TextPartRenderer from './TextPart';
 import StoryCardPartRenderer from './StoryCardPart';
 import { GuidancePartComponent } from './GuidancePart';
+import SummaryPartRenderer from './SummaryPart';
 
 /**
  * 片段渲染器的通用 Props 定义。
@@ -25,6 +26,7 @@ const partRenderers: Record<string, FC<any>> = {
     text: TextPartRenderer,
     storyCard: StoryCardPartRenderer,
     guidance: GuidancePartComponent,
+    summary: SummaryPartRenderer,
 };
 
 /**

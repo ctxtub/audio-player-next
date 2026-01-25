@@ -30,6 +30,8 @@ export type ChatMessageMetadata = {
   finishReason?: string;
   /** OpenAI 返回的 token 统计。 */
   usage?: ChatUsageSummary;
+  /** 标识该消息是否为上下文总结消息。 */
+  isSummary?: boolean;
 };
 
 // ============================================================================
@@ -70,10 +72,20 @@ export type GuidancePart = {
 };
 
 /**
+ * 总结片段，用于历史上下文总结展示。
+ */
+export type SummaryPart = {
+  /** 片段类型标识。 */
+  type: 'summary';
+  /** 总结内容。 */
+  content: string;
+};
+
+/**
  * 消息片段联合类型，支持多种消息内容形态。
  * 扩展时在此添加新的片段类型。
  */
-export type MessagePart = TextPart | StoryCardPart | GuidancePart;
+export type MessagePart = TextPart | StoryCardPart | GuidancePart | SummaryPart;
 
 /**
  * 类型守卫：判断片段是否为文本类型。
@@ -94,6 +106,12 @@ export const isGuidancePart = (part: MessagePart): part is GuidancePart =>
   part.type === 'guidance';
 
 /**
+ * 类型守卫：判断片段是否为总结类型。
+ */
+export const isSummaryPart = (part: MessagePart): part is SummaryPart =>
+  part.type === 'summary';
+
+/**
  * 从消息片段数组中提取纯文本内容，用于上下文传递。
  * @param parts 消息片段数组
  * @returns 拼接后的文本内容
@@ -104,6 +122,7 @@ export const extractTextFromParts = (parts: MessagePart[]): string =>
       if (isTextPart(part)) return part.content;
       if (isStoryCardPart(part)) return part.storyText;
       if (isGuidancePart(part)) return part.content;
+      if (isSummaryPart(part)) return part.content;
       return '';
     })
     .join('');

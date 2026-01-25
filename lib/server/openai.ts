@@ -5,7 +5,7 @@
  * 提供环境变量配置加载、客户端单例管理及上游请求封装。
  */
 
-import OpenAI, { APIError } from "openai";
+import OpenAI from "openai";
 import { TRPCError } from "@trpc/server";
 
 import type { VoiceOption, VoiceGender } from "@/types/ttsGenerate";

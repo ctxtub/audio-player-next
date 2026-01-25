@@ -23,7 +23,7 @@ const workflow = new StateGraph<AgentState>({
             default: () => "Supervisor",
         },
         agentConfig: {
-            value: (x: any, y: any) => y ?? x,
+            value: (x: AgentState["agentConfig"], y: AgentState["agentConfig"]) => y ?? x,
             default: () => ({}),
         },
     },

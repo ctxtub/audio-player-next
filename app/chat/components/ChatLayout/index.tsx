@@ -72,9 +72,24 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
 
 
   useEffect(() => {
-    // 组件挂载或更新时，标记已读
-    useChatStore.getState().markAsRead();
-  }, [messages.length]);
+    // 当存在未读响应时，立即标记为已读（已阅）
+    // 监听 hasUnviewedResponse 变化，确保生成结束后能及时清除
+    const hasUnviewed = useChatStore.getState().hasUnviewedResponse;
+    if (hasUnviewed) {
+      useChatStore.getState().markResponseAsViewed();
+    }
+
+    // 订阅后续变化
+    const unsubscribe = useChatStore.subscribe((state) => {
+      if (state.hasUnviewedResponse) {
+        useChatStore.getState().markResponseAsViewed();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
 
 

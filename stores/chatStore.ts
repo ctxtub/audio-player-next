@@ -68,8 +68,8 @@ type ChatStoreBaseState = {
   messages: ChatMessage[];
   /** 输入框中的实时内容，供建议快捷填充。 */
   inputValue: string;
-  /** 是否有未读消息（用于 TabBar 小红点）。 */
-  hasUnread: boolean;
+  /** 是否有未读的 AI 响应（用于 TabBar 小红点）。 */
+  hasUnviewedResponse: boolean;
 };
 
 /**
@@ -84,9 +84,9 @@ type ChatStoreActions = {
   /** 更新输入框的实时内容。 */
   setInputValue: (nextValue: string) => void;
   /**
-   * 标记当前会话为已读，清除未读红点。
+   * 标记当前会话为已读，清除未读 AI 响应红点。
    */
-  markAsRead: () => void;
+  markResponseAsViewed: () => void;
 
   /** 
    * 统一的消息操作入口。
@@ -112,7 +112,7 @@ export type ChatStore = ChatStoreBaseState & ChatStoreActions;
 const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
   messages: [],
   inputValue: '',
-  hasUnread: false,
+  hasUnviewedResponse: false,
   dispatch: (action: ChatStoreAction) => {
     set((state) => {
       const messages = [...state.messages];
@@ -246,7 +246,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
 
           return {
             messages,
-            hasUnread: true,
+            hasUnviewedResponse: true,
           };
         }
         case 'stream.story_finish': {
@@ -273,7 +273,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
 
           return {
             messages,
-            hasUnread: true,
+            hasUnviewedResponse: true,
           };
         }
         case 'stream.fail': {
@@ -315,8 +315,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
   setInputValue: (nextValue) => {
     set({ inputValue: nextValue });
   },
-  markAsRead: () => {
-    set({ hasUnread: false });
+  markResponseAsViewed: () => {
+    set({ hasUnviewedResponse: false });
   },
   selectors: {
     isLatestMessage: (id) => {

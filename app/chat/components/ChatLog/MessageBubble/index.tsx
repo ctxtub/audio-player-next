@@ -52,7 +52,7 @@ const roleBubbleClassMap: Record<ChatMessageRole, string> = {
  * 角色对应的默认展示信息，避免缺失头像或昵称。 
  */
 const fallbackPersonaMap: Record<ChatMessageRole, { name: string; avatar: string; fallback: string }> = {
-  assistant: { name: '故事助手', avatar: '/icons/avatar-assistant.svg', fallback: '助' },
+  assistant: { name: 'Agent助手', avatar: '/icons/avatar-assistant.svg', fallback: '助' },
   user: { name: '我', avatar: '/icons/avatar-user.svg', fallback: '我' },
   system: { name: '系统提示', avatar: '/icons/avatar-assistant.svg', fallback: '系' },
   developer: { name: '系统提示', avatar: '/icons/avatar-assistant.svg', fallback: '系' },

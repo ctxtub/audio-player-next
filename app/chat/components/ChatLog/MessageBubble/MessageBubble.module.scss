@@ -78,8 +78,8 @@
   line-height: 1.7;
   word-break: break-word;
   white-space: pre-wrap;
-  border: 1px solid transparent;
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--shadow-color) 10%, transparent);
   background: color-mix(in srgb, var(--foreground) 4%, transparent);
   color: var(--foreground);
 }

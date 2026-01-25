@@ -28,7 +28,7 @@
   --process: #0a84ff;
   --error: #ff453a;
   --success: #30d158;
-  
+
   /* iOS风格特有变量 */
   --card-background: rgba(28, 28, 30, 0.8);
   --card-border: rgba(84, 84, 88, 0.65);
@@ -77,7 +77,7 @@
   --process: #007aff;
   --error: #ff3b30;
   --success: #34c759;
-  
+
   /* iOS风格特有变量 - 亮色 */
   --card-background: rgba(255, 255, 255, 0.8);
   --card-border: rgba(209, 209, 214, 0.65);
@@ -122,7 +122,7 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
     'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -133,19 +133,24 @@ body {
   touch-action: manipulation;
   /* 添加过渡效果，使主题切换更平滑 */
   transition: background-color var(--transition-speed) var(--transition-timing),
-              color var(--transition-speed) var(--transition-timing);
+    color var(--transition-speed) var(--transition-timing);
 }
 
-/* 禁用默认的触摸行为 */
+/* 禁用默认的触摸行为，并锁死根节点防止iOS滚动穿透 */
 html {
   touch-action: manipulation;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* 确保html和body占满整个视口高度 */
-html, body, #root {
+html,
+body,
+#root {
   margin: 0;
   padding: 0;
-  min-height: 100vh;
+  height: 100%;
 }
 
 
@@ -164,9 +169,9 @@ html, body, #root {
 .adm-selector-item {
   backdrop-filter: blur(var(--blur-radius)) !important;
   -webkit-backdrop-filter: blur(var(--blur-radius)) !important;
-  transition: background-color var(--transition-speed) var(--transition-timing) ,
-              border-color var(--transition-speed) var(--transition-timing) ,
-              color var(--transition-speed) var(--transition-timing) !important;
+  transition: background-color var(--transition-speed) var(--transition-timing),
+    border-color var(--transition-speed) var(--transition-timing),
+    color var(--transition-speed) var(--transition-timing) !important;
 }
 
 .adm-slider {
@@ -186,6 +191,7 @@ html, body, #root {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.18) !important;
 }
 
-.adm-text-area, .adm-input-element {
- --placeholder-color: color-mix(in srgb, var(--secondary) 70%, transparent) !important;
+.adm-text-area,
+.adm-input-element {
+  --placeholder-color: color-mix(in srgb, var(--secondary) 70%, transparent) !important;
 }

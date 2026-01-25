@@ -7,6 +7,7 @@
   padding: 16px;
   background: color-mix(in srgb, var(--card-background) 70%, transparent);
   box-shadow: 0 12px 32px color-mix(in srgb, var(--shadow-color) 30%, transparent);
+  border-top: 1px solid var(--card-border);
   backdrop-filter: blur(var(--blur-radius));
   -webkit-backdrop-filter: blur(var(--blur-radius));
 }
@@ -30,10 +31,12 @@
   display: flex;
   background: color-mix(in srgb, var(--background) 80%, transparent);
   border-radius: 18px;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 12%, transparent);
+  border: 1px solid var(--card-border);
+  box-shadow: inset 0 0 0 1px transparent;
 
   &:focus-within {
-    box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 28%, transparent);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 20%, transparent);
   }
 }
 
@@ -56,7 +59,7 @@
 
 .actionButtons {
   position: absolute;
-  right: 12px;
+  right: 6px;
   bottom: 6px;
   display: flex;
   flex-direction: column;
@@ -73,12 +76,16 @@
   align-items: center;
   justify-content: center;
   border: none;
-  font-size: 13px;
+
+  &:global(.adm-button) {
+    font-size: 13px;
+  }
+
   font-weight: 500;
   padding: 0 !important;
   box-shadow: 0 4px 12px color-mix(in srgb, var(--adm-color-danger) 25%, transparent);
   transition: transform var(--transition-speed) var(--transition-timing),
-    box-shadow var(--transition-speed) var(--transition-timing);
+  box-shadow var(--transition-speed) var(--transition-timing);
 
   &:hover:not(:disabled) {
     transform: translateY(-1px);
@@ -107,7 +114,11 @@
   box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 25%, transparent);
   transition: transform var(--transition-speed) var(--transition-timing),
     box-shadow var(--transition-speed) var(--transition-timing);
-  font-size: 13px;
+
+  &:global(.adm-button) {
+    font-size: 13px;
+  }
+
   font-weight: 500;
   padding: 0 !important;
 

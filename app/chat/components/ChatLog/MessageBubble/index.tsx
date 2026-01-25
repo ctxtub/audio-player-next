@@ -52,12 +52,12 @@ const roleBubbleClassMap: Record<ChatMessageRole, string> = {
  * 角色对应的默认展示信息，避免缺失头像或昵称。 
  */
 const fallbackPersonaMap: Record<ChatMessageRole, { name: string; avatar: string }> = {
-  assistant: { name: 'Agent助手', avatar: '/icons/avatar-assistant.svg' },
-  user: { name: '我', avatar: '/icons/avatar-user.svg' },
-  system: { name: '系统提示', avatar: '/icons/avatar-assistant.svg' },
-  developer: { name: '系统提示', avatar: '/icons/avatar-assistant.svg' },
-  function: { name: '函数输出', avatar: '/icons/avatar-assistant.svg' },
-  tool: { name: '工具消息', avatar: '/icons/avatar-assistant.svg' },
+  assistant: { name: 'Agent助手', avatar: '/icons/avatar-assistant.jpeg' },
+  user: { name: '我', avatar: '/icons/avatar-user.jpeg' },
+  system: { name: '系统提示', avatar: '/icons/avatar-assistant.png' },
+  developer: { name: '系统提示', avatar: '/icons/avatar-assistant.png' },
+  function: { name: '函数输出', avatar: '/icons/avatar-assistant.png' },
+  tool: { name: '工具消息', avatar: '/icons/avatar-assistant.png' },
 };
 
 /**
@@ -72,10 +72,10 @@ const shouldHideAvatar = (role: ChatMessageRole) =>
  * Agent 身份配置表
  */
 const agentPersonaMap: Record<string, { name: string; avatar: string }> = {
-  'story_agent': { name: '创作Agent', avatar: '/icons/avatar-assistant.svg' },
-  'chat_agent': { name: '聊天Agent', avatar: '/icons/avatar-assistant.svg' },
-  'guidance_agent': { name: '指令Agent', avatar: '/icons/avatar-assistant.svg' },
-  'summary_agent': { name: '摘要Agent', avatar: '/icons/avatar-assistant.svg' },
+  'story_agent': { name: '创作Agent', avatar: '/icons/avatar-story-agent.jpeg' },
+  'chat_agent': { name: '聊天Agent', avatar: '/icons/avatar-chat-agent.jpeg' },
+  'guidance_agent': { name: '指令Agent', avatar: '/icons/avatar-guidance-agent.jpeg' },
+  'summary_agent': { name: '摘要Agent', avatar: '/icons/avatar-summary-agent.jpeg' },
 };
 
 /**

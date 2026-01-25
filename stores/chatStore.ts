@@ -4,27 +4,70 @@ import { devtools } from 'zustand/middleware';
 import type {
   ChatConversationMessage,
   ChatMessage,
-  ChatPendingMessage,
   ChatStreamDoneEvent,
   StoryCardPart,
 } from '@/types/chat';
+import {
+  createAssistantPlaceholder,
+  createTempMessageId,
+  createTimestamp,
+  mapMessagesToContext,
+  withPersona,
+} from '@/utils/chatUtils';
+
+/**
+ * 聊天 Store 的 Action 定义，统一管理所有对消息状态的变更操作。
+ */
+export type ChatStoreAction =
+  // 用户触发
+  | { type: 'user.submit'; content: string } // 提交新消息
+  | { type: 'user.retry' }                   // 重试上一条失败消息
+  // 流式更新
+  | { type: 'stream.delta'; content: string }          // 追加内容
+  | { type: 'stream.intent'; intent: 'Story' | 'Chat' | 'Guidance' } // 更新意图
+  | { type: 'stream.persona'; name: string }           // 更新角色名
+  | { type: 'stream.finish'; payload: ChatStreamDoneEvent } // 普通对话完成
+  | { type: 'stream.story_finish'; storyText: string; audioUrl: string } // 故事生成完成
+  | { type: 'stream.fail'; error?: string };           // 失败
+
+/**
+ * 聊天 Store 的计算属性与选择器接口。
+ * 将所有数据读取逻辑收敛于此，避免在组件中直接操作复杂的过滤逻辑。
+ */
+interface ChatStoreSelectors {
+  /** 检查 ID 是否为最新一条消息 */
+  isLatestMessage: (id: string) => boolean;
+
+  /** 获取下一段可播放的故事片段 (Derived from Message) */
+  nextStorySegment: (currentId: string) => { audioUrl: string; storyText: string; messageId: string } | null;
+
+  /** 获取用于 API 请求的上下文消息列表 (Conversation Messages) */
+  conversationMessages: () => ChatConversationMessage[];
+
+  /** 最新的一条消息 */
+  latestMessage: () => ChatMessage | undefined;
+
+  /** 最新的一条助手消息 */
+  latestAssistantMessage: () => ChatMessage | undefined;
+
+  /** 最新的一条失败消息 (用于重试) */
+  latestFailedMessage: () => ChatMessage | undefined;
+
+  /** 是否存在历史故事消息 (用于自动播放判断) */
+  hasStoryMessages: (excludeId?: string) => boolean;
+}
 
 /**
  * 聊天 store 的基础状态，记录历史消息与当前请求。
  */
 type ChatStoreBaseState = {
-  /** 已确认写入的聊天消息列表。 */
+  /** 
+   * 聊天消息列表，包含所有状态（sending, failed, delivered）。
+   * 作为唯一的真实数据源，驱动 UI 展示与逻辑判断。
+   */
   messages: ChatMessage[];
-  /** 待发送或等待重试的消息占位。 */
-  pendingMessage: ChatPendingMessage | null;
-  /** 正在流式拼装的助手消息。 */
-  activeAssistantMessage: ChatMessage | null;
-  /** 当前在用的 AbortController，支持取消请求。 */
-  currentAbortController: AbortController | null;
   /** 输入框中的实时内容，供建议快捷填充。 */
   inputValue: string;
-  /** 记录是否已经完成初始消息加载，避免 Tab 切换时覆盖状态。 */
-  hasHydrated: boolean;
   /** 是否有未读消息（用于 TabBar 小红点）。 */
   hasUnread: boolean;
 };
@@ -33,52 +76,28 @@ type ChatStoreBaseState = {
  * 聊天 store 暴露的动作集合。
  */
 type ChatStoreActions = {
-  /** 使用服务端返回的历史记录初始化 store。 */
-  hydrateInitialMessages: (initialMessages: ChatMessage[]) => void;
-  /** 准备新的消息提交，生成占位消息与上下文。 */
-  prepareNewSubmission: (content: string) => ChatSubmissionSnapshot;
-  /** 对失败的消息重试，再次生成上下文与助手占位。 */
-  prepareRetrySubmission: () => ChatSubmissionSnapshot;
-  /** 将助手的流式增量追加到占位消息。 */
-  appendAssistantDelta: (delta: string) => void;
-  /** 在收到 done 事件后写入消息并刷新上下文。 */
-  finalizeAssistantMessage: (payload: ChatStreamDoneEvent) => void;
-  /** 流程失败时回退状态并保留失败消息供重试。 */
-  markFailure: () => void;
+
   /** 主动取消时清理占位消息与上下文。 */
   resetActiveSession: () => void;
   /** 清空所有历史消息 */
   resetChat: () => void;
-  /** 记录或清空当前的 AbortController。 */
-  setAbortController: (controller: AbortController | null) => void;
   /** 更新输入框的实时内容。 */
   setInputValue: (nextValue: string) => void;
-  /** 准备故事类型的消息提交，助手消息从一开始就是 StoryCardPart。 */
-  prepareStorySubmission: (content: string) => ChatSubmissionSnapshot;
-  /** 准备故事续写（无用户消息），仅创建助手消息。 */
-  prepareFollowUpStorySubmission: () => ChatSubmissionSnapshot;
-  /** 完成故事消息，更新 StoryCardPart 的音频地址。 */
-  finalizeStoryMessage: (payload: { storyText: string; audioUrl: string }) => void;
-  /** 获取当前上下文中的故事 Prompt 和已生成内容（用于续写）。 */
-  getStoryContext: () => { prompt: string; storyContent: string };
-  /** 判断给定的消息 ID 是否属于最后一条包含音频的故事卡片。 */
-  isLastMessageId: (id: string) => boolean;
-  /**
-   * 根据当前消息 ID，查找下一段可播放的故事内容。
-   */
-  getNextStorySegmentByMessageId: (currentMessageId: string) => { audioUrl: string; storyText: string; messageId: string } | null;
   /**
    * 标记当前会话为已读，清除未读红点。
    */
   markAsRead: () => void;
-  /**
-   * 根据检测到的意图，切换当前正在生成的助手消息的类型。
+
+  /** 
+   * 统一的消息操作入口。
+   * @param action 具体的操作指令
    */
-  switchAssistantMessageType: (intent: 'Story' | 'Chat' | 'Guidance') => void;
+  dispatch: (action: ChatStoreAction) => void;
+
   /**
-   * 更新当前正在生成的助手消息的展示名称。
+   * 计算与查询方法集。
    */
-  setAssistantDisplayName: (name: string) => void;
+  selectors: ChatStoreSelectors;
 };
 
 /**
@@ -87,513 +106,286 @@ type ChatStoreActions = {
 export type ChatStore = ChatStoreBaseState & ChatStoreActions;
 
 /**
- * 提交前快照结构，包含用户占位、助手占位及请求上下文。
- */
-type ChatSubmissionSnapshot = {
-  /** 当前的用户占位消息，用于 UI 展示。 */
-  pendingMessage: ChatPendingMessage;
-  /** 正在构造的助手占位消息。 */
-  assistantMessage: ChatMessage;
-  /** 即将发送给上游的对话上下文。 */
-  context: ChatConversationMessage[];
-};
-
-/**
- * 生成统一格式的时间戳，使用 ISO 字符串表达。
- */
-const createTimestamp = () => new Date().toISOString();
-
-/**
- * 生成前缀化的临时消息 id，优先使用 crypto.randomUUID。 
- * @param prefix id 前缀，区分用户或助手。
- */
-const createTempMessageId = (prefix: string) => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `${prefix}-${crypto.randomUUID()}`;
-  }
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-};
-
-/**
- * 支持透传给上游的会话角色列表。
- */
-const supportedConversationRoles: ReadonlyArray<ChatConversationMessage['role']> = [
-  'system',
-  'user',
-  'assistant',
-];
-
-/**
- * 判断给定角色是否允许透出到会话上下文。
- * @param role 待校验的消息角色。
- */
-const isSupportedConversationRole = (
-  role: ChatMessage['role'],
-): role is ChatConversationMessage['role'] =>
-  (supportedConversationRoles as ReadonlyArray<string>).includes(role);
-
-/**
- * 不同角色对应的展示昵称与头像配置。 
- */
-const messagePersonaMap: Record<ChatMessage['role'], { displayName: string; avatar: string }> = {
-  assistant: {
-    displayName: 'Agent',
-    avatar: '/icons/avatar-assistant.svg',
-  },
-  user: {
-    displayName: '我',
-    avatar: '/icons/avatar-user.svg',
-  },
-  system: {
-    displayName: '系统提示',
-    avatar: '/icons/avatar-assistant.svg',
-  },
-  developer: {
-    displayName: '系统提示',
-    avatar: '/icons/avatar-assistant.svg',
-  },
-  function: {
-    displayName: '函数输出',
-    avatar: '/icons/avatar-assistant.svg',
-  },
-  tool: {
-    displayName: '工具消息',
-    avatar: '/icons/avatar-assistant.svg',
-  },
-};
-
-/**
- * 为消息补全展示用的头像与昵称信息。 
- * @param message 待补全的消息实体。
- */
-const withPersona = <T extends ChatMessage | ChatPendingMessage>(message: T): T => {
-  const persona = messagePersonaMap[message.role];
-  if (!persona) {
-    return message;
-  }
-  return {
-    ...message,
-    displayName: message.displayName ?? persona.displayName,
-    avatar: message.avatar ?? persona.avatar,
-  };
-};
-
-/**
- * 将历史消息映射为上游所需的 ChatCompletionMessageParam 数组。
- * @param messages 已确认的聊天消息列表。
- */
-const mapMessagesToContext = (
-  messages: ChatMessage[],
-): ChatConversationMessage[] =>
-  messages.reduce<ChatConversationMessage[]>((acc, item) => {
-    if (!isSupportedConversationRole(item.role)) {
-      return acc;
-    }
-    const normalized: ChatConversationMessage = {
-      role: item.role,
-      content: item.content,
-    };
-    acc.push(normalized);
-    return acc;
-  }, []);
-
-/**
- * 构造一个默认的助手占位消息，状态为发送中。
- */
-const createAssistantPlaceholder = (): ChatMessage => ({
-  id: createTempMessageId('assistant'),
-  role: 'assistant',
-  content: '',
-  status: 'sending',
-  createdAt: createTimestamp(),
-});
-
-/**
- * 构造一个故事类型的助手占位消息，从一开始就使用 StoryCardPart。
- */
-const createStoryAssistantPlaceholder = (): ChatMessage => ({
-  id: createTempMessageId('assistant'),
-  role: 'assistant',
-  content: '',
-  parts: [{ type: 'storyCard', storyText: '', audioUrl: '' }],
-  status: 'sending',
-  createdAt: createTimestamp(),
-});
-
-/**
- * 聊天 store 的创建器，封装状态初始化与动作实现。
+ * 聊天 Store 创建器。
+ * 封装了状态初始化、Action 分发 (dispatch) 以及 Selectors 实现。
  */
 const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
   messages: [],
-  pendingMessage: null,
-  activeAssistantMessage: null,
-  currentAbortController: null,
   inputValue: '',
-  hasHydrated: false,
   hasUnread: false,
-  hydrateInitialMessages: (initialMessages) => {
-    // 仅在未初始化时允许覆盖，防止状态丢失
-    if (get().hasHydrated) {
-      return;
-    }
-
-    set({
-      messages: initialMessages.map((item) => withPersona(item)),
-      pendingMessage: null,
-      activeAssistantMessage: null,
-      inputValue: '',
-      hasHydrated: true,
-      hasUnread: false,
-    });
-  },
-  prepareNewSubmission: (content) => {
-    const pendingMessage = withPersona<ChatPendingMessage>({
-      id: createTempMessageId('user'),
-      role: 'user',
-      content,
-      status: 'sending',
-      createdAt: createTimestamp(),
-    });
-    const assistantMessage = withPersona(createAssistantPlaceholder());
-    const baseContext = mapMessagesToContext(get().messages);
-    const context: ChatConversationMessage[] = [
-      ...baseContext,
-      { role: 'user', content },
-    ];
-    set({
-      pendingMessage,
-      activeAssistantMessage: assistantMessage,
-      inputValue: '',
-    });
-    return { pendingMessage, assistantMessage, context };
-  },
-  prepareRetrySubmission: () => {
-    const existing = get().pendingMessage;
-    if (!existing) {
-      throw new Error('当前没有可重试的消息');
-    }
-    const pendingMessage = withPersona<ChatPendingMessage>({
-      ...existing,
-      status: 'sending',
-      createdAt: existing.createdAt ?? createTimestamp(),
-    });
-    const assistantMessage = withPersona(createAssistantPlaceholder());
-    const baseContext = mapMessagesToContext(get().messages);
-    const context: ChatConversationMessage[] = [
-      ...baseContext,
-      { role: 'user', content: pendingMessage.content },
-    ];
-    set({
-      pendingMessage,
-      activeAssistantMessage: assistantMessage,
-    });
-    return { pendingMessage, assistantMessage, context };
-  },
-  prepareStorySubmission: (content) => {
-    const pendingMessage = withPersona<ChatPendingMessage>({
-      id: createTempMessageId('user'),
-      role: 'user',
-      content,
-      status: 'sending',
-      createdAt: createTimestamp(),
-    });
-    // 使用故事类型的助手占位，从一开始就是 StoryCardPart
-    const assistantMessage = withPersona(createStoryAssistantPlaceholder());
-    const baseContext = mapMessagesToContext(get().messages);
-    const context: ChatConversationMessage[] = [
-      ...baseContext,
-      { role: 'user', content },
-    ];
-    set({
-      pendingMessage,
-      activeAssistantMessage: assistantMessage,
-      inputValue: '',
-      hasHydrated: true,
-    });
-    return { pendingMessage, assistantMessage, context };
-  },
-  prepareFollowUpStorySubmission: () => {
-    // 仅创建助手占位，用于故事续写
-    const assistantMessage = withPersona(createStoryAssistantPlaceholder());
-
-    // 上下文基于当前已有消息（续写不需要再插入用户消息）
-    const baseContext = mapMessagesToContext(get().messages);
-
-    set({
-      pendingMessage: null, // 续写没有新的用户消息
-      activeAssistantMessage: assistantMessage,
-    });
-
-    return {
-      pendingMessage: { role: 'user', content: '', status: 'sending' } as ChatPendingMessage, // 占位返回，实际为空
-      assistantMessage,
-      context: baseContext
-    };
-  },
-  appendAssistantDelta: (delta) => {
+  dispatch: (action: ChatStoreAction) => {
     set((state) => {
-      if (!state.activeAssistantMessage) {
-        return state;
-      }
-      const newContent = `${state.activeAssistantMessage.content}${delta}`;
+      const messages = [...state.messages];
 
-      // 动态更新第一个 Part 中的主要文本字段
-      let newParts = state.activeAssistantMessage.parts;
-      if (newParts && newParts.length > 0) {
-        const firstPart = newParts[0];
-        if (firstPart.type === 'storyCard') {
-          newParts = [{ ...firstPart, storyText: newContent }, ...newParts.slice(1)];
-        } else if (firstPart.type === 'guidance') {
-          newParts = [{ ...firstPart, content: newContent }, ...newParts.slice(1)];
+      switch (action.type) {
+        case 'user.submit': {
+          const userMsg = withPersona<ChatMessage>({
+            id: createTempMessageId('user'),
+            role: 'user',
+            content: action.content,
+            status: 'sending',
+            createdAt: createTimestamp(),
+          });
+          const assistantMsg = withPersona(createAssistantPlaceholder());
+          return {
+            messages: [...messages, userMsg, assistantMsg],
+            inputValue: '',
+          };
         }
-      }
+        case 'user.retry': {
+          // 找到最后一条失败的 User 消息
+          const lastIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'failed');
+          if (lastIndex === -1) {
+            console.warn('No failed message to retry');
+            return state;
+          }
+          // 更新该消息为 sending，并更新时间戳？通常重试就是保持内容不变
+          messages[lastIndex] = {
+            ...messages[lastIndex],
+            status: 'sending',
+            createdAt: createTimestamp(), // 更新时间戳以便重新排序？或者保持原样
+          };
 
-      return {
-        activeAssistantMessage: {
-          ...state.activeAssistantMessage,
-          content: newContent,
-          parts: newParts,
-        },
-      };
-    });
-  },
-  switchAssistantMessageType: (intent) => {
-    set((state) => {
-      if (!state.activeAssistantMessage) {
-        return state;
-      }
+          // 检查是否有后续的助手消息（可能是 failed 或者不存在）
+          // 简单的策略：移除后续的所有消息（通常是失败的助手占位），并重新添加一个新的助手占位
+          // 但如果要保留历史（例如中间夹杂了其他），这里我们假设重试总是针对对话流的末尾
+          // 为了安全，我们只处理末尾的情况。如果 lastIndex 不是倒数第一/第二，可能需要更复杂的逻辑。
+          // 简化：追加一个新的助手占位
+          const assistantMsg = withPersona(createAssistantPlaceholder());
 
-      const currentContent = state.activeAssistantMessage.content;
-      let newParts: any[] = [];
+          // 清理 lastIndex 之后的所有消息（假设它们是之前的失败尝试产生的垃圾）
+          const newMessages = messages.slice(0, lastIndex + 1);
+          newMessages.push(assistantMsg);
 
-      switch (intent) {
-        case 'Story':
-          newParts = [{ type: 'storyCard', storyText: currentContent, audioUrl: '' }];
-          break;
-        case 'Guidance':
-          newParts = [{ type: 'guidance', content: currentContent }];
-          break;
+          return {
+            messages: newMessages,
+          };
+        }
+        case 'stream.delta': {
+          // 找到最后一条助手消息（应该处于 sending 状态）
+          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
+          if (lastAssistantIndex === -1) return state;
+
+          const msg = messages[lastAssistantIndex];
+          const newContent = msg.content + action.content;
+
+          let newParts = msg.parts;
+          if (newParts && newParts.length > 0) {
+            const firstPart = newParts[0];
+            if (firstPart.type === 'storyCard') {
+              newParts = [{ ...firstPart, storyText: newContent }, ...newParts.slice(1)];
+            } else if (firstPart.type === 'guidance') {
+              newParts = [{ ...firstPart, content: newContent }, ...newParts.slice(1)];
+            }
+          }
+
+          messages[lastAssistantIndex] = {
+            ...msg,
+            content: newContent,
+            parts: newParts,
+          };
+          return { messages };
+        }
+        case 'stream.intent': {
+          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
+          if (lastAssistantIndex === -1) return state;
+
+          const msg = messages[lastAssistantIndex];
+          const currentContent = msg.content;
+          let newParts: any[] = [];
+
+          switch (action.intent) {
+            case 'Story':
+              newParts = [{ type: 'storyCard', storyText: currentContent, audioUrl: '' }];
+              break;
+            case 'Guidance':
+              newParts = [{ type: 'guidance', content: currentContent }];
+              break;
+            default:
+              newParts = [];
+              break;
+          }
+
+          messages[lastAssistantIndex] = {
+            ...msg,
+            parts: newParts.length > 0 ? newParts : undefined,
+          };
+          return { messages };
+        }
+        case 'stream.persona': {
+          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
+          if (lastAssistantIndex === -1) return state;
+
+          messages[lastAssistantIndex] = {
+            ...messages[lastAssistantIndex],
+            displayName: action.name,
+          };
+          return { messages };
+        }
+        case 'stream.finish': {
+          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
+          // 逻辑说明：stream.finish 仅标记流结束。
+          // 若之前处于 sending 状态，则更新为 delivered，并记录结束原因与 Token 用量。
+
+          if (lastAssistantIndex !== -1) {
+            messages[lastAssistantIndex] = {
+              ...messages[lastAssistantIndex],
+              status: 'delivered',
+              metadata: {
+                finishReason: action.payload.finishReason,
+                usage: action.payload.usage,
+              },
+            };
+          }
+
+          // 确保最近的 User 消息也是 delivered
+          const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
+          if (lastUserIndex !== -1) {
+            messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'delivered' };
+          }
+
+          return {
+            messages,
+            hasUnread: true,
+          };
+        }
+        case 'stream.story_finish': {
+          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
+          if (lastAssistantIndex !== -1) {
+            const storyPart: StoryCardPart = {
+              type: 'storyCard',
+              storyText: action.storyText,
+              audioUrl: action.audioUrl,
+            };
+            messages[lastAssistantIndex] = {
+              ...messages[lastAssistantIndex],
+              content: action.storyText,
+              parts: [storyPart],
+              status: 'delivered',
+            };
+          }
+
+          // 确保最近的 User 消息也是 delivered
+          const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
+          if (lastUserIndex !== -1) {
+            messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'delivered' };
+          }
+
+          return {
+            messages,
+            hasUnread: true,
+          };
+        }
+        case 'stream.fail': {
+          // 标记最后正在发送的消息为失败
+          // 通常是助手消息和用户消息
+          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
+          if (lastAssistantIndex !== -1) {
+            messages[lastAssistantIndex] = { ...messages[lastAssistantIndex], status: 'failed' }; // 或者直接移除助手占位？通常保留显示失败
+            // 逻辑说明：将最后一条正在发送的 Assistant 消息移除（避免展示空气泡），
+            // 并将最后一条 User 消息标记为 failed，以便用户可以点击重试。
+            messages.splice(lastAssistantIndex, 1);
+          }
+
+          const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
+          if (lastUserIndex !== -1) {
+            messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'failed' };
+          }
+
+          return { messages };
+        }
         default:
-          // 'Chat' 类型通常不使用特定的 Parts，保持默认即可
-          newParts = [];
-          break;
+          return state;
       }
+    });
+  },
 
-      return {
-        activeAssistantMessage: {
-          ...state.activeAssistantMessage,
-          parts: newParts.length > 0 ? newParts : undefined,
-        },
-      };
-    });
-  },
-  setAssistantDisplayName: (name) => {
-    set((state) => {
-      if (!state.activeAssistantMessage) {
-        return state;
-      }
-      return {
-        activeAssistantMessage: {
-          ...state.activeAssistantMessage,
-          displayName: name,
-        },
-      };
-    });
-  },
-  finalizeAssistantMessage: (payload) => {
-    set((state) => {
-      const nextMessages = [...state.messages];
-      if (state.pendingMessage) {
-        nextMessages.push({
-          id: state.pendingMessage.id ?? createTempMessageId('user'),
-          role: state.pendingMessage.role,
-          content: state.pendingMessage.content,
-          status: 'delivered',
-          createdAt: state.pendingMessage.createdAt ?? createTimestamp(),
-          displayName: state.pendingMessage.displayName,
-          avatar: state.pendingMessage.avatar,
-        });
-      }
-      if (state.activeAssistantMessage) {
-        nextMessages.push({
-          ...state.activeAssistantMessage,
-          status: 'delivered',
-          metadata: {
-            finishReason: payload.finishReason,
-            usage: payload.usage,
-          },
-          createdAt: state.activeAssistantMessage.createdAt ?? createTimestamp(),
-        });
-      }
-      return {
-        messages: nextMessages,
-        pendingMessage: null,
-        activeAssistantMessage: null,
-        conversationContext: mapMessagesToContext(nextMessages),
-        inputValue: '',
-        hasUnread: true,
-      };
-    });
-  },
-  markFailure: () => {
-    set((state) => {
-      if (!state.pendingMessage) {
-        // 如果是续写失败（没有 pendingMessage），也需要清理 activeAssistantMessage
-        // 简单处理：重置会话
-        return {
-          activeAssistantMessage: null,
-          currentAbortController: null,
-        };
-      }
-      return {
-        pendingMessage: {
-          ...state.pendingMessage,
-          status: 'failed',
-        },
-        activeAssistantMessage: null,
-        currentAbortController: null,
-      };
-    });
-  },
   resetActiveSession: () => {
+    // 重置会话：移除所有处于 sending 状态的临时消息，
+    // 通常在用户主动取消生成，或页面卸载时调用。
     set((state) => ({
-      pendingMessage: null,
-      activeAssistantMessage: null,
-      currentAbortController: null,
-      inputValue: state.inputValue,
+      messages: state.messages.filter(m => m.status !== 'sending'),
     }));
   },
   resetChat: () => {
     set({
       messages: [],
-      pendingMessage: null,
-      activeAssistantMessage: null,
-      currentAbortController: null,
     });
-  },
-  setAbortController: (controller) => {
-    set({ currentAbortController: controller });
   },
   setInputValue: (nextValue) => {
     set({ inputValue: nextValue });
   },
-  finalizeStoryMessage: (payload) => {
-    set((state) => {
-      const nextMessages = [...state.messages];
-      // 添加用户消息 (如果有)
-      if (state.pendingMessage) {
-        nextMessages.push({
-          id: state.pendingMessage.id ?? createTempMessageId('user'),
-          role: state.pendingMessage.role,
-          content: state.pendingMessage.content,
-          status: 'delivered',
-          createdAt: state.pendingMessage.createdAt ?? createTimestamp(),
-          displayName: state.pendingMessage.displayName,
-          avatar: state.pendingMessage.avatar,
-        });
-      }
-      // 添加助手故事卡片消息
-      if (state.activeAssistantMessage) {
-        const storyPart: StoryCardPart = {
-          type: 'storyCard',
-          storyText: payload.storyText,
-          audioUrl: payload.audioUrl,
-        };
-        nextMessages.push({
-          ...state.activeAssistantMessage,
-          content: payload.storyText, // 保留 content 用于上下文
-          parts: [storyPart],
-          status: 'delivered',
-          createdAt: state.activeAssistantMessage.createdAt ?? createTimestamp(),
-        });
-      }
-      return {
-        messages: nextMessages,
-        pendingMessage: null,
-        activeAssistantMessage: null,
-        conversationContext: mapMessagesToContext(nextMessages),
-        inputValue: '',
-        hasUnread: true,
-      };
-    });
-  },
-  getStoryContext: () => {
-    const messages = get().messages;
-    if (messages.length === 0) {
-      return { prompt: '', storyContent: '' };
-    }
-
-    // 反向查找最后一条用户消息
-    let lastUserIndex = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        lastUserIndex = i;
-        break;
-      }
-    }
-
-    if (lastUserIndex === -1 && get().pendingMessage?.role === 'user') {
-      return {
-        prompt: get().pendingMessage!.content,
-        storyContent: '',
-      };
-    }
-
-    if (lastUserIndex === -1) {
-      return { prompt: '', storyContent: '' };
-    }
-
-    const prompt = messages[lastUserIndex].content;
-    const assistantMessages = messages.slice(lastUserIndex + 1).filter(m => m.role === 'assistant');
-
-    const storyContent = assistantMessages.map(m => {
-      // 优先取 StoryCardPart
-      const storyPart = m.parts?.find(p => p.type === 'storyCard') as StoryCardPart | undefined;
-      if (storyPart) {
-        return storyPart.storyText;
-      }
-      return m.content;
-    }).join('');
-
-    return { prompt, storyContent };
-  },
-  isLastMessageId: (id) => {
-    const messages = get().messages;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
-      if (msg.role === 'assistant' && msg.parts?.some(p => p.type === 'storyCard')) {
-        return msg.id === id;
-      }
-    }
-    return false;
-  },
-  getNextStorySegmentByMessageId: (currentMessageId) => {
-    const messages = get().messages;
-    const currentIndex = messages.findIndex((m) => m.id === currentMessageId);
-
-    if (currentIndex === -1 || currentIndex === messages.length - 1) {
-      return null;
-    }
-
-    // 从当前消息的下一条开始查找助手消息（包含故事卡片）
-    for (let i = currentIndex + 1; i < messages.length; i++) {
-      const msg = messages[i];
-      if (msg.role === 'assistant' && msg.parts) {
-        const storyPart = msg.parts.find((p) => p.type === 'storyCard') as StoryCardPart | undefined;
-        if (storyPart && storyPart.audioUrl && storyPart.storyText) {
-          return {
-            audioUrl: storyPart.audioUrl,
-            storyText: storyPart.storyText,
-            messageId: msg.id,
-          };
-        }
-      }
-    }
-
-    return null;
-  },
   markAsRead: () => {
     set({ hasUnread: false });
+  },
+  selectors: {
+    isLatestMessage: (id) => {
+      const messages = get().messages;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg.role === 'assistant' && msg.parts?.some(p => p.type === 'storyCard')) {
+          return msg.id === id;
+        }
+      }
+      return false;
+    },
+    nextStorySegment: (currentMessageId) => {
+      const messages = get().messages;
+      const currentIndex = messages.findIndex((m) => m.id === currentMessageId);
+
+      if (currentIndex === -1 || currentIndex === messages.length - 1) {
+        return null;
+      }
+
+      // 从当前消息的下一条开始查找助手消息（包含故事卡片）
+      for (let i = currentIndex + 1; i < messages.length; i++) {
+        const msg = messages[i];
+        if (msg.role === 'assistant' && msg.parts) {
+          const storyPart = msg.parts.find((p) => p.type === 'storyCard') as StoryCardPart | undefined;
+          if (storyPart && storyPart.audioUrl && storyPart.storyText) {
+            return {
+              audioUrl: storyPart.audioUrl,
+              storyText: storyPart.storyText,
+              messageId: msg.id,
+            };
+          }
+        }
+      }
+
+      return null;
+    },
+    conversationMessages: () => {
+      return mapMessagesToContext(get().messages);
+    },
+    latestMessage: () => {
+      const messages = get().messages;
+      return messages[messages.length - 1];
+    },
+    latestAssistantMessage: () => {
+      return get().messages.findLast((m) => m.role === 'assistant');
+    },
+    latestFailedMessage: () => {
+      return get().messages.findLast((m) => m.status === 'failed');
+    },
+    hasStoryMessages: (excludeMessageId) => {
+      const messages = get().messages;
+      const targetIndex = excludeMessageId
+        ? messages.findIndex((m) => m.id === excludeMessageId)
+        : messages.length;
+
+      if (targetIndex === -1) {
+        // 如果没找到排除的消息，说明它可能还没加入列表，或者 ID 传错了。
+        // 无妨，搜索整个列表。
+        return messages.some((msg) =>
+          msg.role === 'assistant' && msg.parts?.some((p) => p.type === 'storyCard')
+        );
+      }
+
+      // Search in messages before targetIndex
+      return messages.slice(0, targetIndex).some((msg) =>
+        msg.role === 'assistant' && msg.parts?.some((p) => p.type === 'storyCard')
+      );
+    },
   },
 });
 

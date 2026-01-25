@@ -45,36 +45,31 @@ const defaultSuggestions: HeaderSuggestion[] = [
  * @param props.initialMessages 初始消息列表。
  * @returns 布局结构 JSX。
  */
-const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
-  /** 读取 store 中的初始化状态。 */
-  const hasHydrated = useChatStore((state) => state.hasHydrated);
+const ChatLayout: React.FC<ChatLayoutProps> = () => {
+
 
   const messages = useChatStore((state) => state.messages);
-  const pendingMessage = useChatStore((state) => state.pendingMessage);
-  const activeAssistantMessage = useChatStore((state) => state.activeAssistantMessage);
   const inputValue = useChatStore((state) => state.inputValue);
   const setInputValue = useChatStore((state) => state.setInputValue);
 
   /** 悬浮播放器控制。 */
   const { play: playAudio } = useFloatingPlayer();
 
-  /** 是否存在发送中的消息，用于控制输入区禁用状态。 */
+  /** 是否存在发送中的消息，用于控制输入区禁用状态 */
   const isSending = useMemo(
-    () => pendingMessage?.status === 'sending' || Boolean(activeAssistantMessage),
-    [pendingMessage?.status, activeAssistantMessage],
+    () => messages.some((m) => m.status === 'sending'),
+    [messages],
   );
 
   /** 将 store 与初始消息融合，避免首屏出现空白。 */
-  const resolvedMessages = useMemo(() => {
-    if (!hasHydrated && messages.length === 0) {
-      return initialMessages;
-    }
-    return messages;
-  }, [initialMessages, messages, hasHydrated]);
+  // const resolvedMessages = useMemo(() => {
+  //   if (!hasHydrated && messages.length === 0) {
+  //     return initialMessages;
+  //   }
+  //   return messages;
+  // }, [initialMessages, messages, hasHydrated]);
 
-  useEffect(() => {
-    useChatStore.getState().hydrateInitialMessages(initialMessages);
-  }, [initialMessages]);
+
 
   useEffect(() => {
     // 组件挂载或更新时，标记已读
@@ -125,8 +120,8 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
 
   /** 是否展示顶部欢迎区，根据是否存在历史消息决定。 */
   const shouldShowHeader = useMemo(
-    () => messages.length === 0 && !pendingMessage && !activeAssistantMessage,
-    [messages.length, pendingMessage, activeAssistantMessage],
+    () => messages.length === 0,
+    [messages.length],
   );
 
   /**
@@ -134,8 +129,10 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
    * @param retryId 触发重试的消息 id。
    */
   const handleRetry = useCallback(async (retryId?: string) => {
-    const currentPending = useChatStore.getState().pendingMessage;
-    if (!currentPending || currentPending.id !== retryId) {
+    // 检查最后一条失败消息是否匹配
+    const lastFailed = useChatStore.getState().selectors.latestFailedMessage();
+
+    if (!lastFailed || lastFailed.id !== retryId) {
       return;
     }
     try {
@@ -164,9 +161,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
         onSuggestionSelect={handleSuggestionSelect}
       />
       <MessageArea
-        messages={resolvedMessages}
-        pendingMessage={pendingMessage}
-        streamingMessage={activeAssistantMessage}
+        messages={messages}
         isLoading={false}
         onRetry={handleRetry}
         onPlayStory={(url, id) => playAudio(url, id)}

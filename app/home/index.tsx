@@ -25,12 +25,12 @@ const HomePage: React.FC = () => {
   const router = useRouter();
 
   // 故事状态
-  const storyInputText = useChatStore((state) => state.getStoryContext().prompt);
+  const storyInputText = useChatStore((state) => {
+    const lastUserMsg = state.messages.findLast((m) => m.role === 'user');
+    return lastUserMsg?.content || '';
+  });
 
-  // 初始化 ChatStore，防止首次访问首页时状态未就绪
-  useEffect(() => {
-    useChatStore.getState().hydrateInitialMessages([]);
-  }, []);
+
 
   // 配置初始化与校验能力
   const isConfigLoaded = useConfigStore(state => state.isLoaded);

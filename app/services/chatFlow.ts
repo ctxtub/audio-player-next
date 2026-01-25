@@ -16,14 +16,24 @@ const normalizeError = (error: unknown): Error => {
 };
 
 /**
+ * 全局的 AbortController，用于管理当前进行中的请求。
+ * 确保同一时间只有一个活跃的聊天请求，避免竞态问题。
+ */
+let globalAbortController: AbortController | null = null;
+
+/**
  * 执行一次聊天流式调用，根据流事件更新 store。
  * @param context 即将发送给后端的对话上下文。
  * @returns 包含最终音频地址和生成内容的对象
  */
 const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ audioUrl: string; content: string }> => {
   const generationStore = useGenerationStore.getState();
-  const abortController = new AbortController();
-  useChatStore.getState().setAbortController(abortController);
+
+  // 确保清理上一个控制器，防止残留的请求继续占用资源
+  if (globalAbortController) {
+    globalAbortController.abort();
+  }
+  globalAbortController = new AbortController();
 
   let streamErrored = false;
   let lastErrorMessage: string | undefined;
@@ -46,7 +56,7 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
           // 同步更新 UI 状态
           generationStore.appendText(delta);
           // 同步更新 Chat 消息
-          useChatStore.getState().appendAssistantDelta(delta);
+          useChatStore.getState().dispatch({ type: 'stream.delta', content: delta });
           // 累积生成内容
           generatedContent += delta;
         },
@@ -54,7 +64,7 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
           if (intent === "Story") {
             generationStore.setPhase('generating_text');
           }
-          useChatStore.getState().switchAssistantMessageType(intent);
+          useChatStore.getState().dispatch({ type: 'stream.intent', intent });
         },
         onAgentActive: (name) => {
           // 将英文名转换为更友好的中文显示
@@ -64,7 +74,7 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
             "GuidanceAgent": "系统指令",
           };
           const displayName = displayNames[name] || name;
-          useChatStore.getState().setAssistantDisplayName(displayName);
+          useChatStore.getState().dispatch({ type: 'stream.persona', name: displayName });
         },
         onAudioStart: () => {
           generationStore.setPhase('generating_audio');
@@ -79,40 +89,38 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
           if (!streamErrored) {
             if (audioUrl) {
               // 如果收到了音频，作为故事消息完成
-              // 1. 获取完成前的消息列表（不含当前正在生成的这条，因为它还在 activeAssistantMessage 暂存态）
-              const messages = useChatStore.getState().messages;
+              // 2. 检查上下文中是否存在历史故事 (用于判断是否自动播放)。
+              // 注意：需排除当前刚刚生成的这一条。
+              const lastMsg = useChatStore.getState().selectors.latestMessage();
+              const existingStories = useChatStore.getState().selectors.hasStoryMessages(lastMsg?.id);
 
-              // 2. 检查历史中是否存在故事消息
-              const hasPriorStories = messages.some(msg =>
-                msg.role === 'assistant' && msg.parts?.some(p => p.type === 'storyCard')
-              );
-
-              const currentContent = useChatStore.getState().activeAssistantMessage?.content || "";
-              useChatStore.getState().finalizeStoryMessage({
-                storyText: currentContent,
+              // 此时 generatedContent 已累积了完整内容，直接使用确保一致性
+              useChatStore.getState().dispatch({
+                type: 'stream.story_finish',
+                storyText: generatedContent,
                 audioUrl,
               });
 
-              // 3. 仅当历史中没有故事时，才自动播放
-              if (!hasPriorStories) {
-                // 需要获取刚刚 finalize 写入后的最新消息 ID，或者直接从 activeAssistantMessage 取 ID
-                // finalizeStoryMessage 会把 activeAssistantMessage 放入 messages，ID 不变
-                const messageId = useChatStore.getState().messages.slice(-1)[0].id;
-                startStoryPlayback(messageId, audioUrl).catch(console.error);
+              // 3. 仅当历史中没有故事时（即首次生成故事），才自动开始播放。
+              if (!existingStories && lastMsg) {
+                startStoryPlayback(lastMsg.id, audioUrl).catch(console.error);
               }
             } else {
-              // 否则作为普通助手消息完成
-              useChatStore.getState().finalizeAssistantMessage({ type: 'done', finishReason: 'stop' });
+              // 若无音频 URL，则按照普通对话消息结束流程
+              useChatStore.getState().dispatch({
+                type: 'stream.finish',
+                payload: { type: 'done', finishReason: 'stop' }
+              });
             }
           }
         },
         onError: (error) => {
           streamErrored = true;
           lastErrorMessage = error.message;
-          useChatStore.getState().markFailure();
+          useChatStore.getState().dispatch({ type: 'stream.fail', error: error.message });
         },
       },
-      abortController.signal
+      globalAbortController.signal
     );
 
     if (streamErrored) {
@@ -121,20 +129,20 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
 
     return { audioUrl, content: generatedContent };
   } catch (error) {
-    useChatStore.getState().setAbortController(null);
+    globalAbortController = null;
     if (error instanceof DOMException && error.name === 'AbortError') {
       useChatStore.getState().resetActiveSession();
 
       throw error;
     }
     if (!streamErrored) {
-      useChatStore.getState().markFailure();
+      useChatStore.getState().dispatch({ type: 'stream.fail', error: String(error) });
     }
     const normalized = normalizeError(error);
     throw normalized;
   } finally {
-    // 总是清理 Controller
-    useChatStore.getState().setAbortController(null);
+    // 无论成功或失败，请求结束时总是释放 Controller 引用
+    globalAbortController = null;
   }
 };
 
@@ -144,20 +152,39 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
  * @returns 包含生成的消息 ID 和音频 URL
  */
 export const beginChatStream = async (content: string): Promise<{ messageId: string; audioUrl: string; content: string }> => {
-  const { context, assistantMessage } = useChatStore.getState().prepareNewSubmission(content);
-  const { audioUrl, content: generatedContent } = await executeChatStream(context);
-  return { messageId: assistantMessage.id, audioUrl, content: generatedContent };
+  // 1. 提交用户消息
+  useChatStore.getState().dispatch({ type: 'user.submit', content });
+
+  // 2. 获取上下文消息列表
+  const context = useChatStore.getState().selectors.conversationMessages();
+
+  // 获取刚刚创建的助手消息 ID (为最后一条消息，此时处于 sending 状态)
+  const assistantMsgId = useChatStore.getState().selectors.latestMessage()?.id;
+
+  // 3. 执行流
+  if (assistantMsgId) {
+    const { audioUrl, content: generatedContent } = await executeChatStream(context);
+    return { messageId: assistantMsgId, audioUrl, content: generatedContent };
+  }
+  throw new Error('Failed to create assistant message');
 };
 
 /**
  * 重试最近一条失败的消息，再次触发流式流程。
  */
 export const retryChatStream = async (): Promise<void> => {
-  const state = useChatStore.getState();
-  if (!state.pendingMessage || state.pendingMessage.status !== 'failed') {
+  const lastFailed = useChatStore.getState().selectors.latestFailedMessage();
+  if (!lastFailed) {
     throw new Error('当前没有需要重试的消息');
   }
-  const { context } = state.prepareRetrySubmission();
+
+  // 1. 触发重试 Action
+  useChatStore.getState().dispatch({ type: 'user.retry' });
+
+  // 2. 获取上下文
+  const context = useChatStore.getState().selectors.conversationMessages();
+
+  // 3. 执行流
   await executeChatStream(context);
 };
 
@@ -165,10 +192,9 @@ export const retryChatStream = async (): Promise<void> => {
  * 主动取消当前的聊天流式请求并清理状态。
  */
 export const cancelChatStream = () => {
-  const controller = useChatStore.getState().currentAbortController;
-  if (controller) {
-    controller.abort();
+  if (globalAbortController) {
+    globalAbortController.abort();
+    globalAbortController = null;
   }
   useChatStore.getState().resetActiveSession();
-  useChatStore.getState().setAbortController(null);
 };

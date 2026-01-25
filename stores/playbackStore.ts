@@ -243,6 +243,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     reset: () => {
       clearCountdown();
       const controller = get().audioController;
+      controller?.pause();
       set({
         ...INITIAL_STATE,
         currentAudioUrl: null,

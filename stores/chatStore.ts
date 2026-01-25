@@ -21,8 +21,6 @@ type ChatStoreBaseState = {
   activeAssistantMessage: ChatMessage | null;
   /** 当前在用的 AbortController，支持取消请求。 */
   currentAbortController: AbortController | null;
-  /** 已同步到上游的对话上下文。 */
-  conversationContext: ChatConversationMessage[];
   /** 输入框中的实时内容，供建议快捷填充。 */
   inputValue: string;
   /** 记录是否已经完成初始消息加载，避免 Tab 切换时覆盖状态。 */
@@ -49,6 +47,8 @@ type ChatStoreActions = {
   markFailure: () => void;
   /** 主动取消时清理占位消息与上下文。 */
   resetActiveSession: () => void;
+  /** 清空所有历史消息 */
+  resetChat: () => void;
   /** 记录或清空当前的 AbortController。 */
   setAbortController: (controller: AbortController | null) => void;
   /** 更新输入框的实时内容。 */
@@ -228,7 +228,6 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
   pendingMessage: null,
   activeAssistantMessage: null,
   currentAbortController: null,
-  conversationContext: [],
   inputValue: '',
   hasHydrated: false,
   hasUnread: false,
@@ -242,7 +241,6 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
       messages: initialMessages.map((item) => withPersona(item)),
       pendingMessage: null,
       activeAssistantMessage: null,
-      conversationContext: mapMessagesToContext(initialMessages),
       inputValue: '',
       hasHydrated: true,
       hasUnread: false,
@@ -265,7 +263,6 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     set({
       pendingMessage,
       activeAssistantMessage: assistantMessage,
-      conversationContext: context,
       inputValue: '',
     });
     return { pendingMessage, assistantMessage, context };
@@ -289,7 +286,6 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     set({
       pendingMessage,
       activeAssistantMessage: assistantMessage,
-      conversationContext: context,
     });
     return { pendingMessage, assistantMessage, context };
   },
@@ -311,7 +307,6 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     set({
       pendingMessage,
       activeAssistantMessage: assistantMessage,
-      conversationContext: context,
       inputValue: '',
       hasHydrated: true,
     });
@@ -327,7 +322,6 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     set({
       pendingMessage: null, // 续写没有新的用户消息
       activeAssistantMessage: assistantMessage,
-      conversationContext: baseContext,
     });
 
     return {
@@ -449,7 +443,6 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
         return {
           activeAssistantMessage: null,
           currentAbortController: null,
-          conversationContext: mapMessagesToContext(state.messages),
         };
       }
       return {
@@ -459,7 +452,6 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
         },
         activeAssistantMessage: null,
         currentAbortController: null,
-        conversationContext: mapMessagesToContext(state.messages),
       };
     });
   },
@@ -468,9 +460,16 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
       pendingMessage: null,
       activeAssistantMessage: null,
       currentAbortController: null,
-      conversationContext: mapMessagesToContext(state.messages),
       inputValue: state.inputValue,
     }));
+  },
+  resetChat: () => {
+    set({
+      messages: [],
+      pendingMessage: null,
+      activeAssistantMessage: null,
+      currentAbortController: null,
+    });
   },
   setAbortController: (controller) => {
     set({ currentAbortController: controller });

@@ -71,9 +71,7 @@ export const startStoryPlayback = async (messageId: string, audioUrl: string): P
   const preloadStore = usePreloadStore.getState();
   const apiConfig = useConfigStore.getState().apiConfig;
 
-
-
-  // 2. 停止当前正在播放的音频（如有）
+  // 停止当前正在播放的音频（如有）
   playbackStore.pauseAudioPlayback();
 
   // 重置状态
@@ -93,6 +91,7 @@ export const startStoryPlayback = async (messageId: string, audioUrl: string): P
  * @param prompt 用户输入的故事提示词
  */
 export const beginStorySession = async (prompt: string) => {
+  resetStoryFlow();
   const { messageId, audioUrl } = await beginChatStream(prompt);
   await startStoryPlayback(messageId, audioUrl);
 };
@@ -231,6 +230,6 @@ export const resetStoryFlow = () => {
   usePlaybackStore.getState().reset();
   usePreloadStore.getState().reset();
   useGenerationStore.getState().reset();
-  // ChatStore 不重置，保留历史
+  useChatStore.getState().resetChat();
   clearPreloadRetryTimer();
 };

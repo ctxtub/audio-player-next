@@ -2,8 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, TextArea, Toast } from 'antd-mobile';
-import { SendOutline } from 'antd-mobile-icons';
-
 import styles from './Composer.module.scss';
 
 /**
@@ -26,6 +24,8 @@ export interface ComposerProps {
   leftSlot?: React.ReactNode;
   /** 提交按钮文案，默认显示“发送”。 */
   submitText?: string;
+  /** 清空回调，用于触发更广泛的重置逻辑。 */
+  onClear?: () => void;
 }
 
 /**
@@ -39,7 +39,9 @@ const Composer: React.FC<ComposerProps> = ({
   isSending = false,
   placeholder = '请输入内容...',
   leftSlot,
+
   submitText = '发送',
+  onClear,
 }) => {
   /** 本地输入状态，受控时以 props value 为准。 */
   const [internalValue, setInternalValue] = useState(value ?? '');
@@ -114,6 +116,17 @@ const Composer: React.FC<ComposerProps> = ({
   }, [effectiveDisabled, handleChange, internalValue, onSubmit, showEmptyContentWarning]);
 
   /**
+   * 清空输入框内容。
+   */
+  const handleClear = useCallback(() => {
+    if (disabled || isSending || isLocalSending) {
+      return;
+    }
+    handleChange('');
+    onClear?.();
+  }, [disabled, isSending, isLocalSending, handleChange, onClear]);
+
+  /**
    * 键盘回车快捷提交，支持 Shift+Enter 换行。
    */
   const handleKeyDown = useCallback(
@@ -145,20 +158,33 @@ const Composer: React.FC<ComposerProps> = ({
             maxLength={5000}
             className={styles.textArea}
           />
-          <Button
-            color="primary"
-            fill="solid"
-            shape="rounded"
-            loading={isSending || isLocalSending}
-            disabled={effectiveDisabled}
-            aria-label={submitText}
-            className={styles.sendButton}
-            onClick={() => {
-              void handleSubmit();
-            }}
-          >
-            <SendOutline />
-          </Button>
+
+          <div className={styles.actionButtons}>
+            <Button
+              className={styles.clearButton}
+              onClick={handleClear}
+              disabled={effectiveDisabled}
+              color="danger"
+              fill="solid"
+              shape="rounded"
+            >
+              清空
+            </Button>
+            <Button
+              color="primary"
+              fill="solid"
+              shape="rounded"
+              loading={isSending || isLocalSending}
+              disabled={effectiveDisabled}
+              aria-label={submitText}
+              className={styles.sendButton}
+              onClick={() => {
+                void handleSubmit();
+              }}
+            >
+              {submitText}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

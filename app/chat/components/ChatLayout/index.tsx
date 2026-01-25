@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo } from 'react';
 import { Toast } from 'antd-mobile';
 
 import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
+import { resetStoryFlow } from '@/app/services/storyFlow';
 import { useChatStore } from '@/stores/chatStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { useFloatingPlayer } from '@/components/FloatingPlayer';
@@ -146,6 +147,13 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
     }
   }, []);
 
+  /**
+   * 清空输入框并重置整个故事流（包含聊天记录与音频状态）。
+   */
+  const handleClear = useCallback(() => {
+    resetStoryFlow();
+  }, []);
+
   return (
     <div className={styles.chatLayout}>
       <OnboardingModal />
@@ -169,6 +177,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ initialMessages }) => {
         isSending={isSending}
         value={inputValue}
         onChange={handleInputChange}
+        onClear={handleClear}
       />
     </div>
   );

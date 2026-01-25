@@ -40,7 +40,7 @@
 .textArea {
   width: 100%;
   border: none;
-  padding: 14px 64px 14px 20px;
+  padding: 14px 72px 14px 20px;
   background: transparent;
   color: var(--foreground);
   font-size: 15px;
@@ -54,29 +54,71 @@
   }
 }
 
-.sendButton {
+.actionButtons {
   position: absolute;
   right: 12px;
-  top: 24px;
-  width: 44px !important;
-  height: 44px !important;
-  min-width: 44px;
-  border-radius: 22px;
+  bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.clearButton {
+  width: 52px !important;
+  height: 32px !important;
+  min-width: 52px;
+  border-radius: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 8px 16px color-mix(in srgb, var(--primary) 25%, transparent);
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 !important;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--adm-color-danger) 25%, transparent);
   transition: transform var(--transition-speed) var(--transition-timing),
-              box-shadow var(--transition-speed) var(--transition-timing);
+    box-shadow var(--transition-speed) var(--transition-timing);
 
   &:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 12px 20px color-mix(in srgb, var(--primary) 30%, transparent);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--adm-color-danger) 30%, transparent);
   }
 
   &:active:not(:disabled) {
     transform: translateY(0);
-    box-shadow: 0 6px 14px color-mix(in srgb, var(--primary) 24%, transparent);
+    box-shadow: 0 3px 8px color-mix(in srgb, var(--adm-color-danger) 24%, transparent);
+  }
+
+  &:disabled {
+    box-shadow: none;
+    opacity: 0.6;
+  }
+}
+
+.sendButton {
+  width: 52px !important;
+  height: 32px !important;
+  min-width: 52px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 25%, transparent);
+  transition: transform var(--transition-speed) var(--transition-timing),
+    box-shadow var(--transition-speed) var(--transition-timing);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 !important;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 30%, transparent);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 3px 8px color-mix(in srgb, var(--primary) 24%, transparent);
   }
 
   &:disabled {

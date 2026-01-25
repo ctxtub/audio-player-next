@@ -13,5 +13,5 @@
 - `types.ts`：组件 Props 与相关类型定义。
 
 ## 关键协作与依赖
-- 接收 `app/chat/index.tsx` 传入的用户昵称与会话 ID。
+- 自身消费 `stores/chatStore` 等全局状态，不再依赖父组件通过 Props 传入会话数据。
 - 后续可与实时消息数据、输入控件等模块衔接。

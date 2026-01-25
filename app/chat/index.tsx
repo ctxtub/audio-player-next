@@ -1,7 +1,6 @@
 import React from 'react';
 import ChatLayout from './components/ChatLayout';
 import styles from './index.module.scss';
-import type { ChatMessage } from '@/types/chat';
 
 /**
  * 聊天页面壳组件，负责准备服务端数据并渲染布局。

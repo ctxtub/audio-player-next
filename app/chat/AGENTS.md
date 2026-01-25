@@ -12,7 +12,7 @@
 - `index.module.scss`：聊天页面容器样式。
 
 ## 关键协作与依赖
-- 将会话元数据传入 `components/ChatLayout` 完成 UI 组织。
+- 引用 `components/ChatLayout` 完成 UI 组织（数据状态由其内部消费 store）。
 - 预留与 `@/stores/**`、`@/app/services/**` 的交互以支撑后续实时聊天能力。
 - 承载聊天体验相关的页面与组件，实现对话输入与消息呈现。
 - 对接故事生成与音频播放能力，为未来聊天交互提供扩展点。

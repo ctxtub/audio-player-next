@@ -8,10 +8,6 @@ import type { ChatMessage, ChatPendingMessage } from '@/types/chat';
 export type ChatLogProps = {
   /** 消息列表，按时间顺序排列。 */
   messages: ChatMessage[];
-  /** 待发送的消息，用于在列表末尾展示发送进度。 */
-  pendingMessage?: ChatPendingMessage | null;
-  /** 正在流式拼装的助手消息。 */
-  streamingMessage?: ChatMessage | null;
   /** 是否展示加载状态，用于历史记录加载过程。 */
   isLoading?: boolean;
   /** 自定义空状态文案或插画。 */

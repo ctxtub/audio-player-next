@@ -144,11 +144,11 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
   const currentMessageId = playbackStore.currentMessageId;
 
   if (currentMessageId) {
-    const nextFromChat = useChatStore.getState().getNextStorySegmentByMessageId(currentMessageId);
+    const nextFromChat = useChatStore.getState().selectors.nextStorySegment(currentMessageId);
     if (nextFromChat) {
-      // 若聊天记录中存在下一段，且是“最新”的一段（即系统自动预加载生成的），
-      // 则需释放 PreloadStore 的 ready 锁，允许后续继续触发新的预加载。
-      if (useChatStore.getState().isLastMessageId(nextFromChat.messageId)) {
+      // 释放 PreloadStore 的锁，允许后续预加载。
+      // 仅当下一段是最新生成的消息时才操作，避免回放旧内容干扰生成流程。
+      if (useChatStore.getState().selectors.isLatestMessage(nextFromChat.messageId)) {
         usePreloadStore.getState().consume();
       }
 
@@ -163,14 +163,14 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
     }
   }
 
-  // 走到这里说明 ChatStore 里没有下一段了（当前是最后一段，或者没找到）。
-  // 这时必须使用 PreloadStore 来生成/获取下一段。
+  // ChatStore 中无后续段落，尝试从预加载 Store 获取。
+  // 场景：当前播放的是最后一段，或者预加载的内容尚未同步到 ChatStore。
 
   let result: { segment: string; audioUrl: string; messageId?: string } | null = null;
   const preloadState = usePreloadStore.getState();
 
   try {
-    // 即便状态为 ready，也强制请求以确保获取数据或触发必要操作。
+    // 强制触发消费预加载内容，即使状态已就绪。
     if (preloadState.status === 'ready') {
       usePreloadStore.getState().consume();
     }

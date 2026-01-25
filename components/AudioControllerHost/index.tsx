@@ -147,18 +147,18 @@ const AudioControllerHost: React.FC = () => {
         throw new Error('音频播放器尚未就绪');
       }
 
-      // 修复：若播放的是最新预加载的段落，需重置 PreloadStore 状态，
-      // 否则 handleNearEnd 会因 status === 'ready' 而跳过下一次预加载。
+      // 若播放的是最新预加载的段落，需重置 PreloadStore 状态，
+      // 防止后续逻辑误判导致跳过下一次预加载。
       const preloadStore = usePreloadStore.getState();
       // 使用 messageId 进行精准匹配
-      if (messageId && useChatStore.getState().isLastMessageId(messageId)) {
+      if (messageId && useChatStore.getState().selectors.isLatestMessage(messageId)) {
         if (preloadStore.status === 'ready') {
           preloadStore.consume();
         }
       }
 
       // 同步当前播放地址到 Store，确保 StoryCard UI 状态正确
-      // 注意：使用 syncPlaybackState 而不是 playAudio，避免递归调用 controller.play
+      // 使用 syncPlaybackState 避免递归调用 play
       usePlaybackStore.getState().syncPlaybackState(audioUrl, messageId);
 
 
@@ -293,7 +293,7 @@ const AudioControllerHost: React.FC = () => {
           // 避免用户回听旧片段时，错误地触发了后续生成。
           const currentMessageId = usePlaybackStore.getState().currentMessageId;
           const isLast = currentMessageId
-            ? useChatStore.getState().isLastMessageId(currentMessageId)
+            ? useChatStore.getState().selectors.isLatestMessage(currentMessageId)
             : false; // 如果没有 ID，保守起见不自动触发
 
           if (isLast) {

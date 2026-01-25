@@ -8,7 +8,7 @@ import type { ChatLogProps } from '../ChatLog/types';
  */
 type MessageAreaProps = Pick<
   ChatLogProps,
-  'messages' | 'pendingMessage' | 'streamingMessage' | 'isLoading' | 'emptyHint' | 'loadingHint' | 'onRetry' | 'onPlayStory'
+  'messages' | 'isLoading' | 'emptyHint' | 'loadingHint' | 'onRetry' | 'onPlayStory'
 >;
 
 /**
@@ -17,8 +17,6 @@ type MessageAreaProps = Pick<
  */
 const MessageArea: React.FC<MessageAreaProps> = ({
   messages,
-  pendingMessage,
-  streamingMessage,
   isLoading,
   emptyHint,
   loadingHint,
@@ -30,8 +28,6 @@ const MessageArea: React.FC<MessageAreaProps> = ({
       <ChatLog
         className={styles.chatLogContainer}
         messages={messages}
-        pendingMessage={pendingMessage}
-        streamingMessage={streamingMessage}
         isLoading={isLoading}
         emptyHint={emptyHint}
         loadingHint={loadingHint}

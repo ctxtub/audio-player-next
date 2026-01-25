@@ -11,7 +11,7 @@ import {
 } from 'react';
 import MessageBubble from './MessageBubble';
 import styles from './ChatLog.module.scss';
-import type { ChatLogProps, ChatPendingMessage } from './types';
+import type { ChatLogProps } from './types';
 
 /**
  * 滚动到底部的辅助函数，使用 requestAnimationFrame 预留节流能力。
@@ -33,8 +33,6 @@ const scrollNodeToBottom = (container: HTMLDivElement | null) => {
 const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => {
   const {
     messages,
-    pendingMessage,
-    streamingMessage,
     isLoading = false,
     emptyHint,
     loadingHint,
@@ -72,11 +70,8 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
   useEffect(() => {
     scrollToBottom();
   }, [
-    messages,
-    pendingMessage?.id,
-    pendingMessage?.content,
-    streamingMessage?.id,
-    streamingMessage?.content,
+    messages, // 只要消息列表长度或内容变化就滚动
+    // 如果消息内部属性变化（如流式生成内容更新），可能也需要滚动，messages 引用变化会触发
     scrollToBottom,
   ]);
 
@@ -88,21 +83,12 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
     };
   }, []);
 
-  const resolvedPending = useMemo<ChatPendingMessage | null>(() => {
-    if (!pendingMessage) {
-      return null;
-    }
-    const status = pendingMessage.status ?? 'sending';
-    return { ...pendingMessage, status };
-  }, [pendingMessage]);
-
   const containerClassName = useMemo(
     () => [styles.chatLog, className].filter(Boolean).join(' '),
     [className],
   );
 
-  const hasMessages =
-    messages.length > 0 || Boolean(resolvedPending) || Boolean(streamingMessage);
+  const hasMessages = messages.length > 0;
 
   /** 滚动容器类名，根据空状态追加去除底部内边距的样式。 */
   const scrollContainerClassName = useMemo(
@@ -122,24 +108,13 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
         {hasMessages ? (
           <div className={styles.messagesList}>
             {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} onRetry={onRetry} onPlayStory={onPlayStory} />
+              <MessageBubble
+                key={message.id}
+                message={message}
+                onRetry={onRetry}
+                onPlayStory={onPlayStory}
+              />
             ))}
-            {resolvedPending ? (
-              <MessageBubble
-                key={resolvedPending.id ?? 'pending'}
-                message={resolvedPending}
-                onRetry={onRetry}
-                onPlayStory={onPlayStory}
-              />
-            ) : null}
-            {streamingMessage ? (
-              <MessageBubble
-                key={streamingMessage.id}
-                message={{ ...streamingMessage, status: streamingMessage.status ?? 'sending' }}
-                onRetry={onRetry}
-                onPlayStory={onPlayStory}
-              />
-            ) : null}
           </div>
         ) : !isLoading ? (
           <div className={styles.placeholder}>

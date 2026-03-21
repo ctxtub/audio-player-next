@@ -1,10 +1,11 @@
+/* Auth 页 — spec 3.8 */
 .page {
   display: flex;
   flex-direction: column;
   align-items: center;
   min-height: 100dvh;
-  padding: 48px 24px 40px;
-  gap: 28px;
+  padding: var(--space-12) var(--space-6) var(--space-10);
+  gap: var(--space-8);
 }
 
 /* Logo 区 */
@@ -12,55 +13,55 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding-top: 24px;
+  gap: var(--space-2);
+  padding-top: var(--space-6);
 }
 
 .logo {
   font-size: 56px;
   line-height: 1;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .appName {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--foreground);
-  letter-spacing: -0.3px;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  letter-spacing: var(--tracking-tight);
 }
 
 .tagline {
-  font-size: 14px;
-  color: var(--secondary);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
 }
 
-/* 表单卡片：不设 overflow: hidden，避免截断自适应高度的表单内容 */
+/* 表单卡片 */
 .card {
   width: 100%;
-  background: var(--card-background);
-  border: 1px solid var(--card-border);
-  border-radius: 20px;
-  backdrop-filter: blur(var(--blur-radius));
-  box-shadow: 0 8px 24px var(--shadow-color);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  backdrop-filter: blur(var(--blur-md));
+  box-shadow: var(--shadow-lg);
 }
 
 /* 自定义 Tab 头 */
 .tabHeader {
   display: flex;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .tabBtn {
   flex: 1;
-  padding: 14px 0;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--secondary);
+  padding: var(--space-3) 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  color: var(--text-tertiary);
   background: none;
   border: none;
   cursor: pointer;
   position: relative;
-  transition: color var(--transition-speed) var(--transition-timing);
+  transition: color var(--duration-normal) var(--ease-default);
 
   &::after {
     content: '';
@@ -71,24 +72,24 @@
     width: 0;
     height: 2px;
     border-radius: 1px;
-    background: var(--primary);
-    transition: width var(--transition-speed) var(--transition-timing);
+    background: var(--accent-primary);
+    transition: width var(--duration-normal) var(--ease-default);
   }
 }
 
 .tabBtnActive {
-  color: var(--primary);
-  font-weight: 600;
+  color: var(--accent-primary);
+  font-weight: var(--weight-semibold);
 
   &::after {
-    width: 24px;
+    width: var(--space-6);
   }
 }
 
 .formWrapper {
   display: flex;
   flex-direction: column;
-  padding: 8px 0 4px;
+  padding: var(--space-2) 0 var(--space-1);
 }
 
 .form {
@@ -119,19 +120,19 @@
 .inputRow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 20px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-  transition: background-color var(--transition-speed) var(--transition-timing);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background-color var(--duration-normal) var(--ease-default);
 
   &:focus-within {
-    background: color-mix(in srgb, var(--primary) 5%, transparent);
+    background: var(--accent-primary-subtle);
   }
 }
 
 .inputIcon {
-  font-size: 18px;
-  color: var(--secondary);
+  font-size: var(--text-md);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -141,33 +142,33 @@
 }
 
 .input :global(.adm-input-element) {
-  color: var(--foreground);
-  font-size: 16px;
+  color: var(--text-primary);
+  font-size: var(--text-base);
 }
 
 .input :global(.adm-input-element::placeholder) {
-  color: color-mix(in srgb, var(--secondary) 60%, transparent);
+  color: var(--text-tertiary);
 }
 
 .formFooter {
-  padding: 16px 20px 20px;
+  padding: var(--space-4) var(--space-5) var(--space-5);
 }
 
 .formFooter :global(.adm-button) {
-  --adm-button-border-radius: 14px;
-  font-size: 16px;
-  padding: 16px;
-  font-weight: 600;
+  --adm-button-border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  padding: var(--space-4);
+  font-weight: var(--weight-semibold);
 }
 
 .apiErrorBar {
-  margin: 12px 20px 4px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--adm-color-danger) 10%, transparent);
-  color: var(--adm-color-danger);
-  font-size: 13px;
-  line-height: 1.5;
+  margin: var(--space-3) var(--space-5) var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  color: var(--status-error);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
   text-align: center;
 }
 
@@ -176,32 +177,32 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .divider {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 
   &::before,
   &::after {
     content: '';
     flex: 1;
     height: 1px;
-    background: var(--border);
+    background: var(--border-default);
   }
 }
 
 .dividerText {
-  font-size: 13px;
-  color: var(--secondary);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
 }
 
 .guestButton {
-  --adm-button-border-radius: 14px;
-  --adm-button-border-color: var(--border);
-  --adm-button-text-color: var(--secondary);
-  font-size: 15px;
-  padding: 14px;
+  --adm-button-border-radius: var(--radius-md);
+  --adm-button-border-color: var(--border-default);
+  --adm-button-text-color: var(--text-secondary);
+  font-size: var(--text-base);
+  padding: var(--space-3);
 }

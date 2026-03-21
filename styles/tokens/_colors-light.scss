@@ -1,0 +1,46 @@
+/* Light 语义色 — iOS 26 Liquid Glass */
+:root[data-theme="light"] {
+  /* 背景 — iOS 标准蓝调灰 */
+  --bg-primary: #F2F2F7;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #F9F9FB;
+  --bg-elevated: rgba(255, 255, 255, 0.80);
+  --bg-overlay: rgba(0, 0, 0, 0.3);
+
+  /* Liquid Glass 表面 */
+  --glass-bg: rgba(255, 255, 255, 0.45);
+  --glass-border: rgba(255, 255, 255, 0.60);
+  --glass-highlight: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.70);
+
+  /* 前景 / 文字 */
+  --text-primary: #1C1C1E;
+  --text-secondary: #636366;
+  --text-tertiary: #8E8E93;
+  --text-inverse: #ffffff;
+  --text-on-primary: #ffffff;
+
+  /* 品牌 / 交互 — iOS system blue */
+  --accent-primary: #007AFF;
+  --accent-primary-hover: #0A84FF;
+  --accent-primary-subtle: rgba(0, 122, 255, 0.12);
+  --accent-secondary: #AF52DE;
+
+  /* 语义状态 — iOS system colors */
+  --status-success: #34C759;
+  --status-warning: #FF9500;
+  --status-error: #FF3B30;
+  --status-info: #5AC8FA;
+
+  /* 边框 — iOS 26 luminous hairline */
+  --border-default: rgba(0, 0, 0, 0.08);
+  --border-subtle: rgba(0, 0, 0, 0.04);
+  --border-strong: rgba(0, 0, 0, 0.15);
+  --border-accent: rgba(0, 122, 255, 0.40);
+
+  /* 渐变 */
+  --gradient-brand: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  --gradient-surface: linear-gradient(180deg, var(--bg-secondary), var(--bg-primary));
+  --gradient-fade-down: linear-gradient(180deg, var(--bg-secondary), transparent);
+  --gradient-fade-up: linear-gradient(0deg, var(--bg-primary) 0%, transparent 100%);
+  --gradient-glow: radial-gradient(circle, var(--accent-primary-subtle) 0%, transparent 70%);
+}

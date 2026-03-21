@@ -1,49 +1,51 @@
+/* 播放状态面板 — spec 3.16 */
 .statusContainer {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
 
   .statusItem {
-    backdrop-filter: blur(5px);
-    box-shadow: 0 2px 8px var(--shadow-color);
-    transition: transform var(--transition-speed) var(--transition-timing);
+    backdrop-filter: blur(var(--blur-sm));
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition-transform);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     min-width: 172px;
-    padding: 10px 14px;
-    border-radius: 12px;
-    font-size: 14px;
-    font-weight: 500;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    font-weight: var(--weight-medium);
 
     &:hover {
       transform: translateY(-1px);
     }
 
     &.countdown {
-      background: color-mix(in srgb, var(--process) 20%, transparent);
-      color: var(--process);
+      background: var(--accent-primary-subtle);
+      color: var(--accent-primary);
     }
 
     &.loading {
-      background: color-mix(in srgb, var(--process) 20%, transparent);
-      color: var(--process);
+      background: var(--accent-primary-subtle);
+      color: var(--accent-primary);
     }
 
     &.error {
-      background: color-mix(in srgb, var(--error) 20%, transparent);
-      color: var(--error);
+      background: color-mix(in srgb, var(--status-error) 20%, transparent);
+      color: var(--status-error);
     }
 
     &.success {
-      background: color-mix(in srgb, var(--success) 20%, transparent);
-      color: var(--success);
+      background: color-mix(in srgb, var(--status-success) 20%, transparent);
+      color: var(--status-success);
     }
 
     .statusIcon {
-      width: 16px;
-      height: 16px;
+      width: var(--size-icon-sm);
+      height: var(--size-icon-sm);
       stroke: currentColor;
 
       &.loadingIcon {

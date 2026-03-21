@@ -1,22 +1,24 @@
+/* 全局加载状态 */
 .loadingContainer {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  background: var(---background);
-  color: var(--foreground);
+  gap: var(--space-4);
+  background: var(--bg-primary);
+  color: var(--text-primary);
   text-align: center;
-  padding: 24px;
+  padding: var(--space-6);
 
   .spinner {
-    --size: 48px;
-    --color: var(--foreground);
+    --size: var(--size-avatar-lg);
+    --color: var(--text-primary);
   }
 
   .message {
-    font-size: 16px;
+    font-size: var(--text-base);
+    line-height: var(--leading-base);
     letter-spacing: 0.4px;
   }
 }

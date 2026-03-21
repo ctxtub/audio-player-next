@@ -31,7 +31,7 @@ export const THEME_MODE_STORAGE_KEY = 'theme-mode';
  */
 export const THEME_COLORS: Record<ThemeValue, string> = {
   dark: '#000000',
-  light: '#f2f2f7',
+  light: '#F2F2F7',
 };
 
 declare global {

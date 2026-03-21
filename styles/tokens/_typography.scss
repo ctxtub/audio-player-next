@@ -1,0 +1,37 @@
+/* 排版系统 */
+:root {
+  /* 字体族 */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Noto Sans SC', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* 字号（固定 8 级，禁止使用其他数值） */
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-md: 17px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 40px;
+
+  /* 行高（与字号配对） */
+  --leading-xs: 16px;
+  --leading-sm: 18px;
+  --leading-base: 22px;
+  --leading-md: 24px;
+  --leading-lg: 28px;
+  --leading-xl: 32px;
+  --leading-2xl: 40px;
+  --leading-3xl: 48px;
+
+  /* 字重 */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* 字间距 */
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.02em;
+}

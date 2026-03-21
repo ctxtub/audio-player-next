@@ -1,13 +1,16 @@
+/* 底部导航栏 — spec 3.6 */
 .tabBarContainer {
   position: sticky;
   bottom: 0;
-  z-index: 20;
-  background-color: var(--initial-background, var(--background));
-  border-top: 1px solid var(--card-border);
-  box-shadow: 0 -4px 16px color-mix(in srgb, var(--shadow-color) 60%, transparent);
-  min-height: var(--main-tab-bar-height, 56px);
+  z-index: var(--z-sticky);
+  background-color: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-top: 0.5px solid var(--glass-border);
+  box-shadow: var(--glass-highlight);
+  min-height: var(--tab-bar-height);
 
   :global(.adm-tab-bar-item) {
-    padding: 8px 8px;
+    padding: var(--space-2);
   }
 }

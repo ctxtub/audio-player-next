@@ -1,36 +1,37 @@
+/* 故事查看器 — spec 3.15 */
 .storyPreview {
-  backdrop-filter: blur(var(--blur-radius));
-  transition: transform var(--transition-speed) var(--transition-timing);
-  box-shadow: 0 8px 16px var(--shadow-color);
-  border: 1px solid var(--card-border);
-  background-color: var(--card-background);
-  border-radius: 16px;
-  padding: 20px;
+  backdrop-filter: blur(var(--blur-md));
+  transition: var(--transition-transform);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border-default);
+  background-color: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
   cursor: pointer;
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
 
   .storyPreviewText {
-    font-size: 16px;
-    line-height: 1.6;
-    color: var(--foreground);
+    font-size: var(--text-base);
+    line-height: 1.7;
+    color: var(--text-primary);
     text-indent: 2em;
   }
 
   .readMore {
-    transition: transform var(--transition-speed) var(--transition-timing);
+    transition: var(--transition-transform);
     display: inline-flex;
     align-items: center;
-    font-weight: 600;
-    font-size: 14px;
-    margin-top: 15px;
+    font-weight: var(--weight-semibold);
+    font-size: var(--text-sm);
+    margin-top: var(--space-3);
     cursor: pointer;
     border: none;
     background: none;
-    color: var(--primary);
+    color: var(--accent-primary);
 
     &::after {
-      transition: transform var(--transition-speed) var(--transition-timing);
-      margin-left: 5px;
+      transition: var(--transition-transform);
+      margin-left: var(--space-1);
       content: '→';
     }
 
@@ -43,10 +44,10 @@
 }
 
 .storyText {
-  font-size: 16px;
+  font-size: var(--text-base);
   line-height: 1.8;
-  padding: 20px;
-  color: var(--foreground);
+  padding: var(--card-padding);
+  color: var(--text-primary);
 
   p {
     text-indent: 2em;

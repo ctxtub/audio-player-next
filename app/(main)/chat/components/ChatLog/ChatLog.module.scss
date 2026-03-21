@@ -1,3 +1,4 @@
+/* 聊天日志列表 */
 .chatLog {
   display: flex;
   flex-direction: column;
@@ -8,8 +9,8 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding: 16px 16px 0 16px;
-  gap: 16px;
+  padding: var(--space-4) var(--space-4) 0 var(--space-4);
+  gap: var(--space-4);
   scroll-behavior: smooth;
 
   &::-webkit-scrollbar {
@@ -17,12 +18,12 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    border-radius: 3px;
-    background: color-mix(in srgb, var(--primary) 20%, transparent);
+    border-radius: var(--radius-xs);
+    background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
   }
 
   &::-webkit-scrollbar-track {
-    background: color-mix(in srgb, var(--foreground) 4%, transparent);
+    background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   }
 }
 
@@ -39,7 +40,7 @@
 .placeholder {
   flex: 1;
   margin: 0;
-  padding: 24px 16px;
+  padding: var(--space-6) var(--space-4);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -49,12 +50,12 @@
     max-width: 320px;
     width: 100%;
     text-align: center;
-    gap: 12px;
+    gap: var(--space-3);
   }
 
   :global(.adm-empty-description) {
-    color: var(--secondary);
-    font-size: 14px;
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
   }
 }
 
@@ -62,7 +63,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-size: 14px;
-  color: color-mix(in srgb, var(--primary) 70%, var(--secondary));
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: color-mix(in srgb, var(--accent-primary) 70%, var(--text-secondary));
 }

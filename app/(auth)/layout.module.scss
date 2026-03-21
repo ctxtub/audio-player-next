@@ -1,12 +1,13 @@
+/* Auth 布局 */
 .authLayout {
   max-width: 800px;
   height: 100dvh;
   margin: 0 auto;
-  background-color: var(--background);
-  color: var(--foreground);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  transition: background-color var(--transition-speed) var(--transition-timing),
-    color var(--transition-speed) var(--transition-timing);
+  transition: background-color var(--duration-normal) var(--ease-default),
+    color var(--duration-normal) var(--ease-default);
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import 'antd-mobile/es/global';
-import '@/styles/index.css';
+import '@/styles/index.scss';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AntdMobileCompat } from '@/components/AntdMobileCompat';
 import {

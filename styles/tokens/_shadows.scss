@@ -1,0 +1,15 @@
+/* 阴影系统 — iOS 26 风格：更柔和、更扩散 */
+:root {
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 2px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 4px 20px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  /* 特殊阴影 */
+  --shadow-accent: 0 4px 16px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+
+  /* Liquid Glass 阴影 — 含内部高光 */
+  --shadow-glass: 0 2px 16px rgba(0, 0, 0, 0.08);
+  --shadow-glass-dark: 0 2px 16px rgba(0, 0, 0, 0.35);
+}

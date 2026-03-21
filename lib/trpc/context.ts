@@ -7,6 +7,7 @@
 import { cookies } from 'next/headers';
 
 import type { AuthSession } from '@/types/auth';
+import { decodeSession, SESSION_COOKIE } from '@/lib/session';
 
 /**
  * tRPC 请求上下文类型。
@@ -21,21 +22,9 @@ export type Context = {
  * @param cookieStore Next.js cookies() 返回的存储。
  */
 const parseSession = (cookieStore: Awaited<ReturnType<typeof cookies>>): AuthSession | null => {
-    const authCookie = cookieStore.get('auth');
-    if (!authCookie?.value) {
-        return null;
-    }
-
-    try {
-        const decoded = Buffer.from(authCookie.value, 'base64').toString('utf-8');
-        const parsed = JSON.parse(decoded) as { nickname?: string };
-        if (parsed.nickname) {
-            return { nickname: parsed.nickname };
-        }
-        return null;
-    } catch {
-        return null;
-    }
+    const value = cookieStore.get(SESSION_COOKIE)?.value;
+    if (!value) return null;
+    return decodeSession(value);
 };
 
 /**

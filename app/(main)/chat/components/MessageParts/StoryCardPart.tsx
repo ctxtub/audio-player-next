@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import type { StoryCardPart } from '@/types/chat';
 import { useGenerationStore } from '@/stores/generationStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
-import StoryViewer from '@/app/chat/components/StoryViewer';
+import StoryViewer from '@/app/(main)/chat/components/StoryViewer';
 import type { PartRendererProps } from './index';
 import styles from './index.module.scss';
 

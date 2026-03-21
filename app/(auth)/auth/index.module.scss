@@ -1,0 +1,207 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100dvh;
+  padding: 48px 24px 40px;
+  gap: 28px;
+}
+
+/* Logo 区 */
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-top: 24px;
+}
+
+.logo {
+  font-size: 56px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.appName {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--foreground);
+  letter-spacing: -0.3px;
+}
+
+.tagline {
+  font-size: 14px;
+  color: var(--secondary);
+}
+
+/* 表单卡片：不设 overflow: hidden，避免截断自适应高度的表单内容 */
+.card {
+  width: 100%;
+  background: var(--card-background);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  backdrop-filter: blur(var(--blur-radius));
+  box-shadow: 0 8px 24px var(--shadow-color);
+}
+
+/* 自定义 Tab 头 */
+.tabHeader {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabBtn {
+  flex: 1;
+  padding: 14px 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: color var(--transition-speed) var(--transition-timing);
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--primary);
+    transition: width var(--transition-speed) var(--transition-timing);
+  }
+}
+
+.tabBtnActive {
+  color: var(--primary);
+  font-weight: 600;
+
+  &::after {
+    width: 24px;
+  }
+}
+
+.formWrapper {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0 4px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+}
+
+.form :global(.adm-form-item) {
+  margin: 0;
+}
+
+.form :global(.adm-form-item-label) {
+  display: none;
+}
+
+.form :global(.adm-list-item-content) {
+  padding: 0;
+  border: none;
+}
+
+.form :global(.adm-list) {
+  background: transparent;
+  --border-top: none;
+  --border-bottom: none;
+  --border-inner: none;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  transition: background-color var(--transition-speed) var(--transition-timing);
+
+  &:focus-within {
+    background: color-mix(in srgb, var(--primary) 5%, transparent);
+  }
+}
+
+.inputIcon {
+  font-size: 18px;
+  color: var(--secondary);
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  --background-color: transparent;
+}
+
+.input :global(.adm-input-element) {
+  color: var(--foreground);
+  font-size: 16px;
+}
+
+.input :global(.adm-input-element::placeholder) {
+  color: color-mix(in srgb, var(--secondary) 60%, transparent);
+}
+
+.formFooter {
+  padding: 16px 20px 20px;
+}
+
+.formFooter :global(.adm-button) {
+  --adm-button-border-radius: 14px;
+  font-size: 16px;
+  padding: 16px;
+  font-weight: 600;
+}
+
+.apiErrorBar {
+  margin: 12px 20px 4px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--adm-color-danger) 10%, transparent);
+  color: var(--adm-color-danger);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* 访客入口 */
+.guestSection {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+}
+
+.dividerText {
+  font-size: 13px;
+  color: var(--secondary);
+}
+
+.guestButton {
+  --adm-button-border-radius: 14px;
+  --adm-button-border-color: var(--border);
+  --adm-button-text-color: var(--secondary);
+  font-size: 15px;
+  padding: 14px;
+}

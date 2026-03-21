@@ -48,5 +48,6 @@ export interface AuthProfileResponse {
  * 登录态 Cookie 解析后的会话信息。
  */
 export interface AuthSession {
+  userId: number;
   nickname: string;
 }

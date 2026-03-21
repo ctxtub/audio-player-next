@@ -1,13 +1,8 @@
 import React from 'react';
 import 'antd-mobile/es/global';
 import '@/styles/index.css';
-import styles from '@/styles/app.module.scss';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { AntdMobileCompat } from '@/components/AntdMobileCompat';
-import MainTabBar from '@/components/MainTabBar';
-import AudioControllerHost from '@/components/AudioControllerHost';
-import { FloatingPlayer } from '@/components/FloatingPlayer';
-import ConfigInitializer from '@/components/ConfigInitializer';
 import {
   FALLBACK_THEME,
   THEME_COLORS,
@@ -15,9 +10,8 @@ import {
 } from '@/components/ThemeProvider/themeConfig';
 
 /**
- * 应用根布局，注入主题脚本与全局导航。
- * @param children 页面渲染内容
- * @returns 包裹全局 Provider 的 HTML 结构
+ * 应用根布局，注入主题脚本与全局 Provider。
+ * TabBar / AudioController 等主应用专属布局在 (main)/layout.tsx 中。
  */
 export default function RootLayout({
   children,
@@ -35,16 +29,7 @@ export default function RootLayout({
       <body>
         <AntdMobileCompat />
         <ThemeProvider>
-          <ConfigInitializer>
-            <div className={styles.app}>
-              <main className={styles.content}>
-                {children}
-              </main>
-              <MainTabBar />
-            </div>
-            <AudioControllerHost />
-            <FloatingPlayer />
-          </ConfigInitializer>
+          {children}
         </ThemeProvider>
       </body>
     </html>

@@ -54,7 +54,7 @@ const Modal: React.FC<ModalProps> = ({
       className={styles.modalPopup}
       bodyClassName={styles.modalBody}
       maskStyle={{
-        backgroundColor: 'color-mix(in srgb, var(--background) 40%, transparent)',
+        backgroundColor: 'var(--bg-overlay)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',
       }}

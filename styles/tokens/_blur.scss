@@ -1,0 +1,10 @@
+/* 模糊 / 毛玻璃 — iOS 26 Liquid Glass 级别 */
+:root {
+  --blur-sm: 12px;
+  --blur-md: 24px;
+  --blur-lg: 40px;
+  --blur-xl: 60px;
+
+  /* Liquid Glass 专用：blur + saturate 组合 */
+  --glass-blur: blur(48px) saturate(180%);
+}

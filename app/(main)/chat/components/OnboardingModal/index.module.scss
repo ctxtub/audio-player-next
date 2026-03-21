@@ -1,91 +1,92 @@
+/* 引导弹窗 — spec 3.14 */
 .modalContent {
-    padding: 12px 0;
-    color: var(--color-text-primary);
+  padding: var(--space-3) 0;
+  color: var(--text-primary);
 }
 
 .header {
-    text-align: center;
-    margin-bottom: 24px;
+  text-align: center;
+  margin-bottom: var(--space-6);
 
-    h3 {
-        font-size: 20px;
-        font-weight: 600;
-        margin: 0 0 8px;
-        background: linear-gradient(135deg, #1677ff 0%, #36cfc9 100%);
-        background-clip: text;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--weight-bold);
+    margin: 0 0 var(--space-2);
+    background: var(--gradient-brand);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
 }
 
 .agentList {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
 }
 
 .agentItem {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    padding: 12px;
-    background: var(--color-bg-light);
-    border-radius: 12px;
-    border: 1px solid var(--color-border-light);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
 
-    .icon {
-        font-size: 24px;
-        flex-shrink: 0;
-        width: 40px;
-        height: 40px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #fff;
-        border-radius: 50%;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    }
+  .icon {
+    font-size: var(--text-xl);
+    flex-shrink: 0;
+    width: var(--size-avatar-md);
+    height: var(--size-avatar-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-sm);
+  }
 }
 
 .agentInfo {
-    flex: 1;
+  flex: 1;
 
-    .name {
-        font-size: 16px;
-        font-weight: 600;
-        margin-bottom: 4px;
-        color: var(--color-text-primary);
-    }
+  .name {
+    font-size: var(--text-base);
+    font-weight: var(--weight-semibold);
+    margin-bottom: var(--space-1);
+    color: var(--text-primary);
+  }
 
-    .desc {
-        font-size: 13px;
-        line-height: 1.5;
-        color: var(--color-text-secondary);
-    }
+  .desc {
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--text-secondary);
+  }
 }
 
 .triggerGuide {
-    background: linear-gradient(135deg, rgba(22, 119, 255, 0.05) 0%, rgba(54, 207, 201, 0.05) 100%);
-    border-radius: 12px;
-    padding: 16px;
-    text-align: center;
+  background: var(--accent-primary-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  text-align: center;
 
-    p {
-        font-size: 14px;
-        line-height: 1.6;
-        color: var(--color-text-secondary);
-        margin: 0;
-    }
+  p {
+    font-size: var(--text-sm);
+    line-height: var(--leading-sm);
+    color: var(--text-secondary);
+    margin: 0;
+  }
 }
 
 .modalContainer {
-    --adm-center-popup-min-width: min(calc(100vw - 48px), 480px);
-    --adm-center-popup-max-width: 480px;
-    --adm-center-popup-border-radius: 16px;
+  --adm-center-popup-min-width: min(calc(100vw - 48px), 480px);
+  --adm-center-popup-max-width: 480px;
+  --adm-center-popup-border-radius: var(--radius-lg);
 
-    :global(.adm-center-popup-body) {
-        border: 1px solid var(--card-border);
-        box-shadow: 0 8px 24px var(--shadow-color);
-    }
+  :global(.adm-center-popup-body) {
+    border: 1px solid var(--border-default);
+    box-shadow: var(--shadow-xl);
+  }
 }

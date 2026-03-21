@@ -1,8 +1,9 @@
+/* 悬浮播放器 — spec 3.7 */
 .floatingRoot {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 900;
+  z-index: var(--z-floating);
 
   .floatingPanel {
     position: fixed;
@@ -10,19 +11,23 @@
     display: flex;
     flex-direction: column;
     width: 124px;
-    padding: 12px 12px;
-    border-radius: 18px;
-    border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--card-border));
-    background: color-mix(in srgb, var(--card-background) 85%, var(--primary) 15%);
-    box-shadow: 0 10px 24px color-mix(in srgb, var(--primary) 22%, rgba(0, 0, 0, 0.35));
-    backdrop-filter: blur(14px);
-    transition: left 0.2s ease, top 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+    padding: var(--card-padding-sm);
+    border-radius: var(--radius-lg);
+    border: 0.5px solid var(--glass-border);
+    background: var(--glass-bg);
+    box-shadow: var(--glass-highlight), var(--shadow-lg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    transition: left var(--duration-normal) var(--ease-default),
+      top var(--duration-normal) var(--ease-default),
+      opacity var(--duration-normal) var(--ease-default),
+      transform var(--duration-normal) var(--ease-default);
     touch-action: none;
 
     &Hidden {
       opacity: 0;
       pointer-events: none;
-      transform: translate3d(-50%, 16px, 0);
+      transform: translate3d(-50%, var(--space-4), 0);
     }
 
     &Expanded {
@@ -40,13 +45,14 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      gap: var(--space-2);
       touch-action: none;
 
       .floatingTitle {
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--foreground);
+        font-size: var(--text-base);
+        line-height: var(--leading-base);
+        font-weight: var(--weight-semibold);
+        color: var(--text-primary);
         flex: 1;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -56,37 +62,38 @@
       .floatingActions {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--space-2);
 
         .floatingActionButton {
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
+          width: var(--size-touch-target);
+          height: var(--size-touch-target);
+          border-radius: var(--radius-full);
           border: none;
-          background: var(--primary);
-          color: #ffffff;
+          background: var(--accent-primary);
+          color: var(--text-on-primary);
           cursor: pointer;
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 45%, transparent);
-          transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+          box-shadow: var(--shadow-accent);
+          transition: background var(--duration-fast) var(--ease-default),
+            transform var(--duration-fast) var(--ease-default),
+            box-shadow var(--duration-fast) var(--ease-default);
 
           &:hover {
-            background: color-mix(in srgb, var(--primary) 80%, #ffffff 20%);
-            box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 55%, transparent);
+            background: var(--accent-primary-hover);
+            box-shadow: var(--shadow-md);
             transform: translateY(-1px);
           }
 
           &:active {
-            background: color-mix(in srgb, var(--primary) 70%, #000000 10%);
-            box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 35%, transparent);
-            transform: translateY(0);
+            transform: scale(0.97);
+            box-shadow: var(--shadow-sm);
           }
 
           svg {
-            width: 20px;
-            height: 20px;
+            width: var(--size-icon-md);
+            height: var(--size-icon-md);
           }
         }
       }

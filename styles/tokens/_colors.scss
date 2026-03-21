@@ -1,0 +1,38 @@
+/* Primitive Colors — 与主题无关的原始色板 */
+:root {
+  --color-black: #000000;
+  --color-white: #ffffff;
+
+  /* Gray Scale — iOS system grays */
+  --color-gray-50: #F9F9FB;
+  --color-gray-100: #F2F2F7;
+  --color-gray-200: #E5E5EA;
+  --color-gray-300: #D1D1D6;
+  --color-gray-400: #AEAEB2;
+  --color-gray-500: #8E8E93;
+  --color-gray-600: #636366;
+  --color-gray-700: #48484A;
+  --color-gray-800: #2C2C2E;
+  --color-gray-900: #1C1C1E;
+
+  /* Blue — iOS system blue */
+  --color-blue-400: #409cff;
+  --color-blue-500: #0A84FF;
+  --color-blue-600: #007AFF;
+
+  /* Orange / Amber — iOS system orange */
+  --color-amber-400: #ffb340;
+  --color-amber-500: #FF9500;
+
+  /* Red — iOS system red */
+  --color-red-400: #ff6961;
+  --color-red-500: #FF3B30;
+
+  /* Green — iOS system green */
+  --color-green-400: #4cd964;
+  --color-green-500: #34C759;
+
+  /* Violet — iOS system purple */
+  --color-violet-400: #bf8bff;
+  --color-violet-500: #AF52DE;
+}

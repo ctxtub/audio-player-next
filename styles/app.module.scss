@@ -3,14 +3,13 @@
   height: 100dvh;
   overflow: hidden;
   margin: 0 auto;
-  background-color: var(--initial-background, var(--background, #000000));
-  color: var(--initial-foreground, var(--foreground, #ffffff));
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   position: relative;
   display: flex;
   flex-direction: column;
-  /* 添加过渡效果 */
-  transition: background-color var(--transition-speed) var(--transition-timing),
-    color var(--transition-speed) var(--transition-timing);
+  transition: background-color var(--duration-normal) var(--ease-default),
+    color var(--duration-normal) var(--ease-default);
 
   .content {
     display: flex;

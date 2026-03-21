@@ -1,52 +1,56 @@
+/* 设置页 — spec 3.9 */
 .configPage {
-  background: var(--initial-background, var(--background));
+  background: var(--bg-primary);
   position: relative;
   min-height: 100vh;
   padding: var(--page-padding);
 
   .configForm {
     width: 100%;
-    background: var(--initial-background, var(--background));
+    background: var(--bg-primary);
     box-shadow: none;
     box-sizing: border-box;
     margin-top: 0;
-    margin-bottom: 24px;
+    margin-bottom: var(--space-6);
     border-radius: 0;
 
     .configSection {
-      backdrop-filter: blur(var(--blur-radius));
-      box-shadow: 0 8px 16px var(--shadow-color);
-      transition: transform var(--transition-speed) var(--transition-timing);
-      margin-bottom: 20px;
-      padding: 19px;
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      background-color: var(--card-background);
+      backdrop-filter: blur(var(--blur-md));
+      box-shadow: var(--shadow-md);
+      transition: var(--transition-transform);
+      margin-bottom: var(--space-5);
+      padding: var(--card-padding);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      background-color: var(--bg-secondary);
+
       &:first-child {
         margin-top: 0;
       }
+
       h3 {
-        margin: 0 0 16px;
-        color: var(--foreground);
-        font-size: 19px;
-        font-weight: 600;
+        margin: 0 0 var(--space-3);
+        color: var(--text-primary);
+        font-size: var(--text-md);
+        line-height: var(--leading-md);
+        font-weight: var(--weight-semibold);
         position: relative;
-        padding-bottom: 8px;
+        padding-bottom: var(--space-2);
       }
 
       .configActionRow {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
+        gap: var(--space-3);
         width: 100%;
       }
 
       .configDescription {
         margin: 0;
-        color: var(--secondary);
-        font-size: 13px;
-        line-height: 1.5;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        line-height: var(--leading-sm);
         flex: 1;
       }
 
@@ -58,12 +62,12 @@
     }
 
     .voiceEmptyState {
-      padding: 16px;
-      border-radius: 12px;
-      background: color-mix(in srgb, var(--primary) 8%, transparent);
-      color: var(--secondary);
-      font-size: 14px;
-      line-height: 1.5;
+      padding: var(--space-4);
+      border-radius: var(--radius-md);
+      background: var(--accent-primary-subtle);
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+      line-height: var(--leading-sm);
     }
 
     .voiceSelector {
@@ -78,14 +82,14 @@
     .voiceSelectorWrapper {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: var(--space-3);
     }
 
     .voiceSelectorOption {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: var(--space-3);
       width: 100%;
     }
 
@@ -96,9 +100,9 @@
     }
 
     .voiceSelectorName {
-      color: var(--foreground);
-      font-size: 15px;
-      font-weight: 600;
+      color: var(--text-primary);
+      font-size: var(--text-base);
+      font-weight: var(--weight-semibold);
     }
 
     .voicePreviewButton {
@@ -108,26 +112,26 @@
     .voiceDescription {
       display: flex;
       flex-direction: column;
-      gap: 4px;
-      color: var(--secondary);
-      font-size: 12px;
+      gap: var(--space-1);
+      color: var(--text-secondary);
+      font-size: var(--text-xs);
     }
 
     .voiceMeta {
-      color: var(--secondary);
-      font-size: 12px;
+      color: var(--text-secondary);
+      font-size: var(--text-xs);
     }
 
     .configField {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: var(--space-2);
     }
 
     .configHint {
-      color: var(--secondary);
-      font-size: 13px;
-      line-height: 1.5;
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+      line-height: var(--leading-sm);
     }
 
     .configSlider {
@@ -137,25 +141,24 @@
     .themeOption {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: var(--space-3);
     }
 
     .themeOptionIcon {
-      font-size: 24px;
+      font-size: var(--text-xl);
     }
 
     .themeOptionContent {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: var(--space-1);
       align-items: flex-start;
     }
 
     .themeOptionLabel {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--foreground);
+      font-size: var(--text-base);
+      font-weight: var(--weight-semibold);
+      color: var(--text-primary);
     }
   }
-
 }

@@ -1,88 +1,84 @@
-/* 
-   GuidancePart 专用样式 
+/*
+   GuidancePart 专用样式 — spec 3.18
    风格：系统终端 / 命令行界面
-   特点：强制深色背景，等宽字体，高对比度
+   特点：强制深色背景，等宽字体，高对比度（不跟随主题切换）
 */
 
 .container {
-    margin: 8px 0;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #1e1e1e;
-    /* VS Code dark background usually */
-    border: 1px solid #333;
-    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  margin: var(--space-2) 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #1a1a2e;
+  border: 1px solid #2a2a4a;
+  font-family: var(--font-mono);
+  box-shadow: var(--shadow-md);
 }
 
 .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 12px;
-    background: #252526;
-    border-bottom: 1px solid #333;
-    user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-1) var(--space-3);
+  background: #16162a;
+  border-bottom: 1px solid #2a2a4a;
+  user-select: none;
 }
 
 .titleGroup {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 11px;
-    font-weight: 600;
-    color: #9cdcfe;
-    /* Light Blue */
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: #9cdcfe;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
 }
 
 .terminalIcon {
-    opacity: 0.8;
+  opacity: 0.8;
 }
 
 .content {
-    padding: 12px;
-    font-size: 13px;
-    line-height: 1.6;
-    color: #ce9178;
-    /* Orange/Brown for strings */
-    white-space: pre-wrap;
-    word-break: break-word;
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: #e2b97f;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .footer {
-    padding: 4px 12px 8px;
-    display: flex;
-    justify-content: flex-end;
+  padding: var(--space-1) var(--space-3) var(--space-2);
+  display: flex;
+  justify-content: flex-end;
 }
 
 .status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-    color: #6a9955;
-    /* Comment Green */
-    font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: #6ecb63;
+  font-weight: var(--weight-medium);
 }
 
 .cursor {
-    display: inline-block;
-    width: 6px;
-    height: 12px;
-    background: #6a9955;
-    animation: blink 1s step-end infinite;
+  display: inline-block;
+  width: 6px;
+  height: 12px;
+  background: #6ecb63;
+  animation: blink 1s step-end infinite;
 }
 
 @keyframes blink {
 
-    0%,
-    100% {
-        opacity: 1;
-    }
+  0%,
+  100% {
+    opacity: 1;
+  }
 
-    50% {
-        opacity: 0;
-    }
+  50% {
+    opacity: 0;
+  }
 }

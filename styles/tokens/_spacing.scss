@@ -1,0 +1,22 @@
+/* 间距系统 — 基于 4px 网格 */
+:root {
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* 布局别名 */
+  --page-padding: var(--space-4);
+  --section-gap: var(--space-6);
+  --card-padding: var(--space-5);
+  --card-padding-sm: var(--space-3);
+  --tab-bar-height: 56px;
+}

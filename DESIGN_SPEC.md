@@ -1,4 +1,4 @@
-# Audio Player Next — Design Token Spec v1.0
+# Audio Player Next — Design Token Spec v2.0 (iOS 26 Liquid Glass)
 
 > 本文档是 UI 重设计的唯一设计规范来源（Single Source of Truth）。
 > 所有页面和组件的样式必须引用本文档中定义的 Design Token，禁止使用硬编码数值。
@@ -10,10 +10,10 @@
 | 原则 | 说明 |
 |------|------|
 | **沉浸优先** | 音频播放场景需要最大化沉浸感，减少视觉干扰 |
-| **温暖智能** | AI 陪伴感，用色温暖、交互柔和，不冰冷不机械 |
-| **层次分明** | 通过 Surface 层级 + 阴影 + 模糊构建清晰的 Z 轴空间 |
+| **Liquid Glass** | 借鉴 iOS 26 设计语言，通过高强度毛玻璃 + 光泽边框 + 柔和阴影构建通透的玻璃质感 |
+| **层次分明** | 通过 Surface 层级 + 阴影 + 模糊 + saturate 构建清晰的 Z 轴空间 |
 | **动静结合** | 静态时克制留白，动态时（生成/播放）有仪式感和节奏感 |
-| **一致性** | 所有间距、圆角、字号、颜色只能从 Token 中取值 |
+| **一致性** | 所有间距、圆角、字号、颜色只能从 Token 中取值，色板对齐 iOS HIG |
 
 ---
 
@@ -29,59 +29,63 @@
 |-------|------|-------|------|
 | `--color-black` | `#000000` | `#000000` | 纯黑 |
 | `--color-white` | `#ffffff` | `#ffffff` | 纯白 |
-| `--color-gray-50` | `#fafafa` | `#fafafa` | |
-| `--color-gray-100` | `#f5f5f5` | `#f5f5f5` | |
-| `--color-gray-200` | `#e5e5e5` | `#e5e5e5` | |
-| `--color-gray-300` | `#d4d4d4` | `#d4d4d4` | |
-| `--color-gray-400` | `#a3a3a3` | `#a3a3a3` | |
-| `--color-gray-500` | `#737373` | `#737373` | |
-| `--color-gray-600` | `#525252` | `#525252` | |
-| `--color-gray-700` | `#404040` | `#404040` | |
-| `--color-gray-800` | `#262626` | `#262626` | |
-| `--color-gray-900` | `#171717` | `#171717` | |
-| `--color-blue-400` | `#60a5fa` | `#60a5fa` | |
-| `--color-blue-500` | `#3b82f6` | `#3b82f6` | 品牌主色 |
-| `--color-blue-600` | `#2563eb` | `#2563eb` | |
-| `--color-amber-400` | `#fbbf24` | `#fbbf24` | |
-| `--color-amber-500` | `#f59e0b` | `#f59e0b` | |
-| `--color-red-400` | `#f87171` | `#f87171` | |
-| `--color-red-500` | `#ef4444` | `#ef4444` | |
-| `--color-green-400` | `#4ade80` | `#4ade80` | |
-| `--color-green-500` | `#22c55e` | `#22c55e` | |
-| `--color-violet-400` | `#a78bfa` | `#a78bfa` | 装饰/渐变 |
-| `--color-violet-500` | `#8b5cf6` | `#8b5cf6` | |
+| `--color-gray-50` | `#F9F9FB` | `#F9F9FB` | |
+| `--color-gray-100` | `#F2F2F7` | `#F2F2F7` | iOS systemGroupedBackground |
+| `--color-gray-200` | `#E5E5EA` | `#E5E5EA` | |
+| `--color-gray-300` | `#D1D1D6` | `#D1D1D6` | |
+| `--color-gray-400` | `#AEAEB2` | `#AEAEB2` | iOS systemGray2 |
+| `--color-gray-500` | `#8E8E93` | `#8E8E93` | iOS systemGray |
+| `--color-gray-600` | `#636366` | `#636366` | iOS systemGray2 (dark) |
+| `--color-gray-700` | `#48484A` | `#48484A` | iOS systemGray3 (dark) |
+| `--color-gray-800` | `#2C2C2E` | `#2C2C2E` | iOS secondarySystemBackground (dark) |
+| `--color-gray-900` | `#1C1C1E` | `#1C1C1E` | iOS systemBackground (dark) |
+| `--color-blue-400` | `#409CFF` | `#409CFF` | |
+| `--color-blue-500` | `#0A84FF` | `#0A84FF` | iOS systemBlue (dark) |
+| `--color-blue-600` | `#007AFF` | `#007AFF` | iOS systemBlue (light) |
+| `--color-amber-400` | `#FFB340` | `#FFB340` | |
+| `--color-amber-500` | `#FF9500` | `#FF9500` | iOS systemOrange |
+| `--color-red-400` | `#FF6961` | `#FF6961` | |
+| `--color-red-500` | `#FF3B30` | `#FF3B30` | iOS systemRed |
+| `--color-green-400` | `#4CD964` | `#4CD964` | |
+| `--color-green-500` | `#34C759` | `#34C759` | iOS systemGreen |
+| `--color-violet-400` | `#BF8BFF` | `#BF8BFF` | 装饰/渐变 |
+| `--color-violet-500` | `#AF52DE` | `#AF52DE` | iOS systemPurple |
 
 #### 2.1.2 Semantic Colors
 
 | Token | Dark 值 | Light 值 | 用途 |
 |-------|---------|----------|------|
 | **背景 (Background)** | | | |
-| `--bg-primary` | `#000000` | `#f5f5f5` | 页面主背景 |
-| `--bg-secondary` | `#0a0a0a` | `#ffffff` | 卡片/面板背景 |
-| `--bg-tertiary` | `#171717` | `#fafafa` | 输入框/嵌套区域背景 |
-| `--bg-elevated` | `rgba(23,23,23,0.85)` | `rgba(255,255,255,0.85)` | 毛玻璃浮层背景 |
-| `--bg-overlay` | `rgba(0,0,0,0.6)` | `rgba(0,0,0,0.3)` | 遮罩层 |
+| `--bg-primary` | `#000000` | `#F2F2F7` | 页面主背景（iOS systemGroupedBackground） |
+| `--bg-secondary` | `#1C1C1E` | `#ffffff` | 卡片/面板背景 |
+| `--bg-tertiary` | `#2C2C2E` | `#F9F9FB` | 输入框/嵌套区域背景 |
+| `--bg-elevated` | `rgba(44,44,46,0.75)` | `rgba(255,255,255,0.80)` | 毛玻璃浮层背景 |
+| `--bg-overlay` | `rgba(0,0,0,0.5)` | `rgba(0,0,0,0.3)` | 遮罩层 |
+| **Liquid Glass 表面** | | | |
+| `--glass-bg` | `rgba(38,38,40,0.50)` | `rgba(255,255,255,0.45)` | Liquid Glass 背景 |
+| `--glass-border` | `rgba(255,255,255,0.12)` | `rgba(255,255,255,0.60)` | 光泽发光边框 |
+| `--glass-highlight` | `inset 0 0.5px ... 0.15` | `inset 0 0.5px ... 0.70` | 顶部高光（模拟玻璃折射） |
 | **前景 (Foreground / Text)** | | | |
-| `--text-primary` | `#ffffff` | `#171717` | 主文本 |
-| `--text-secondary` | `#a3a3a3` | `#525252` | 次要文本、描述 |
-| `--text-tertiary` | `#737373` | `#737373` | 占位符、禁用文本 |
+| `--text-primary` | `#ffffff` | `#1C1C1E` | 主文本 |
+| `--text-secondary` | `#AEAEB2` | `#636366` | 次要文本、描述 |
+| `--text-tertiary` | `#8E8E93` | `#8E8E93` | 占位符、禁用文本 |
 | `--text-inverse` | `#000000` | `#ffffff` | 反色文本（如 primary 按钮文字） |
 | `--text-on-primary` | `#ffffff` | `#ffffff` | primary 色上的文字 |
 | **品牌 / 交互 (Brand / Interactive)** | | | |
-| `--accent-primary` | `#3b82f6` | `#2563eb` | 主操作色（按钮、链接、进度条） |
-| `--accent-primary-hover` | `#60a5fa` | `#3b82f6` | 主操作色 hover |
-| `--accent-primary-subtle` | `rgba(59,130,246,0.15)` | `rgba(37,99,235,0.10)` | 主色浅底（Tag、选中态背景） |
-| `--accent-secondary` | `#8b5cf6` | `#7c3aed` | 辅助强调色（渐变、装饰） |
+| `--accent-primary` | `#0A84FF` | `#007AFF` | iOS systemBlue（按钮、链接、进度条） |
+| `--accent-primary-hover` | `#409CFF` | `#0A84FF` | 主操作色 hover |
+| `--accent-primary-subtle` | `rgba(10,132,255,0.18)` | `rgba(0,122,255,0.12)` | 主色浅底（Tag、选中态背景） |
+| `--accent-secondary` | `#AF52DE` | `#AF52DE` | iOS systemPurple（渐变、装饰） |
 | **语义状态 (Status)** | | | |
-| `--status-success` | `#4ade80` | `#22c55e` | 成功 |
-| `--status-warning` | `#fbbf24` | `#f59e0b` | 警告 |
-| `--status-error` | `#f87171` | `#ef4444` | 错误 |
-| `--status-info` | `#60a5fa` | `#3b82f6` | 信息提示 |
+| `--status-success` | `#30D158` | `#34C759` | iOS systemGreen |
+| `--status-warning` | `#FFD60A` | `#FF9500` | iOS systemYellow / Orange |
+| `--status-error` | `#FF453A` | `#FF3B30` | iOS systemRed |
+| `--status-info` | `#64D2FF` | `#5AC8FA` | iOS systemCyan |
 | **边框 (Border)** | | | |
-| `--border-default` | `rgba(255,255,255,0.08)` | `rgba(0,0,0,0.06)` | 默认边框 |
-| `--border-subtle` | `rgba(255,255,255,0.04)` | `rgba(0,0,0,0.03)` | 微弱分割线 |
-| `--border-strong` | `rgba(255,255,255,0.16)` | `rgba(0,0,0,0.12)` | 强调边框/聚焦框 |
-| `--border-accent` | `rgba(59,130,246,0.40)` | `rgba(37,99,235,0.35)` | 选中/聚焦态边框 |
+| `--border-default` | `rgba(255,255,255,0.10)` | `rgba(0,0,0,0.08)` | 默认边框 |
+| `--border-subtle` | `rgba(255,255,255,0.05)` | `rgba(0,0,0,0.04)` | 微弱分割线 |
+| `--border-strong` | `rgba(255,255,255,0.18)` | `rgba(0,0,0,0.15)` | 强调边框/聚焦框 |
+| `--border-accent` | `rgba(10,132,255,0.45)` | `rgba(0,122,255,0.40)` | 选中/聚焦态边框 |
 
 #### 2.1.3 渐变 (Gradient)
 
@@ -191,10 +195,12 @@
 
 | Token | 值 | 用途 |
 |-------|----|------|
-| `--shadow-sm` | `0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)` | 卡片微浮起 |
-| `--shadow-md` | `0 4px 12px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.06)` | 卡片默认阴影 |
-| `--shadow-lg` | `0 8px 24px rgba(0,0,0,0.16), 0 4px 8px rgba(0,0,0,0.08)` | 弹窗、浮层 |
-| `--shadow-xl` | `0 16px 48px rgba(0,0,0,0.24), 0 8px 16px rgba(0,0,0,0.12)` | 模态框、播放器 |
+| `--shadow-sm` | `0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.03)` | 卡片微浮起 |
+| `--shadow-md` | `0 2px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04)` | 卡片默认阴影 |
+| `--shadow-lg` | `0 4px 20px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)` | 弹窗、浮层 |
+| `--shadow-xl` | `0 8px 32px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.08)` | 模态框、播放器 |
+| `--shadow-glass` | `0 2px 16px rgba(0,0,0,0.08)` | Liquid Glass 外部阴影（亮色） |
+| `--shadow-glass-dark` | `0 2px 16px rgba(0,0,0,0.35)` | Liquid Glass 外部阴影（暗色） |
 
 > Dark 模式下阴影不明显，改用 `border` + `bg-elevated` 构建层级感。
 
@@ -207,16 +213,21 @@
 
 ---
 
-### 2.6 模糊 / 毛玻璃 (Blur / Glassmorphism)
+### 2.6 模糊 / 毛玻璃 (Blur / Liquid Glass)
+
+iOS 26 Liquid Glass 风格，使用更高强度的模糊 + 饱和度增强。
 
 | Token | 值 | 用途 |
 |-------|----|------|
-| `--blur-sm` | `8px` | 小浮层 |
-| `--blur-md` | `16px` | 标准毛玻璃面板 |
-| `--blur-lg` | `24px` | 大面积毛玻璃（导航栏、底栏） |
-| `--blur-xl` | `40px` | 播放器背景、遮罩 |
+| `--blur-sm` | `12px` | 小浮层 |
+| `--blur-md` | `24px` | 标准毛玻璃面板 |
+| `--blur-lg` | `40px` | 大面积毛玻璃（导航栏、底栏） |
+| `--blur-xl` | `60px` | 播放器背景、遮罩 |
+| `--glass-blur` | `blur(48px) saturate(180%)` | Liquid Glass 专用复合效果 |
 
-**使用方式：** `backdrop-filter: blur(var(--blur-md)); -webkit-backdrop-filter: blur(var(--blur-md));`
+**使用方式：**
+- 普通模糊：`backdrop-filter: blur(var(--blur-md)); -webkit-backdrop-filter: blur(var(--blur-md));`
+- Liquid Glass：`backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);` 配合 `--glass-bg`、`--glass-border`、`--glass-highlight` 使用
 
 ---
 

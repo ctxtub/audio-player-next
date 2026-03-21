@@ -3,9 +3,9 @@
 import React, { useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Toast } from 'antd-mobile';
-import PlaybackStatusBoard from '@/app/(main)/home/components/PlaybackStatusBoard';
-import GenerationPreview from '@/app/(main)/home/components/GenerationPreview';
-import AudioPlayer from '@/app/(main)/home/components/AudioPlayer';
+import PlaybackStatusBoard from '@/app/(main)/player/components/PlaybackStatusBoard';
+import GenerationPreview from '@/app/(main)/player/components/GenerationPreview';
+import AudioPlayer from '@/app/(main)/player/components/AudioPlayer';
 
 import { useConfigStore } from '@/stores/configStore';
 import { useChatStore } from '@/stores/chatStore';

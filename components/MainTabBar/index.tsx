@@ -38,20 +38,19 @@ type TabConfig = {
  */
 const TABS: readonly TabConfig[] = [
   {
-    key: 'home',
-    title: '首页',
-    icon: <AppOutline />,
-    path: '/',
-    isActive: pathname => pathname === '/',
-  },
-  {
     key: 'chat',
     title: '创作',
     icon: <MessageOutline />,
     path: '/chat',
-    isActive: pathname => pathname.startsWith('/chat'),
+    isActive: pathname => pathname === '/' || pathname.startsWith('/chat'),
   },
-
+  {
+    key: 'player',
+    title: '播放器',
+    icon: <AppOutline />,
+    path: '/player',
+    isActive: pathname => pathname === '/player',
+  },
   {
     key: 'setting',
     title: '设置',
@@ -71,7 +70,7 @@ const resolveActiveKey = (pathname: string): TabConfig['key'] => {
   if (matchedTab) {
     return matchedTab.key;
   }
-  return 'home';
+  return 'chat';
 };
 
 /**

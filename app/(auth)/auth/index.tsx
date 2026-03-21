@@ -24,8 +24,8 @@ interface RegisterFormValues {
  * 安全重定向：校验 from 参数必须是相对路径，防止 open redirect。
  */
 const safeRedirect = (from: string | null): string => {
-  if (!from) return '/home';
-  if (!from.startsWith('/') || from.startsWith('//')) return '/home';
+  if (!from) return '/chat';
+  if (!from.startsWith('/') || from.startsWith('//')) return '/chat';
   return from;
 };
 
@@ -123,7 +123,7 @@ const AuthPage: React.FC = () => {
       {/* Logo 区 */}
       <div className={styles.header}>
         <div className={styles.logo}>🎵</div>
-        <h1 className={styles.appName}>AI 播放器</h1>
+        <h1 className={styles.appName}>故事工坊</h1>
         <p className={styles.tagline}>智能故事，随时聆听</p>
       </div>
 

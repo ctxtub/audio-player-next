@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { decodeSession, encodeSession, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
 
-const protectedPaths = ['/home', '/chat', '/setting', '/dashboard', '/profile'];
+const protectedPaths = ['/player', '/chat', '/setting', '/dashboard', '/profile'];
 
 const isAuthenticated = (request: NextRequest): boolean => {
   const value = request.cookies.get(SESSION_COOKIE)?.value;
@@ -21,7 +21,7 @@ export async function middleware(request: NextRequest) {
 
   // 已登录访问 /auth → 反向守卫，跳回首页
   if (path.startsWith('/auth') && authed) {
-    return NextResponse.redirect(new URL('/home', request.url));
+    return NextResponse.redirect(new URL('/chat', request.url));
   }
 
   // 受保护路径：已登录或访客均可访问，未认证则跳转到 /auth

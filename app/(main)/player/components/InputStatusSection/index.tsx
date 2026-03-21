@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Toast } from 'antd-mobile';
-import HistoryRecords, { HistoryRecordsRef } from '@/app/(main)/home/components/HistoryRecords';
+import HistoryRecords, { HistoryRecordsRef } from '@/app/(main)/player/components/HistoryRecords';
 import {
   usePromptHistoryStore,
   selectIsInitialized,

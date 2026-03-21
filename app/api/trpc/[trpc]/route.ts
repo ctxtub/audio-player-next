@@ -9,6 +9,9 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { appRouter } from '@/lib/trpc/routers';
 import { createContext } from '@/lib/trpc/context';
 
+/** 强制动态渲染，避免构建时预渲染触发数据库连接 */
+export const dynamic = 'force-dynamic';
+
 /**
  * 处理 tRPC 请求。
  */

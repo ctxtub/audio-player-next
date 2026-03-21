@@ -12,5 +12,5 @@ services:
       NODE_ENV: production
       DATABASE_URL: "file:/app/data/app.db"
     volumes:
-      - /opt/audio-player-next/data:/app/data
+      - ./data:/app/data
     restart: unless-stopped

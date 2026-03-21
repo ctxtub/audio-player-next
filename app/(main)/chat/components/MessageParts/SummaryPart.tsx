@@ -1,7 +1,7 @@
 
 import { useState, type FC } from 'react';
 import type { SummaryPart } from '@/types/chat';
-import StoryViewer from '@/app/chat/components/StoryViewer';
+import StoryViewer from '@/app/(main)/chat/components/StoryViewer';
 import styles from './index.module.scss';
 
 type SummaryPartRendererProps = {

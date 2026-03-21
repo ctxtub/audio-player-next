@@ -1,29 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authMiddleware } from '@/app/server';
+import { decodeSession, encodeSession, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
 
-/**
- * 需要进行身份校验的受保护路径前缀。
- */
-const protectedPaths = ['/dashboard', '/profile', '/settings'];
+const protectedPaths = ['/home', '/chat', '/setting', '/dashboard', '/profile'];
 
-/**
- * 应用中间件，在访问受保护路径时执行身份校验。
- * @param request 当前请求对象
- * @returns 认证通过返回原请求，失败则重定向到登录页
- */
+const isAuthenticated = (request: NextRequest): boolean => {
+  const value = request.cookies.get(SESSION_COOKIE)?.value;
+  return !!value && decodeSession(value) !== null;
+};
+
+const isGuest = (request: NextRequest): boolean => {
+  return request.cookies.get('guest')?.value === '1';
+};
+
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  if (protectedPaths.some((prefix) => path.startsWith(prefix))) {
-    const authResult = await authMiddleware(request);
+  const sessionValue = request.cookies.get(SESSION_COOKIE)?.value;
+  const session = sessionValue ? decodeSession(sessionValue) : null;
+  const authed = !!session;
+  const guest = isGuest(request);
 
-    if ('error' in authResult) {
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('from', path);
-      return NextResponse.redirect(loginUrl);
+  // 已登录访问 /auth → 反向守卫，跳回首页
+  if (path.startsWith('/auth') && authed) {
+    return NextResponse.redirect(new URL('/home', request.url));
+  }
+
+  // 受保护路径：已登录或访客均可访问，未认证则跳转到 /auth
+  if (protectedPaths.some(p => path.startsWith(p))) {
+    if (!authed && !guest) {
+      const authUrl = new URL('/auth', request.url);
+      authUrl.searchParams.set('from', path);
+      return NextResponse.redirect(authUrl);
     }
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+
+  // 已登录用户：每次页面请求自动续签 Session Cookie，防止活跃用户意外登出
+  if (session) {
+    response.cookies.set({
+      name: SESSION_COOKIE,
+      value: encodeSession(session.userId, session.nickname),
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: SESSION_MAX_AGE,
+    });
+  }
+
+  return response;
 }
 
 /**

@@ -13,3 +13,4 @@
 ## 关键协作与依赖
 - 依赖 `@/stores/configStore`、`@/components/ThemeProvider` 获取配置和主题。
 - 与 `@/components/**`、`@/lib/client/appConfig` 协同确保配置同步。
+- `components/UserSection` 依赖 `@/stores/authStore`，展示头像、昵称、登录状态，提供登出与跳转登录入口。

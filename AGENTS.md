@@ -7,7 +7,7 @@
 
 - Next.js 15.2.1 + React 19 + TypeScript 5 + antd-mobile 5 音频播放应用，主要采用 `app/` 路由（未检测到 `pages/`）
 - 关键目录：页面路由位于 `app/`（含 `app/home`、`app/setting` 等子路由），共享 UI 位于根部 `components/`，辅助模块在 `lib/`、`utils/`、`types/`、`stores/`，静态资源在 `public/`，样式在 `styles/`
-- 配置文件：全局 ESLint 规则见 `eslint.config.mjs`，编译设定见 `tsconfig.json`，Next.js 定制逻辑见 `next.config.ts`
+- 配置文件：全局 ESLint 规则见 `eslint.config.mjs`，编译设定见 `tsconfig.json`，Next.js 定制逻辑见 `next.config.ts`，环境变量定义见 `.env.sample`
 
 ## 编码规范（Coding Conventions）
 

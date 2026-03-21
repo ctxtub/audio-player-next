@@ -21,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="zh" data-theme={FALLBACK_THEME} suppressHydrationWarning>
       <head>
-        <title>AI播放器</title>
+        <title>故事工坊</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content={THEME_COLORS[FALLBACK_THEME]} />
         <script dangerouslySetInnerHTML={{ __html: INITIAL_THEME_SCRIPT }} />

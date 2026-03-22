@@ -1,0 +1,57 @@
+/* GlassSelector — Liquid Glass 风格单选组 */
+.selectorGroup {
+  width: 100%;
+}
+
+.selectorGrid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.selectorItem {
+  display: flex;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--border-default);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-default),
+    border-color var(--duration-fast) var(--ease-default),
+    box-shadow var(--duration-fast) var(--ease-default),
+    transform var(--duration-fast) var(--ease-default);
+  outline: none;
+
+  &[data-hovered] {
+    background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  }
+
+  &[data-pressed] {
+    transform: scale(0.98);
+  }
+
+  &[data-focus-visible] {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+.selected {
+  background: var(--accent-primary-subtle);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  box-shadow: 0 0 0 0.5px var(--accent-primary);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}

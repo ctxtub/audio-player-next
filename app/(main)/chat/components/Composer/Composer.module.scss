@@ -1,4 +1,4 @@
-/* 聊天输入栏 — spec 3.11 */
+/* 聊天输入栏 — spec 3.11, Liquid Glass */
 .container {
   position: relative;
   display: flex;
@@ -30,10 +30,12 @@
   position: relative;
   flex: 1;
   display: flex;
+  align-items: flex-end;
   background: var(--bg-tertiary);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-default);
-  box-shadow: inset 0 0 0 1px transparent;
+  border: 0.5px solid var(--border-default);
+  transition: border-color var(--duration-normal) var(--ease-default),
+    box-shadow var(--duration-normal) var(--ease-default);
 
   &:focus-within {
     border-color: var(--accent-primary);
@@ -42,15 +44,21 @@
 }
 
 .textArea {
-  width: 100%;
+  flex: 1;
   border: none;
-  padding: var(--space-3) 72px var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
   background: transparent;
   color: var(--text-primary);
   font-size: var(--text-base);
   line-height: 1.6;
   font-family: inherit;
   resize: none;
+  outline: none;
+  max-height: 120px;
+
+  &::placeholder {
+    color: var(--text-tertiary);
+  }
 
   &:disabled {
     opacity: 0.65;
@@ -59,82 +67,30 @@
 }
 
 .actionButtons {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-1);
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  flex-shrink: 0;
 }
 
 .clearButton {
-  width: 52px !important;
-  height: 32px !important;
+  width: 52px;
   min-width: 52px;
-  border-radius: var(--radius-lg);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
+  border-radius: var(--radius-md);
+  color: var(--status-error) !important;
+  border-color: color-mix(in srgb, var(--status-error) 30%, transparent) !important;
+  background: color-mix(in srgb, var(--status-error) 6%, transparent) !important;
 
-  &:global(.adm-button) {
-    font-size: var(--text-sm);
-  }
-
-  font-weight: var(--weight-medium);
-  padding: 0 !important;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--status-error) 25%, transparent);
-  transition: var(--transition-transform),
-    box-shadow var(--duration-fast) var(--ease-default);
-
-  &:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 16px color-mix(in srgb, var(--status-error) 30%, transparent);
-  }
-
-  &:active:not(:disabled) {
-    transform: translateY(0);
-    box-shadow: 0 3px 8px color-mix(in srgb, var(--status-error) 24%, transparent);
-  }
-
-  &:disabled {
-    box-shadow: none;
-    opacity: 0.6;
+  &[data-hovered] {
+    background: color-mix(in srgb, var(--status-error) 12%, transparent) !important;
   }
 }
 
 .sendButton {
-  width: 52px !important;
-  height: 32px !important;
+  width: 52px;
   min-width: 52px;
-  border-radius: var(--radius-lg);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-accent);
-  transition: var(--transition-transform),
-    box-shadow var(--duration-fast) var(--ease-default);
-
-  &:global(.adm-button) {
-    font-size: var(--text-sm);
-  }
-
-  font-weight: var(--weight-medium);
-  padding: 0 !important;
-
-  &:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-  }
-
-  &:active:not(:disabled) {
-    transform: translateY(0);
-    box-shadow: var(--shadow-sm);
-  }
-
-  &:disabled {
-    box-shadow: none;
-    opacity: 0.6;
-  }
 }

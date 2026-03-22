@@ -1,11 +1,11 @@
-/* 故事生成预览 — spec 3.10 */
+/* 故事生成预览 — spec 3.10, Liquid Glass */
 .previewContainer {
-  background: var(--bg-secondary);
-  backdrop-filter: blur(var(--blur-md));
-  -webkit-backdrop-filter: blur(var(--blur-md));
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-default);
-  box-shadow: var(--shadow-md);
+  border: 0.5px solid color-mix(in srgb, var(--glass-border) 70%, transparent);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
   transition: var(--transition-all);
   position: relative;
@@ -20,7 +20,7 @@
   font-size: var(--text-sm);
   line-height: var(--leading-sm);
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 0.5px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
   position: relative;
   z-index: 2;
 }
@@ -106,13 +106,8 @@
 /* 音频生成蒙层 */
 .audioOverlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--bg-overlay);
-  backdrop-filter: blur(var(--blur-sm));
-  -webkit-backdrop-filter: blur(var(--blur-sm));
+  inset: 0;
+  background: color-mix(in srgb, var(--bg-elevated) 65%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;

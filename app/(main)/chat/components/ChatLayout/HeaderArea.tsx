@@ -1,8 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Avatar, Button } from 'antd-mobile';
-
+import GlassButton from '@/components/ui/GlassButton';
 import styles from './HeaderArea.module.scss';
 
 /**
@@ -19,10 +18,6 @@ type HeaderAreaProps = {
 
 /**
  * 聊天顶部欢迎与推荐区，包含头像、欢迎语与快捷问题。
- * @param props.visible 控制显隐。
- * @param props.suggestions 推荐按钮列表。
- * @param props.onSuggestionSelect 点击推荐项时的回调。
- * @returns 顶部欢迎区 JSX。
  */
 const HeaderArea: React.FC<HeaderAreaProps> = ({ visible, suggestions, onSuggestionSelect }) => {
   if (!visible) {
@@ -32,10 +27,10 @@ const HeaderArea: React.FC<HeaderAreaProps> = ({ visible, suggestions, onSuggest
   return (
     <div className={styles.headerArea}>
       <div className={styles.heroRow}>
-        <Avatar
+        <img
           className={styles.avatar}
           src="/icons/avatar-assistant.jpeg"
-          aria-label="Agent助手头像"
+          alt="Agent助手头像"
         />
         <div className={styles.textBlock}>
           <h2 className={styles.title}>你好，我是Agent助手</h2>
@@ -45,17 +40,15 @@ const HeaderArea: React.FC<HeaderAreaProps> = ({ visible, suggestions, onSuggest
       {suggestions.length > 0 ? (
         <div className={styles.suggestionList}>
           {suggestions.map((item) => (
-            <Button
+            <GlassButton
               key={item.id}
-              size="small"
-              color="primary"
-              fill="outline"
-              shape="rounded"
+              variant="outline"
+              size="sm"
+              onPress={() => onSuggestionSelect(item.value)}
               className={styles.suggestionButton}
-              onClick={() => onSuggestionSelect(item.value)}
             >
               {item.label}
-            </Button>
+            </GlassButton>
           ))}
         </div>
       ) : null}

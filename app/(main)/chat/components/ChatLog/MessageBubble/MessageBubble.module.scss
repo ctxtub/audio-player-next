@@ -79,7 +79,7 @@
   line-height: 1.7;
   word-break: break-word;
   white-space: pre-wrap;
-  border: 1px solid var(--border-default);
+  border: 0.5px solid var(--border-default);
   box-shadow: var(--shadow-sm);
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   color: var(--text-primary);
@@ -87,8 +87,11 @@
 
 .bubbleAssistant {
   padding: var(--space-3);
-  border-color: color-mix(in srgb, var(--accent-primary) 24%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  border: 0.5px solid var(--glass-border);
+  background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
+  box-shadow: var(--glass-highlight), var(--shadow-sm);
 }
 
 .bubbleUser {
@@ -134,15 +137,15 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-1) 0;
 }
 
 .shimmerText {
+  font-size: var(--text-base);
   font-weight: var(--weight-medium);
   background: linear-gradient(90deg,
-      var(--text-primary) 0%,
+      var(--text-secondary) 0%,
       var(--accent-primary) 50%,
-      var(--text-primary) 100%);
+      var(--text-secondary) 100%);
   background-size: 200% auto;
   color: transparent;
   background-clip: text;
@@ -158,14 +161,13 @@
 
 .dotFlashing {
   position: relative;
-  width: 6px;
-  height: 6px;
-  border-radius: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
   background-color: var(--accent-primary);
-  color: var(--accent-primary);
   animation: dotFlashing 1s infinite linear alternate;
   animation-delay: 0.5s;
-  margin: 0 var(--space-3);
+  margin: 0 var(--space-2);
 }
 
 .dotFlashing::before,
@@ -174,26 +176,20 @@
   display: inline-block;
   position: absolute;
   top: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background-color: var(--accent-primary);
 }
 
 .dotFlashing::before {
-  left: -12px;
-  width: 6px;
-  height: 6px;
-  border-radius: 2px;
-  background-color: var(--accent-primary);
-  color: var(--accent-primary);
+  left: -9px;
   animation: dotFlashing 1s infinite linear alternate;
   animation-delay: 0s;
 }
 
 .dotFlashing::after {
-  left: 12px;
-  width: 6px;
-  height: 6px;
-  border-radius: 2px;
-  background-color: var(--accent-primary);
-  color: var(--accent-primary);
+  left: 9px;
   animation: dotFlashing 1s infinite linear alternate;
   animation-delay: 1s;
 }

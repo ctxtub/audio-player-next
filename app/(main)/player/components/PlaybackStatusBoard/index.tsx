@@ -1,8 +1,5 @@
 import React, { useMemo } from 'react';
-import ClockIcon from '@/public/icons/playstatus-clock.svg';
-import LoadingIcon from '@/public/icons/playstatus-loading.svg';
-import WarningIcon from '@/public/icons/playstatus-warning.svg';
-import CheckIcon from '@/public/icons/playstatus-check.svg';
+import { Clock, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useConfigStore } from '@/stores/configStore';
@@ -138,10 +135,10 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
     return null;
   }
 
-  const iconForPhase: Record<Exclude<GenerationPhase, 'idle'>, React.FC<React.SVGProps<SVGSVGElement>>> = {
-    loading: LoadingIcon,
-    success: CheckIcon,
-    error: WarningIcon,
+  const iconForPhase: Record<Exclude<GenerationPhase, 'idle'>, React.FC<{ className?: string; size?: number; strokeWidth?: number }>> = {
+    loading: Loader2,
+    success: CheckCircle2,
+    error: AlertTriangle,
   };
 
   return (
@@ -150,7 +147,7 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
         if (item.key === 'countdown') {
           return (
             <div key={item.key} className={`${styles.statusItem} ${styles.countdown}`}>
-              <ClockIcon className={styles.statusIcon} />
+              <Clock size={16} strokeWidth={1.8} className={styles.statusIcon} />
               <span>{item.message}</span>
             </div>
           );
@@ -160,7 +157,7 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
           return null;
         }
 
-        const IconComponent = iconForPhase[item.phase] ?? CheckIcon;
+        const IconComponent = iconForPhase[item.phase] ?? CheckCircle2;
         const phaseClass =
           item.phase === 'loading'
             ? styles.loading
@@ -174,7 +171,7 @@ const PlaybackStatusBoard: React.FC<PlaybackStatusBoardProps> = ({ className }) 
 
         return (
           <div key={item.key} className={`${styles.statusItem} ${phaseClass}`}>
-            <IconComponent className={iconClassName} />
+            <IconComponent size={16} strokeWidth={1.8} className={iconClassName} />
             <span>{item.message}</span>
           </div>
         );

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, TextArea, Toast } from 'antd-mobile';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import GlassToast from '@/components/ui/GlassToast';
+import GlassButton from '@/components/ui/GlassButton';
 import styles from './Composer.module.scss';
 
 /**
@@ -22,7 +23,7 @@ export interface ComposerProps {
   placeholder?: string;
   /** 左侧扩展插槽区域，可挂载语音、附件按钮。 */
   leftSlot?: React.ReactNode;
-  /** 提交按钮文案，默认显示“发送”。 */
+  /** 提交按钮文案，默认显示"发送"。 */
   submitText?: string;
   /** 清空回调，用于触发更广泛的重置逻辑。 */
   onClear?: () => void;
@@ -39,7 +40,6 @@ const Composer: React.FC<ComposerProps> = ({
   isSending = false,
   placeholder = '请输入内容...',
   leftSlot,
-
   submitText = '发送',
   onClear,
 }) => {
@@ -47,6 +47,7 @@ const Composer: React.FC<ComposerProps> = ({
   const [internalValue, setInternalValue] = useState(value ?? '');
   /** 本地发送中状态，用于在 props isSending 前后衔接提交锁。 */
   const [isLocalSending, setIsLocalSending] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   /**
    * 同步外部受控的 value 变化，保持内部状态一致。
@@ -69,7 +70,7 @@ const Composer: React.FC<ComposerProps> = ({
    * 空内容提示提醒用户补充输入。
    */
   const showEmptyContentWarning = useCallback(() => {
-    Toast.show({
+    GlassToast.show({
       icon: 'fail',
       content: '请输入内容后再发送哦~',
     });
@@ -84,6 +85,28 @@ const Composer: React.FC<ComposerProps> = ({
       onChange?.(next);
     },
     [onChange],
+  );
+
+  /**
+   * 自动调整 textarea 高度。
+   */
+  const adjustHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+    }
+  }, []);
+
+  /**
+   * textarea 输入事件处理。
+   */
+  const handleInput = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      handleChange(e.target.value);
+      adjustHeight();
+    },
+    [handleChange, adjustHeight],
   );
 
   /**
@@ -104,12 +127,16 @@ const Composer: React.FC<ComposerProps> = ({
     try {
       await onSubmit(trimmed);
       handleChange('');
+      // 重置高度
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
     } catch (error) {
       const message =
         error instanceof Error && error.message
           ? error.message
           : '发送失败，请稍后重试';
-      Toast.show({ icon: 'fail', content: message });
+      GlassToast.show({ icon: 'fail', content: message });
     } finally {
       setIsLocalSending(false);
     }
@@ -123,6 +150,9 @@ const Composer: React.FC<ComposerProps> = ({
       return;
     }
     handleChange('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     onClear?.();
   }, [disabled, isSending, isLocalSending, handleChange, onClear]);
 
@@ -148,42 +178,38 @@ const Composer: React.FC<ComposerProps> = ({
       {leftSlot ? <div className={styles.leftSlot}>{leftSlot}</div> : null}
       <div className={styles.editorArea}>
         <div className={styles.textAreaWrapper}>
-          <TextArea
+          <textarea
+            ref={textareaRef}
             value={internalValue}
-            onChange={handleChange}
+            onChange={handleInput}
             onKeyDown={handleKeyDown}
             disabled={effectiveDisabled}
             placeholder={placeholder}
-            autoSize={{ minRows: 1, maxRows: 5 }}
             maxLength={5000}
+            rows={1}
             className={styles.textArea}
           />
 
           <div className={styles.actionButtons}>
-            <Button
+            <GlassButton
+              variant="ghost"
+              size="sm"
+              onPress={handleClear}
+              isDisabled={effectiveDisabled}
               className={styles.clearButton}
-              onClick={handleClear}
-              disabled={effectiveDisabled}
-              color="danger"
-              fill="solid"
-              shape="rounded"
             >
               清空
-            </Button>
-            <Button
-              color="primary"
-              fill="solid"
-              shape="rounded"
+            </GlassButton>
+            <GlassButton
+              variant="primary"
+              size="sm"
               loading={isSending || isLocalSending}
-              disabled={effectiveDisabled}
-              aria-label={submitText}
+              isDisabled={effectiveDisabled}
+              onPress={() => { void handleSubmit(); }}
               className={styles.sendButton}
-              onClick={() => {
-                void handleSubmit();
-              }}
             >
               {submitText}
-            </Button>
+            </GlassButton>
           </div>
         </div>
       </div>

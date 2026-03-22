@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect } from 'react';
+import { Sparkles } from 'lucide-react';
 import { useGenerationStore } from '@/stores/generationStore';
 import styles from './index.module.scss';
 
@@ -34,7 +35,7 @@ const GenerationPreview: React.FC = () => {
         <div className={styles.previewContainer}>
             {/* 头部状态指示 */}
             <div className={styles.header}>
-                <span className={styles.sparkle}>✦</span>
+                <Sparkles size={16} strokeWidth={2} className={styles.sparkle} />
                 <span>{isGeneratingAudio ? '正在生成语音...' : '正在创作故事...'}</span>
             </div>
 

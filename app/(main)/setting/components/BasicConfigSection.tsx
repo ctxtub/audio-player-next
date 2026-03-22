@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { Slider } from 'antd-mobile';
+import GlassSlider from '@/components/ui/GlassSlider';
 import styles from '../index.module.scss';
 
 /**
@@ -43,11 +43,9 @@ const BasicConfigSection: React.FC<BasicConfigSectionProps> = ({
   );
 
   const handleChange = useCallback(
-    (next: number | number[]) => {
-      const numericValue = Array.isArray(next) ? next[0] ?? MIN_DURATION : next;
-      const normalized = numericValue;
-      if (normalized !== playDuration) {
-        onPlayDurationChange(normalized);
+    (next: number) => {
+      if (next !== playDuration) {
+        onPlayDurationChange(next);
       }
     },
     [onPlayDurationChange, playDuration]
@@ -57,12 +55,10 @@ const BasicConfigSection: React.FC<BasicConfigSectionProps> = ({
     <div className={styles.configSection}>
       <h3>播放时长</h3>
       <div className={styles.configField}>
-        <Slider
-          className={styles.configSlider}
+        <GlassSlider
           min={MIN_DURATION}
           max={MAX_DURATION}
           step={STEP}
-          ticks
           marks={marks}
           value={playDuration}
           onChange={handleChange}

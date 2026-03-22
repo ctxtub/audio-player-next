@@ -15,14 +15,15 @@
     border-radius: 0;
 
     .configSection {
-      backdrop-filter: blur(var(--blur-md));
-      box-shadow: var(--shadow-md);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      box-shadow: var(--glass-highlight), var(--shadow-md);
       transition: var(--transition-transform);
       margin-bottom: var(--space-5);
       padding: var(--card-padding);
-      border: 1px solid var(--border-default);
+      border: 0.5px solid var(--glass-border);
       border-radius: var(--radius-lg);
-      background-color: var(--bg-secondary);
+      background-color: var(--glass-bg);
 
       &:first-child {
         margin-top: 0;
@@ -70,19 +71,39 @@
       line-height: var(--leading-sm);
     }
 
-    .voiceSelector {
-      width: 100%;
-
-      :global(.adm-selector-item) {
-        width: 100%;
-        text-align: left;
-      }
-    }
-
     .voiceSelectorWrapper {
       display: flex;
       flex-direction: column;
       gap: var(--space-3);
+      outline: none;
+    }
+
+    .voiceRadioItem {
+      display: block;
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-md);
+      border: 0.5px solid var(--border-default);
+      background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+      cursor: pointer;
+      outline: none;
+      transition: background var(--duration-fast) var(--ease-default),
+        border-color var(--duration-fast) var(--ease-default),
+        box-shadow var(--duration-fast) var(--ease-default);
+
+      &[data-hovered] {
+        background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+      }
+
+      &[data-focus-visible] {
+        outline: 2px solid var(--accent-primary);
+        outline-offset: 2px;
+      }
+    }
+
+    .voiceRadioSelected {
+      background: var(--accent-primary-subtle);
+      border-color: var(--accent-primary);
+      box-shadow: 0 0 0 0.5px var(--accent-primary);
     }
 
     .voiceSelectorOption {

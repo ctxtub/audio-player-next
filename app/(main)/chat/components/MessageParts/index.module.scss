@@ -12,18 +12,18 @@
 
 .storyCard {
   position: relative;
-  background: var(--bg-elevated);
-  backdrop-filter: blur(var(--blur-md));
-  -webkit-backdrop-filter: blur(var(--blur-md));
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-default);
-  box-shadow: var(--shadow-md);
+  border: 0.5px solid color-mix(in srgb, var(--glass-border) 70%, transparent);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
   transition: var(--transition-all);
 
   &.playing {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px var(--accent-primary-subtle), var(--shadow-lg);
+    border-color: color-mix(in srgb, var(--accent-primary) 50%, transparent);
+    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent-primary) 20%, transparent), var(--shadow-md);
   }
 }
 
@@ -36,7 +36,7 @@
   font-size: var(--text-sm);
   line-height: var(--leading-sm);
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 0.5px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
   position: relative;
   z-index: 2;
 }
@@ -128,13 +128,8 @@
 /* 音频生成蒙层 */
 .audioOverlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--bg-overlay);
-  backdrop-filter: blur(var(--blur-sm));
-  -webkit-backdrop-filter: blur(var(--blur-sm));
+  inset: 0;
+  background: color-mix(in srgb, var(--bg-elevated) 65%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -195,7 +190,7 @@
   font-weight: var(--weight-medium);
   color: var(--accent-primary);
   background: transparent;
-  border: 1px solid var(--accent-primary);
+  border: 0.5px solid color-mix(in srgb, var(--accent-primary) 40%, transparent);
   border-radius: var(--radius-xl);
   cursor: pointer;
   transition: var(--transition-all);
@@ -239,8 +234,10 @@
   display: flex;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  background-color: color-mix(in srgb, var(--bg-tertiary) 50%, transparent);
-  border: 1px dashed var(--border-default);
+  background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
+  backdrop-filter: blur(var(--blur-sm));
+  -webkit-backdrop-filter: blur(var(--blur-sm));
+  border: 0.5px solid color-mix(in srgb, var(--glass-border) 60%, transparent);
   border-radius: var(--radius-md);
   margin: var(--space-1) 0;
   font-size: var(--text-sm);
@@ -276,9 +273,9 @@
 
 .clickable {
   cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-default);
+  transition: background var(--duration-fast) var(--ease-default);
 
   &:active {
-    background-color: color-mix(in srgb, var(--bg-tertiary) 60%, transparent);
+    background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
   }
 }

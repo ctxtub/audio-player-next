@@ -1,5 +1,6 @@
 
 import { useState, type FC } from 'react';
+import { FileText } from 'lucide-react';
 import type { SummaryPart } from '@/types/chat';
 import StoryViewer from '@/app/(main)/chat/components/StoryViewer';
 import styles from './index.module.scss';
@@ -28,7 +29,7 @@ const SummaryPartRenderer: FC<SummaryPartRendererProps> = ({ part }) => {
                 className={`${styles.summaryContainer} ${shouldTruncate ? styles.clickable : ''}`}
                 onClick={handleClick}
             >
-                <div className={styles.summaryIcon}>📝</div>
+                <div className={styles.summaryIcon}><FileText size={20} strokeWidth={1.8} /></div>
                 <div className={styles.summaryContent}>
                     <div className={styles.summaryTitle}>上下文总结</div>
                     <div className={styles.summaryText}>{displayText}</div>

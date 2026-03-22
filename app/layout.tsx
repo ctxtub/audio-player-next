@@ -1,8 +1,6 @@
 import React from 'react';
-import 'antd-mobile/es/global';
 import '@/styles/index.scss';
 import { ThemeProvider } from '@/components/ThemeProvider';
-import { AntdMobileCompat } from '@/components/AntdMobileCompat';
 import {
   FALLBACK_THEME,
   THEME_COLORS,
@@ -27,7 +25,6 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: INITIAL_THEME_SCRIPT }} />
       </head>
       <body>
-        <AntdMobileCompat />
         <ThemeProvider>
           {children}
         </ThemeProvider>

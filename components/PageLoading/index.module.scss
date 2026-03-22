@@ -10,15 +10,27 @@
   color: var(--text-primary);
   text-align: center;
   padding: var(--space-6);
+}
 
-  .spinner {
-    --size: var(--size-avatar-lg);
-    --color: var(--text-primary);
-  }
+.spinner {
+  width: var(--size-avatar-lg);
+  height: var(--size-avatar-lg);
+  border: 2.5px solid var(--border-subtle);
+  border-top-color: var(--accent-primary);
+  border-radius: var(--radius-full);
+  animation: spin var(--duration-slow) linear infinite;
+}
 
-  .message {
-    font-size: var(--text-base);
-    line-height: var(--leading-base);
-    letter-spacing: 0.4px;
+.message {
+  font-size: var(--text-base);
+  line-height: var(--leading-base);
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }

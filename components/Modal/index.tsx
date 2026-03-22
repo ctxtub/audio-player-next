@@ -1,6 +1,13 @@
+'use client';
+
 import React, { useState } from 'react';
-import { Popup } from 'antd-mobile';
-import CloseIcon from '@/public/icons/close.svg';
+import {
+  Dialog,
+  DialogTrigger,
+  Modal as AriaModal,
+  ModalOverlay,
+} from 'react-aria-components';
+import { X } from 'lucide-react';
 import styles from './index.module.scss';
 
 /**
@@ -27,7 +34,8 @@ export const useModal = () => {
 };
 
 /**
- * 通用模态框组件，支持头部额外内容与关闭按钮。
+ * 通用底部弹出模态框组件，支持头部额外内容与关闭按钮。
+ * 使用 React Aria Dialog 替代 antd-mobile Popup，支持完整的无障碍交互。
  */
 const Modal: React.FC<ModalProps> = ({
   isShow,
@@ -38,50 +46,43 @@ const Modal: React.FC<ModalProps> = ({
   onClose,
 }) => {
   const handleClose = () => {
-    if (onClose) {
-      onClose();
-    }
+    onClose?.();
   };
+
   const shouldRenderHeader = Boolean(title || showCloseButton || headerExtra);
 
   return (
-    <Popup
-      visible={isShow}
-      onClose={handleClose}
-      onMaskClick={handleClose}
-      position="bottom"
-      destroyOnClose
-      className={styles.modalPopup}
-      bodyClassName={styles.modalBody}
-      maskStyle={{
-        backgroundColor: 'var(--bg-overlay)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-      }}
-    >
-      <div className={styles.modalContent}>
-        {shouldRenderHeader && (
-          <div className={styles.modalHeader}>
-            <div className={styles.modalTitle}>
-              {title}
-              {headerExtra && (
-                <div className={styles.headerExtra}>{headerExtra}</div>
+    <DialogTrigger isOpen={isShow} onOpenChange={(open) => { if (!open) handleClose(); }}>
+      <ModalOverlay className={styles.overlay} isDismissable>
+        <AriaModal className={styles.modalContainer}>
+          <Dialog className={styles.dialog} aria-label={title ?? '弹窗'}>
+            <div className={styles.modalContent}>
+              {shouldRenderHeader && (
+                <div className={styles.modalHeader}>
+                  <div className={styles.modalTitle}>
+                    {title}
+                    {headerExtra && (
+                      <div className={styles.headerExtra}>{headerExtra}</div>
+                    )}
+                  </div>
+                  {showCloseButton && (
+                    <button
+                      className={styles.closeButton}
+                      onClick={handleClose}
+                      aria-label="关闭"
+                      type="button"
+                    >
+                      <X size={20} strokeWidth={1.8} />
+                    </button>
+                  )}
+                </div>
               )}
+              <div className={styles.modalBodyContent}>{children}</div>
             </div>
-            {showCloseButton && (
-              <button
-                className={styles.closeButton}
-                onClick={handleClose}
-                aria-label="关闭"
-              >
-                <CloseIcon />
-              </button>
-            )}
-          </div>
-        )}
-        <div className={styles.modalBodyContent}>{children}</div>
-      </div>
-    </Popup>
+          </Dialog>
+        </AriaModal>
+      </ModalOverlay>
+    </DialogTrigger>
   );
 };
 

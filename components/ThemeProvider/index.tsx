@@ -8,7 +8,6 @@ import React, {
   useState,
   useCallback,
 } from 'react';
-import { ConfigProvider } from 'antd-mobile';
 import type { ThemeMode } from '@/types/theme';
 import {
   THEME_MODE_STORAGE_KEY,
@@ -148,7 +147,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return (
     <ThemeContext.Provider value={contextValue}>
-      <ConfigProvider>{children}</ConfigProvider>
+      {children}
     </ThemeContext.Provider>
   );
 };

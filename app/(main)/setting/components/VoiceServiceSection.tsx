@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Selector, Toast } from 'antd-mobile';
+import GlassToast from '@/components/ui/GlassToast';
+import { RadioGroup, Radio } from 'react-aria-components';
 
+import GlassButton from '@/components/ui/GlassButton';
 import styles from '../index.module.scss';
 import type { VoiceOption } from '@/types/ttsGenerate';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
@@ -26,8 +28,6 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const previewUrlRef = useRef<string | null>(null);
 
-  const selectorValue = value ? [value] : [];
-
   const stopPreview = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -50,13 +50,11 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
     }
   }, [playingVoice, stopPreview, voicesList]);
 
-  const handleSelectorChange = useCallback(
-    (values: string[]) => {
-      const [nextVoice] = values;
-      if (!nextVoice || nextVoice === value) {
-        return;
+  const handleChange = useCallback(
+    (nextVoice: string) => {
+      if (nextVoice && nextVoice !== value) {
+        onChange(nextVoice);
       }
-      onChange(nextVoice);
     },
     [onChange, value],
   );
@@ -69,7 +67,7 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
       }
 
       if (!voicesList.some(option => option.value === voice)) {
-        Toast.show({ icon: 'fail', content: '所选声音已不可用，请重新选择', duration: 3000 });
+        GlassToast.show({ icon: 'fail', content: '所选声音已不可用，请重新选择', duration: 3000 });
         return;
       }
 
@@ -92,7 +90,7 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
             const errorMessage =
               (event as ErrorEvent).error?.message || '音频播放失败，请重试';
             stopPreview();
-            Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
+            GlassToast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
           },
           { once: true }
         );
@@ -105,7 +103,7 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
           URL.revokeObjectURL(objectUrl);
         }
         const message = error instanceof Error ? error.message : String(error);
-        Toast.show({ icon: 'fail', content: message, duration: 3000 });
+        GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
       }
     },
     [playingVoice, stopPreview, voicesList],
@@ -115,51 +113,52 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
     <div className={styles.configSection}>
       <h3>语音音色</h3>
       {hasVoices ? (
-        <div className={styles.voiceSelectorWrapper}>
-          <Selector
-            className={styles.voiceSelector}
-            columns={1}
-            multiple={false}
-            value={selectorValue}
-            onChange={handleSelectorChange}
-            options={voicesList.map(option => {
-              const isPlaying = playingVoice === option.value;
-              return {
-                value: option.value,
-                label: (
-                  <div className={styles.voiceSelectorOption}>
-                    <div className={styles.voiceSelectorInfo}>
-                      <div className={styles.voiceSelectorName}>
-                        {option.label}
-                      </div>
-                      <div className={styles.voiceDescription}>
-                        <div>{option.description ?? '暂无描述'}</div>
-                        <div className={styles.voiceMeta}>
-                          {(option.gender ?? '未知')} ·{' '}
-                          {(option.locale ?? '未知')}
-                        </div>
+        <RadioGroup
+          value={value ?? ''}
+          onChange={handleChange}
+          className={styles.voiceSelectorWrapper}
+          aria-label="语音音色选择"
+        >
+          {voicesList.map(option => {
+            const isPlaying = playingVoice === option.value;
+            return (
+              <Radio
+                key={option.value}
+                value={option.value}
+                className={({ isSelected }) =>
+                  `${styles.voiceRadioItem} ${isSelected ? styles.voiceRadioSelected : ''}`
+                }
+              >
+                <div className={styles.voiceSelectorOption}>
+                  <div className={styles.voiceSelectorInfo}>
+                    <div className={styles.voiceSelectorName}>
+                      {option.label}
+                    </div>
+                    <div className={styles.voiceDescription}>
+                      <div>{option.description ?? '暂无描述'}</div>
+                      <div className={styles.voiceMeta}>
+                        {(option.gender ?? '未知')} ·{' '}
+                        {(option.locale ?? '未知')}
                       </div>
                     </div>
-                    <Button
-                      className={styles.voicePreviewButton}
-                      size="mini"
-                      color="primary"
-                      fill="outline"
-                      onClick={event => {
-                        event.stopPropagation();
-                        void handlePreview(option.value);
-                      }}
-                      loading={isPlaying}
-                      disabled={playingVoice !== null && !isPlaying}
-                    >
-                      {isPlaying ? '试听中' : '试听'}
-                    </Button>
                   </div>
-                ),
-              };
-            })}
-          />
-        </div>
+                  <GlassButton
+                    variant="outline"
+                    size="sm"
+                    loading={isPlaying}
+                    isDisabled={playingVoice !== null && !isPlaying}
+                    onPress={(e) => {
+                      e.continuePropagation();
+                      void handlePreview(option.value);
+                    }}
+                  >
+                    {isPlaying ? '试听中' : '试听'}
+                  </GlassButton>
+                </div>
+              </Radio>
+            );
+          })}
+        </RadioGroup>
       ) : (
         <div className={styles.voiceEmptyState}>
           暂无可用声音，请联系管理员配置 OPENAI_TTS_VOICE_LIST。

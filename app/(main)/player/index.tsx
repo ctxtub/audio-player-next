@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Toast } from 'antd-mobile';
+import GlassToast from '@/components/ui/GlassToast';
 import PlaybackStatusBoard from '@/app/(main)/player/components/PlaybackStatusBoard';
 import GenerationPreview from '@/app/(main)/player/components/GenerationPreview';
 import AudioPlayer from '@/app/(main)/player/components/AudioPlayer';
@@ -53,7 +53,7 @@ const HomePage: React.FC = () => {
         await beginStorySession(shortcutText);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : '发生未知错误';
-        Toast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
+        GlassToast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
         resetStoryFlow();
       }
     },

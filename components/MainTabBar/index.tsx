@@ -1,8 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect } from 'react';
-import { TabBar, Badge } from 'antd-mobile';
-import { AppOutline, MessageOutline, SetOutline } from 'antd-mobile-icons';
+import { MessageCircle, Disc3, Settings } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useChatStore } from '@/stores/chatStore';
 import styles from './index.module.scss';
@@ -11,25 +10,15 @@ import styles from './index.module.scss';
  * 底部标签配置，定义导航目标与图标。
  */
 type TabConfig = {
-  /**
-   * 标签唯一 key，与 `TabBar.Item` 对应。
-   */
-  key: 'home' | 'chat' | 'player' | 'setting';
-  /**
-   * 标签展示名称。
-   */
+  /** 标签唯一 key。 */
+  key: 'chat' | 'player' | 'setting';
+  /** 标签展示名称。 */
   title: string;
-  /**
-   * 标签使用的图标组件。
-   */
-  icon: React.ReactNode;
-  /**
-   * 对应的路由路径。
-   */
+  /** 对应的路由路径。 */
   path: string;
-  /**
-   * 自定义激活判断逻辑。
-   */
+  /** 图标组件。 */
+  icon: React.FC<{ size?: number; strokeWidth?: number; className?: string }>;
+  /** 自定义激活判断逻辑。 */
   isActive?: (pathname: string) => boolean;
 };
 
@@ -40,21 +29,21 @@ const TABS: readonly TabConfig[] = [
   {
     key: 'chat',
     title: '创作',
-    icon: <MessageOutline />,
+    icon: MessageCircle,
     path: '/chat',
     isActive: pathname => pathname === '/' || pathname.startsWith('/chat'),
   },
   {
     key: 'player',
     title: '播放器',
-    icon: <AppOutline />,
+    icon: Disc3,
     path: '/player',
     isActive: pathname => pathname === '/player',
   },
   {
     key: 'setting',
     title: '设置',
-    icon: <SetOutline />,
+    icon: Settings,
     path: '/setting',
     isActive: pathname => pathname.startsWith('/setting'),
   },
@@ -67,10 +56,7 @@ const TABS: readonly TabConfig[] = [
  */
 const resolveActiveKey = (pathname: string): TabConfig['key'] => {
   const matchedTab = TABS.find(tab => tab.isActive?.(pathname));
-  if (matchedTab) {
-    return matchedTab.key;
-  }
-  return 'chat';
+  return matchedTab?.key ?? 'chat';
 };
 
 /**
@@ -82,18 +68,15 @@ const MainTabBar: React.FC = () => {
   const activeKey = resolveActiveKey(pathname);
 
   useEffect(() => {
-    TABS.filter(tab => tab.path !== '/').forEach(tab => {
+    TABS.forEach(tab => {
       router.prefetch(tab.path);
     });
   }, [router]);
 
-  const handleTabChange = useCallback(
+  const handleTabClick = useCallback(
     (key: string) => {
       const target = TABS.find(tab => tab.key === key);
-      if (!target) {
-        return;
-      }
-
+      if (!target) return;
       if (target.path !== pathname) {
         router.push(target.path);
       }
@@ -104,24 +87,35 @@ const MainTabBar: React.FC = () => {
   const hasUnviewedResponse = useChatStore(state => state.hasUnviewedResponse);
 
   return (
-    <div className={styles.tabBarContainer}>
-      <TabBar activeKey={activeKey} onChange={handleTabChange} safeArea>
-        {TABS.map(({ key, title, icon }) => {
-          const isChat = key === 'chat';
-          // 如果当前就在聊天页面 (chat tab 激活)，则强制不显示红点
-          // 否则才根据 store 状态判断
-          const isChatActive = activeKey === 'chat';
-          const showBadge = isChat && !isChatActive && hasUnviewedResponse;
-          return (
-            <TabBar.Item
-              key={key}
-              icon={showBadge ? <Badge content={Badge.dot}>{icon}</Badge> : icon}
-              title={title}
-            />
-          );
-        })}
-      </TabBar>
-    </div>
+    <nav className={styles.tabBar} role="tablist" aria-label="主导航">
+      {TABS.map(({ key, title, icon: Icon }) => {
+        const isActive = activeKey === key;
+        const isChat = key === 'chat';
+        const isChatActive = activeKey === 'chat';
+        const showBadge = isChat && !isChatActive && hasUnviewedResponse;
+
+        return (
+          <button
+            key={key}
+            role="tab"
+            type="button"
+            aria-selected={isActive}
+            className={`${styles.tabItem} ${isActive ? styles.tabItemActive : ''}`}
+            onClick={() => handleTabClick(key)}
+          >
+            <span className={styles.iconWrapper}>
+              <Icon
+                size={24}
+                strokeWidth={isActive ? 2 : 1.5}
+                className={isActive ? styles.iconActive : styles.icon}
+              />
+              {showBadge && <span className={styles.badge} aria-label="有新消息" />}
+            </span>
+            <span className={styles.tabLabel}>{title}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 };
 

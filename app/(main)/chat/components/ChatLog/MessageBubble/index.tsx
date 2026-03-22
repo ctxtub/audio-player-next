@@ -1,6 +1,5 @@
 'use client';
 
-import { Avatar } from 'antd-mobile';
 import { useMemo, type FC } from 'react';
 
 import type {
@@ -170,10 +169,10 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
   return (
     <div className={rowClassName}>
       {shouldHideAvatar(roleKey) ? null : (
-        <Avatar
+        <img
           className={styles.avatar}
           src={avatarSrc}
-          aria-label={`${displayName}头像`}
+          alt={`${displayName}头像`}
         />
       )}
       <div className={styles.bubbleWrapper}>

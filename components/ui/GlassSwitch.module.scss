@@ -1,0 +1,55 @@
+/* GlassSwitch — Liquid Glass 风格开关 */
+.switchRoot {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  outline: none;
+  touch-action: none;
+  flex-shrink: 0;
+
+  &[data-focus-visible] .track {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+.track {
+  position: relative;
+  width: 50px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  border: 0.5px solid var(--border-default);
+  transition: background var(--duration-fast) var(--ease-default),
+    border-color var(--duration-fast) var(--ease-default);
+
+  .switchRoot[data-selected] & {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+}
+
+.thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 25px;
+  height: 25px;
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: var(--shadow-sm), var(--glass-highlight);
+  transition: transform var(--duration-fast) var(--ease-default);
+
+  .switchRoot[data-selected] & {
+    transform: translateX(20px);
+  }
+
+  .switchRoot[data-pressed] & {
+    width: 28px;
+  }
+
+  .switchRoot[data-pressed][data-selected] & {
+    transform: translateX(17px);
+  }
+}

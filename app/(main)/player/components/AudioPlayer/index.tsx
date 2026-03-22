@@ -2,10 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { CSSTransition } from 'react-transition-group';
-import { Toast } from 'antd-mobile';
-import PlayIcon from '@/public/icons/audioplayer-play.svg';
-import PauseIcon from '@/public/icons/audioplayer-pause.svg';
-import BackgroundIcon from '@/public/icons/audioplayer-background.svg';
+import { Play, Pause, Disc3 } from 'lucide-react';
+import GlassToast from '@/components/ui/GlassToast';
 import { usePlaybackStore, useFloatingPlayer } from '@/stores/playbackStore';
 import styles from './index.module.scss';
 
@@ -80,7 +78,7 @@ const AudioPlayer: React.FC = () => {
     } else {
       resume().catch((error) => {
         const message = error instanceof Error ? error.message : '无法恢复播放';
-        Toast.show({ icon: 'fail', content: message, duration: 3000 });
+        GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
       });
     }
   };
@@ -108,10 +106,10 @@ const AudioPlayer: React.FC = () => {
     <div className={styles.audioPlayer}>
       <div className={`${styles.recordDisc} ${isPlaying ? styles.recordDiscPlaying : ''}`}>
         <div className={styles.playButton} onClick={togglePlay}>
-          {isPlaying ? <PauseIcon className={styles.icon} /> : <PlayIcon className={styles.icon} />}
+          {isPlaying ? <Pause size={32} strokeWidth={2} className={styles.icon} /> : <Play size={32} strokeWidth={2} className={styles.icon} />}
         </div>
         <div className={styles.backgroundIcon}>
-          <BackgroundIcon />
+          <Disc3 size={120} strokeWidth={0.5} />
         </div>
       </div>
       <div className={styles.audioControls}>

@@ -2,9 +2,8 @@
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useDrag } from '@use-gesture/react';
-import { Toast } from 'antd-mobile';
-import PlayIcon from '@/public/icons/audioplayer-play.svg';
-import PauseIcon from '@/public/icons/audioplayer-pause.svg';
+import { Play, Pause } from 'lucide-react';
+import GlassToast from '@/components/ui/GlassToast';
 import { useConfigStore } from '@/stores/configStore';
 import { usePlaybackStore, useFloatingPlayer } from '@/stores/playbackStore';
 import {
@@ -129,7 +128,7 @@ export const FloatingPlayer: React.FC = () => {
     } else {
       resume().catch((error) => {
         const message = error instanceof Error ? error.message : '无法恢复播放';
-        Toast.show({ icon: 'fail', content: message, duration: 3000 });
+        GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
       });
     }
   }, [isPlaying, pause, resume]);
@@ -195,7 +194,7 @@ export const FloatingPlayer: React.FC = () => {
               aria-label={isPlaying ? '暂停播放' : '继续播放'}
               onClick={togglePlay}
             >
-              {isPlaying ? <PauseIcon /> : <PlayIcon />}
+              {isPlaying ? <Pause size={18} strokeWidth={2} /> : <Play size={18} strokeWidth={2} />}
             </button>
           </div>
         </div>

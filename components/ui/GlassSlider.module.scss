@@ -1,0 +1,104 @@
+/* GlassSlider — Liquid Glass 风格滑块 */
+.sliderRoot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  touch-action: none;
+}
+
+.label {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.output {
+  display: none;
+}
+
+.track {
+  position: relative;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  cursor: pointer;
+}
+
+.fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--accent-primary);
+  pointer-events: none;
+}
+
+/* 刻度点 */
+.ticks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  pointer-events: none;
+}
+
+.tick {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--text-primary) 20%, transparent);
+  transform: translate(-50%, -50%);
+}
+
+.tickActive {
+  background: var(--accent-primary);
+}
+
+/* 拖拽手柄 */
+.thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: var(--shadow-md), var(--glass-highlight);
+  top: 50%;
+  outline: none;
+  cursor: grab;
+
+  &[data-dragging] {
+    cursor: grabbing;
+    box-shadow: var(--shadow-lg), var(--glass-highlight);
+    transform: scale(1.1);
+  }
+
+  &[data-focus-visible] {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+/* 刻度标签 */
+.markLabels {
+  position: relative;
+  height: 20px;
+  margin-top: var(--space-1);
+}
+
+.markLabel {
+  position: absolute;
+  transform: translateX(-50%);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.markLabelActive {
+  color: var(--accent-primary);
+  font-weight: var(--weight-medium);
+}

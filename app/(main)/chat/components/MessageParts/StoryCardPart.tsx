@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
+import { Sparkles, Pause, Headphones } from 'lucide-react';
 import type { StoryCardPart } from '@/types/chat';
 import { useGenerationStore } from '@/stores/generationStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
@@ -106,7 +107,7 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
             {/* 生成中的状态头部 */}
             {isGenerating && (
                 <div className={styles.storyHeader}>
-                    <span className={styles.sparkle}>✦</span>
+                    <Sparkles size={16} strokeWidth={2} className={styles.sparkle} />
                     <span>{headerText}</span>
                 </div>
             )}
@@ -154,7 +155,7 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
                         className={styles.playButton}
                         onClick={handlePlay}
                     >
-                        {isThisCardPlaying ? '⏸ 暂停播放' : '🎧 播放故事'}
+                        {isThisCardPlaying ? <><Pause size={14} strokeWidth={2} /> 暂停播放</> : <><Headphones size={14} strokeWidth={2} /> 播放故事</>}
                     </button>
                 </div>
             )}

@@ -1,6 +1,5 @@
 'use client';
 
-import { Empty } from 'antd-mobile';
 import {
   forwardRef,
   useCallback,
@@ -9,6 +8,7 @@ import {
   useMemo,
   useRef,
 } from 'react';
+import { MessageCircle } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 import styles from './ChatLog.module.scss';
 import type { ChatLogProps } from './types';
@@ -118,7 +118,10 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
           </div>
         ) : !isLoading ? (
           <div className={styles.placeholder}>
-            <Empty description={emptyHint ?? '暂未开始任何对话'} />
+            <div className={styles.emptyContent}>
+              <MessageCircle size={40} strokeWidth={1.2} className={styles.emptyIcon} />
+              <p className={styles.emptyText}>{emptyHint ?? '暂未开始任何对话'}</p>
+            </div>
           </div>
         ) : null}
         {isLoading ? (

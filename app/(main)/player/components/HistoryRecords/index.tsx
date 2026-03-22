@@ -2,8 +2,7 @@
 
 import React, { useEffect, forwardRef, useImperativeHandle, useMemo } from 'react';
 import Modal, { useModal } from '@/components/Modal';
-import PlayIcon from '@/public/icons/audioplayer-play.svg';
-import DeleteIcon from '@/public/icons/close.svg';
+import { Play, Trash2 } from 'lucide-react';
 import {
   usePromptHistoryStore,
   selectSortMode,
@@ -110,7 +109,7 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
                     }}
                     aria-label="播放此提示词"
                   >
-                    <PlayIcon />
+                    <Play size={16} strokeWidth={2} />
                   </button>
                   <button
                     className={styles.deleteButton}
@@ -120,7 +119,7 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
                     }}
                     aria-label="删除此提示词"
                   >
-                    <DeleteIcon />
+                    <Trash2 size={16} strokeWidth={1.8} />
                   </button>
                 </div>
               </div>

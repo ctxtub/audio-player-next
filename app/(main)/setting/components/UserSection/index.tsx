@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { Button, Toast } from 'antd-mobile';
+import GlassToast from '@/components/ui/GlassToast';
 import { useRouter } from 'next/navigation';
 
+import GlassButton from '@/components/ui/GlassButton';
 import { useAuthStore } from '@/stores/authStore';
 import styles from './index.module.scss';
 
@@ -47,26 +48,16 @@ const UserSection: React.FC = () => {
   const handleLogout = useCallback(async () => {
     const success = await doLogout();
     if (success) {
-      Toast.show({ icon: 'success', content: '已登出' });
+      GlassToast.show({ icon: 'success', content: '已登出' });
       router.push('/auth');
     } else {
-      Toast.show({ icon: 'fail', content: useAuthStore.getState().error || '登出失败' });
+      GlassToast.show({ icon: 'fail', content: useAuthStore.getState().error || '登出失败' });
     }
   }, [doLogout, router]);
 
   const handleGoAuth = useCallback(() => {
     router.push('/auth?from=/setting');
   }, [router]);
-
-  const actionButton = isLogin ? (
-    <Button color="primary" size="small" loading={loading} className={styles.actionButton} onClick={handleLogout}>
-      登出
-    </Button>
-  ) : (
-    <Button color="primary" size="small" loading={loading} className={styles.actionButton} onClick={handleGoAuth}>
-      {isGuest ? '去注册' : '去登录'}
-    </Button>
-  );
 
   return (
     <div className={styles.userSection}>
@@ -77,7 +68,29 @@ const UserSection: React.FC = () => {
         <span className={styles.nickname}>{displayNickname}</span>
         <span className={styles.status}>{statusText}</span>
       </div>
-      <div className={styles.actions}>{actionButton}</div>
+      <div className={styles.actions}>
+        {isLogin ? (
+          <GlassButton
+            variant="primary"
+            size="sm"
+            loading={loading}
+            onPress={handleLogout}
+            className={styles.actionButton}
+          >
+            登出
+          </GlassButton>
+        ) : (
+          <GlassButton
+            variant="primary"
+            size="sm"
+            loading={loading}
+            onPress={handleGoAuth}
+            className={styles.actionButton}
+          >
+            {isGuest ? '去注册' : '去登录'}
+          </GlassButton>
+        )}
+      </div>
     </div>
   );
 };

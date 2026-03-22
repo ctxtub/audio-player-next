@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo } from 'react';
-import { Toast } from 'antd-mobile';
+import GlassToast from '@/components/ui/GlassToast';
 
 import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
 import { resetStoryFlow } from '@/app/services/storyFlow';
@@ -103,7 +103,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
       await beginChatStream(content);
     } catch (error) {
       const message = error instanceof Error ? error.message : '发送失败，请稍后重试';
-      Toast.show({ icon: 'fail', content: message });
+      GlassToast.show({ icon: 'fail', content: message });
     }
   }, []);
 
@@ -125,7 +125,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
   const handleSuggestionSelect = useCallback(
     (value: string) => {
       if (isSending) {
-        Toast.show({ icon: 'fail', content: '正在生成回答，请稍后再试' });
+        GlassToast.show({ icon: 'fail', content: '正在生成回答，请稍后再试' });
         return;
       }
       setInputValue(value);
@@ -155,7 +155,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : '重试失败，请稍后再试';
-      Toast.show({ icon: 'fail', content: message });
+      GlassToast.show({ icon: 'fail', content: message });
     }
   }, []);
 

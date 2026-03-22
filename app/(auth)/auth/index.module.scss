@@ -1,4 +1,4 @@
-/* Auth 页 — spec 3.8 */
+/* Auth 页 — iOS 26 Liquid Glass 风格 */
 .page {
   display: flex;
   flex-direction: column;
@@ -6,28 +6,86 @@
   min-height: 100dvh;
   padding: var(--space-12) var(--space-6) var(--space-10);
   gap: var(--space-8);
+  position: relative;
+  overflow: hidden;
+
+  /* 背景光晕装饰 */
+  &::before {
+    content: '';
+    position: absolute;
+    top: -20%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 600px;
+    border-radius: var(--radius-full);
+    background: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--accent-primary) 12%, transparent) 0%,
+      color-mix(in srgb, var(--accent-primary) 4%, transparent) 40%,
+      transparent 70%
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* 底部第二个光晕 */
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -10%;
+    right: -20%;
+    width: 400px;
+    height: 400px;
+    border-radius: var(--radius-full);
+    background: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--accent-primary) 8%, transparent) 0%,
+      transparent 60%
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* 所有子元素浮于光晕之上 */
+  > * {
+    position: relative;
+    z-index: 1;
+  }
 }
 
-/* Logo 区 */
+/* ──────── Logo 区 ──────── */
 .header {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   padding-top: var(--space-6);
 }
 
 .logo {
-  font-size: 56px;
-  line-height: 1;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-2xl);
+  background: var(--gradient-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow:
+    0 8px 32px color-mix(in srgb, var(--accent-primary) 35%, transparent),
+    var(--glass-highlight);
   margin-bottom: var(--space-2);
 }
 
 .appName {
   font-size: var(--text-2xl);
   font-weight: var(--weight-bold);
-  color: var(--text-primary);
   letter-spacing: var(--tracking-tight);
+  background: var(--gradient-brand);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .tagline {
@@ -35,25 +93,28 @@
   color: var(--text-secondary);
 }
 
-/* 表单卡片 */
+/* ──────── Liquid Glass 表单卡片 ──────── */
 .card {
   width: 100%;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-default);
+  max-width: 420px;
+  background: var(--glass-bg);
+  border: 0.5px solid var(--glass-border);
   border-radius: var(--radius-xl);
-  backdrop-filter: blur(var(--blur-md));
-  box-shadow: var(--shadow-lg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-highlight), var(--shadow-lg);
+  overflow: hidden;
 }
 
-/* 自定义 Tab 头 */
+/* ──────── Tab 导航 ──────── */
 .tabHeader {
   display: flex;
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 0.5px solid var(--border-default);
 }
 
 .tabBtn {
   flex: 1;
-  padding: var(--space-3) 0;
+  padding: var(--space-4) 0;
   font-size: var(--text-base);
   font-weight: var(--weight-medium);
   color: var(--text-tertiary);
@@ -62,6 +123,8 @@
   cursor: pointer;
   position: relative;
   transition: color var(--duration-normal) var(--ease-default);
+  outline: none;
+  text-align: center;
 
   &::after {
     content: '';
@@ -75,6 +138,16 @@
     background: var(--accent-primary);
     transition: width var(--duration-normal) var(--ease-default);
   }
+
+  &[data-hovered] {
+    color: var(--text-secondary);
+  }
+
+  &[data-focus-visible] {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: -2px;
+    border-radius: var(--radius-sm);
+  }
 }
 
 .tabBtnActive {
@@ -86,10 +159,12 @@
   }
 }
 
+/* ──────── 表单区域 ──────── */
 .formWrapper {
   display: flex;
   flex-direction: column;
   padding: var(--space-2) 0 var(--space-1);
+  outline: none;
 }
 
 .form {
@@ -97,84 +172,143 @@
   flex-direction: column;
 }
 
-.form :global(.adm-form-item) {
-  margin: 0;
-}
-
-.form :global(.adm-form-item-label) {
-  display: none;
-}
-
-.form :global(.adm-list-item-content) {
-  padding: 0;
-  border: none;
-}
-
-.form :global(.adm-list) {
-  background: transparent;
-  --border-top: none;
-  --border-bottom: none;
-  --border-inner: none;
+/* ──────── 输入行 — Liquid Glass 风格 ──────── */
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
 }
 
 .inputRow {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 0.5px solid var(--border-subtle);
   transition: background-color var(--duration-normal) var(--ease-default);
 
   &:focus-within {
     background: var(--accent-primary-subtle);
+    border-bottom-color: var(--accent-primary);
   }
 }
 
 .inputIcon {
-  font-size: var(--text-md);
-  color: var(--text-secondary);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  transition: color var(--duration-normal) var(--ease-default);
+
+  .inputRow:focus-within & {
+    color: var(--accent-primary);
+  }
 }
 
 .input {
   flex: 1;
-  --background-color: transparent;
-}
-
-.input :global(.adm-input-element) {
+  background: transparent;
+  border: none;
+  outline: none;
   color: var(--text-primary);
   font-size: var(--text-base);
+  font-family: inherit;
+  line-height: var(--leading-base);
+
+  &::placeholder {
+    color: var(--text-tertiary);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
-.input :global(.adm-input-element::placeholder) {
-  color: var(--text-tertiary);
+/* Screen-reader only label */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
-.formFooter {
-  padding: var(--space-4) var(--space-5) var(--space-5);
+/* 字段级验证错误 */
+.fieldError {
+  padding: var(--space-1) var(--space-5);
+  color: var(--status-error);
+  font-size: var(--text-xs);
+  line-height: var(--leading-sm);
 }
 
-.formFooter :global(.adm-button) {
-  --adm-button-border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  padding: var(--space-4);
-  font-weight: var(--weight-semibold);
-}
-
+/* ──────── API 级错误 ──────── */
 .apiErrorBar {
   margin: var(--space-3) var(--space-5) var(--space-1);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  background: color-mix(in srgb, var(--status-error) 12%, transparent);
   color: var(--status-error);
   font-size: var(--text-sm);
   line-height: var(--leading-sm);
   text-align: center;
 }
 
-/* 访客入口 */
+/* ──────── 提交按钮 — Liquid Glass 风格 ──────── */
+.formFooter {
+  padding: var(--space-4) var(--space-5) var(--space-5);
+}
+
+.submitButton {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--gradient-brand);
+  color: var(--text-on-primary);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-default),
+    box-shadow var(--duration-fast) var(--ease-default),
+    opacity var(--duration-fast) var(--ease-default);
+  box-shadow:
+    0 4px 16px color-mix(in srgb, var(--accent-primary) 40%, transparent);
+
+  &[data-hovered] {
+    box-shadow:
+      0 6px 24px color-mix(in srgb, var(--accent-primary) 50%, transparent);
+    transform: translateY(-1px);
+  }
+
+  &[data-pressed] {
+    transform: scale(0.98);
+    box-shadow:
+      0 2px 8px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+  }
+
+  &[data-disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  &[data-focus-visible] {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
+}
+
+/* ──────── 访客入口 ──────── */
 .guestSection {
   width: 100%;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -189,7 +323,7 @@
   &::after {
     content: '';
     flex: 1;
-    height: 1px;
+    height: 0.5px;
     background: var(--border-default);
   }
 }
@@ -200,9 +334,39 @@
 }
 
 .guestButton {
-  --adm-button-border-radius: var(--radius-md);
-  --adm-button-border-color: var(--border-default);
-  --adm-button-text-color: var(--text-secondary);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-highlight);
+  color: var(--text-secondary);
   font-size: var(--text-base);
-  padding: var(--space-3);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-default),
+    transform var(--duration-fast) var(--ease-default),
+    color var(--duration-fast) var(--ease-default);
+
+  &[data-hovered] {
+    color: var(--text-primary);
+    transform: translateY(-1px);
+  }
+
+  &[data-pressed] {
+    transform: scale(0.98);
+  }
+
+  &[data-disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  &[data-focus-visible] {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+  }
 }

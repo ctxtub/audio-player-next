@@ -14,7 +14,7 @@
     padding: var(--card-padding-sm);
     border-radius: var(--radius-lg);
     border: 0.5px solid var(--glass-border);
-    background: var(--glass-bg);
+    background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
     box-shadow: var(--glass-highlight), var(--shadow-lg);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);

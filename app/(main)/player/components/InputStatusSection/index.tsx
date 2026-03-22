@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Toast } from 'antd-mobile';
+import GlassToast from '@/components/ui/GlassToast';
 import HistoryRecords, { HistoryRecordsRef } from '@/app/(main)/player/components/HistoryRecords';
 import {
   usePromptHistoryStore,
@@ -76,7 +76,7 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
       return;
     }
     if (!textareaInput || textareaInput.trim() === '') {
-      Toast.show({ icon: 'fail', content: '请输入故事概要，再生成故事哦~' });
+      GlassToast.show({ icon: 'fail', content: '请输入故事概要，再生成故事哦~' });
       return;
     }
     handleSubmitWithHistory(textareaInput);

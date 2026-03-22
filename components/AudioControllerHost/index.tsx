@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef } from 'react';
-import { Toast } from 'antd-mobile';
+import GlassToast from '@/components/ui/GlassToast';
 import {
   handleNearEnd,
   handleSegmentEnded,
@@ -176,7 +176,7 @@ const AudioControllerHost: React.FC = () => {
         }
         handlePlaybackPause();
         const message = error instanceof Error ? error.message : '无法播放音频';
-        Toast.show({ icon: 'fail', content: message, duration: 3000 });
+        GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
         throw error instanceof Error ? error : new Error(message);
       }
     },
@@ -201,7 +201,7 @@ const AudioControllerHost: React.FC = () => {
       }
       handlePlaybackPause();
       const message = error instanceof Error ? error.message : '无法恢复播放';
-      Toast.show({ icon: 'fail', content: message, duration: 3000 });
+      GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
       throw error instanceof Error ? error : new Error(message);
     }
   }, []);
@@ -329,7 +329,7 @@ const AudioControllerHost: React.FC = () => {
         await handlePlay(nextSegment.audioUrl, nextSegment.messageId);
       } catch (error) {
         const message = error instanceof Error ? error.message : '无法播放下一段音频';
-        Toast.show({ icon: 'fail', content: message, duration: 3000 });
+        GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
       }
     };
 

@@ -1,38 +1,18 @@
 'use client';
 
 import React, { useCallback } from 'react';
-import { Selector } from 'antd-mobile';
+import { Sun, Moon, Monitor } from 'lucide-react';
 import type { ThemeMode } from '@/types/theme';
+import GlassSelector from '@/components/ui/GlassSelector';
 import styles from '../index.module.scss';
-
-/**
- * 主题选项的元数据结构。
- */
-interface ThemeOptionMeta {
-  value: ThemeMode;
-  label: string;
-  icon: string;
-}
 
 /**
  * 可供选择的主题模式列表。
  */
-const THEME_OPTIONS: ThemeOptionMeta[] = [
-  {
-    value: 'light',
-    label: '亮色模式',
-    icon: '☀️',
-  },
-  {
-    value: 'dark',
-    label: '暗色模式',
-    icon: '🌙',
-  },
-  {
-    value: 'system',
-    label: '跟随系统',
-    icon: '🌓',
-  },
+const THEME_OPTIONS = [
+  { value: 'light' as ThemeMode, label: <div className={styles.themeOption}><span className={styles.themeOptionIcon} aria-hidden><Sun size={18} strokeWidth={1.8} /></span><div className={styles.themeOptionContent}><span className={styles.themeOptionLabel}>亮色模式</span></div></div> },
+  { value: 'dark' as ThemeMode, label: <div className={styles.themeOption}><span className={styles.themeOptionIcon} aria-hidden><Moon size={18} strokeWidth={1.8} /></span><div className={styles.themeOptionContent}><span className={styles.themeOptionLabel}>暗色模式</span></div></div> },
+  { value: 'system' as ThemeMode, label: <div className={styles.themeOption}><span className={styles.themeOptionIcon} aria-hidden><Monitor size={18} strokeWidth={1.8} /></span><div className={styles.themeOptionContent}><span className={styles.themeOptionLabel}>跟随系统</span></div></div> },
 ];
 
 /**
@@ -48,12 +28,10 @@ interface ThemeModeSectionProps {
  */
 const ThemeModeSection: React.FC<ThemeModeSectionProps> = ({ value, onChange }) => {
   const handleChange = useCallback(
-    (values: string[]) => {
-      const [nextValue] = values as ThemeMode[];
-      if (!nextValue || nextValue === value) {
-        return;
+    (nextValue: string) => {
+      if (nextValue !== value) {
+        onChange(nextValue as ThemeMode);
       }
-      onChange(nextValue);
     },
     [onChange, value],
   );
@@ -61,24 +39,13 @@ const ThemeModeSection: React.FC<ThemeModeSectionProps> = ({ value, onChange }) 
   return (
     <div className={styles.configSection}>
       <h3>主题设置</h3>
-      <Selector
-        className={styles.themeSelector}
-        columns={3}
-        value={[value]}
+      <GlassSelector
+        value={value}
         onChange={handleChange}
-        options={THEME_OPTIONS.map(option => ({
-          label: (
-            <div className={styles.themeOption}>
-              <span className={styles.themeOptionIcon} aria-hidden>
-                {option.icon}
-              </span>
-              <div className={styles.themeOptionContent}>
-                <span className={styles.themeOptionLabel}>{option.label}</span>
-              </div>
-            </div>
-          ),
-          value: option.value,
-        }))}
+        options={THEME_OPTIONS}
+        columns={3}
+        label="主题模式"
+        className={styles.themeSelector}
       />
     </div>
   );

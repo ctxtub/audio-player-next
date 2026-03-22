@@ -1,16 +1,79 @@
-/* 底部导航栏 — spec 3.6 */
-.tabBarContainer {
+/* 底部导航栏 — spec 3.6, Liquid Glass */
+.tabBar {
   position: sticky;
   bottom: 0;
   z-index: var(--z-sticky);
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  min-height: var(--tab-bar-height);
   background-color: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-top: 0.5px solid var(--glass-border);
   box-shadow: var(--glass-highlight);
-  min-height: var(--tab-bar-height);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
 
-  :global(.adm-tab-bar-item) {
-    padding: var(--space-2);
+.tabItem {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity var(--duration-fast) var(--ease-default);
+
+  &:active {
+    opacity: 0.6;
   }
+}
+
+.tabItemActive {
+  .tabLabel {
+    color: var(--accent-primary);
+    font-weight: var(--weight-semibold);
+  }
+}
+
+.icon {
+  color: var(--text-tertiary);
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+.iconActive {
+  color: var(--accent-primary);
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+.iconWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.badge {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--status-error);
+  border: 1.5px solid var(--glass-bg);
+}
+
+.tabLabel {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-tertiary);
+  transition: color var(--duration-fast) var(--ease-default);
 }

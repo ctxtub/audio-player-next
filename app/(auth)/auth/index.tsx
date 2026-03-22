@@ -2,23 +2,22 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Form, Input } from 'antd-mobile';
-import { LockOutline, UserOutline } from 'antd-mobile-icons';
+import {
+  Button,
+  Form,
+  TextField,
+  Input,
+  Label,
+  FieldError,
+  TabList,
+  TabPanel,
+  Tabs,
+  Tab,
+} from 'react-aria-components';
 
+import { Music, User, Lock, Smile } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import styles from './index.module.scss';
-
-interface LoginFormValues {
-  username: string;
-  password: string;
-}
-
-interface RegisterFormValues {
-  username: string;
-  nickname?: string;
-  password: string;
-  confirmPassword: string;
-}
 
 /**
  * 安全重定向：校验 from 参数必须是相对路径，防止 open redirect。
@@ -29,6 +28,9 @@ const safeRedirect = (from: string | null): string => {
   return from;
 };
 
+/**
+ * Auth 页面组件 — 使用 React Aria Components + Liquid Glass 风格。
+ */
 const AuthPage: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -39,11 +41,19 @@ const AuthPage: React.FC = () => {
   const storeError = useAuthStore(state => state.error);
   const resetError = useAuthStore(state => state.resetError);
 
-  const [loginForm] = Form.useForm<LoginFormValues>();
-  const [registerForm] = Form.useForm<RegisterFormValues>();
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  /* 登录表单状态 */
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+
+  /* 注册表单状态 */
+  const [regUsername, setRegUsername] = useState('');
+  const [regNickname, setRegNickname] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPwd, setRegConfirmPwd] = useState('');
 
   const from = searchParams.get('from');
 
@@ -51,18 +61,24 @@ const AuthPage: React.FC = () => {
     if (storeError) setApiError(storeError);
   }, [storeError]);
 
-  const handleTabChange = useCallback((key: 'login' | 'register') => {
-    setActiveTab(key);
+  /** 切换 Tab 时重置表单和错误 */
+  const handleTabChange = useCallback((key: React.Key) => {
+    setActiveTab(key as 'login' | 'register');
     setApiError(null);
     resetError();
-    loginForm.resetFields();
-    registerForm.resetFields();
-  }, [loginForm, registerForm, resetError]);
+    setLoginUsername('');
+    setLoginPassword('');
+    setRegUsername('');
+    setRegNickname('');
+    setRegPassword('');
+    setRegConfirmPwd('');
+  }, [resetError]);
 
   const handleSuccess = useCallback(() => {
     router.replace(safeRedirect(from));
   }, [from, router]);
 
+  /** 通用提交逻辑 */
   const handleSubmit = useCallback(async (
     action: () => Promise<boolean>,
     fallbackError: string,
@@ -84,20 +100,25 @@ const AuthPage: React.FC = () => {
     }
   }, [handleSuccess, resetError]);
 
-  const handleLoginFinish = useCallback(async (values: LoginFormValues) => {
-    await handleSubmit(
-      () => doLogin(values.username.trim(), values.password.trim()),
+  /** 登录提交 */
+  const handleLoginSubmit = useCallback((e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    handleSubmit(
+      () => doLogin(loginUsername.trim(), loginPassword.trim()),
       '登录失败，请稍后重试',
     );
-  }, [doLogin, handleSubmit]);
+  }, [doLogin, handleSubmit, loginUsername, loginPassword]);
 
-  const handleRegisterFinish = useCallback(async (values: RegisterFormValues) => {
-    await handleSubmit(
-      () => doRegister(values.username.trim(), values.password.trim(), values.nickname?.trim() || undefined),
+  /** 注册提交 */
+  const handleRegisterSubmit = useCallback((e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    handleSubmit(
+      () => doRegister(regUsername.trim(), regPassword.trim(), regNickname.trim() || undefined),
       '注册失败，请稍后重试',
     );
-  }, [doRegister, handleSubmit]);
+  }, [doRegister, handleSubmit, regUsername, regPassword, regNickname]);
 
+  /** 访客模式 */
   const handleGuestMode = useCallback(async () => {
     setSubmitting(true);
     try {
@@ -110,143 +131,198 @@ const AuthPage: React.FC = () => {
     }
   }, [doEnterGuestMode, from, router]);
 
-  const formFooter = (onSubmit: () => void, label: string) => (
-    <div className={styles.formFooter}>
-      <Button color="primary" block loading={submitting} type="button" onClick={onSubmit}>
-        {label}
-      </Button>
-    </div>
-  );
+  /** 清除输入时的错误 */
+  const clearError = useCallback(() => {
+    if (apiError) setApiError(null);
+  }, [apiError]);
 
   return (
     <div className={styles.page}>
       {/* Logo 区 */}
       <div className={styles.header}>
-        <div className={styles.logo}>🎵</div>
+        <div className={styles.logo}><Music size={32} strokeWidth={1.8} /></div>
         <h1 className={styles.appName}>故事工坊</h1>
         <p className={styles.tagline}>智能故事，随时聆听</p>
       </div>
 
-      {/* 表单卡片 */}
-      <div className={styles.card}>
-        {/* 自定义 Tab 头：避免 antd-mobile Tabs 的 JS 固定高度机制截断表单内容 */}
-        <div className={styles.tabHeader}>
-          <button
-            className={`${styles.tabBtn} ${activeTab === 'login' ? styles.tabBtnActive : ''}`}
-            onClick={() => handleTabChange('login')}
-            type="button"
-          >
+      {/* Liquid Glass 表单卡片 */}
+      <Tabs
+        selectedKey={activeTab}
+        onSelectionChange={handleTabChange}
+        className={styles.card}
+      >
+        <TabList className={styles.tabHeader} aria-label="登录或注册">
+          <Tab id="login" className={({ isSelected }) =>
+            `${styles.tabBtn} ${isSelected ? styles.tabBtnActive : ''}`
+          }>
             登录
-          </button>
-          <button
-            className={`${styles.tabBtn} ${activeTab === 'register' ? styles.tabBtnActive : ''}`}
-            onClick={() => handleTabChange('register')}
-            type="button"
-          >
+          </Tab>
+          <Tab id="register" className={({ isSelected }) =>
+            `${styles.tabBtn} ${isSelected ? styles.tabBtnActive : ''}`
+          }>
             注册
-          </button>
-        </div>
+          </Tab>
+        </TabList>
 
-        {/* 登录表单 */}
-        {activeTab === 'login' && (
-          <div className={styles.formWrapper}>
-            <Form
-              form={loginForm}
-              layout="vertical"
-              className={styles.form}
-              onFinish={handleLoginFinish}
-              onValuesChange={() => { if (apiError) setApiError(null); }}
-              initialValues={{ username: '', password: '' }}
-              footer={formFooter(() => loginForm.submit(), '登录')}
-            >
-              {apiError && (
-                <div className={styles.apiErrorBar}>{apiError}</div>
-              )}
-              <Form.Item name="username" rules={[{ required: true, message: '请输入账号' }]}>
-                <div className={styles.inputRow}>
-                  <UserOutline className={styles.inputIcon} />
-                  <Input placeholder="账号" clearable disabled={submitting} className={styles.input} autoComplete="username" />
-                </div>
-              </Form.Item>
-              <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }]}>
-                <div className={styles.inputRow}>
-                  <LockOutline className={styles.inputIcon} />
-                  <Input type="password" placeholder="密码" clearable disabled={submitting} className={styles.input} autoComplete="current-password" />
-                </div>
-              </Form.Item>
-            </Form>
-          </div>
-        )}
+        {/* 登录面板 */}
+        <TabPanel id="login" className={styles.formWrapper}>
+          <Form onSubmit={handleLoginSubmit} className={styles.form}>
+            {apiError && (
+              <div className={styles.apiErrorBar} role="alert">{apiError}</div>
+            )}
 
-        {/* 注册表单 */}
-        {activeTab === 'register' && (
-          <div className={styles.formWrapper}>
-            <Form
-              form={registerForm}
-              layout="vertical"
-              className={styles.form}
-              onFinish={handleRegisterFinish}
-              onValuesChange={() => { if (apiError) setApiError(null); }}
-              initialValues={{ username: '', nickname: '', password: '', confirmPassword: '' }}
-              footer={formFooter(() => registerForm.submit(), '注册')}
+            <TextField
+              isRequired
+              isDisabled={submitting}
+              className={styles.fieldGroup}
+              onChange={(v) => { setLoginUsername(v); clearError(); }}
+              value={loginUsername}
             >
-              {apiError && (
-                <div className={styles.apiErrorBar}>{apiError}</div>
-              )}
-              <Form.Item
-                name="username"
-                rules={[
-                  { required: true, message: '请输入账号' },
-                  { min: 2, message: '账号至少 2 个字符' },
-                ]}
+              <Label className={styles.srOnly}>账号</Label>
+              <div className={styles.inputRow}>
+                <span className={styles.inputIcon}><User size={18} strokeWidth={1.8} /></span>
+                <Input
+                  className={styles.input}
+                  placeholder="账号"
+                  autoComplete="username"
+                />
+              </div>
+              <FieldError className={styles.fieldError} />
+            </TextField>
+
+            <TextField
+              isRequired
+              isDisabled={submitting}
+              className={styles.fieldGroup}
+              onChange={(v) => { setLoginPassword(v); clearError(); }}
+              value={loginPassword}
+              type="password"
+            >
+              <Label className={styles.srOnly}>密码</Label>
+              <div className={styles.inputRow}>
+                <span className={styles.inputIcon}><Lock size={18} strokeWidth={1.8} /></span>
+                <Input
+                  className={styles.input}
+                  placeholder="密码"
+                  autoComplete="current-password"
+                />
+              </div>
+              <FieldError className={styles.fieldError} />
+            </TextField>
+
+            <div className={styles.formFooter}>
+              <Button
+                type="submit"
+                isDisabled={submitting}
+                className={styles.submitButton}
               >
-                <div className={styles.inputRow}>
-                  <UserOutline className={styles.inputIcon} />
-                  <Input placeholder="账号" clearable disabled={submitting} className={styles.input} autoComplete="username" />
-                </div>
-              </Form.Item>
-              <Form.Item name="nickname">
-                <div className={styles.inputRow}>
-                  <UserOutline className={styles.inputIcon} />
-                  <Input placeholder="昵称（可选）" clearable disabled={submitting} className={styles.input} autoComplete="nickname" />
-                </div>
-              </Form.Item>
-              <Form.Item
-                name="password"
-                rules={[
-                  { required: true, message: '请输入密码' },
-                  { min: 6, message: '密码至少 6 个字符' },
-                ]}
+                {submitting ? '登录中…' : '登录'}
+              </Button>
+            </div>
+          </Form>
+        </TabPanel>
+
+        {/* 注册面板 */}
+        <TabPanel id="register" className={styles.formWrapper}>
+          <Form onSubmit={handleRegisterSubmit} className={styles.form}>
+            {apiError && (
+              <div className={styles.apiErrorBar} role="alert">{apiError}</div>
+            )}
+
+            <TextField
+              isRequired
+              minLength={2}
+              isDisabled={submitting}
+              className={styles.fieldGroup}
+              onChange={(v) => { setRegUsername(v); clearError(); }}
+              value={regUsername}
+            >
+              <Label className={styles.srOnly}>账号</Label>
+              <div className={styles.inputRow}>
+                <span className={styles.inputIcon}><User size={18} strokeWidth={1.8} /></span>
+                <Input
+                  className={styles.input}
+                  placeholder="账号（至少 2 个字符）"
+                  autoComplete="username"
+                />
+              </div>
+              <FieldError className={styles.fieldError} />
+            </TextField>
+
+            <TextField
+              isDisabled={submitting}
+              className={styles.fieldGroup}
+              onChange={(v) => { setRegNickname(v); clearError(); }}
+              value={regNickname}
+            >
+              <Label className={styles.srOnly}>昵称</Label>
+              <div className={styles.inputRow}>
+                <span className={styles.inputIcon}><Smile size={18} strokeWidth={1.8} /></span>
+                <Input
+                  className={styles.input}
+                  placeholder="昵称（可选）"
+                  autoComplete="nickname"
+                />
+              </div>
+            </TextField>
+
+            <TextField
+              isRequired
+              minLength={6}
+              isDisabled={submitting}
+              className={styles.fieldGroup}
+              onChange={(v) => { setRegPassword(v); clearError(); }}
+              value={regPassword}
+              type="password"
+            >
+              <Label className={styles.srOnly}>密码</Label>
+              <div className={styles.inputRow}>
+                <span className={styles.inputIcon}><Lock size={18} strokeWidth={1.8} /></span>
+                <Input
+                  className={styles.input}
+                  placeholder="密码（至少 6 个字符）"
+                  autoComplete="new-password"
+                />
+              </div>
+              <FieldError className={styles.fieldError} />
+            </TextField>
+
+            <TextField
+              isRequired
+              isDisabled={submitting}
+              className={styles.fieldGroup}
+              onChange={(v) => { setRegConfirmPwd(v); clearError(); }}
+              value={regConfirmPwd}
+              type="password"
+              validate={(value) => {
+                if (value !== regPassword) return '两次输入的密码不一致';
+                return null;
+              }}
+            >
+              <Label className={styles.srOnly}>确认密码</Label>
+              <div className={styles.inputRow}>
+                <span className={styles.inputIcon}><Lock size={18} strokeWidth={1.8} /></span>
+                <Input
+                  className={styles.input}
+                  placeholder="确认密码"
+                  autoComplete="new-password"
+                />
+              </div>
+              <FieldError className={styles.fieldError} />
+            </TextField>
+
+            <div className={styles.formFooter}>
+              <Button
+                type="submit"
+                isDisabled={submitting}
+                className={styles.submitButton}
               >
-                <div className={styles.inputRow}>
-                  <LockOutline className={styles.inputIcon} />
-                  <Input type="password" placeholder="密码" clearable disabled={submitting} className={styles.input} autoComplete="new-password" />
-                </div>
-              </Form.Item>
-              <Form.Item
-                name="confirmPassword"
-                dependencies={['password']}
-                rules={[
-                  { required: true, message: '请再次输入密码' },
-                  ({ getFieldValue }) => ({
-                    validator(_, value) {
-                      if (!value || getFieldValue('password') === value) {
-                        return Promise.resolve();
-                      }
-                      return Promise.reject(new Error('两次输入的密码不一致'));
-                    },
-                  }),
-                ]}
-              >
-                <div className={styles.inputRow}>
-                  <LockOutline className={styles.inputIcon} />
-                  <Input type="password" placeholder="确认密码" clearable disabled={submitting} className={styles.input} autoComplete="new-password" />
-                </div>
-              </Form.Item>
-            </Form>
-          </div>
-        )}
-      </div>
+                {submitting ? '注册中…' : '注册'}
+              </Button>
+            </div>
+          </Form>
+        </TabPanel>
+      </Tabs>
 
       {/* 访客模式入口 */}
       <div className={styles.guestSection}>
@@ -254,10 +330,9 @@ const AuthPage: React.FC = () => {
           <span className={styles.dividerText}>或</span>
         </div>
         <Button
-          block
+          isDisabled={submitting}
+          onPress={handleGuestMode}
           className={styles.guestButton}
-          loading={submitting}
-          onClick={handleGuestMode}
         >
           以访客身份继续使用
         </Button>

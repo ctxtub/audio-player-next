@@ -1,6 +1,33 @@
-/* 引导弹窗 — spec 3.14 */
+/* 引导弹窗 — spec 3.14, Liquid Glass */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+}
+
+.modalContainer {
+  width: min(calc(100vw - 48px), 480px);
+  outline: none;
+}
+
+.dialog {
+  background: var(--bg-elevated);
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-highlight), var(--shadow-xl);
+  outline: none;
+  overflow: hidden;
+}
+
 .modalContent {
-  padding: var(--space-3) 0;
+  padding: var(--card-padding);
   color: var(--text-primary);
 }
 
@@ -22,7 +49,7 @@
 .agentList {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
   margin-bottom: var(--space-6);
 }
 
@@ -31,21 +58,38 @@
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-3);
-  background: var(--bg-tertiary);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-default);
+  border: 0.5px solid var(--border-default);
+  transition: background var(--duration-fast) var(--ease-default);
+
+  &:hover {
+    background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  }
 
   .icon {
-    font-size: var(--text-xl);
     flex-shrink: 0;
     width: var(--size-avatar-md);
     height: var(--size-avatar-md);
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg-secondary);
     border-radius: var(--radius-full);
     box-shadow: var(--shadow-sm);
+    color: #fff;
+  }
+
+  /* 三个 agent 图标不同色调 */
+  &:nth-child(1) .icon {
+    background: linear-gradient(135deg, #0A84FF, #5AC8FA);
+  }
+
+  &:nth-child(2) .icon {
+    background: linear-gradient(135deg, #30D158, #63E6BE);
+  }
+
+  &:nth-child(3) .icon {
+    background: linear-gradient(135deg, #FF9F0A, #FFD60A);
   }
 }
 
@@ -71,6 +115,8 @@
   border-radius: var(--radius-md);
   padding: var(--space-4);
   text-align: center;
+  margin-bottom: var(--space-5);
+  border: 0.5px solid color-mix(in srgb, var(--accent-primary) 20%, transparent);
 
   p {
     font-size: var(--text-sm);
@@ -80,13 +126,6 @@
   }
 }
 
-.modalContainer {
-  --adm-center-popup-min-width: min(calc(100vw - 48px), 480px);
-  --adm-center-popup-max-width: 480px;
-  --adm-center-popup-border-radius: var(--radius-lg);
-
-  :global(.adm-center-popup-body) {
-    border: 1px solid var(--border-default);
-    box-shadow: var(--shadow-xl);
-  }
+.footer {
+  display: flex;
 }

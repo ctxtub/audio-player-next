@@ -13,7 +13,6 @@ import { prisma } from '@/lib/db';
 import { encodeSession, decodeSession, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
 
 const GUEST_COOKIE = 'guest';
-const GUEST_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 /**
  * 写入登录态 Cookie。
@@ -116,6 +115,7 @@ export const authRouter = router({
      */
     enterGuestMode: publicProcedure.mutation(async () => {
         const cookieStore = await cookies();
+        /** 不设 maxAge，使其成为 session cookie，浏览器关闭即过期 */
         cookieStore.set({
             name: GUEST_COOKIE,
             value: '1',
@@ -123,7 +123,6 @@ export const authRouter = router({
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             path: '/',
-            maxAge: GUEST_MAX_AGE,
         });
 
         return { success: true as const };

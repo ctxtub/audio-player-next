@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
+import { avatarAssistant } from '@/lib/assets/avatars';
 import GlassButton from '@/components/ui/GlassButton';
 import styles from './HeaderArea.module.scss';
 
@@ -27,10 +29,11 @@ const HeaderArea: React.FC<HeaderAreaProps> = ({ visible, suggestions, onSuggest
   return (
     <div className={styles.headerArea}>
       <div className={styles.heroRow}>
-        <img
+        <Image
           className={styles.avatar}
-          src="/icons/avatar-assistant.jpeg"
+          src={avatarAssistant}
           alt="Agent助手头像"
+          unoptimized
         />
         <div className={styles.textBlock}>
           <h2 className={styles.title}>你好，我是Agent助手</h2>

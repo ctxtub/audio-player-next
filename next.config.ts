@@ -5,6 +5,10 @@ import type { NextConfig } from 'next';
  */
 const nextConfig: NextConfig = {
   output: 'standalone',
+  images: {
+    /** 图片优化缓存时长：31 天（秒） */
+    minimumCacheTTL: 2678400,
+  },
   experimental: {
     turbo: {
       rules: {

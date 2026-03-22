@@ -19,4 +19,6 @@
   --card-padding: var(--space-5);
   --card-padding-sm: var(--space-3);
   --tab-bar-height: 56px;
+  /* 浮动 Tab Bar 占用的底部空间（胶囊高度 + 上下 padding + 安全区） */
+  --tab-bar-safe-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
 }

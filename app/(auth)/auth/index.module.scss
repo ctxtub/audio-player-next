@@ -7,7 +7,7 @@
   padding: var(--space-12) var(--space-6) var(--space-10);
   gap: var(--space-8);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
 
   /* 背景光晕装饰 */
   &::before {
@@ -103,13 +103,14 @@
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   box-shadow: var(--glass-highlight), var(--shadow-lg);
-  overflow: hidden;
 }
 
 /* ──────── Tab 导航 ──────── */
 .tabHeader {
   display: flex;
   border-bottom: 0.5px solid var(--border-default);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  overflow: hidden;
 }
 
 .tabBtn {

@@ -16,5 +16,7 @@
     flex-direction: column;
     flex: 1 1 auto;
     overflow-y: auto;
+    /* 为浮动 Tab Bar 留出底部空间 */
+    padding-bottom: var(--tab-bar-safe-bottom);
   }
 }

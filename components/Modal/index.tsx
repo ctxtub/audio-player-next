@@ -72,7 +72,7 @@ const Modal: React.FC<ModalProps> = ({
                       aria-label="关闭"
                       type="button"
                     >
-                      <X size={20} strokeWidth={1.8} />
+                      <X size={16} strokeWidth={2} />
                     </button>
                   )}
                 </div>

@@ -22,7 +22,7 @@
 
 .modalContainer {
   width: min(100%, 800px);
-  max-height: 80vh;
+  height: 80vh;
   outline: none;
 
   &[data-entering] {
@@ -43,7 +43,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  max-height: 80vh;
+  height: 100%;
 }
 
 .modalContent {
@@ -58,13 +58,12 @@
   position: sticky;
   top: 0;
   z-index: var(--z-raised);
-  padding: var(--card-padding) var(--card-padding) var(--space-3);
+  padding: var(--space-3) var(--space-4);
   background: var(--bg-elevated);
   border-bottom: 0.5px solid var(--border-subtle);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: var(--shadow-sm);
 }
 
 .modalTitle {
@@ -83,25 +82,24 @@
 }
 
 .closeButton {
-  align-items: center;
-  backdrop-filter: blur(var(--blur-sm));
-  -webkit-backdrop-filter: blur(var(--blur-sm));
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-full);
-  box-shadow: var(--shadow-sm);
-  color: var(--accent-primary);
-  cursor: pointer;
   display: flex;
-  font-size: var(--text-lg);
-  height: var(--size-touch-target);
+  align-items: center;
   justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  border: 0.5px solid var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
   transition: var(--transition-transform);
-  width: var(--size-touch-target);
 
   &:hover {
-    transform: scale(1.05);
-    box-shadow: var(--shadow-md);
+    transform: scale(1.08);
+  }
+
+  &:active {
+    transform: scale(0.95);
   }
 }
 
@@ -110,6 +108,8 @@
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 动画关键帧 */

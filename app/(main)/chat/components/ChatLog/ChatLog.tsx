@@ -119,7 +119,9 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
         ) : !isLoading ? (
           <div className={styles.placeholder}>
             <div className={styles.emptyContent}>
-              <MessageCircle size={40} strokeWidth={1.2} className={styles.emptyIcon} />
+              <div className={styles.emptyIcon}>
+                <MessageCircle size={60} strokeWidth={1.2} />
+              </div>
               <p className={styles.emptyText}>{emptyHint ?? '暂未开始任何对话'}</p>
             </div>
           </div>

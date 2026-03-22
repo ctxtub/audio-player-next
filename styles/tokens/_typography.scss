@@ -8,6 +8,8 @@
   --text-xs: 11px;
   --text-sm: 13px;
   --text-base: 15px;
+  /* 输入框专用字号，≥16px 防止 iOS Safari 自动缩放 */
+  --text-input: 16px;
   --text-md: 17px;
   --text-lg: 20px;
   --text-xl: 24px;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, type FC } from 'react';
+import Image, { type StaticImageData } from 'next/image';
 
 import type {
   ChatMessage,
@@ -8,6 +9,14 @@ import type {
   ChatMessageRole,
   ChatPendingMessage,
 } from '@/types/chat';
+import {
+  avatarAssistant,
+  avatarUser,
+  avatarStoryAgent,
+  avatarChatAgent,
+  avatarGuidanceAgent,
+  avatarSummaryAgent,
+} from '@/lib/assets/avatars';
 import MessagePartRenderer from '../../MessageParts';
 import styles from './MessageBubble.module.scss';
 
@@ -50,13 +59,13 @@ const roleBubbleClassMap: Record<ChatMessageRole, string> = {
 /**
  * 角色对应的默认展示信息，避免缺失头像或昵称。 
  */
-const fallbackPersonaMap: Record<ChatMessageRole, { name: string; avatar: string }> = {
-  assistant: { name: 'Agent助手', avatar: '/icons/avatar-assistant.jpeg' },
-  user: { name: '我', avatar: '/icons/avatar-user.jpeg' },
-  system: { name: '系统提示', avatar: '/icons/avatar-assistant.png' },
-  developer: { name: '系统提示', avatar: '/icons/avatar-assistant.png' },
-  function: { name: '函数输出', avatar: '/icons/avatar-assistant.png' },
-  tool: { name: '工具消息', avatar: '/icons/avatar-assistant.png' },
+const fallbackPersonaMap: Record<ChatMessageRole, { name: string; avatar: StaticImageData }> = {
+  assistant: { name: 'Agent助手', avatar: avatarAssistant },
+  user: { name: '我', avatar: avatarUser },
+  system: { name: '系统提示', avatar: avatarAssistant },
+  developer: { name: '系统提示', avatar: avatarAssistant },
+  function: { name: '函数输出', avatar: avatarAssistant },
+  tool: { name: '工具消息', avatar: avatarAssistant },
 };
 
 /**
@@ -70,11 +79,11 @@ const shouldHideAvatar = (role: ChatMessageRole) =>
 /**
  * Agent 身份配置表
  */
-const agentPersonaMap: Record<string, { name: string; avatar: string }> = {
-  'story_agent': { name: '创作Agent', avatar: '/icons/avatar-story-agent.jpeg' },
-  'chat_agent': { name: '聊天Agent', avatar: '/icons/avatar-chat-agent.jpeg' },
-  'guidance_agent': { name: '指令Agent', avatar: '/icons/avatar-guidance-agent.jpeg' },
-  'summary_agent': { name: '摘要Agent', avatar: '/icons/avatar-summary-agent.jpeg' },
+const agentPersonaMap: Record<string, { name: string; avatar: StaticImageData }> = {
+  'story_agent': { name: '创作Agent', avatar: avatarStoryAgent },
+  'chat_agent': { name: '聊天Agent', avatar: avatarChatAgent },
+  'guidance_agent': { name: '指令Agent', avatar: avatarGuidanceAgent },
+  'summary_agent': { name: '摘要Agent', avatar: avatarSummaryAgent },
 };
 
 /**
@@ -169,10 +178,11 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
   return (
     <div className={rowClassName}>
       {shouldHideAvatar(roleKey) ? null : (
-        <img
+        <Image
           className={styles.avatar}
           src={avatarSrc}
           alt={`${displayName}头像`}
+          unoptimized
         />
       )}
       <div className={styles.bubbleWrapper}>

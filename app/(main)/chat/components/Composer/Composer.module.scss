@@ -29,7 +29,7 @@
   position: relative;
   flex: 1;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   background: var(--bg-tertiary);
   border-radius: var(--radius-lg);
   border: 0.5px solid var(--border-default);
@@ -48,7 +48,7 @@
   padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4);
   background: transparent;
   color: var(--text-primary);
-  font-size: var(--text-base);
+  font-size: var(--text-input);
   line-height: 1.6;
   font-family: inherit;
   resize: none;

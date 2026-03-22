@@ -87,35 +87,37 @@ const MainTabBar: React.FC = () => {
   const hasUnviewedResponse = useChatStore(state => state.hasUnviewedResponse);
 
   return (
-    <nav className={styles.tabBar} role="tablist" aria-label="主导航">
-      {TABS.map(({ key, title, icon: Icon }) => {
-        const isActive = activeKey === key;
-        const isChat = key === 'chat';
-        const isChatActive = activeKey === 'chat';
-        const showBadge = isChat && !isChatActive && hasUnviewedResponse;
+    <div className={styles.tabBarOuter}>
+      <nav className={styles.tabBar} role="tablist" aria-label="主导航">
+        {TABS.map(({ key, title, icon: Icon }) => {
+          const isActive = activeKey === key;
+          const isChat = key === 'chat';
+          const isChatActive = activeKey === 'chat';
+          const showBadge = isChat && !isChatActive && hasUnviewedResponse;
 
-        return (
-          <button
-            key={key}
-            role="tab"
-            type="button"
-            aria-selected={isActive}
-            className={`${styles.tabItem} ${isActive ? styles.tabItemActive : ''}`}
-            onClick={() => handleTabClick(key)}
-          >
-            <span className={styles.iconWrapper}>
-              <Icon
-                size={24}
-                strokeWidth={isActive ? 2 : 1.5}
-                className={isActive ? styles.iconActive : styles.icon}
-              />
-              {showBadge && <span className={styles.badge} aria-label="有新消息" />}
-            </span>
-            <span className={styles.tabLabel}>{title}</span>
-          </button>
-        );
-      })}
-    </nav>
+          return (
+            <button
+              key={key}
+              role="tab"
+              type="button"
+              aria-selected={isActive}
+              className={`${styles.tabItem} ${isActive ? styles.tabItemActive : ''}`}
+              onClick={() => handleTabClick(key)}
+            >
+              <span className={styles.iconWrapper}>
+                <Icon
+                  size={22}
+                  strokeWidth={isActive ? 2 : 1.5}
+                  className={isActive ? styles.iconActive : styles.icon}
+                />
+                {showBadge && <span className={styles.badge} aria-label="有新消息" />}
+              </span>
+              <span className={styles.tabLabel}>{title}</span>
+            </button>
+          );
+        })}
+      </nav>
+    </div>
   );
 };
 

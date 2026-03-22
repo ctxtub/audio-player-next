@@ -10,9 +10,10 @@
     pointer-events: auto;
     display: flex;
     flex-direction: column;
-    width: 124px;
-    padding: var(--card-padding-sm);
-    border-radius: var(--radius-lg);
+    width: auto;
+    min-width: 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-full);
     border: 0.5px solid var(--glass-border);
     background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
     box-shadow: var(--glass-highlight), var(--shadow-lg);
@@ -32,8 +33,6 @@
 
     &Expanded {
       cursor: grab;
-      max-height: min(560px, 80vh);
-      overflow-y: auto;
     }
 
     &Dragging {
@@ -44,29 +43,27 @@
     .floatingHeader {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: var(--space-2);
       touch-action: none;
 
       .floatingTitle {
-        font-size: var(--text-base);
-        line-height: var(--leading-base);
+        font-size: var(--text-sm);
+        line-height: 1;
         font-weight: var(--weight-semibold);
         color: var(--text-primary);
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
+        min-width: 3.5em;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
       }
 
       .floatingActions {
         display: flex;
         align-items: center;
-        gap: var(--space-2);
 
         .floatingActionButton {
-          width: var(--size-touch-target);
-          height: var(--size-touch-target);
+          width: 32px;
+          height: 32px;
           border-radius: var(--radius-full);
           border: none;
           background: var(--accent-primary);
@@ -87,13 +84,13 @@
           }
 
           &:active {
-            transform: scale(0.97);
+            transform: scale(0.95);
             box-shadow: var(--shadow-sm);
           }
 
           svg {
-            width: var(--size-icon-md);
-            height: var(--size-icon-md);
+            width: 16px;
+            height: 16px;
           }
         }
       }

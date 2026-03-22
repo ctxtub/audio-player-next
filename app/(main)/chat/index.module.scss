@@ -4,6 +4,8 @@
   flex-direction: column;
   flex: 1;
   height: 100%;
+  /* Composer 自行管理底部安全距离，抵消外层 .content 的 padding-bottom */
+  margin-bottom: calc(-1 * var(--tab-bar-safe-bottom));
   background: var(--bg-primary);
   color: var(--text-primary);
   transition: background-color var(--duration-normal) var(--ease-default),

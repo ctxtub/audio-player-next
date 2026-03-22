@@ -169,7 +169,8 @@
 | `--section-gap` | `var(--space-6)` = 24px | 页面内各 Section 之间 |
 | `--card-padding` | `var(--space-5)` = 20px | 卡片内边距 |
 | `--card-padding-sm` | `var(--space-3)` = 12px | 小卡片内边距 |
-| `--tab-bar-height` | `56px` | 底部 TabBar 固定高度 |
+| `--tab-bar-height` | `56px` | 底部 TabBar 参考高度 |
+| `--tab-bar-safe-bottom` | `calc(64px + env(safe-area-inset-bottom, 0px))` | 浮动 Tab Bar 底部安全距离（内容区 padding-bottom） |
 
 ---
 
@@ -378,31 +379,46 @@ iOS 26 Liquid Glass 风格，使用更高强度的模糊 + 饱和度增强。
 | **时间文字** | `size: var(--text-sm)`, `color: var(--text-secondary)`, `weight: var(--weight-medium)`, `font: var(--font-mono)` |
 | **速度按钮** | `radius: var(--radius-md)`, `bg: var(--bg-tertiary)`, `size: var(--text-sm)` |
 
-### 3.6 导航栏 (TabBar)
+### 3.6 导航栏 (TabBar) — 浮动胶囊风格
+
+iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 
 | 属性 | Token |
 |------|-------|
-| 高度 | `var(--tab-bar-height)` |
-| 背景 | `var(--bg-elevated)` |
-| 模糊 | `var(--blur-lg)` |
-| 边框 | `border-top: 1px solid var(--border-subtle)` |
+| 定位 | `position: fixed`, `bottom: 0`, 水平居中 |
+| 外层 padding | `var(--space-2) var(--space-4)`, `padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom))` |
+| 胶囊背景 | `color-mix(in srgb, var(--bg-secondary) 85%, transparent)` |
+| 模糊 | `var(--glass-blur)` |
+| 边框 | `0.5px solid var(--glass-border)` |
+| 圆角 | `var(--radius-full)` |
+| 阴影 | `var(--glass-highlight), var(--shadow-lg)` |
 | 层级 | `var(--z-sticky)` |
+| Tab 项 padding | `var(--space-2) var(--space-6)` |
+| 选中态背景 | `var(--accent-primary-subtle)`, `radius: var(--radius-full)` |
 | 未选中色 | `var(--text-tertiary)` |
 | 选中色 | `var(--accent-primary)` |
-| 图标尺寸 | `var(--size-icon-lg)` |
-| 标签字号 | `var(--text-xs)` |
-| Badge 背景 | `var(--status-error)` |
+| 图标尺寸 | `22px` |
+| 标签字号 | `10px` |
+| Badge | `8px`, `var(--status-error)` |
+| 按压反馈 | `transform: scale(0.92)` |
 
-### 3.7 悬浮播放器 (FloatingPlayer)
+> 内容区通过 `padding-bottom: var(--tab-bar-safe-bottom)` 留出底部安全距离。Chat 页的 Composer 自行管理底部间距。
+
+### 3.7 悬浮播放器 (FloatingPlayer) — 胶囊风格
+
+紧凑胶囊形态，可拖拽定位，展示倒计时与播放控制。
 
 | 属性 | Token |
 |------|-------|
-| 背景 | `var(--bg-elevated)` |
-| 模糊 | `var(--blur-md)` |
-| 圆角 | `var(--radius-lg)` |
-| 阴影 | `var(--shadow-lg)` |
+| 背景 | `color-mix(in srgb, var(--bg-elevated) 78%, transparent)` |
+| 模糊 | `var(--glass-blur)` |
+| 圆角 | `var(--radius-full)` |
+| 边框 | `0.5px solid var(--glass-border)` |
+| 阴影 | `var(--glass-highlight), var(--shadow-lg)` |
 | 层级 | `var(--z-floating)` |
-| 播放按钮 | `size: var(--size-touch-target)`, `radius: var(--radius-full)`, `bg: var(--accent-primary)` |
+| padding | `var(--space-2) var(--space-3)` |
+| 标题字号 | `var(--text-sm)`, `font-variant-numeric: tabular-nums`, `min-width: 3.5em` |
+| 播放按钮 | `32px`, `radius: var(--radius-full)`, `bg: var(--accent-primary)`, 图标 `16px` |
 
 ### 3.8 表单区域 (Auth Page)
 
@@ -442,18 +458,20 @@ iOS 26 Liquid Glass 风格，使用更高强度的模糊 + 饱和度增强。
 
 | 元素 | 规格 |
 |------|------|
-| **容器** | `padding: var(--space-3) var(--space-4)`, `bg: var(--bg-elevated)`, `blur: var(--blur-lg)`, `border-top: 1px solid var(--border-subtle)` |
-| **输入框** | `radius: var(--radius-lg)`, `padding: var(--space-3) var(--space-5)`, `size: var(--text-base)`, `bg: var(--bg-tertiary)` |
-| **发送按钮** | `radius: var(--radius-full)`, `size: var(--size-touch-target)`, `bg: var(--accent-primary)`, `icon: var(--size-icon-md)` |
+| **容器** | `padding: var(--space-3) var(--space-4)`, `padding-bottom: calc(var(--space-3) + var(--tab-bar-safe-bottom))`, `bg: color-mix(in srgb, var(--bg-secondary) 85%, transparent)`, `blur: var(--glass-blur)` |
+| **输入框** | `radius: var(--radius-lg)`, `align-items: flex-start`, `bg: var(--bg-tertiary)`, `border: 0.5px solid var(--border-default)` |
+| **文本域** | `padding: var(--space-3) var(--space-2) var(--space-3) var(--space-4)`, `size: var(--text-base)`, `max-height: 120px` |
+| **发送按钮** | `width: 52px`, `radius: var(--radius-md)`, `shadow: var(--shadow-accent)` |
 
-### 3.12 预设模板卡片 (HeaderArea Quick Prompts)
+### 3.12 HeaderArea (聊天欢迎区)
 
 | 元素 | 规格 |
 |------|------|
-| **容器** | 2 列 Grid, `gap: var(--space-3)` |
-| **卡片** | `padding: var(--space-3)`, `radius: var(--radius-md)`, `bg: var(--bg-secondary)`, `border: 1px solid var(--border-default)` |
-| **Hover** | `border-color: var(--border-accent)`, `bg: var(--accent-primary-subtle)`, `shadow: var(--shadow-sm)` |
-| **文本** | `size: var(--text-sm)`, `color: var(--text-secondary)`, `weight: var(--weight-medium)` |
+| **容器** | `padding: var(--space-4)`, `radius: 0 0 var(--radius-xl) var(--radius-xl)`, `bg: color-mix(in srgb, var(--bg-elevated) 82%, transparent)`, `blur: var(--glass-blur)` |
+| **头像** | `40px`, `radius: var(--radius-md)` |
+| **标题** | `size: var(--text-lg)`, `weight: var(--weight-bold)`, `background: var(--gradient-brand)`, `-webkit-background-clip: text` |
+| **副标题** | `size: var(--text-xs)`, `color: var(--text-secondary)` |
+| **推荐按钮** | `radius: var(--radius-full)`, `padding: 0 var(--space-3)`, Pill 样式, `color: var(--accent-primary)` |
 
 ### 3.13 GuestBanner
 
@@ -493,13 +511,25 @@ iOS 26 Liquid Glass 风格，使用更高强度的模糊 + 饱和度增强。
 
 | 元素 | 规格 |
 |------|------|
-| **列表容器** | `gap: var(--space-2)` |
-| **记录项** | `padding: var(--space-3) var(--space-4)`, `radius: var(--radius-md)`, `bg: var(--bg-secondary)`, `border: 1px solid var(--border-subtle)` |
-| **标题** | `size: var(--text-base)`, `weight: var(--weight-medium)`, `color: var(--text-primary)` |
-| **时间** | `size: var(--text-xs)`, `color: var(--text-tertiary)`, `font: var(--font-mono)` |
-| **Hover** | `border-color: var(--border-default)`, `shadow: var(--shadow-sm)` |
+| **列表容器** | `padding: var(--space-4)`, `gap: var(--space-3)` |
+| **记录项** | `padding: var(--space-3)`, `radius: var(--radius-lg)`, `bg: var(--bg-secondary)`, `border: 0.5px solid var(--border-subtle)`, `align-items: center` |
+| **序号** | `22px` 圆形, `bg: var(--accent-primary-subtle)`, `color: var(--accent-primary)`, `size: var(--text-xs)` |
+| **提示词** | `size: var(--text-sm)`, 最多 2 行截断 (`line-clamp: 2`) |
+| **元信息** | `size: var(--text-xs)`, `color: var(--text-tertiary)` |
+| **操作按钮** | `28px` 圆形, 播放 `bg: var(--accent-primary)`, 删除 `bg: color-mix(var(--status-error) 12%)` 浅底红字 |
 
-### 3.18 GuidancePart (终端风格消息)
+### 3.18 Modal (通用底部弹窗)
+
+| 元素 | 规格 |
+|------|------|
+| **遮罩** | `bg: rgba(0,0,0,0.45)`, `blur: 12px saturate(120%)`, `z-index: var(--z-modal)` |
+| **容器** | `height: 80vh`, 底部弹出, `radius: var(--radius-xl) var(--radius-xl) 0 0` |
+| **标题栏** | `padding: var(--space-3) var(--space-4)`, `border-bottom: 0.5px solid var(--border-subtle)` |
+| **标题** | `size: var(--text-md)`, `weight: var(--weight-semibold)` |
+| **关闭按钮** | `28px` 圆形, `bg: var(--bg-tertiary)`, `border: 0.5px solid var(--border-default)`, `color: var(--text-secondary)`, 图标 `16px` |
+| **内容区** | `flex: 1`, `overflow-y: auto`, `display: flex; flex-direction: column`（支持空状态居中） |
+
+### 3.19 GuidancePart (终端风格消息)
 
 | 元素 | 规格 |
 |------|------|
@@ -523,14 +553,15 @@ iOS 26 Liquid Glass 风格，使用更高强度的模糊 + 饱和度增强。
 │                             │
 │                             │
 │        Page Content         │  ← flex: 1, overflow-y: auto
-│    padding: var(--page-     │
-│             padding)        │
+│    padding: var(--page-     │     padding-bottom:
+│             padding)        │       var(--tab-bar-safe-bottom)
 │                             │
 │                             │
-├─────────────────────────────┤
-│         TabBar              │  ← sticky bottom, z-sticky
 └─────────────────────────────┘
-         FloatingPlayer        ← fixed, z-floating
+     ┌───────────────────┐
+     │   TabBar 胶囊       │  ← fixed bottom, z-sticky
+     └───────────────────┘      浮动在内容上方
+    (待创作) FloatingPlayer    ← fixed, z-floating, 可拖拽
 ```
 
 ### 4.2 Home 页布局

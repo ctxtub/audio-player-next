@@ -2,7 +2,6 @@
 .configPage {
   background: var(--bg-primary);
   position: relative;
-  min-height: 100vh;
   padding: var(--page-padding);
 
   .configForm {
@@ -11,7 +10,6 @@
     box-shadow: none;
     box-sizing: border-box;
     margin-top: 0;
-    margin-bottom: var(--space-6);
     border-radius: 0;
 
     .configSection {
@@ -27,6 +25,10 @@
 
       &:first-child {
         margin-top: 0;
+      }
+
+      &:last-child {
+        margin-bottom: var(--space-4);
       }
 
       h3 {

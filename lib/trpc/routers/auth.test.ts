@@ -4,11 +4,11 @@
  * 覆盖 register / login / logout / profile 核心流程。
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import bcrypt from 'bcryptjs';
 import { prismaMock } from '@/test/helpers/prisma';
 import '@/test/helpers/cookies';
-import { mockCookieStore, resetCookieStore } from '@/test/helpers/cookies';
+import { mockCookieStore } from '@/test/helpers/cookies';
 import { createPublicCaller, createAuthedCaller } from '@/test/helpers/trpc';
 
 /** 模拟 DB 用户行记录 */
@@ -20,10 +20,6 @@ const userRow = {
   nickname: '爱丽丝',
   createdAt: new Date(),
 };
-
-beforeEach(() => {
-  resetCookieStore();
-});
 
 describe('auth.register', () => {
   it('正常注册成功', async () => {
@@ -44,6 +40,23 @@ describe('auth.register', () => {
     expect(createCall?.data?.password).not.toBe('123456');
     /** 验证 cookie 已写入 */
     expect(mockCookieStore.set).toHaveBeenCalled();
+  });
+
+  it('不传 nickname 默认使用 username', async () => {
+    const userWithoutNickname = { ...userRow, nickname: 'alice' };
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    prismaMock.user.create.mockResolvedValue(userWithoutNickname);
+
+    const caller = createPublicCaller();
+    const result = await caller.auth.register({
+      username: 'alice',
+      password: '123456',
+    });
+
+    expect(result.success).toBe(true);
+    /** 验证 Prisma create 调用中 nickname 回退为 username */
+    const createCall = prismaMock.user.create.mock.calls[0]?.[0];
+    expect(createCall?.data?.nickname).toBe('alice');
   });
 
   it('用户名已存在抛出 CONFLICT', async () => {
@@ -113,12 +126,11 @@ describe('auth.profile', () => {
     const caller = createAuthedCaller(1, '爱丽丝');
     const result = await caller.auth.profile();
 
-    expect(result.isLogin).toBe(true);
-    expect(result.isGuest).toBe(false);
-    expect(result).toHaveProperty('user');
-    if ('user' in result) {
-      expect(result.user?.nickname).toBe('爱丽丝');
-    }
+    expect(result).toEqual({
+      isLogin: true,
+      isGuest: false,
+      user: { nickname: '爱丽丝' },
+    });
   });
 
   it('未登录且非访客', async () => {

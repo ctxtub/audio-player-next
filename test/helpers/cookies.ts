@@ -5,46 +5,44 @@
  * 在测试环境中使用 Map 模拟 cookie store。
  */
 
-import { vi } from 'vitest';
+import { vi, beforeEach } from 'vitest';
 
 /** 内部存储，模拟浏览器 cookie jar。 */
 const cookieJar = new Map<string, string>();
 
+/** 根据 cookie jar 查找指定名称的 cookie。 */
+const getCookie = (name: string) => {
+  const value = cookieJar.get(name);
+  return value != null ? { name, value } : undefined;
+};
+
+/** 设置 cookie。 */
+const setCookie = (options: { name: string; value: string; [key: string]: unknown }) => {
+  cookieJar.set(options.name, options.value);
+};
+
+/** 删除 cookie。 */
+const deleteCookie = (name: string) => {
+  cookieJar.delete(name);
+};
+
 /** mock cookie store，实现 get / set / delete 接口。 */
 export const mockCookieStore = {
-  get: vi.fn((name: string) => {
-    const value = cookieJar.get(name);
-    return value != null ? { name, value } : undefined;
-  }),
-  set: vi.fn((options: { name: string; value: string; [key: string]: unknown }) => {
-    cookieJar.set(options.name, options.value);
-  }),
-  delete: vi.fn((name: string) => {
-    cookieJar.delete(name);
-  }),
+  get: vi.fn(getCookie),
+  set: vi.fn(setCookie),
+  delete: vi.fn(deleteCookie),
 };
 
-/** 清空 cookie jar，供 beforeEach 调用。 */
-export const resetCookieStore = () => {
+/**
+ * 每个测试前自动重置 cookie 状态，清空 jar 和调用记录，
+ * 并恢复默认实现。
+ */
+beforeEach(() => {
   cookieJar.clear();
-  mockCookieStore.get.mockClear();
-  mockCookieStore.set.mockClear();
-  mockCookieStore.delete.mockClear();
-
-  /** 重新绑定 get 的实现（mockClear 会清除 implementation） */
-  mockCookieStore.get.mockImplementation((name: string) => {
-    const value = cookieJar.get(name);
-    return value != null ? { name, value } : undefined;
-  });
-  mockCookieStore.set.mockImplementation(
-    (options: { name: string; value: string; [key: string]: unknown }) => {
-      cookieJar.set(options.name, options.value);
-    }
-  );
-  mockCookieStore.delete.mockImplementation((name: string) => {
-    cookieJar.delete(name);
-  });
-};
+  mockCookieStore.get.mockReset().mockImplementation(getCookie);
+  mockCookieStore.set.mockReset().mockImplementation(setCookie);
+  mockCookieStore.delete.mockReset().mockImplementation(deleteCookie);
+});
 
 /**
  * 拦截 `next/headers` 模块，将 cookies() 替换为 mock 实现。

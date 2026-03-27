@@ -7,6 +7,7 @@
 import { router } from '../init';
 import { authRouter } from './auth';
 import { configRouter } from './config';
+import { settingsRouter } from './settings';
 import { ttsRouter } from './tts';
 import { agentRouter } from './agent';
 
@@ -16,6 +17,7 @@ import { agentRouter } from './agent';
 export const appRouter = router({
     auth: authRouter,
     config: configRouter,
+    settings: settingsRouter,
     tts: ttsRouter,
     agent: agentRouter,
 });

@@ -47,4 +47,9 @@ export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
     return next({ ctx: { ...ctx, session: ctx.session } });
 });
 
+/**
+ * 创建 caller 工厂，用于服务端直接调用与测试。
+ */
+export const createCallerFactory = t.createCallerFactory;
+
 export { TRPCError };

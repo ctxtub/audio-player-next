@@ -10,7 +10,10 @@
     "lint": "next lint",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up",
-    "docker:push": "./scripts/push-ghcr.sh"
+    "docker:push": "./scripts/push-ghcr.sh",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@langchain/community": "^1.1.7",
@@ -51,11 +54,14 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.1.2",
     "autoprefixer": "^10.4.20",
     "eslint": "^9",
     "eslint-config-next": "^15.3.0",
     "prisma": "^7.5.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.2",
+    "vitest-mock-extended": "^3.1.0"
   },
   "packageManager": "yarn@1.22.22"
 }

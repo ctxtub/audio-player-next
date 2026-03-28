@@ -12,6 +12,8 @@ import { trpc } from '@/lib/trpc/client';
 type ConfigStoreBaseState = {
   apiConfig: APIConfig;
   isLoaded: boolean;
+  /** 当前用户是否已登录，决定是否将配置写入数据库。 */
+  isLoggedIn: boolean;
   voiceOptions: VoiceOption[];
 };
 
@@ -94,7 +96,7 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
       : base.voiceId;
 
   const nextPlayDuration =
-    typeof partial.playDuration === 'number' && partial.playDuration > 0
+    typeof partial.playDuration === 'number' && partial.playDuration >= 10 && partial.playDuration <= 60
       ? partial.playDuration
       : base.playDuration;
 
@@ -184,12 +186,14 @@ export const useConfigStore = create<ConfigStore>()(
         apiConfig: mergedConfig,
         voiceOptions,
         isLoaded: true,
+        isLoggedIn: userSettings != null,
       });
     };
 
     return {
       apiConfig: createEmptyConfig(),
       isLoaded: false,
+      isLoggedIn: false,
       voiceOptions: [],
       initialize: () => {
         if (!initializationPromise) {
@@ -198,6 +202,7 @@ export const useConfigStore = create<ConfigStore>()(
             set({
               apiConfig: createEmptyConfig(),
               isLoaded: false,
+              isLoggedIn: false,
               voiceOptions: [],
             });
             initializationPromise = null;
@@ -210,8 +215,10 @@ export const useConfigStore = create<ConfigStore>()(
         const current = get().apiConfig;
         const nextConfig = mergeConfig(current, partial);
         set({ apiConfig: nextConfig });
-        /** 防抖写入数据库（未登录时服务端静默忽略） */
-        saveSettingsToDb(partial);
+        /** 仅登录用户防抖写入数据库 */
+        if (get().isLoggedIn) {
+          saveSettingsToDb(partial);
+        }
       },
       isConfigValid: () => isValidConfig(get().apiConfig),
     };

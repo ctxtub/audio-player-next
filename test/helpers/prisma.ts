@@ -6,7 +6,7 @@
  * 可在测试用例中通过 mockResolvedValue 设置返回值。
  */
 
-import { mockDeep, mockReset, type DeepMockProxy } from 'vitest-mock-extended';
+import { mockDeep, mockReset } from 'vitest-mock-extended';
 import { beforeEach, vi } from 'vitest';
 import type { PrismaClient } from '@/lib/generated/prisma/client';
 

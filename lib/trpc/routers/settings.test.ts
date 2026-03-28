@@ -109,4 +109,18 @@ describe('settings.save', () => {
     const caller = createAuthedCaller(1);
     await expect(caller.settings.save({})).resolves.toBeDefined();
   });
+
+  it('DB 异常时抛出错误', async () => {
+    prismaMock.userSettings.upsert.mockRejectedValue(new Error('DB connection lost'));
+    const caller = createAuthedCaller(1);
+    await expect(caller.settings.save({ speed: 1.0 })).rejects.toThrow();
+  });
+});
+
+describe('settings.get DB 异常', () => {
+  it('DB 异常时抛出错误', async () => {
+    prismaMock.userSettings.findUnique.mockRejectedValue(new Error('DB connection lost'));
+    const caller = createAuthedCaller(1);
+    await expect(caller.settings.get()).rejects.toThrow();
+  });
 });

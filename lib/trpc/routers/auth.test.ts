@@ -35,9 +35,11 @@ describe('auth.register', () => {
 
     expect(result.success).toBe(true);
     expect(result.user.nickname).toBe('爱丽丝');
-    /** 验证密码已 hash（不是明文存储） */
+    /** 验证密码经过 bcrypt hash，且可被正确还原 */
     const createCall = prismaMock.user.create.mock.calls[0]?.[0];
-    expect(createCall?.data?.password).not.toBe('123456');
+    const storedPassword = createCall?.data?.password as string;
+    expect(storedPassword).not.toBe('123456');
+    expect(bcrypt.compareSync('123456', storedPassword)).toBe(true);
     /** 验证 cookie 已写入 */
     expect(mockCookieStore.set).toHaveBeenCalled();
   });
@@ -153,5 +155,30 @@ describe('auth.profile', () => {
 
     expect(result.isLogin).toBe(false);
     expect(result.isGuest).toBe(true);
+  });
+});
+
+describe('auth.enterGuestMode', () => {
+  it('设置 guest session cookie', async () => {
+    const caller = createPublicCaller();
+    const result = await caller.auth.enterGuestMode();
+
+    expect(result.success).toBe(true);
+    expect(mockCookieStore.set).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'guest', value: '1' })
+    );
+    /** 不设 maxAge，确保是 session cookie */
+    const setCall = mockCookieStore.set.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(setCall).not.toHaveProperty('maxAge');
+  });
+});
+
+describe('auth.exitGuestMode', () => {
+  it('删除 guest cookie', async () => {
+    const caller = createPublicCaller();
+    const result = await caller.auth.exitGuestMode();
+
+    expect(result.success).toBe(true);
+    expect(mockCookieStore.delete).toHaveBeenCalledWith('guest');
   });
 });

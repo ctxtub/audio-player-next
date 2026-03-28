@@ -4,7 +4,6 @@ import { useEffect, useRef } from 'react';
 import { useDebounceFn } from 'ahooks';
 import type { ThemeMode } from '@/types/theme';
 import { trpc } from '@/lib/trpc/client';
-import { THEME_MODE_STORAGE_KEY } from './themeConfig';
 
 /**
  * 主题同步 Hook：将主题模式持久化到数据库，并在登录后从 DB 恢复。
@@ -40,13 +39,8 @@ export const useThemeSync = (
 
         const dbTheme = settings.themeMode;
         if (dbTheme && dbTheme !== themeMode) {
+          /** setThemeMode 触发后 ThemeProvider 的 useEffect 会自动写 localStorage */
           setThemeMode(dbTheme);
-          /** 同步更新 localStorage 缓存 */
-          try {
-            window.localStorage.setItem(THEME_MODE_STORAGE_KEY, dbTheme);
-          } catch {
-            // ignore
-          }
         }
         hasSyncedFromDb.current = true;
       })

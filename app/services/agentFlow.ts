@@ -65,14 +65,18 @@ export const interactWithAgent = async (
             } else if (event.type === 'audio') {
                 if (callbacks.onAudioComplete) {
                     // Base64 -> Blob URL
-                    const binaryString = atob(event.content);
-                    const bytes = new Uint8Array(binaryString.length);
-                    for (let i = 0; i < binaryString.length; i++) {
-                        bytes[i] = binaryString.charCodeAt(i);
+                    try {
+                        const binaryString = atob(event.content);
+                        const bytes = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        const blob = new Blob([bytes], { type: 'audio/mpeg' });
+                        const url = URL.createObjectURL(blob);
+                        callbacks.onAudioComplete(url);
+                    } catch (e) {
+                        console.error('音频 Base64 解码失败:', e);
                     }
-                    const blob = new Blob([bytes], { type: 'audio/mpeg' });
-                    const url = URL.createObjectURL(blob);
-                    callbacks.onAudioComplete(url);
                 }
             }
         }

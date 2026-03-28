@@ -78,7 +78,7 @@ const isValidConfig = (config: APIConfig | undefined): config is APIConfig => {
     return false;
   }
 
-  if (typeof config.playDuration !== 'number' || config.playDuration <= 0) {
+  if (typeof config.playDuration !== 'number' || config.playDuration < 10 || config.playDuration > 60) {
     return false;
   }
 

@@ -18,7 +18,12 @@ export const fetchAudio = async (text: string, voiceId?: VoiceId, speed?: number
   const result = await trpc.tts.synthesize.mutate({ text, voiceId, speed });
 
   // 将 base64 转换为 Blob URL
-  const binaryString = atob(result.audioBase64);
+  let binaryString: string;
+  try {
+    binaryString = atob(result.audioBase64);
+  } catch {
+    throw new Error('TTS 返回的音频数据格式异常');
+  }
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
     bytes[i] = binaryString.charCodeAt(i);

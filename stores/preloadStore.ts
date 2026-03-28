@@ -94,19 +94,13 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
 
       const currentState = get();
 
-      // 并发检查
-      if (currentState._activePreloadTask?.token !== taskToken) {
-        return {
-          segment: nextSegment,
-          audioUrl,
-          messageId: generatedId,
-        };
+      // 并发检查：若当前任务已被更新的请求取代，则跳过状态更新，仅返回结果
+      if (currentState._activePreloadTask?.token === taskToken) {
+        set({
+          status: 'ready',
+          retryCount: 0,
+        });
       }
-
-      set({
-        status: 'ready',
-        retryCount: 0,
-      });
 
       return {
         segment: nextSegment,

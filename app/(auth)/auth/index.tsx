@@ -92,7 +92,14 @@ const AuthPage: React.FC = () => {
         handleSuccess();
         return;
       }
-      setApiError(useAuthStore.getState().error || fallbackError);
+      // action 失败时 store.error 已被设置，通过 useEffect 同步至 apiError；
+      // 此处仅设置兜底消息，避免 store.error 尚未同步时界面无反馈。
+      const currentError = useAuthStore.getState().error;
+      if (currentError) {
+        setApiError(currentError);
+      } else {
+        setApiError(fallbackError);
+      }
     } catch {
       setApiError(fallbackError);
     } finally {

@@ -151,7 +151,7 @@ const AudioControllerHost: React.FC = () => {
       // 防止后续逻辑误判导致跳过下一次预加载。
       const preloadStore = usePreloadStore.getState();
       // 使用 messageId 进行精准匹配
-      if (messageId && useChatStore.getState().selectors.isLatestMessage(messageId)) {
+      if (messageId && useChatStore.getState().selectors.isLatestStoryCardMessage(messageId)) {
         if (preloadStore.status === 'ready') {
           preloadStore.consume();
         }
@@ -293,7 +293,7 @@ const AudioControllerHost: React.FC = () => {
           // 避免用户回听旧片段时，错误地触发了后续生成。
           const currentMessageId = usePlaybackStore.getState().currentMessageId;
           const isLast = currentMessageId
-            ? useChatStore.getState().selectors.isLatestMessage(currentMessageId)
+            ? useChatStore.getState().selectors.isLatestStoryCardMessage(currentMessageId)
             : false; // 如果没有 ID，保守起见不自动触发
 
           if (isLast) {

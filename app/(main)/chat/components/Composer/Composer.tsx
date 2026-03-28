@@ -53,10 +53,10 @@ const Composer: React.FC<ComposerProps> = ({
    * 同步外部受控的 value 变化，保持内部状态一致。
    */
   useEffect(() => {
-    if (value !== undefined && value !== internalValue) {
+    if (value !== undefined) {
       setInternalValue(value);
     }
-  }, [value, internalValue]);
+  }, [value]);
 
   /**
    * 计算禁用态，整合外部禁用与发送中的状态。

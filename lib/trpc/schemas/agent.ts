@@ -18,12 +18,11 @@ export const interactSchema = z.object({
         .object({
             audio: z
                 .object({
-                    speed: z.number().optional(),
-                    voiceId: z.string().optional(),
+                    speed: z.number().min(0.25).max(4.0).optional(),
+                    voiceId: z.string().min(1).optional(),
                 })
                 .optional(),
         })
-        .and(z.record(z.string(), z.any()))
         .optional(),
 });
 

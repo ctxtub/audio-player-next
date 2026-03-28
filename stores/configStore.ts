@@ -237,6 +237,7 @@ export const useConfigStore = create<ConfigStore>()(
           const current = get().apiConfig;
           set({
             isLoggedIn: true,
+            dbThemeMode: userSettings.themeMode,
             apiConfig: mergeConfig(current, {
               playDuration: userSettings.playDuration,
               voiceId: userSettings.voiceId,

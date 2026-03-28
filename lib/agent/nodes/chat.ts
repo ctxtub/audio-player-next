@@ -28,6 +28,5 @@ export const chatNode = async (state: AgentState) => {
 
     return {
         messages: [response],
-        next_step: "FINISH"
     };
 };

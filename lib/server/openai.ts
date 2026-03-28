@@ -236,10 +236,8 @@ export const synthesizeSpeech = async (
     voiceId: string,
     speed?: number,
 ): Promise<SynthesizeSpeechResult> => {
-    const openAIConfig = getOpenAIConfig();
     const ttsConfig = getTtsConfig();
-
-    const openai = new OpenAI({ apiKey: openAIConfig.apiKey });
+    const openai = getOpenAIClient();
 
     try {
         const response = await openai.audio.speech.create({

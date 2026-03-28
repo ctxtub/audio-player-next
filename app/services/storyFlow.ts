@@ -148,7 +148,7 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
     if (nextFromChat) {
       // 释放 PreloadStore 的锁，允许后续预加载。
       // 仅当下一段是最新生成的消息时才操作，避免回放旧内容干扰生成流程。
-      if (useChatStore.getState().selectors.isLatestMessage(nextFromChat.messageId)) {
+      if (useChatStore.getState().selectors.isLatestStoryCardMessage(nextFromChat.messageId)) {
         usePreloadStore.getState().consume();
       }
 

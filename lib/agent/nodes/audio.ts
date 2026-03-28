@@ -33,9 +33,7 @@ export const audioNode = async (state: AgentState) => {
         };
     }
 
-    const text = typeof lastMessage.content === "string"
-        ? lastMessage.content
-        : JSON.stringify(lastMessage.content);
+    const text = lastMessage.content as string;
 
     try {
         const config = getTtsConfig();

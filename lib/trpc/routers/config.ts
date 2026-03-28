@@ -16,7 +16,7 @@ export const configRouter = router({
     /**
      * 获取应用配置。
      */
-    get: publicProcedure.mutation(() => {
+    get: publicProcedure.query(() => {
         const { voicesList, voiceId } = getTtsConfig();
 
         return {

@@ -14,15 +14,6 @@ import type { Context } from './context';
  */
 const t = initTRPC.context<Context>().create({
     transformer: superjson,
-    errorFormatter({ shape }) {
-        return {
-            ...shape,
-            data: {
-                ...shape.data,
-                // 可在此添加自定义错误字段
-            },
-        };
-    },
 });
 
 /**
@@ -46,5 +37,10 @@ export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
     }
     return next({ ctx: { ...ctx, session: ctx.session } });
 });
+
+/**
+ * 创建 caller 工厂，用于服务端直接调用与测试。
+ */
+export const createCallerFactory = t.createCallerFactory;
 
 export { TRPCError };

@@ -149,10 +149,13 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
       }
     };
 
+    // 先初始化 _lastTickAt，确保首次 tick 能正确计算 elapsed
+    const now = Date.now();
+    set({ _lastTickAt: now });
+
     const intervalId = window.setInterval(tick, 1000);
     set({
       _tickIntervalId: intervalId,
-      _lastTickAt: Date.now(),
     });
   };
 

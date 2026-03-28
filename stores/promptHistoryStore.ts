@@ -147,7 +147,9 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
       }
 
       if (!get().initialized) {
-        void get().hydrate();
+        // 先触发 hydrate，待完成后再执行写入，避免 hydrate 覆盖本次更新
+        void get().hydrate().then(() => get().addOrUpdate(rawPrompt));
+        return;
       }
 
       const now = new Date().toISOString();
@@ -182,7 +184,9 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
       }
 
       if (!get().initialized) {
-        void get().hydrate();
+        // 先等待 hydrate 完成，再执行删除，避免 hydrate 覆盖本次操作
+        void get().hydrate().then(() => get().remove(rawPrompt));
+        return;
       }
 
       set((state) => {

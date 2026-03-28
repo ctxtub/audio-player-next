@@ -16,6 +16,7 @@ import {
   getInitialThemeState,
 } from './themeConfig';
 import type { ThemeValue, ThemeState } from './themeConfig';
+import { useThemeSync } from './useThemeSync';
 
 /**
  * 主题上下文的状态结构。
@@ -108,6 +109,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const handleSetThemeMode = useCallback((mode: ThemeMode) => {
     setThemeMode(mode);
   }, []);
+
+  /** 同步主题到数据库（登录用户），保持 localStorage 缓存 */
+  useThemeSync(themeMode, setThemeMode);
 
   const toggleTheme = useCallback(() => {
     const currentIndex = THEME_SEQUENCE.indexOf(themeMode);

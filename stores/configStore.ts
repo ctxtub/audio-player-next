@@ -1,9 +1,10 @@
-import { create, StateCreator, type StoreApi } from 'zustand';
-import { devtools, persist, createJSONStorage } from 'zustand/middleware';
+import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
+import { debounce } from 'lodash-es';
 import type { APIConfig } from '@/types/appConfig';
-import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
 import type { VoiceOption } from '@/types/ttsGenerate';
 import { fetchAppConfig } from '@/lib/client/appConfig';
+import { trpc } from '@/lib/trpc/client';
 
 /**
  * 配置 store 的基础状态结构：记录当前配置、加载标记及可选语音列表。
@@ -11,6 +12,12 @@ import { fetchAppConfig } from '@/lib/client/appConfig';
 type ConfigStoreBaseState = {
   apiConfig: APIConfig;
   isLoaded: boolean;
+  /** 初始化失败时的错误信息，供 UI 判断是否展示重试。 */
+  initError: string | null;
+  /** 当前用户是否已登录，决定是否将配置写入数据库。 */
+  isLoggedIn: boolean;
+  /** DB 中的主题模式，供 useThemeSync 初始化时读取，避免重复请求。 */
+  dbThemeMode: 'light' | 'dark' | 'system' | null;
   voiceOptions: VoiceOption[];
 };
 
@@ -19,12 +26,21 @@ type ConfigStoreBaseState = {
  */
 type ConfigStoreActions = {
   /**
-   * 初始化配置（本地 + 远端），确保仅执行一次。
+   * 初始化配置（远端默认值 + 用户 DB 设置），确保仅执行一次。
    * @returns Promise<void>
    */
   initialize: () => Promise<void>;
   /**
-   * 合并更新配置，并写入持久化层。
+   * 登录成功后重新拉取用户设置并合并到 store。
+   * @returns Promise<void>
+   */
+  onLogin: () => Promise<void>;
+  /**
+   * 登出后清除登录态，停止向 DB 写入。
+   */
+  onLogout: () => void;
+  /**
+   * 合并更新配置，并通过防抖写入数据库。
    * @param partial Partial<APIConfig> 待更新的字段片段
    * @returns void
    */
@@ -40,11 +56,6 @@ type ConfigStoreActions = {
  * 配置 store 的完整状态与动作集合。
  */
 export type ConfigStore = ConfigStoreBaseState & ConfigStoreActions;
-
-/**
- * 持久化存储键名。
- */
-const CONFIG_STORAGE_KEY = 'config-store';
 
 /**
  * 构造初始配置对象。
@@ -67,7 +78,7 @@ const isValidConfig = (config: APIConfig | undefined): config is APIConfig => {
     return false;
   }
 
-  if (typeof config.playDuration !== 'number' || config.playDuration <= 0) {
+  if (typeof config.playDuration !== 'number' || config.playDuration < 10 || config.playDuration > 60) {
     return false;
   }
 
@@ -98,7 +109,7 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
       : base.voiceId;
 
   const nextPlayDuration =
-    typeof partial.playDuration === 'number' && partial.playDuration > 0
+    typeof partial.playDuration === 'number' && partial.playDuration >= 10 && partial.playDuration <= 60
       ? partial.playDuration
       : base.playDuration;
 
@@ -121,64 +132,49 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
 };
 
 /**
- * Zustand persist 中间件暴露的扩展 API。
+ * 防抖保存用户设置到数据库，静默失败避免阻塞交互。
  */
-type PersistApi = StoreApi<ConfigStore> & {
-  persist: {
-    rehydrate: () => Promise<void> | void;
-    hasHydrated: () => boolean;
-  };
-};
+const saveSettingsToDb = debounce((config: Partial<APIConfig>) => {
+  trpc.settings.save.mutate(config).catch((err: unknown) => {
+    console.warn('[configStore] saveSettingsToDb failed', err);
+  });
+}, 500);
 
 /**
- * 配置 store 的状态创建器，包含初始化与更新逻辑。
+ * 配置 store Hook，提供配置读取与操作能力。
  */
-const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
-  const persistApi = api as PersistApi;
-  let initializationPromise: Promise<void> | null = null;
+export const useConfigStore = create<ConfigStore>()(
+  devtools((set, get) => {
+    let initializationPromise: Promise<void> | null = null;
 
-  const hydrateLocalConfig = async (): Promise<APIConfig | undefined> => {
-    if (!isBrowserEnvironment()) {
-      return undefined;
-    }
+    /**
+     * 加载远端应用配置与用户个性化设置，合并后写入 store。
+     */
+    const runInitialization = async () => {
+      /** 并行请求应用默认配置与用户 DB 设置 */
+      const [remote, userSettings] = await Promise.all([
+        fetchAppConfig(),
+        trpc.settings.get.query().catch(() => null),
+      ]);
 
-    if (persistApi.persist.hasHydrated()) {
-      const stored = get().apiConfig;
-      return isValidConfig(stored) ? stored : undefined;
-    }
-
-    try {
-      await persistApi.persist.rehydrate();
-      const stored = get().apiConfig;
-      return isValidConfig(stored) ? stored : undefined;
-    } catch (error) {
-      console.warn('[configStore] hydrateLocalConfig failed', error);
-      return undefined;
-    }
-  };
-
-  const loadRemoteConfig = async (
-    localConfig: APIConfig | undefined
-  ): Promise<{ config: APIConfig; voiceOptions: VoiceOption[] }> => {
-    try {
-      const remote = await fetchAppConfig();
       const voiceOptions = Array.isArray(remote.voicesList) ? remote.voicesList : [];
       const hasVoice = (voice?: string) =>
         !!voice && voiceOptions.some(option => option.value === voice);
 
+      /** 播放时长：用户设置 > 远端默认值 */
       const playDuration =
-        localConfig && localConfig.playDuration > 0
-          ? localConfig.playDuration
+        userSettings && userSettings.playDuration > 0
+          ? userSettings.playDuration
           : remote.playDuration;
 
       if (!playDuration || playDuration <= 0) {
         throw new Error('INVALID_PLAY_DURATION');
       }
 
+      /** 语音：用户设置 > 远端默认 > 第一个可用 */
       let resolvedVoice: string | undefined;
-
-      if (localConfig && hasVoice(localConfig.voiceId)) {
-        resolvedVoice = localConfig.voiceId;
+      if (userSettings && hasVoice(userSettings.voiceId)) {
+        resolvedVoice = userSettings.voiceId;
       } else if (hasVoice(remote.voiceId)) {
         resolvedVoice = remote.voiceId;
       }
@@ -188,88 +184,94 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
       }
 
       const floatingPlayerEnabled =
-        typeof remote.floatingPlayerEnabled === 'boolean'
-          ? remote.floatingPlayerEnabled
-          : localConfig?.floatingPlayerEnabled ?? true;
+        userSettings != null
+          ? userSettings.floatingPlayerEnabled
+          : remote.floatingPlayerEnabled ?? true;
 
       const mergedConfig: APIConfig = {
         playDuration,
         voiceId: resolvedVoice,
-        speed: localConfig?.speed ?? 1.0,
+        speed: userSettings?.speed ?? 1.0,
         floatingPlayerEnabled,
       };
 
-      return { config: mergedConfig, voiceOptions };
-    } catch (error) {
-      throw new Error(
-        error instanceof Error ? error.message : 'FAILED_TO_FETCH_REMOTE_CONFIG'
-      );
-    }
-  };
-
-  const runInitialization = async () => {
-    const localConfig = await hydrateLocalConfig();
-    const { config, voiceOptions } = await loadRemoteConfig(localConfig);
-    set({
-      apiConfig: config,
-      voiceOptions,
-      isLoaded: true,
-    });
-  };
-
-  return {
-    apiConfig: createEmptyConfig(),
-    isLoaded: false,
-    voiceOptions: [],
-    initialize: () => {
-      if (!initializationPromise) {
-        initializationPromise = runInitialization().catch(error => {
-          console.warn('[configStore] initialize failed', error);
-          set({
-            apiConfig: createEmptyConfig(),
-            isLoaded: false,
-            voiceOptions: [],
-          });
-          initializationPromise = null;
-          throw error;
-        });
-      }
-      return initializationPromise;
-    },
-    update: (partial) => {
-      const current = get().apiConfig;
-      const nextConfig = mergeConfig(current, partial);
       set({
-        apiConfig: nextConfig,
+        apiConfig: mergedConfig,
+        voiceOptions,
+        isLoaded: true,
+        isLoggedIn: userSettings != null,
+        dbThemeMode: userSettings?.themeMode ?? null,
       });
-    },
-    isConfigValid: () => isValidConfig(get().apiConfig),
-  };
-};
-
-/**
- * 带持久化与版本迁移能力的配置 store。
- */
-const persistedConfigStore = persist(configStoreCreator, {
-  name: CONFIG_STORAGE_KEY,
-  storage: createJSONStorage(getSafeLocalStorage),
-  partialize: (state) => ({
-    apiConfig: state.apiConfig,
-  }),
-  migrate: (persistedState: unknown) => {
-    const config = (persistedState as Partial<ConfigStore> | undefined)?.apiConfig;
-    if (isValidConfig(config)) {
-      return { apiConfig: config };
-    }
+    };
 
     return {
       apiConfig: createEmptyConfig(),
+      isLoaded: false,
+      initError: null,
+      isLoggedIn: false,
+      dbThemeMode: null,
+      voiceOptions: [],
+      initialize: () => {
+        if (!initializationPromise) {
+          set({ initError: null });
+          initializationPromise = runInitialization().catch(error => {
+            console.warn('[configStore] initialize failed', error);
+            const message = error instanceof Error ? error.message : '配置加载失败';
+            set({
+              apiConfig: createEmptyConfig(),
+              isLoaded: false,
+              initError: message,
+              isLoggedIn: false,
+              dbThemeMode: null,
+              voiceOptions: [],
+            });
+            initializationPromise = null;
+            throw error;
+          });
+        }
+        return initializationPromise;
+      },
+      onLogin: async () => {
+        const userSettings = await trpc.settings.get.query().catch(() => null);
+        if (userSettings) {
+          const current = get().apiConfig;
+          set({
+            isLoggedIn: true,
+            dbThemeMode: userSettings.themeMode,
+            apiConfig: mergeConfig(current, {
+              playDuration: userSettings.playDuration,
+              voiceId: userSettings.voiceId,
+              speed: userSettings.speed,
+              floatingPlayerEnabled: userSettings.floatingPlayerEnabled,
+            }),
+          });
+        } else {
+          set({ isLoggedIn: true });
+        }
+      },
+      onLogout: () => {
+        saveSettingsToDb.cancel();
+        set({ isLoggedIn: false });
+      },
+      update: (partial) => {
+        const current = get().apiConfig;
+        const nextConfig = mergeConfig(current, partial);
+        set({ apiConfig: nextConfig });
+        /** 仅登录用户防抖写入数据库，发送校验后的 diff */
+        if (get().isLoggedIn) {
+          const diff: Partial<APIConfig> = {};
+          for (const key of Object.keys(partial) as (keyof APIConfig)[]) {
+            if (nextConfig[key] !== current[key]) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (diff as any)[key] = nextConfig[key];
+            }
+          }
+          if (Object.keys(diff).length > 0) {
+            saveSettingsToDb(diff);
+          }
+        }
+      },
+      isConfigValid: () => isValidConfig(get().apiConfig),
     };
-  },
-  skipHydration: true,
-});
-
-/**
- * 配置 store Hook，提供配置读取与操作能力。
- */
-export const useConfigStore = create<ConfigStore>()(devtools(persistedConfigStore));
+  })
+);

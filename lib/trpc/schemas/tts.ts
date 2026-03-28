@@ -17,7 +17,7 @@ export const ttsInputSchema = z.object({
         .string()
         .min(1, 'text 不能为空')
         .max(MAX_TEXT_LENGTH, `文本长度不能超过 ${MAX_TEXT_LENGTH} 字符`),
-    voiceId: z.string().optional(),
+    voiceId: z.string().min(1).optional(),
     speed: z.number().min(0.25).max(4.0).optional(),
 });
 

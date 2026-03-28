@@ -36,7 +36,7 @@ export const decodeSession = (value: string): AuthSession | null => {
         }
         const json = new TextDecoder().decode(bytes);
         const parsed = JSON.parse(json) as { userId?: number; nickname?: string };
-        if (parsed.userId && parsed.nickname) {
+        if (typeof parsed.userId === 'number' && typeof parsed.nickname === 'string') {
             return { userId: parsed.userId, nickname: parsed.nickname };
         }
         return null;

@@ -7,6 +7,7 @@ import {
   register as registerRequest,
   enterGuestMode as enterGuestModeRequest,
 } from '@/lib/client/auth';
+import { useConfigStore } from '@/stores/configStore';
 
 type AuthState = {
   isLogin: boolean;
@@ -63,6 +64,8 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     try {
       const result = await loginRequest({ username, password });
       set({ isLogin: true, isGuest: false, nickname: result.user.nickname, loading: false, initialized: true, error: undefined });
+      /** 同步 configStore 登录态，拉取用户设置 */
+      useConfigStore.getState().onLogin().catch(() => {});
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '登录失败，请稍后重试';
@@ -77,6 +80,8 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     try {
       const result = await registerRequest({ username, password, nickname });
       set({ isLogin: true, isGuest: false, nickname: result.user.nickname, loading: false, initialized: true, error: undefined });
+      /** 同步 configStore 登录态，拉取用户设置 */
+      useConfigStore.getState().onLogin().catch(() => {});
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '注册失败，请稍后重试';
@@ -91,6 +96,8 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
     try {
       await logoutRequest();
       set({ isLogin: false, isGuest: false, nickname: '', loading: false, initialized: true, error: undefined });
+      /** 同步 configStore 登出态，停止 DB 写入 */
+      useConfigStore.getState().onLogout();
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '登出失败，请稍后重试';

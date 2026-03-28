@@ -39,4 +39,14 @@ describe('session 编解码', () => {
     const encoded = btoa('{broken json');
     expect(decodeSession(encoded)).toBeNull();
   });
+
+  it('userId 为 0 时仍可正常解码', () => {
+    const result = decodeSession(encodeSession(0, 'zero'));
+    expect(result).toEqual({ userId: 0, nickname: 'zero' });
+  });
+
+  it('nickname 为空字符串时仍可正常解码', () => {
+    const result = decodeSession(encodeSession(1, ''));
+    expect(result).toEqual({ userId: 1, nickname: '' });
+  });
 });

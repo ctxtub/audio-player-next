@@ -12,8 +12,12 @@ import { trpc } from '@/lib/trpc/client';
 type ConfigStoreBaseState = {
   apiConfig: APIConfig;
   isLoaded: boolean;
+  /** 初始化失败时的错误信息，供 UI 判断是否展示重试。 */
+  initError: string | null;
   /** 当前用户是否已登录，决定是否将配置写入数据库。 */
   isLoggedIn: boolean;
+  /** DB 中的主题模式，供 useThemeSync 初始化时读取，避免重复请求。 */
+  dbThemeMode: 'light' | 'dark' | 'system' | null;
   voiceOptions: VoiceOption[];
 };
 
@@ -26,6 +30,15 @@ type ConfigStoreActions = {
    * @returns Promise<void>
    */
   initialize: () => Promise<void>;
+  /**
+   * 登录成功后重新拉取用户设置并合并到 store。
+   * @returns Promise<void>
+   */
+  onLogin: () => Promise<void>;
+  /**
+   * 登出后清除登录态，停止向 DB 写入。
+   */
+  onLogout: () => void;
   /**
    * 合并更新配置，并通过防抖写入数据库。
    * @param partial Partial<APIConfig> 待更新的字段片段
@@ -187,22 +200,29 @@ export const useConfigStore = create<ConfigStore>()(
         voiceOptions,
         isLoaded: true,
         isLoggedIn: userSettings != null,
+        dbThemeMode: userSettings?.themeMode ?? null,
       });
     };
 
     return {
       apiConfig: createEmptyConfig(),
       isLoaded: false,
+      initError: null,
       isLoggedIn: false,
+      dbThemeMode: null,
       voiceOptions: [],
       initialize: () => {
         if (!initializationPromise) {
+          set({ initError: null });
           initializationPromise = runInitialization().catch(error => {
             console.warn('[configStore] initialize failed', error);
+            const message = error instanceof Error ? error.message : '配置加载失败';
             set({
               apiConfig: createEmptyConfig(),
               isLoaded: false,
+              initError: message,
               isLoggedIn: false,
+              dbThemeMode: null,
               voiceOptions: [],
             });
             initializationPromise = null;
@@ -211,13 +231,43 @@ export const useConfigStore = create<ConfigStore>()(
         }
         return initializationPromise;
       },
+      onLogin: async () => {
+        const userSettings = await trpc.settings.get.query().catch(() => null);
+        if (userSettings) {
+          const current = get().apiConfig;
+          set({
+            isLoggedIn: true,
+            apiConfig: mergeConfig(current, {
+              playDuration: userSettings.playDuration,
+              voiceId: userSettings.voiceId,
+              speed: userSettings.speed,
+              floatingPlayerEnabled: userSettings.floatingPlayerEnabled,
+            }),
+          });
+        } else {
+          set({ isLoggedIn: true });
+        }
+      },
+      onLogout: () => {
+        saveSettingsToDb.cancel();
+        set({ isLoggedIn: false });
+      },
       update: (partial) => {
         const current = get().apiConfig;
         const nextConfig = mergeConfig(current, partial);
         set({ apiConfig: nextConfig });
-        /** 仅登录用户防抖写入数据库 */
+        /** 仅登录用户防抖写入数据库，发送校验后的 diff */
         if (get().isLoggedIn) {
-          saveSettingsToDb(partial);
+          const diff: Partial<APIConfig> = {};
+          for (const key of Object.keys(partial) as (keyof APIConfig)[]) {
+            if (nextConfig[key] !== current[key]) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (diff as any)[key] = nextConfig[key];
+            }
+          }
+          if (Object.keys(diff).length > 0) {
+            saveSettingsToDb(diff);
+          }
         }
       },
       isConfigValid: () => isValidConfig(get().apiConfig),

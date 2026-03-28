@@ -5,10 +5,6 @@ import { getOpenAIConfig } from "@/lib/server/openai";
  * 获取统一配置的 ChatOpenAI 实例。
  * 复用现有的环境变量配置。
  */
-/**
- * 获取统一配置的 ChatOpenAI 实例。
- * 复用现有的环境变量配置。
- */
 export const getAgentModel = () => {
     const config = getOpenAIConfig();
 

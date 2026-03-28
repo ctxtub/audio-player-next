@@ -30,7 +30,17 @@ export const getSafeLocalStorage = (): Storage => {
   if (typeof window === 'undefined') {
     return fallbackStorage;
   }
-  return window.localStorage;
+  try {
+    // 隐私模式或存储配额耗尽时，访问 localStorage 可能抛异常
+    const storage = window.localStorage;
+    // 通过实际写入测试可用性
+    const testKey = '__storage_test__';
+    storage.setItem(testKey, '1');
+    storage.removeItem(testKey);
+    return storage;
+  } catch {
+    return fallbackStorage;
+  }
 };
 
 /**

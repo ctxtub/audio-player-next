@@ -1,5 +1,5 @@
 
-import { BaseMessage, SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
+import { BaseMessage, SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { getAgentModel } from "@/lib/agent/model";
 
 const SYSTEM_PROMPT = `你是一个专业的对话总结助手。你的任务是维护一段对话的简明摘要。

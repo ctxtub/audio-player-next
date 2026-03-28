@@ -51,7 +51,8 @@ const UserSection: React.FC = () => {
       GlassToast.show({ icon: 'success', content: '已登出' });
       router.push('/auth');
     } else {
-      GlassToast.show({ icon: 'fail', content: useAuthStore.getState().error || '登出失败' });
+      const errorMsg = useAuthStore.getState().error;
+      GlassToast.show({ icon: 'fail', content: errorMsg || '登出失败' });
     }
   }, [doLogout, router]);
 

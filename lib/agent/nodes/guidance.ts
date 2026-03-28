@@ -39,6 +39,5 @@ export const guidanceNode = async (state: AgentState) => {
 
     return {
         messages: [response],
-        next_step: "FINISH"
     };
 };

@@ -14,15 +14,6 @@ import type { Context } from './context';
  */
 const t = initTRPC.context<Context>().create({
     transformer: superjson,
-    errorFormatter({ shape }) {
-        return {
-            ...shape,
-            data: {
-                ...shape.data,
-                // 可在此添加自定义错误字段
-            },
-        };
-    },
 });
 
 /**

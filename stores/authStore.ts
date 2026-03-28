@@ -65,7 +65,9 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       const result = await loginRequest({ username, password });
       set({ isLogin: true, isGuest: false, nickname: result.user.nickname, loading: false, initialized: true, error: undefined });
       /** 同步 configStore 登录态，拉取用户设置 */
-      useConfigStore.getState().onLogin().catch(() => {});
+      useConfigStore.getState().onLogin().catch((err) => {
+        console.error('登录后同步用户设置失败:', err);
+      });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '登录失败，请稍后重试';
@@ -81,7 +83,9 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
       const result = await registerRequest({ username, password, nickname });
       set({ isLogin: true, isGuest: false, nickname: result.user.nickname, loading: false, initialized: true, error: undefined });
       /** 同步 configStore 登录态，拉取用户设置 */
-      useConfigStore.getState().onLogin().catch(() => {});
+      useConfigStore.getState().onLogin().catch((err) => {
+        console.error('注册后同步用户设置失败:', err);
+      });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '注册失败，请稍后重试';

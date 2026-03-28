@@ -40,8 +40,15 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
   let streamErrored = false;
   let lastErrorMessage: string | undefined;
 
-  // 转换 ChatConversationMessage 到 AgentMessage
-  const agentMessages = context as unknown as AgentMessage[];
+  // 转换 ChatConversationMessage 到 AgentMessage，确保 content 为纯字符串
+  const agentMessages: AgentMessage[] = context.map((msg) => ({
+    role: msg.role,
+    content: typeof msg.content === 'string'
+      ? msg.content
+      : Array.isArray(msg.content)
+        ? msg.content.map((part) => ('text' in part ? part.text : '')).join('')
+        : '',
+  }));
 
   try {
     let audioUrl: string = '';

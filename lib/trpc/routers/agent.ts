@@ -51,8 +51,8 @@ export const agentRouter = router({
 
                     // on_chat_model_stream: LLM 生成的 token 流
                     if (event.event === "on_chat_model_stream") {
-                        const chunk = event.data.chunk;
-                        if (chunk && chunk.content) {
+                        const chunk = event.data?.chunk;
+                        if (chunk?.content) {
                             yield {
                                 type: "token",
                                 content: chunk.content,

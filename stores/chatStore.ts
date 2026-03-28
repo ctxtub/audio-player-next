@@ -41,8 +41,8 @@ export type ChatStoreAction =
  * 将所有数据读取逻辑收敛于此，避免在组件中直接操作复杂的过滤逻辑。
  */
 interface ChatStoreSelectors {
-  /** 检查 ID 是否为最新一条消息 */
-  isLatestMessage: (id: string) => boolean;
+  /** 检查 ID 是否为最新一条故事卡片消息 */
+  isLatestStoryCardMessage: (id: string) => boolean;
 
   /** 获取下一段可播放的故事片段 (Derived from Message) */
   nextStorySegment: (currentId: string) => { audioUrl: string; storyText: string; messageId: string } | null;
@@ -295,13 +295,10 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
           };
         }
         case 'stream.fail': {
-          // 标记最后正在发送的消息为失败
-          // 通常是助手消息和用户消息
+          // 移除最后一条正在发送的 Assistant 占位消息（避免展示空气泡），
+          // 并将最后一条 User 消息标记为 failed，以便用户可以点击重试。
           const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
           if (lastAssistantIndex !== -1) {
-            messages[lastAssistantIndex] = { ...messages[lastAssistantIndex], status: 'failed' }; // 或者直接移除助手占位？通常保留显示失败
-            // 逻辑说明：将最后一条正在发送的 Assistant 消息移除（避免展示空气泡），
-            // 并将最后一条 User 消息标记为 failed，以便用户可以点击重试。
             messages.splice(lastAssistantIndex, 1);
           }
 
@@ -430,7 +427,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     set({ hasUnviewedResponse: false });
   },
   selectors: {
-    isLatestMessage: (id) => {
+    isLatestStoryCardMessage: (id) => {
       const messages = get().messages;
       for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];

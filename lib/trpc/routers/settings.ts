@@ -8,6 +8,16 @@ import { router, publicProcedure, authedProcedure } from '../init';
 import { saveSettingsSchema } from '../schemas/settings';
 import { prisma } from '@/lib/db';
 
+/** 合法的主题模式值 */
+const VALID_THEME_MODES = ['light', 'dark', 'system'] as const;
+type ThemeMode = (typeof VALID_THEME_MODES)[number];
+
+/** 校验数据库中的 themeMode 值，非法值回退为 'system' */
+const validateThemeMode = (value: string): ThemeMode =>
+  (VALID_THEME_MODES as readonly string[]).includes(value)
+    ? (value as ThemeMode)
+    : 'system';
+
 export const settingsRouter = router({
   /**
    * 获取当前用户的个性化设置，未登录时返回 null。
@@ -30,7 +40,7 @@ export const settingsRouter = router({
       voiceId: settings.voiceId,
       speed: settings.speed,
       floatingPlayerEnabled: settings.floatingPlayerEnabled,
-      themeMode: settings.themeMode as 'light' | 'dark' | 'system',
+      themeMode: validateThemeMode(settings.themeMode),
     };
   }),
 
@@ -56,7 +66,7 @@ export const settingsRouter = router({
         voiceId: settings.voiceId,
         speed: settings.speed,
         floatingPlayerEnabled: settings.floatingPlayerEnabled,
-        themeMode: settings.themeMode as 'light' | 'dark' | 'system',
+        themeMode: validateThemeMode(settings.themeMode),
       };
     }),
 });

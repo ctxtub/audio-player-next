@@ -184,7 +184,9 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
       }
 
       if (!get().initialized) {
-        void get().hydrate();
+        // 先等待 hydrate 完成，再执行删除，避免 hydrate 覆盖本次操作
+        void get().hydrate().then(() => get().remove(rawPrompt));
+        return;
       }
 
       set((state) => {

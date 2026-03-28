@@ -5,9 +5,10 @@ import type {
   ChatConversationMessage,
   ChatMessage,
   ChatStreamDoneEvent,
+  GuidancePart,
   StoryCardPart,
 } from '@/types/chat';
-import type { AgentType } from '@/types/agent';
+import type { AgentMessage, AgentType } from '@/types/agent';
 import {
   createAssistantPlaceholder,
   createTempMessageId,
@@ -223,7 +224,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
               newParts = [{
                 type: 'guidance',
                 content: currentContent,
-              } as any];
+              } satisfies GuidancePart];
               break;
           }
 
@@ -388,7 +389,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     const contextForSummary = [
       ...(existingSummaryMsg ? [{ role: existingSummaryMsg.role, content: existingSummaryMsg.content }] : []),
       ...messagesToArchive.map(m => ({ role: m.role, content: m.content }))
-    ] as any[]; // cast to AgentMessage[]
+    ] as AgentMessage[];
 
     try {
       const { summarizeContext } = await import('@/app/services/agentFlow');
@@ -400,8 +401,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
         type: 'summary.update',
         summaryText,
         insertAfterMessageId: lastArchivedMsgId,
-        oldSummaryId: existingSummaryMsg?.id
-      } as any);
+        oldSummaryId: existingSummaryMsg?.id,
+      });
 
     } catch (error) {
       console.error('[SummaryAgent] Failed to summarize:', error);

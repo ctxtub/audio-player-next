@@ -1,0 +1,47 @@
+# E2E 测试工作流 — 使用 Playwright 在 PR 和 main 分支推送时运行前端功能测试。
+name: E2E Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: file:./prisma/test.db
+      OPENAI_API_KEY: sk-test-placeholder
+      OPENAI_MODEL_STORY: gpt-4o
+      OPENAI_MODEL_AGENT: gpt-4o-mini
+      OPENAI_TTS_VOICE_LIST: '[{"value":"alloy","label":"Alloy"}]'
+      OPENAI_TTS_DEFAULT_VOICE: alloy
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Generate Prisma client and push schema
+        run: npx prisma generate && npx prisma db push
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: yarn e2e --project=mobile-chrome
+
+      - name: Upload Playwright report on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7

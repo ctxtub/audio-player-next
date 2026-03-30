@@ -14,6 +14,9 @@
 /coverage
 /e2e/playwright-report/
 /e2e/test-results/
+# Playwright 产物（兜底：防止从项目根目录运行时输出到根目录）
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/

@@ -6,13 +6,15 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './specs',
+  /* 报告和产物输出到 e2e/ 子目录，避免污染项目根目录 */
+  outputDir: './test-results',
+  reporter: process.env.CI
+    ? [['html', { open: 'never', outputFolder: './playwright-report' }], ['github']]
+    : [['html', { open: 'on-failure', outputFolder: './playwright-report' }]],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 2 : undefined,
-  reporter: process.env.CI
-    ? [['html', { open: 'never' }], ['github']]
-    : [['html', { open: 'on-failure' }]],
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',

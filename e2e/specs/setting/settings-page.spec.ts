@@ -1,12 +1,14 @@
 import { test, expect } from '../../fixtures/auth.fixture';
+import { mockConfigGet } from '../../helpers/trpc-mock';
 
 /**
  * 设置页面加载测试 — 验证设置页各区块正常渲染可见。
  */
 test.describe('设置页面', () => {
   test('设置页各区块正常加载', async ({ authedPage: page }) => {
+    await mockConfigGet(page);
     await page.goto('/setting');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     /* 各配置区块标题可见 */
     await expect(page.getByText('播放时长')).toBeVisible();
@@ -16,12 +18,14 @@ test.describe('设置页面', () => {
   });
 
   test('播放浮窗开关可操作', async ({ authedPage: page }) => {
+    await mockConfigGet(page);
     await page.goto('/setting');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
-    await expect(page.getByText('播放浮窗')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '播放浮窗' })).toBeVisible();
     const toggle = page.locator('[aria-label="播放浮窗开关"]');
     await expect(toggle).toBeVisible();
-    await toggle.click();
+    /* GlassSwitch 的 track div 在视觉上覆盖了 input，需要 force click */
+    await toggle.click({ force: true });
   });
 });

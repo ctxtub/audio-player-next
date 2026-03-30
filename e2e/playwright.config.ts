@@ -20,7 +20,17 @@ export default defineConfig({
     ...devices['iPhone 14'],
   },
   projects: [
-    { name: 'mobile-chrome', use: { ...devices['iPhone 14'] } },
+    // Chromium + 移动端 viewport（使用本地已安装的 headless shell）
+    {
+      name: 'mobile-chrome',
+      use: {
+        ...devices['Pixel 5'],
+        launchOptions: {
+          executablePath: '/root/.cache/ms-playwright/chromium_headless_shell-1194/chrome-linux/headless_shell',
+        },
+      },
+    },
+    // WebKit + iPhone viewport（需单独安装 WebKit）
     { name: 'mobile-safari', use: { ...devices['iPhone 14 Pro Max'] } },
   ],
   webServer: {

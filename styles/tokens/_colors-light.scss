@@ -1,46 +1,51 @@
-/* Light 语义色 — iOS 26 Liquid Glass */
+/* Light 语义色 — v2 Design Upgrade */
 :root[data-theme="light"] {
-  /* 背景 — iOS 标准蓝调灰 */
-  --bg-primary: #F2F2F7;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #F9F9FB;
-  --bg-elevated: rgba(255, 255, 255, 0.80);
-  --bg-overlay: rgba(0, 0, 0, 0.3);
+  /* 背景层级 */
+  --bg-primary:   #F2F2F4;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary:  #F7F7F9;
+  --bg-elevated:  rgba(255, 255, 255, 0.78);
+  --bg-overlay:   rgba(0, 0, 0, 0.35);
 
   /* Liquid Glass 表面 */
-  --glass-bg: rgba(255, 255, 255, 0.45);
-  --glass-border: rgba(255, 255, 255, 0.60);
-  --glass-highlight: inset 0 0.5px 0 0 rgba(255, 255, 255, 0.70);
+  --glass-bg:           rgba(255, 255, 255, 0.55);
+  --glass-border:       rgba(0, 0, 0, 0.06);
+  --glass-border-bright:rgba(255, 255, 255, 0.90);
+  --glass-highlight:    inset 0 0.5px 0 rgba(255, 255, 255, 0.80), inset 0 -0.5px 0 rgba(0, 0, 0, 0.04);
 
   /* 前景 / 文字 */
-  --text-primary: #1C1C1E;
-  --text-secondary: #636366;
-  --text-tertiary: #8E8E93;
-  --text-inverse: #ffffff;
-  --text-on-primary: #ffffff;
+  --text-primary:    #0B0B0E;
+  --text-secondary:  #4E4E56;
+  --text-tertiary:   #76767F;
+  --text-inverse:    #FFFFFF;
+  --text-on-primary: #FFFFFF;
 
-  /* 品牌 / 交互 — iOS system blue */
-  --accent-primary: #007AFF;
-  --accent-primary-hover: #0A84FF;
-  --accent-primary-subtle: rgba(0, 122, 255, 0.12);
-  --accent-secondary: #AF52DE;
+  /* 品牌 / 交互 */
+  --accent-primary:        var(--accent-500);
+  --accent-primary-hover:  var(--accent-400);
+  --accent-primary-subtle: var(--accent-tint);
+  --accent-secondary: oklch(68% 0.18 calc(var(--accent-h) + 60));
 
-  /* 语义状态 — iOS system colors */
-  --status-success: #34C759;
-  --status-warning: #FF9500;
-  --status-error: #FF3B30;
-  --status-info: #5AC8FA;
+  /* 语义状态 */
+  --status-success: oklch(62% 0.18 152);
+  --status-warning: oklch(65% 0.16 72);
+  --status-error:   oklch(55% 0.22 25);
+  --status-info:    oklch(60% 0.16 220);
 
-  /* 边框 — iOS 26 luminous hairline */
+  /* 边框 */
   --border-default: rgba(0, 0, 0, 0.08);
-  --border-subtle: rgba(0, 0, 0, 0.04);
-  --border-strong: rgba(0, 0, 0, 0.15);
-  --border-accent: rgba(0, 122, 255, 0.40);
+  --border-subtle:  rgba(0, 0, 0, 0.04);
+  --border-strong:  rgba(0, 0, 0, 0.14);
+  --border-accent:  oklch(66% 0.18 var(--accent-h) / 0.40);
 
   /* 渐变 */
-  --gradient-brand: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  --gradient-surface: linear-gradient(180deg, var(--bg-secondary), var(--bg-primary));
+  --gradient-brand:     linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+  --gradient-surface:   linear-gradient(180deg, var(--bg-secondary), var(--bg-primary));
   --gradient-fade-down: linear-gradient(180deg, var(--bg-secondary), transparent);
-  --gradient-fade-up: linear-gradient(0deg, var(--bg-primary) 0%, transparent 100%);
-  --gradient-glow: radial-gradient(circle, var(--accent-primary-subtle) 0%, transparent 70%);
+  --gradient-fade-up:   linear-gradient(0deg, var(--bg-primary) 0%, transparent 100%);
+  --gradient-glow:      radial-gradient(circle, var(--accent-tint) 0%, transparent 70%);
+
+  /* Aurora 关闭（亮色模式无 aurora） */
+  --aurora-primary:   none;
+  --aurora-secondary: none;
 }

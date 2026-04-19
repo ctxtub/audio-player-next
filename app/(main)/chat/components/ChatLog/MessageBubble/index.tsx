@@ -175,6 +175,15 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
     }
   }, [message.createdAt]);
 
+  /* system/developer/function/tool 角色直接渲染胶囊样式，不走完整气泡结构 */
+  if (shouldHideAvatar(roleKey)) {
+    return (
+      <div className={rowClassName}>
+        <span className={styles.systemChip}>{message.content}</span>
+      </div>
+    );
+  }
+
   return (
     <div className={rowClassName}>
       {shouldHideAvatar(roleKey) ? null : (

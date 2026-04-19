@@ -1,8 +1,9 @@
 /* 排版系统 */
 :root {
-  /* 字体族 */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Noto Sans SC', sans-serif;
-  --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  /* 字体族 — v2（next/font/google 变量注入后优先生效，静态名称作回退） */
+  --font-display: var(--font-instrument-serif, 'Instrument Serif'), 'Noto Serif SC', Georgia, serif;
+  --font-sans:    var(--font-inter, 'Inter'), 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC', sans-serif;
+  --font-mono:    var(--font-jetbrains-mono, 'JetBrains Mono'), 'SF Mono', ui-monospace, monospace;
 
   /* 字号（固定 8 级，禁止使用其他数值） */
   --text-xs: 11px;

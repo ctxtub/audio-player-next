@@ -36,3 +36,15 @@
   --color-violet-400: #bf8bff;
   --color-violet-500: #AF52DE;
 }
+
+/* ── v2 oklch 动态品牌色 ── */
+:root {
+  --accent-h: 245;                                               /* 色相控制旋钮，245 ≈ 靛蓝 */
+  --accent-500: oklch(66% 0.18 var(--accent-h));
+  --accent-400: oklch(74% 0.16 var(--accent-h));
+  --accent-300: oklch(82% 0.12 var(--accent-h));
+  --accent-tint: oklch(66% 0.18 var(--accent-h) / 0.18);
+  --accent-ghost: oklch(66% 0.18 var(--accent-h) / 0.08);
+  --accent-glow: oklch(66% 0.22 var(--accent-h) / 0.35);
+  --accent2-500: oklch(68% 0.18 calc(var(--accent-h) + 60));    /* 互补色，用于 aurora */
+}

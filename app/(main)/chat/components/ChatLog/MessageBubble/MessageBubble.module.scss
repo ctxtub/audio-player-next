@@ -110,6 +110,22 @@
   background: color-mix(in srgb, var(--text-primary) 4%, transparent);
 }
 
+/* system/developer/function/tool 角色专用胶囊 */
+.systemChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border: 0.5px solid var(--border-subtle);
+}
+
 .bubbleSending {
   /* 移除通用阴影，避免用户消息出现光晕 */
 }

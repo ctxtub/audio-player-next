@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback } from 'react';
-import { Sun, Moon, Monitor } from 'lucide-react';
+import { Sun, Moon, Monitor, Palette } from 'lucide-react';
 import type { ThemeMode } from '@/types/theme';
 import GlassSelector from '@/components/ui/GlassSelector';
 import styles from '../index.module.scss';
@@ -38,7 +38,7 @@ const ThemeModeSection: React.FC<ThemeModeSectionProps> = ({ value, onChange }) 
 
   return (
     <div className={styles.configSection}>
-      <h3>主题设置</h3>
+      <h3><Palette className={styles.rowIcon} strokeWidth={1.8} />主题设置</h3>
       <GlassSelector
         value={value}
         onChange={handleChange}

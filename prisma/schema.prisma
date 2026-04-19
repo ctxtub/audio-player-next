@@ -13,9 +13,30 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  username  String   @unique
+  id        Int         @id @default(autoincrement())
+  username  String      @unique
   password  String
   nickname  String?
-  createdAt DateTime @default(now())
+  createdAt DateTime    @default(now())
+  config    UserConfig?
+}
+
+/// 用户个性化配置，与 User 一对一关联。
+model UserConfig {
+  id                    Int      @id @default(autoincrement())
+  userId                Int      @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 允许播放时长，单位：分钟，范围 10-120
+  playDurationMinutes   Int      @default(30)
+  /// TTS 音色 ID，空字符串表示使用系统默认
+  voiceId               String   @default("")
+  /// 播放速率，范围 0.25-4.0，默认 1.0
+  speed                 Float    @default(1.0)
+  /// 是否启用浮动播放器
+  floatingPlayerEnabled Boolean  @default(true)
+  /// 主题模式：dark | light | system
+  themeMode             String   @default("system")
+  /// 预留扩展字段，存储 JSON 格式的未来配置项
+  extras                String?
+  updatedAt             DateTime @updatedAt
 }

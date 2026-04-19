@@ -15,6 +15,7 @@ const UserSection: React.FC = () => {
   const isLogin = useAuthStore(state => state.isLogin);
   const isGuest = useAuthStore(state => state.isGuest);
   const nickname = useAuthStore(state => state.nickname);
+  const username = useAuthStore(state => state.username);
   const loading = useAuthStore(state => state.loading);
   const initialized = useAuthStore(state => state.initialized);
   const fetchProfile = useAuthStore(state => state.fetchProfile);
@@ -66,7 +67,14 @@ const UserSection: React.FC = () => {
       </div>
       <div className={styles.userInfo}>
         <span className={styles.nickname}>{displayNickname}</span>
-        <span className={styles.status}>{statusText}</span>
+        {isLogin && username ? (
+          <span className={styles.userEmail}>{username}</span>
+        ) : (
+          <span className={styles.status}>{statusText}</span>
+        )}
+        {isLogin ? (
+          <span className={styles.planBadge}>FREE</span>
+        ) : null}
       </div>
       <div className={styles.actions}>
         {isLogin ? (

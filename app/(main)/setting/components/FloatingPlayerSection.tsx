@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import { Layers } from 'lucide-react';
 import GlassSwitch from '@/components/ui/GlassSwitch';
 import styles from '../index.module.scss';
 
@@ -25,7 +26,7 @@ const FloatingPlayerSection: React.FC<FloatingPlayerSectionProps> = ({ value, on
 
   return (
     <div className={styles.configSection}>
-      <h3>播放浮窗</h3>
+      <h3><Layers className={styles.rowIcon} strokeWidth={1.8} />播放浮窗</h3>
       <div className={styles.configActionRow}>
         <p className={styles.configDescription}>开启后，在其他页面也会展示播放浮窗</p>
         <GlassSwitch

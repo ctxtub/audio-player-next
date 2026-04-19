@@ -2,9 +2,11 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { CSSTransition } from 'react-transition-group';
-import { Play, Pause, Disc3 } from 'lucide-react';
+import { Play, Pause, SkipForward } from 'lucide-react';
 import GlassToast from '@/components/ui/GlassToast';
 import { usePlaybackStore, useFloatingPlayer } from '@/stores/playbackStore';
+import { useChatStore } from '@/stores/chatStore';
+import { useConfigStore } from '@/stores/configStore';
 import styles from './index.module.scss';
 
 /**
@@ -21,11 +23,10 @@ const PLAYBACK_RATES = [
 ] as const;
 
 /**
- * 播放器页面的音频控制组件，展示进度、倍速与播放按钮。
+ * 播放器页面的音频控制组件，展示唱片动画、曲目信息、进度与倍速控制。
  * @returns JSX.Element 播放器 UI
  */
 const AudioPlayer: React.FC = () => {
-  const progressBarRef = useRef<HTMLInputElement>(null);
   const speedMenuRef = useRef<HTMLDivElement>(null);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const playbackRate = usePlaybackStore((state) => state.playbackRate);
@@ -36,16 +37,17 @@ const AudioPlayer: React.FC = () => {
   const setGlobalPlaybackRate = usePlaybackStore((state) => state.setPlaybackRate);
   const { resume, pause } = useFloatingPlayer();
 
-  const hasAudio = duration > 0;
+  /* 曲目信息：从最后一条用户消息和当前语音选项推导 */
+  const messages = useChatStore((state) => state.messages);
+  const voiceOptions = useConfigStore((state) => state.voiceOptions);
+  const voiceId = useConfigStore((state) => state.apiConfig.voiceId);
+  const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
+  const trackTitle = lastUserMsg ? lastUserMsg.content.slice(0, 20) : '音频故事';
+  const selectedVoice = voiceOptions.find((v) => v.value === voiceId);
+  const trackSub = selectedVoice ? selectedVoice.label : 'AI 语音';
 
-  useEffect(() => {
-    const progressBar = progressBarRef.current;
-    if (!progressBar) {
-      return;
-    }
-    const percent = duration > 0 ? (currentTime / duration) * 100 : 0;
-    progressBar.style.setProperty('--progress-percent', `${percent}%`);
-  }, [currentTime, duration]);
+  const hasAudio = duration > 0;
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -83,13 +85,12 @@ const AudioPlayer: React.FC = () => {
     }
   };
 
-  const handleSeekChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(event.target.value);
-    seekAudio(time);
-    if (duration > 0) {
-      const percent = (time / duration) * 100;
-      event.target.style.setProperty('--progress-percent', `${percent}%`);
-    }
+  const handleProgressClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!hasAudio) return;
+    const track = event.currentTarget;
+    const rect = track.getBoundingClientRect();
+    const percent = (event.clientX - rect.left) / rect.width;
+    seekAudio(Math.max(0, Math.min(duration, percent * duration)));
   };
 
   const toggleSpeedMenu = (event: React.MouseEvent) => {
@@ -104,29 +105,34 @@ const AudioPlayer: React.FC = () => {
 
   return (
     <div className={styles.audioPlayer}>
-      <div className={`${styles.recordDisc} ${isPlaying ? styles.recordDiscPlaying : ''}`}>
-        <div className={styles.playButton} onClick={togglePlay}>
-          {isPlaying ? <Pause size={32} strokeWidth={2} className={styles.icon} /> : <Play size={32} strokeWidth={2} className={styles.icon} />}
+      {/* 唱片舞台 */}
+      <div className={styles.discStage}>
+        <div className={styles.discGlow} />
+        <div className={`${styles.disc} ${!isPlaying ? styles.paused : ''}`} />
+      </div>
+
+      {/* 曲目信息 */}
+      <div className={styles.trackInfo}>
+        <p className={styles.trackTitle}>{trackTitle}</p>
+        <p className={styles.trackSub}>{trackSub}</p>
+      </div>
+
+      {/* 进度条 */}
+      <div className={styles.progress}>
+        <div className={styles.progressTrack} onClick={handleProgressClick}>
+          <div className={styles.progressFill} style={{ width: `${progressPercent}%` }} />
         </div>
-        <div className={styles.backgroundIcon}>
-          <Disc3 size={120} strokeWidth={0.5} />
+        <div className={styles.progressTimes}>
+          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(duration)}</span>
         </div>
       </div>
-      <div className={styles.audioControls}>
-        <span className={styles.timeDisplay}>{formatTime(currentTime)}</span>
-        <input
-          ref={progressBarRef}
-          type="range"
-          className={styles.progressBar}
-          value={currentTime}
-          min={0}
-          max={duration || 0}
-          step={0.1}
-          onChange={handleSeekChange}
-        />
-        <span className={styles.timeDisplay}>{formatTime(duration)}</span>
+
+      {/* Transport 控制行 */}
+      <div className={styles.transport}>
+        {/* 倍速选择器 */}
         <div className={styles.speedControl}>
-          <button className={styles.speedButton} onClick={toggleSpeedMenu} aria-label="播放速度">
+          <button className={styles.speedPill} onClick={toggleSpeedMenu} aria-label="播放速度">
             {playbackRate}x
           </button>
           <CSSTransition
@@ -154,6 +160,21 @@ const AudioPlayer: React.FC = () => {
             </div>
           </CSSTransition>
         </div>
+
+        {/* 主播放按钮 */}
+        <button
+          className={styles.playBtn}
+          onClick={togglePlay}
+          disabled={!hasAudio}
+          aria-label={isPlaying ? '暂停' : '播放'}
+        >
+          {isPlaying ? <Pause size={28} /> : <Play size={28} />}
+        </button>
+
+        {/* 右侧占位按钮（视觉平衡） */}
+        <button className={styles.tbtn} disabled aria-label="下一首">
+          <SkipForward size={20} />
+        </button>
       </div>
     </div>
   );

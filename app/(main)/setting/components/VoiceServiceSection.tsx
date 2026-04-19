@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import GlassToast from '@/components/ui/GlassToast';
+import { Mic } from 'lucide-react';
 import { RadioGroup, Radio } from 'react-aria-components';
 
 import GlassButton from '@/components/ui/GlassButton';
@@ -111,7 +112,7 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
 
   return (
     <div className={styles.configSection}>
-      <h3>语音音色</h3>
+      <h3><Mic className={styles.rowIcon} strokeWidth={1.8} />语音音色</h3>
       {hasVoices ? (
         <RadioGroup
           value={value ?? ''}

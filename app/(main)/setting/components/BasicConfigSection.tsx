@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
+import { Clock } from 'lucide-react';
 import GlassSlider from '@/components/ui/GlassSlider';
 import styles from '../index.module.scss';
 
@@ -53,7 +54,7 @@ const BasicConfigSection: React.FC<BasicConfigSectionProps> = ({
 
   return (
     <div className={styles.configSection}>
-      <h3>播放时长</h3>
+      <h3><Clock className={styles.rowIcon} strokeWidth={1.8} />播放时长</h3>
       <div className={styles.configField}>
         <GlassSlider
           min={MIN_DURATION}

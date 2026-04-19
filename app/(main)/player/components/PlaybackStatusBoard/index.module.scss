@@ -24,13 +24,15 @@
     }
 
     &.countdown {
-      background: var(--accent-primary-subtle);
-      color: var(--accent-primary);
+      background: var(--accent-tint);
+      color: var(--accent-400);
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
     }
 
     &.loading {
-      background: var(--accent-primary-subtle);
-      color: var(--accent-primary);
+      background: var(--accent-tint);
+      color: var(--accent-400);
     }
 
     &.error {

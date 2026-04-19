@@ -127,6 +127,10 @@ const ConfigPage: React.FC = () => {
 
   return (
     <div className={styles.configPage}>
+      <div className={styles.settingsHero}>
+        <p className={styles.heroLabel}>Settings</p>
+        <h1 className={styles.heroTitle}>个人偏好</h1>
+      </div>
       <div className={styles.configForm}>
         <UserSection />
         <ThemeModeSection value={themeMode} onChange={setThemeMode} />

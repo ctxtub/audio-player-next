@@ -12,6 +12,8 @@ type AuthState = {
   isLogin: boolean;
   isGuest: boolean;
   nickname: string;
+  /** 登录账号名，用于 UI 展示账号标识符 */
+  username: string;
   loading: boolean;
   initialized: boolean;
   error?: string;
@@ -32,6 +34,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
   isLogin: false,
   isGuest: false,
   nickname: '',
+  username: '',
   loading: false,
   initialized: false,
   error: undefined,
@@ -47,13 +50,14 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         isLogin: profile.isLogin,
         isGuest: profile.isGuest ?? false,
         nickname: profile.isLogin ? (profile.user?.nickname ?? '') : '',
+        username: profile.isLogin ? (profile.user?.username ?? '') : '',
         loading: false,
         initialized: true,
         error: undefined,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : '获取登录状态失败';
-      set({ isLogin: false, isGuest: false, nickname: '', loading: false, initialized: true, error: message });
+      set({ isLogin: false, isGuest: false, nickname: '', username: '', loading: false, initialized: true, error: message });
     }
   },
 
@@ -90,7 +94,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
 
     try {
       await logoutRequest();
-      set({ isLogin: false, isGuest: false, nickname: '', loading: false, initialized: true, error: undefined });
+      set({ isLogin: false, isGuest: false, nickname: '', username: '', loading: false, initialized: true, error: undefined });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '登出失败，请稍后重试';
@@ -104,7 +108,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
 
     try {
       await enterGuestModeRequest();
-      set({ isLogin: false, isGuest: true, nickname: '', loading: false, initialized: true, error: undefined });
+      set({ isLogin: false, isGuest: true, nickname: '', username: '', loading: false, initialized: true, error: undefined });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '进入访客模式失败';

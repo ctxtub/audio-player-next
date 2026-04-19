@@ -36,3 +36,18 @@ body,
   padding: 0;
   height: 100%;
 }
+
+/* ── v2 全局动画 keyframes ── */
+@keyframes glowPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.08); opacity: 0.8; }
+}
+
+@keyframes discSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}

@@ -25,11 +25,15 @@
   width: var(--size);
   height: var(--size);
   border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  background: var(--gradient-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   font-weight: var(--weight-semibold);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   color: var(--text-on-primary);
-  object-fit: cover;
+  box-shadow: 0 4px 12px var(--accent-glow);
 }
 
 .textBlock {
@@ -42,9 +46,11 @@
 
 .title {
   margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
   font-size: var(--text-lg);
-  font-weight: var(--weight-bold);
-  letter-spacing: 0.3px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
   background: var(--gradient-brand);
   background-clip: text;
   -webkit-background-clip: text;
@@ -53,6 +59,7 @@
 
 .subtitle {
   margin: 0;
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: var(--leading-sm);
   color: var(--text-secondary);

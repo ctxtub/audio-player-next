@@ -144,10 +144,14 @@ export const authRouter = router({
      */
     profile: publicProcedure.query(async ({ ctx }) => {
         if (ctx.session) {
+            const dbUser = await prisma.user.findUnique({
+                where: { id: ctx.session.userId },
+                select: { username: true },
+            });
             return {
                 isLogin: true as const,
                 isGuest: false as const,
-                user: { nickname: ctx.session.nickname },
+                user: { nickname: ctx.session.nickname, username: dbUser?.username ?? '' },
             };
         }
 

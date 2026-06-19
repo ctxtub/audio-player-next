@@ -10,7 +10,7 @@ import bcrypt from 'bcryptjs';
 import { router, publicProcedure, TRPCError } from '../init';
 import { loginInputSchema, registerInputSchema } from '../schemas/auth';
 import { prisma } from '@/lib/db';
-import { encodeSession, decodeSession, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
+import { encodeSession, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
 
 const GUEST_COOKIE = 'guest';
 

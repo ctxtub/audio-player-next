@@ -32,6 +32,8 @@ export const FloatingPlayer: React.FC = () => {
   const playbackRemainingMs = usePlaybackStore((state) => state.remainingMs);
   const { resume, pause, show, hide } = useFloatingPlayer();
   const isVisible = usePlaybackStore((state) => state.isFloatingVisible);
+  // 当前已加载的音频地址；为空表示尚无可控制的音轨
+  const currentAudioUrl = usePlaybackStore((state) => state.currentAudioUrl);
   const isFloatingPlayerEnabled = useConfigStore(
     (state) => state.apiConfig.floatingPlayerEnabled
   );
@@ -158,7 +160,10 @@ export const FloatingPlayer: React.FC = () => {
     return `${minutesLabel}:${secondsLabel}`;
   }, [playbackRemainingMs]);
 
-  const shouldShowFloatingPanel = isFloatingPlayerEnabled && isVisible;
+  // 仅在「开启浮窗 + 处于可见态 + 已加载音轨」时显示；
+  // 空闲（无音轨）时不渲染，避免“待创作”胶囊在各页面默认位置遮挡正文内容。
+  const hasTrack = currentAudioUrl !== null;
+  const shouldShowFloatingPanel = isFloatingPlayerEnabled && isVisible && hasTrack;
 
   // 浮窗标题展示内容，依据播放状态切换默认文案与倒计时
   const floatingTitleLabel = useMemo(() => {

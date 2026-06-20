@@ -3,6 +3,8 @@ import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
+import type { GenerationRecord } from '@/stores/generationHistoryStore';
+import { fetchAudio } from '@/lib/client/ttsGenerate';
 import { beginChatStream } from './chatFlow';
 
 /**
@@ -65,8 +67,13 @@ const schedulePreloadRetry = () => {
  * 启动故事播放会话：停止当前播放、重置状态并开始播放指定的故事音频。
  * @param messageId 故事对应的消息 ID
  * @param audioUrl 音频地址
+ * @param options.oneShot 一次性播放（历史回放）：播完即止，不触发预加载续写
  */
-export const startStoryPlayback = async (messageId: string, audioUrl: string): Promise<void> => {
+export const startStoryPlayback = async (
+  messageId: string,
+  audioUrl: string,
+  options?: { oneShot?: boolean },
+): Promise<void> => {
   const playbackStore = usePlaybackStore.getState();
   const preloadStore = usePreloadStore.getState();
   const apiConfig = useConfigStore.getState().apiConfig;
@@ -80,7 +87,7 @@ export const startStoryPlayback = async (messageId: string, audioUrl: string): P
   playbackStore.reset();
 
   // 启动播放器会话
-  playbackStore.markSessionStart(messageId, apiConfig.playDuration);
+  playbackStore.markSessionStart(messageId, apiConfig.playDuration, options);
 
   // 3. 自动开始播放生成的音频
   await playbackStore.playAudio(audioUrl, messageId);
@@ -97,11 +104,30 @@ export const beginStorySession = async (prompt: string) => {
 };
 
 /**
+ * 回放一条历史生成：用存下的故事正文重新合成音频并播放。
+ * 由于音频为临时 blob URL 无法持久化，回放依赖正文重新走 TTS 合成。
+ * @param record 生成历史记录。
+ */
+export const replayGeneration = async (record: GenerationRecord): Promise<void> => {
+  // 先重置故事链路（含清空 chat），避免回放后自动续播无关内容
+  resetStoryFlow();
+  const { voiceId, speed } = useConfigStore.getState().apiConfig;
+  const audioUrl = await fetchAudio(record.storyText, record.voiceId || voiceId, speed);
+  // 一次性播放：播完即止，不触发预加载续写
+  await startStoryPlayback(`replay-${record.id}`, audioUrl, { oneShot: true });
+};
+
+/**
  * 音频即将结束时触发预加载：若仍在有效播放时长内且未在加载，则请求下一段。
  */
 export const handleNearEnd = async (): Promise<void> => {
   const playbackState = usePlaybackStore.getState();
   if (!playbackState.sessionId) {
+    return;
+  }
+
+  // 一次性播放（历史回放）不预加载续写
+  if (playbackState.isOneShot) {
     return;
   }
 
@@ -132,6 +158,14 @@ export const handleNearEnd = async (): Promise<void> => {
 export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
   const playbackStore = usePlaybackStore.getState();
   const remainingMs = playbackStore.remainingMs ?? 0;
+
+  // 一次性播放（历史回放）：播完即止，不续写下一段
+  if (playbackStore.isOneShot) {
+    playbackStore.reset();
+    usePreloadStore.getState().reset();
+    clearPreloadRetryTimer();
+    return null;
+  }
 
   if (remainingMs <= 0) {
     playbackStore.reset();

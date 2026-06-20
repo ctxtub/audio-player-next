@@ -1,6 +1,7 @@
 import { useChatStore } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
 import { useConfigStore } from '@/stores/configStore';
+import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
 import type { ChatConversationMessage } from '@/types/chat';
 import type { AgentMessage } from '@/types/agent';
 import { interactWithAgent } from './agentFlow';
@@ -28,7 +29,10 @@ let globalAbortController: AbortController | null = null;
  * @param context 即将发送给后端的对话上下文。
  * @returns 包含最终音频地址和生成内容的对象
  */
-const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ audioUrl: string; content: string }> => {
+const executeChatStream = async (
+  context: ChatConversationMessage[],
+  recordHistory: boolean,
+): Promise<{ audioUrl: string; content: string }> => {
   const generationStore = useGenerationStore.getState();
 
   // 确保清理上一个控制器，防止残留的请求继续占用资源
@@ -42,6 +46,11 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
 
   // 转换 ChatConversationMessage 到 AgentMessage
   const agentMessages = context as unknown as AgentMessage[];
+
+  // 触发本次生成的用户提示词（上下文中最后一条 user 消息），用于生成历史记录
+  const lastUserMessage = [...context].reverse().find((m) => m.role === 'user');
+  const triggerPrompt =
+    typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
 
   try {
     let audioUrl: string = '';
@@ -106,6 +115,13 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
               if (!existingStories && lastMsg) {
                 startStoryPlayback(lastMsg.id, audioUrl).catch(console.error);
               }
+
+              // 4. 记录到生成历史（仅用户主动发起的生成；预加载续写不记录）
+              if (recordHistory) {
+                useGenerationHistoryStore
+                  .getState()
+                  .record(triggerPrompt, generatedContent, voiceId);
+              }
             } else {
               // 若无音频 URL，则按照普通对话消息结束流程
               useChatStore.getState().dispatch({
@@ -156,7 +172,10 @@ const executeChatStream = async (context: ChatConversationMessage[]): Promise<{ 
  * @param content 用户输入的文本内容。
  * @returns 包含生成的消息 ID 和音频 URL
  */
-export const beginChatStream = async (content: string): Promise<{ messageId: string; audioUrl: string; content: string }> => {
+export const beginChatStream = async (
+  content: string,
+  options?: { recordHistory?: boolean },
+): Promise<{ messageId: string; audioUrl: string; content: string }> => {
   // 1. 提交用户消息
   useChatStore.getState().dispatch({ type: 'user.submit', content });
 
@@ -168,7 +187,10 @@ export const beginChatStream = async (content: string): Promise<{ messageId: str
 
   // 3. 执行流
   if (assistantMsgId) {
-    const { audioUrl, content: generatedContent } = await executeChatStream(context);
+    const { audioUrl, content: generatedContent } = await executeChatStream(
+      context,
+      options?.recordHistory ?? true,
+    );
     return { messageId: assistantMsgId, audioUrl, content: generatedContent };
   }
   throw new Error('Failed to create assistant message');
@@ -189,8 +211,8 @@ export const retryChatStream = async (): Promise<void> => {
   // 2. 获取上下文
   const context = useChatStore.getState().selectors.conversationMessages();
 
-  // 3. 执行流
-  await executeChatStream(context);
+  // 3. 执行流（用户主动重试，记录生成历史）
+  await executeChatStream(context, true);
 };
 
 /**

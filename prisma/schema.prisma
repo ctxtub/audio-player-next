@@ -21,6 +21,28 @@ model User {
   config            UserConfig?
   promptHistory     PromptHistory[]
   generationHistory GenerationHistory[]
+  chatMessages      ChatMessage[]
+}
+
+/// 用户当前聊天会话的消息（单会话快照），与 User 多对一关联。
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 会话内顺序
+  position  Int
+  /// 前端消息 id
+  messageId String
+  role      String
+  content   String
+  /// JSON 序列化的 parts（storyCard 的 audioUrl 已置空）
+  parts     String?
+  /// Agent 类型
+  agentType String?
+  /// 前端 createdAt ISO 字符串（展示用）
+  createdAt String?
+
+  @@index([userId, position])
 }
 
 /// 用户生成的故事历史，与 User 多对一关联。回放时据 storyText 重新合成音频。

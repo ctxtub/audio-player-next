@@ -5,6 +5,7 @@ import { Sparkles, Pause, Headphones } from 'lucide-react';
 import type { StoryCardPart } from '@/types/chat';
 import { useGenerationStore } from '@/stores/generationStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
+import { playStoryText } from '@/app/services/storyFlow';
 import StoryViewer from '@/app/(main)/chat/components/StoryViewer';
 import type { PartRendererProps } from './index';
 import styles from './index.module.scss';
@@ -80,8 +81,13 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
     const handlePlay = () => {
         if (isThisCardPlaying) {
             pauseAudioPlayback();
-        } else {
+            return;
+        }
+        if (part.audioUrl) {
             onPlayStory?.(part.audioUrl);
+        } else if (part.storyText) {
+            // 恢复态卡片无持久音频，按正文重新合成并一次性播放
+            void playStoryText(part.storyText);
         }
     };
 

@@ -4,7 +4,9 @@ import { devtools } from 'zustand/middleware';
 import type {
   ChatConversationMessage,
   ChatMessage,
+  ChatMessageRole,
   ChatStreamDoneEvent,
+  MessagePart,
   StoryCardPart,
 } from '@/types/chat';
 import type { AgentType } from '@/types/agent';
@@ -15,6 +17,8 @@ import {
   mapMessagesToContext,
   withPersona,
 } from '@/utils/chatUtils';
+import type { ChatMessageInput } from '@/lib/trpc/schemas/chatConversation';
+import { fetchMyConversation, saveMyConversation } from '@/lib/client/chatConversation';
 
 /**
  * 聊天 Store 的 Action 定义，统一管理所有对单条目消息状态的变更操作。
@@ -76,6 +80,8 @@ type ChatStoreBaseState = {
   inputValue: string;
   /** 是否有未读的 AI 响应（用于 TabBar 小红点）。 */
   hasUnviewedResponse: boolean;
+  /** 是否处于登录态（开启服务端持久化）。 */
+  syncEnabled: boolean;
 };
 
 /**
@@ -88,8 +94,12 @@ type ChatStoreActions = {
 
   /** 主动取消时清理占位消息与上下文。 */
   resetActiveSession: () => void;
-  /** 清空所有历史消息 */
+  /** 清空所有历史消息（同时清空服务端会话） */
   resetChat: () => void;
+  /** 登录后：拉取服务端会话并恢复，开启持久化。 */
+  initForUser: () => Promise<void>;
+  /** 登出：仅清本地并关闭持久化，不动服务端。 */
+  reset: () => void;
   /** 更新输入框的实时内容。 */
   setInputValue: (nextValue: string) => void;
   /**
@@ -118,10 +128,68 @@ export type ChatStore = ChatStoreBaseState & ChatStoreActions;
  * 聊天 Store 创建器。
  * 封装了状态初始化、Action 分发 (dispatch) 以及 Selectors 实现。
  */
-const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
+/** 会话快照保存的防抖间隔（毫秒）。 */
+const SAVE_DEBOUNCE_MS = 1000;
+
+const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
+  /** 防抖保存定时器。 */
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  /** initForUser 去重：进行中的拉取 Promise。 */
+  let userInitPromise: Promise<void> | null = null;
+
+  /**
+   * 取完成态、非 summary 的消息构造保存快照（storyCard 的音频置空不存）。
+   * @param messages 当前消息列表。
+   */
+  const toSnapshot = (messages: ChatMessage[]): ChatMessageInput[] =>
+    messages
+      .filter(
+        (message) =>
+          (message.status === undefined || message.status === 'delivered') &&
+          message.metadata?.agentType !== 'summary_agent',
+      )
+      .map((message) => {
+        const parts = message.parts?.map((part) =>
+          part.type === 'storyCard' ? { ...part, audioUrl: '' } : part,
+        );
+        return {
+          messageId: message.id,
+          role: message.role,
+          content: message.content,
+          parts,
+          agentType: message.metadata?.agentType,
+          createdAt: message.createdAt,
+        };
+      });
+
+  /**
+   * 防抖保存当前会话快照：登录态且无在途消息时整条替换服务端。
+   */
+  const scheduleSave = () => {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+    }
+    saveTimer = setTimeout(() => {
+      saveTimer = null;
+      const state = get();
+      if (!state.syncEnabled) {
+        return;
+      }
+      // 有在途消息则跳过，待其完成后再次触发
+      if (state.messages.some((message) => message.status === 'sending')) {
+        return;
+      }
+      saveMyConversation(toSnapshot(state.messages)).catch((error) => {
+        console.warn('[chatStore] saveMyConversation failed', error);
+      });
+    }, SAVE_DEBOUNCE_MS);
+  };
+
+  return {
   messages: [],
   inputValue: '',
   hasUnviewedResponse: false,
+  syncEnabled: false,
   dispatch: (action: ChatStoreAction) => {
     set((state) => {
       const messages = [...state.messages];
@@ -349,6 +417,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
           return state;
       }
     });
+    // 任一消息变更后调度防抖保存（内部按登录态/在途状态决定是否真正保存）
+    scheduleSave();
   },
 
   checkAndSummarize: async () => {
@@ -417,10 +487,54 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
     set((state) => ({
       messages: state.messages.filter(m => m.status !== 'sending'),
     }));
+    scheduleSave();
   },
   resetChat: () => {
     set({
       messages: [],
+    });
+    // 清空后保存空快照即清空服务端会话
+    scheduleSave();
+  },
+  initForUser: () => {
+    if (get().syncEnabled) {
+      return Promise.resolve();
+    }
+    if (userInitPromise) {
+      return userInitPromise;
+    }
+    userInitPromise = (async () => {
+      const dtos = await fetchMyConversation();
+      const messages: ChatMessage[] = dtos.map((dto) => ({
+        id: dto.messageId,
+        role: dto.role as ChatMessageRole,
+        content: dto.content,
+        parts: dto.parts as MessagePart[] | undefined,
+        status: 'delivered',
+        createdAt: dto.createdAt,
+        metadata: dto.agentType ? { agentType: dto.agentType as AgentType } : undefined,
+      }));
+      // 直接 set，不触发 scheduleSave，避免把恢复结果回写
+      set({ messages, syncEnabled: true });
+    })()
+      .catch((error) => {
+        console.warn('[chatStore] initForUser failed', error);
+      })
+      .finally(() => {
+        userInitPromise = null;
+      });
+    return userInitPromise;
+  },
+  reset: () => {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    set({
+      messages: [],
+      inputValue: '',
+      hasUnviewedResponse: false,
+      syncEnabled: false,
     });
   },
   setInputValue: (nextValue) => {
@@ -509,7 +623,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => ({
       );
     },
   },
-});
+  };
+};
 
 /**
  * 导出聊天 store 的 Hook，供组件按需选择字段使用。

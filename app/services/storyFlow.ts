@@ -104,17 +104,40 @@ export const beginStorySession = async (prompt: string) => {
 };
 
 /**
- * 回放一条历史生成：用存下的故事正文重新合成音频并播放。
- * 由于音频为临时 blob URL 无法持久化，回放依赖正文重新走 TTS 合成。
+ * 合成给定正文并一次性播放：播完即止（oneShot 防续写），不清空聊天会话。
+ * 由于音频为临时 blob URL 无法持久化，历史/恢复回放均依赖正文重新走 TTS 合成。
+ * @param storyText 故事正文。
+ * @param voiceId 音色。
+ * @param messageId 播放会话标识。
+ */
+const synthesizeAndPlayOnce = async (
+  storyText: string,
+  voiceId: string,
+  messageId: string,
+): Promise<void> => {
+  // 清理可能残留的生成阶段，避免恢复态故事卡片误显示生成动效
+  useGenerationStore.getState().reset();
+  const { speed } = useConfigStore.getState().apiConfig;
+  const audioUrl = await fetchAudio(storyText, voiceId, speed);
+  await startStoryPlayback(messageId, audioUrl, { oneShot: true });
+};
+
+/**
+ * 回放一条历史生成（生成历史弹窗）。
  * @param record 生成历史记录。
  */
 export const replayGeneration = async (record: GenerationRecord): Promise<void> => {
-  // 先重置故事链路（含清空 chat），避免回放后自动续播无关内容
-  resetStoryFlow();
-  const { voiceId, speed } = useConfigStore.getState().apiConfig;
-  const audioUrl = await fetchAudio(record.storyText, record.voiceId || voiceId, speed);
-  // 一次性播放：播完即止，不触发预加载续写
-  await startStoryPlayback(`replay-${record.id}`, audioUrl, { oneShot: true });
+  const { voiceId } = useConfigStore.getState().apiConfig;
+  await synthesizeAndPlayOnce(record.storyText, record.voiceId || voiceId, `replay-${record.id}`);
+};
+
+/**
+ * 回放给定故事正文（恢复态故事卡片的"播放故事"）。
+ * @param storyText 故事正文。
+ */
+export const playStoryText = async (storyText: string): Promise<void> => {
+  const { voiceId } = useConfigStore.getState().apiConfig;
+  await synthesizeAndPlayOnce(storyText, voiceId, `replay-text-${Date.now()}`);
 };
 
 /**

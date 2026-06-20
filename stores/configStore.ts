@@ -1,9 +1,13 @@
 import { create, StateCreator, type StoreApi } from 'zustand';
 import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import type { APIConfig } from '@/types/appConfig';
+import type { ThemeMode } from '@/types/theme';
 import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
 import type { VoiceOption } from '@/types/ttsGenerate';
 import { fetchAppConfig } from '@/lib/client/appConfig';
+import { DEFAULT_USER_CONFIG, type UserConfigPatch } from '@/lib/trpc/schemas/config';
+import { fetchMyConfig, saveMyConfig } from '@/lib/client/userConfig';
+import GlassToast from '@/components/ui/GlassToast';
 
 /**
  * 配置 store 的基础状态结构：记录当前配置、加载标记及可选语音列表。
@@ -12,6 +16,8 @@ type ConfigStoreBaseState = {
   apiConfig: APIConfig;
   isLoaded: boolean;
   voiceOptions: VoiceOption[];
+  /** 是否处于登录态（开启服务端回写）。 */
+  syncEnabled: boolean;
 };
 
 /**
@@ -34,6 +40,16 @@ type ConfigStoreActions = {
    * @returns boolean true 表示配置合法
    */
   isConfigValid: () => boolean;
+  /**
+   * 登录后：拉取服务端配置（本地作 seed），开启回写。
+   * @returns Promise<void>
+   */
+  initForUser: () => Promise<void>;
+  /**
+   * 登出：重置为默认并清本地缓存，关闭回写。
+   * @returns void
+   */
+  reset: () => void;
 };
 
 /**
@@ -55,6 +71,7 @@ const createEmptyConfig = (): APIConfig => ({
   voiceId: '',
   speed: 1,
   floatingPlayerEnabled: true,
+  themeMode: DEFAULT_USER_CONFIG.themeMode,
 });
 
 /**
@@ -62,7 +79,7 @@ const createEmptyConfig = (): APIConfig => ({
  * @param config 待校验的配置
  * @returns 是否有效
  */
-const isValidConfig = (config: APIConfig | undefined): config is APIConfig => {
+const isValidConfig = (config: Partial<APIConfig> | undefined): config is APIConfig => {
   if (!config) {
     return false;
   }
@@ -80,6 +97,14 @@ const isValidConfig = (config: APIConfig | undefined): config is APIConfig => {
   }
 
   if (typeof config.floatingPlayerEnabled !== 'boolean') {
+    return false;
+  }
+
+  if (
+    config.themeMode !== 'dark' &&
+    config.themeMode !== 'light' &&
+    config.themeMode !== 'system'
+  ) {
     return false;
   }
 
@@ -112,11 +137,19 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
       ? partial.floatingPlayerEnabled
       : base.floatingPlayerEnabled;
 
+  const themeMode: ThemeMode =
+    partial.themeMode === 'dark' ||
+    partial.themeMode === 'light' ||
+    partial.themeMode === 'system'
+      ? partial.themeMode
+      : base.themeMode;
+
   return {
     playDuration: nextPlayDuration,
     voiceId,
     speed,
     floatingPlayerEnabled,
+    themeMode,
   };
 };
 
@@ -169,11 +202,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
       const playDuration =
         localConfig && localConfig.playDuration > 0
           ? localConfig.playDuration
-          : remote.playDuration;
-
-      if (!playDuration || playDuration <= 0) {
-        throw new Error('INVALID_PLAY_DURATION');
-      }
+          : DEFAULT_USER_CONFIG.playDuration;
 
       let resolvedVoice: string | undefined;
 
@@ -187,16 +216,13 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
         throw new Error('INVALID_VOICE');
       }
 
-      const floatingPlayerEnabled =
-        typeof remote.floatingPlayerEnabled === 'boolean'
-          ? remote.floatingPlayerEnabled
-          : localConfig?.floatingPlayerEnabled ?? true;
-
       const mergedConfig: APIConfig = {
         playDuration,
         voiceId: resolvedVoice,
-        speed: localConfig?.speed ?? 1.0,
-        floatingPlayerEnabled,
+        speed: localConfig?.speed ?? DEFAULT_USER_CONFIG.speed,
+        floatingPlayerEnabled:
+          localConfig?.floatingPlayerEnabled ?? DEFAULT_USER_CONFIG.floatingPlayerEnabled,
+        themeMode: localConfig?.themeMode ?? DEFAULT_USER_CONFIG.themeMode,
       };
 
       return { config: mergedConfig, voiceOptions };
@@ -217,10 +243,45 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
     });
   };
 
+  /** 防抖回写定时器与待写 patch 累积。 */
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingPatch: UserConfigPatch = {};
+
+  /**
+   * 将完整配置映射为可作为 seed/patch 的形状。
+   * @param config 当前完整配置。
+   */
+  const toPatch = (config: APIConfig): UserConfigPatch => ({
+    playDuration: config.playDuration,
+    voiceId: config.voiceId,
+    speed: config.speed,
+    floatingPlayerEnabled: config.floatingPlayerEnabled,
+    themeMode: config.themeMode,
+  });
+
+  /**
+   * 防抖 500ms 将累积 patch 回写服务端，失败保留乐观值并提示。
+   * @param patch 本次变更的增量字段。
+   */
+  const scheduleSave = (patch: UserConfigPatch) => {
+    pendingPatch = { ...pendingPatch, ...patch };
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      const toSend = pendingPatch;
+      pendingPatch = {};
+      saveTimer = null;
+      saveMyConfig(toSend).catch((error) => {
+        console.warn('[configStore] saveMyConfig failed', error);
+        GlassToast.show({ icon: 'fail', content: '配置同步失败，稍后重试' });
+      });
+    }, 500);
+  };
+
   return {
     apiConfig: createEmptyConfig(),
     isLoaded: false,
     voiceOptions: [],
+    syncEnabled: false,
     initialize: () => {
       if (!initializationPromise) {
         initializationPromise = runInitialization().catch(error => {
@@ -242,8 +303,61 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
       set({
         apiConfig: nextConfig,
       });
+      if (get().syncEnabled) {
+        scheduleSave(toPatch(nextConfig));
+      }
     },
     isConfigValid: () => isValidConfig(get().apiConfig),
+    initForUser: async () => {
+      // 1) 取本地配置作为 seed（仅服务端无行时被消费）
+      const localConfig = await hydrateLocalConfig();
+      const seed = localConfig ? toPatch(localConfig) : undefined;
+      // 2) 并行拉取系统级音色与个人配置
+      const [remote, mine] = await Promise.all([
+        fetchAppConfig(),
+        fetchMyConfig(seed),
+      ]);
+      const voiceOptions = Array.isArray(remote.voicesList) ? remote.voicesList : [];
+      const hasVoice = (voice?: string) =>
+        !!voice && voiceOptions.some(option => option.value === voice);
+      // 3) 解析音色：服务端值优先，回落系统默认 / 列表首项
+      const resolvedVoice = hasVoice(mine.voiceId)
+        ? mine.voiceId
+        : hasVoice(remote.voiceId)
+          ? remote.voiceId
+          : voiceOptions[0]?.value ?? '';
+
+      set({
+        apiConfig: {
+          playDuration: mine.playDuration,
+          voiceId: resolvedVoice,
+          speed: mine.speed,
+          floatingPlayerEnabled: mine.floatingPlayerEnabled,
+          themeMode: mine.themeMode,
+        },
+        voiceOptions,
+        isLoaded: true,
+        syncEnabled: true,
+      });
+    },
+    reset: () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      pendingPatch = {};
+      try {
+        getSafeLocalStorage().removeItem(CONFIG_STORAGE_KEY);
+      } catch {
+        // ignore storage 清理失败
+      }
+      set({
+        apiConfig: createEmptyConfig(),
+        voiceOptions: [],
+        isLoaded: false,
+        syncEnabled: false,
+      });
+    },
   };
 };
 
@@ -252,12 +366,17 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
  */
 const persistedConfigStore = persist(configStoreCreator, {
   name: CONFIG_STORAGE_KEY,
+  version: 1,
   storage: createJSONStorage(getSafeLocalStorage),
   partialize: (state) => ({
     apiConfig: state.apiConfig,
   }),
   migrate: (persistedState: unknown) => {
-    const config = (persistedState as Partial<ConfigStore> | undefined)?.apiConfig;
+    const raw = (persistedState as { apiConfig?: Partial<APIConfig> } | undefined)?.apiConfig;
+    // 回填缺失的 themeMode（旧版本无此字段时用默认；已有则保留）
+    const config = raw
+      ? { ...raw, themeMode: raw.themeMode ?? DEFAULT_USER_CONFIG.themeMode }
+      : undefined;
     if (isValidConfig(config)) {
       return { apiConfig: config };
     }

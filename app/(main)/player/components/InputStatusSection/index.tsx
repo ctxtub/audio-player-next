@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import GlassToast from '@/components/ui/GlassToast';
 import HistoryRecords, { HistoryRecordsRef } from '@/app/(main)/player/components/HistoryRecords';
-import {
-  usePromptHistoryStore,
-  selectIsInitialized,
-} from '@/stores/promptHistoryStore';
+import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
 
 import styles from './index.module.scss';
 
@@ -30,9 +27,7 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [textareaInput, setTextareaInput] = useState('');
   const historyRecordsRef = useRef<HistoryRecordsRef>(null);
-  const hydrateHistory = usePromptHistoryStore((state) => state.hydrate);
   const addHistoryRecord = usePromptHistoryStore((state) => state.addOrUpdate);
-  const isHistoryInitialized = usePromptHistoryStore(selectIsInitialized);
 
   // 预设故事类型及其描述
   const storyTypes = [
@@ -47,12 +42,6 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
   useEffect(() => {
     setTextareaInput(inputText);
   }, [inputText]);
-
-  useEffect(() => {
-    if (!isHistoryInitialized) {
-      hydrateHistory();
-    }
-  }, [hydrateHistory, isHistoryInitialized]);
 
   // 处理快捷按钮点击
   const handleQuickSelect = (content: string) => {

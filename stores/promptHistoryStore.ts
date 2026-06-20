@@ -1,6 +1,12 @@
 import { create, type StateCreator, type StoreApi } from 'zustand';
 import { devtools, persist, createJSONStorage } from 'zustand/middleware';
 import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
+import GlassToast from '@/components/ui/GlassToast';
+import {
+  fetchMyPromptHistory,
+  recordMyPrompt,
+  removeMyPrompt,
+} from '@/lib/client/promptHistory';
 
 /**
  * 历史记录条目结构，记录提示词使用信息。
@@ -23,6 +29,8 @@ type PromptHistoryBaseState = {
   recordsMap: Record<string, HistoryRecord>;
   sortMode: SortMode;
   initialized: boolean;
+  /** 是否处于登录态（开启服务端读写）。 */
+  syncEnabled: boolean;
 };
 
 /**
@@ -33,6 +41,10 @@ type PromptHistoryActions = {
   addOrUpdate: (prompt: string) => void;
   remove: (prompt: string) => void;
   setSortMode: (mode: SortMode) => void;
+  /** 登录后：拉取服务端历史（覆盖本地），开启读写穿透。 */
+  initForUser: () => Promise<void>;
+  /** 登出：清空历史与本地缓存，关闭读写穿透。 */
+  reset: () => void;
 };
 
 /**
@@ -108,11 +120,14 @@ type PersistApi = StoreApi<PromptHistoryStore> & {
  */
 const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, api) => {
   const persistApi = api as PersistApi;
+  /** initForUser 去重：进行中的拉取 Promise。 */
+  let userInitPromise: Promise<void> | null = null;
 
   return {
     recordsMap: {},
     sortMode: 'frequency',
     initialized: false,
+    syncEnabled: false,
     hydrate: async () => {
       if (get().initialized) {
         return;
@@ -146,10 +161,6 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
         return;
       }
 
-      if (!get().initialized) {
-        void get().hydrate();
-      }
-
       const now = new Date().toISOString();
 
       set((state) => {
@@ -174,15 +185,19 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
           initialized: true,
         };
       });
+
+      // 登录态下穿透写服务端（失败保留乐观值并提示）
+      if (get().syncEnabled) {
+        recordMyPrompt(prompt).catch((error) => {
+          console.warn('[promptHistoryStore] recordMyPrompt failed', error);
+          GlassToast.show({ icon: 'fail', content: '历史同步失败，稍后重试' });
+        });
+      }
     },
     remove: (rawPrompt) => {
       const prompt = normalizePrompt(rawPrompt);
       if (!prompt) {
         return;
-      }
-
-      if (!get().initialized) {
-        void get().hydrate();
       }
 
       set((state) => {
@@ -200,6 +215,14 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
           initialized: true,
         };
       });
+
+      // 登录态下穿透删服务端（失败提示）
+      if (get().syncEnabled) {
+        removeMyPrompt(prompt).catch((error) => {
+          console.warn('[promptHistoryStore] removeMyPrompt failed', error);
+          GlassToast.show({ icon: 'fail', content: '删除同步失败，稍后重试' });
+        });
+      }
     },
     setSortMode: (mode) => {
       if (get().sortMode === mode) {
@@ -208,6 +231,48 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
       set({
         sortMode: mode,
       });
+    },
+    initForUser: () => {
+      // 已按服务端加载则跳过；并发调用复用同一拉取
+      if (get().syncEnabled) {
+        return Promise.resolve();
+      }
+      if (userInitPromise) {
+        return userInitPromise;
+      }
+      userInitPromise = (async () => {
+        const list = await fetchMyPromptHistory();
+        const recordsMap: Record<string, HistoryRecord> = {};
+        list.forEach((item) => {
+          const prompt = normalizePrompt(item.prompt);
+          if (!prompt) {
+            return;
+          }
+          recordsMap[prompt] = {
+            prompt,
+            lastUsed: item.lastUsed,
+            useCount: item.useCount,
+          };
+        });
+        set({ recordsMap, syncEnabled: true, initialized: true });
+      })()
+        .catch((error) => {
+          console.warn('[promptHistoryStore] initForUser failed', error);
+        })
+        .finally(() => {
+          userInitPromise = null;
+        });
+      return userInitPromise;
+    },
+    reset: () => {
+      if (isBrowserEnvironment()) {
+        try {
+          getSafeLocalStorage().removeItem(PROMPT_HISTORY_STORAGE_KEY);
+        } catch {
+          // ignore storage 清理失败
+        }
+      }
+      set({ recordsMap: {}, syncEnabled: false, initialized: false });
     },
   };
 };

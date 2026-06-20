@@ -1,12 +1,11 @@
 'use client';
 
-import React, { useEffect, forwardRef, useImperativeHandle, useMemo } from 'react';
+import React, { forwardRef, useImperativeHandle, useMemo } from 'react';
 import Modal, { useModal } from '@/components/Modal';
 import { Play, Trash2 } from 'lucide-react';
 import {
   usePromptHistoryStore,
   selectSortMode,
-  selectIsInitialized,
   sortHistoryRecords,
 } from '@/stores/promptHistoryStore';
 import styles from './index.module.scss';
@@ -35,21 +34,13 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
   const { isShow, showModal, closeModal } = useModal();
   const recordsMap = usePromptHistoryStore((state) => state.recordsMap);
   const sortMode = usePromptHistoryStore(selectSortMode);
-  const hydrateHistory = usePromptHistoryStore((state) => state.hydrate);
   const removeHistoryRecord = usePromptHistoryStore((state) => state.remove);
   const setSortMode = usePromptHistoryStore((state) => state.setSortMode);
-  const isHistoryInitialized = usePromptHistoryStore(selectIsInitialized);
 
   const historyRecords = useMemo(
     () => sortHistoryRecords(Object.values(recordsMap), sortMode),
     [recordsMap, sortMode]
   );
-
-  useEffect(() => {
-    if (isShow && !isHistoryInitialized) {
-      hydrateHistory();
-    }
-  }, [hydrateHistory, isHistoryInitialized, isShow]);
 
   const toggleSortMethod = () => {
     const nextMode = sortMode === 'frequency' ? 'recent' : 'frequency';

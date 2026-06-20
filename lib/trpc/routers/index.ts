@@ -9,6 +9,7 @@ import { authRouter } from './auth';
 import { configRouter } from './config';
 import { ttsRouter } from './tts';
 import { agentRouter } from './agent';
+import { promptHistoryRouter } from './promptHistory';
 
 /**
  * 应用根 Router。
@@ -18,6 +19,7 @@ export const appRouter = router({
     config: configRouter,
     tts: ttsRouter,
     agent: agentRouter,
+    promptHistory: promptHistoryRouter,
 });
 
 /**

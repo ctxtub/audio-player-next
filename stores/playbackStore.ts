@@ -35,13 +35,21 @@ type PlaybackStoreBaseState = {
    * 当前播放的故事消息 ID（用于追踪“下一段”）。
    */
   currentMessageId: string | null;
+  /**
+   * 一次性播放（如历史回放）：播完即止，不触发预加载续写。
+   */
+  isOneShot: boolean;
 };
 
 /**
  * 播放器可执行的动作：启动/暂停播放、更新进度、推进段落、恢复初始状态等。
  */
 type PlaybackStoreActions = {
-  markSessionStart: (sessionId: string, playDurationMinutes: number) => void;
+  markSessionStart: (
+    sessionId: string,
+    playDurationMinutes: number,
+    options?: { oneShot?: boolean }
+  ) => void;
   start: () => void;
   pause: () => void;
   updateProgress: (payload: { currentTime: number; duration: number }) => void;
@@ -91,6 +99,7 @@ const INITIAL_STATE: PlaybackStoreBaseState = {
   isFloatingVisible: false,
   currentAudioUrl: null,
   currentMessageId: null,
+  isOneShot: false,
 };
 
 /**
@@ -162,9 +171,10 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
      * 标记新的播放会话：记录 sessionId、重置段落索引并初始化倒计时。
      * @param sessionId 当前故事会话标识
      * @param playDurationMinutes 允许播放时长（分钟）
+     * @param options.oneShot 是否为一次性播放（历史回放），播完即止、不续写
      * @returns void
      */
-    markSessionStart: (sessionId, playDurationMinutes) => {
+    markSessionStart: (sessionId, playDurationMinutes, options) => {
       clearCountdown();
       set({
         sessionId,
@@ -178,6 +188,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         isFloatingVisible: false,
         currentAudioUrl: null,
         currentMessageId: null,
+        isOneShot: options?.oneShot ?? false,
       });
     },
     /**

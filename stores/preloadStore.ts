@@ -89,7 +89,8 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
 
     const taskToken = Symbol('active-preload');
     const preloadTask = (async () => {
-      const { messageId: generatedId, audioUrl, content: generatedContent } = await beginChatStream('请继续故事');
+      // 预加载续写不计入生成历史
+      const { messageId: generatedId, audioUrl, content: generatedContent } = await beginChatStream('请继续故事', { recordHistory: false });
       let nextSegment = generatedContent;
 
       const currentState = get();

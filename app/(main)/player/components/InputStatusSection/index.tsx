@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import GlassToast from '@/components/ui/GlassToast';
 import HistoryRecords, { HistoryRecordsRef } from '@/app/(main)/player/components/HistoryRecords';
+import GenerationHistory, { GenerationHistoryRef } from '@/app/(main)/player/components/GenerationHistory';
 import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
 
 import styles from './index.module.scss';
@@ -27,6 +28,7 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [textareaInput, setTextareaInput] = useState('');
   const historyRecordsRef = useRef<HistoryRecordsRef>(null);
+  const generationHistoryRef = useRef<GenerationHistoryRef>(null);
   const addHistoryRecord = usePromptHistoryStore((state) => state.addOrUpdate);
 
   // 预设故事类型及其描述
@@ -91,6 +93,10 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
     historyRecordsRef.current?.showModal();
   };
 
+  const handleGenerationHistoryClick = () => {
+    generationHistoryRef.current?.showModal();
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.inputContent}>
@@ -113,6 +119,14 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
             title="查看历史提示词记录"
           >
             历史记录
+          </button>
+          <button
+            className={`${styles.quickButton} ${styles.historyButton}`}
+            onClick={handleGenerationHistoryClick}
+            disabled={isSubmitting}
+            title="查看生成历史并回放"
+          >
+            生成历史
           </button>
         </div>
         <div className={styles.inputButtonContainer}>
@@ -139,6 +153,9 @@ const InputStatusSection: React.FC<InputStatusSectionProps> = ({
         ref={historyRecordsRef}
         onSelectPrompt={handleSelectHistoryPrompt}
       />
+
+      {/* 生成历史弹窗 */}
+      <GenerationHistory ref={generationHistoryRef} />
     </div>
   );
 };

@@ -13,13 +13,30 @@ datasource db {
 }
 
 model User {
-  id            Int             @id @default(autoincrement())
-  username      String          @unique
-  password      String
-  nickname      String?
-  createdAt     DateTime        @default(now())
-  config        UserConfig?
-  promptHistory PromptHistory[]
+  id                Int                 @id @default(autoincrement())
+  username          String              @unique
+  password          String
+  nickname          String?
+  createdAt         DateTime            @default(now())
+  config            UserConfig?
+  promptHistory     PromptHistory[]
+  generationHistory GenerationHistory[]
+}
+
+/// 用户生成的故事历史，与 User 多对一关联。回放时据 storyText 重新合成音频。
+model GenerationHistory {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 触发生成的提示词
+  prompt    String
+  /// 生成的故事正文
+  storyText String
+  /// 生成时使用的音色（回放优先用它）
+  voiceId   String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 /// 用户提示词使用历史，与 User 多对一关联。

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 
 import GlassButton from '@/components/ui/GlassButton';
 import { useAuthStore } from '@/stores/authStore';
+import { useConfigStore } from '@/stores/configStore';
 import styles from './index.module.scss';
 
 /**
@@ -20,6 +21,7 @@ const UserSection: React.FC = () => {
   const initialized = useAuthStore(state => state.initialized);
   const fetchProfile = useAuthStore(state => state.fetchProfile);
   const doLogout = useAuthStore(state => state.logout);
+  const resetConfig = useConfigStore(state => state.reset);
 
   const router = useRouter();
 
@@ -49,12 +51,13 @@ const UserSection: React.FC = () => {
   const handleLogout = useCallback(async () => {
     const success = await doLogout();
     if (success) {
+      resetConfig();
       GlassToast.show({ icon: 'success', content: '已登出' });
       router.push('/auth');
     } else {
       GlassToast.show({ icon: 'fail', content: useAuthStore.getState().error || '登出失败' });
     }
-  }, [doLogout, router]);
+  }, [doLogout, resetConfig, router]);
 
   const handleGoAuth = useCallback(() => {
     router.push('/auth?from=/setting');

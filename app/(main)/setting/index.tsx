@@ -117,6 +117,20 @@ const ConfigPage: React.FC = () => {
     updateConfig({ floatingPlayerEnabled: enabled });
   }, [apiConfig.floatingPlayerEnabled, isConfigLoaded, updateConfig]);
 
+  /**
+   * 主题切换：既更新 ThemeProvider（即时生效），又写回 configStore（登录态下防抖同步服务端）。
+   */
+  const handleThemeModeChange = useCallback(
+    (mode: typeof themeMode) => {
+      if (mode === themeMode) {
+        return;
+      }
+      setThemeMode(mode);
+      updateConfig({ themeMode: mode });
+    },
+    [themeMode, setThemeMode, updateConfig]
+  );
+
   useEffect(() => {
     fetchAuthProfile();
   }, [fetchAuthProfile]);
@@ -133,7 +147,7 @@ const ConfigPage: React.FC = () => {
       </div>
       <div className={styles.configForm}>
         <UserSection />
-        <ThemeModeSection value={themeMode} onChange={setThemeMode} />
+        <ThemeModeSection value={themeMode} onChange={handleThemeModeChange} />
         <BasicConfigSection
           playDuration={playDuration}
           onPlayDurationChange={handlePlayDurationChange}

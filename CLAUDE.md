@@ -87,6 +87,38 @@ Next.js 15 + React 19 + TypeScript 5 音频播放应用，使用 App Router、an
 
 UI 设计的唯一规范来源为 [DESIGN_SPEC.md](DESIGN_SPEC.md)。所有样式必须引用其中定义的 Design Token，禁止硬编码数值。
 
+## 规范驱动开发（Spec-Driven Development）
+
+非平凡任务采用 SDD：**先写规范与计划，再编码**，过程文档沉淀到仓库内，使决策可追溯、变更可复盘。
+
+### 适用范围
+
+- **必须留档**：新功能、跨模块重构、架构调整、数据模型/接口变更、影响多页面的设计改动。
+- **可豁免**：纯 bugfix、文案修改、依赖升级、局部样式微调、重命名等低风险小改动。
+- 判断原则：若改动需要做方案取舍，或会影响他人理解/后续维护，按非平凡处理。
+
+### 文档结构
+
+```
+docs/
+  specs/    # 设计规范：需求 + 设计 + 方案权衡 + 验收标准
+  plans/    # 实施计划：可独立验证的任务拆解，与对应 spec 配套
+```
+
+- 命名统一为 `YYYY-MM-DD-<topic>.md`；同一任务的 spec 与 plan 同名以便配对。
+
+### 工作流
+
+1. **Spec** — 写 `docs/specs/`：目标、约束、方案对比、验收标准。
+2. **Plan** — 写 `docs/plans/`：拆成可独立验证的步骤。
+3. **Implement** — 按 plan 编码。
+4. **Verify** — 跑 `yarn lint`、`yarn tsc --noEmit`、`yarn build`，结果落档。
+
+### 与其他文档的关系
+
+- [DESIGN_SPEC.md](DESIGN_SPEC.md) 是**跨任务**的 UI 设计 Token 规范（横切 SSOT）；`docs/specs/` 是**单任务**的设计文档，两者层级不同、互不替代。
+- superpowers 的 brainstorming / writing-plans 技能默认写入 `docs/superpowers/`，本仓库统一覆盖为 `docs/specs/`、`docs/plans/`。
+
 ## 提交规范
 
 - 遵循 Conventional Commits：`feat:`, `fix:`, `refactor:` 等

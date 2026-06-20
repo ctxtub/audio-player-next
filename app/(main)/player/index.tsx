@@ -10,6 +10,8 @@ import AudioPlayer from '@/app/(main)/player/components/AudioPlayer';
 import { useConfigStore } from '@/stores/configStore';
 import { useChatStore } from '@/stores/chatStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
+import { useAuthStore } from '@/stores/authStore';
+import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
 import {
   beginStorySession,
   resetStoryFlow,
@@ -36,6 +38,12 @@ const HomePage: React.FC = () => {
   const isConfigLoaded = useConfigStore(state => state.isLoaded);
   const configIsValid = useConfigStore(state => state.isConfigValid());
 
+  // 提示词历史：登录态感知的单一初始化权威
+  const authInitialized = useAuthStore(state => state.initialized);
+  const isLogin = useAuthStore(state => state.isLogin);
+  const initHistoryForUser = usePromptHistoryStore(state => state.initForUser);
+  const hydrateHistoryLocal = usePromptHistoryStore(state => state.hydrate);
+
   useEffect(() => {
     if (!isConfigLoaded) {
       return;
@@ -44,6 +52,18 @@ const HomePage: React.FC = () => {
       router.push('/config');
     }
   }, [isConfigLoaded, configIsValid, router]);
+
+  // 按登录态选择历史初始化路径：登录拉服务端，访客/未登录走本地
+  useEffect(() => {
+    if (!authInitialized) {
+      return;
+    }
+    if (isLogin) {
+      void initHistoryForUser();
+    } else {
+      void hydrateHistoryLocal();
+    }
+  }, [authInitialized, isLogin, initHistoryForUser, hydrateHistoryLocal]);
 
   // 输入框模块：提交生成故事请求
   const handleInputSubmit = useCallback(

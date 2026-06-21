@@ -87,3 +87,18 @@ return <>{children}</>;
 ## Task 7：提交
 
 Conventional Commits：`refactor: 统一账号数据同步机制（注册表 SSOT + 登出订阅）`。落档 spec/plan 一并提交。
+
+## As-built 修订（代码审查后）
+
+- **commit `35bbe51`**：主重构落地（Task 1~7）。
+- **commit `5f77ba9`**（代码审查发现并修复）：`configStore.reset()` 原未清空闭包内的
+  `initializationPromise` / `userInitPromise`。登出后若在 `(main)` 内「就地」重新初始化
+  （未来 401/会话过期自动清理路径），`initialize()` 会返回上一会话**已 resolve 的旧 Promise**，
+  `runInitialization` 不再重跑，`isLoaded` 卡在 false → 加载门永久停在「配置加载中…」，恰好击穿
+  本次重构为 401 自动清理铺的路。修法：`reset()` 时置空两个 Promise 记忆。
+- **遗留（已开后台任务，跨 store，不在本块范围）**：四个 store 的在途 `initForUser` 与 `reset`
+  的窄竞态——在途请求 resolve 后仍会 `set({...上一账号数据, syncEnabled:true})`。需引入 epoch
+  版本号守卫，于 `set` 前校验未被 `reset` 打断。
+- **手测结论**：用两个自建账号（claudea/claudeb）端到端跑通 —— 加载门、seed 迁移、
+  `initAccountForUser` 单 batch、登出订阅清理、**双账号防泄漏（DB + UI 双证：A=dark/浮窗关，
+  B=system/浮窗开，无残留）**、访客本地路径均通过。

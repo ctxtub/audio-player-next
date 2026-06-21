@@ -131,11 +131,29 @@ export type ChatStore = ChatStoreBaseState & ChatStoreActions;
 /** 会话快照保存的防抖间隔（毫秒）。 */
 const SAVE_DEBOUNCE_MS = 1000;
 
+/**
+ * 合并会话：服务端历史在前，本地窗口内新增按 id 去重续后。
+ * 用于 initForUser 终态——既恢复账号历史，又不冲掉 await 窗口内刚发的消息（项 3）。
+ * @param server 服务端恢复的消息（基准顺序）。
+ * @param local await 窗口内本地新增、需保留的消息。
+ * @returns 合并后的有序消息列表。
+ */
+const mergeConversation = (
+  server: ChatMessage[],
+  local: ChatMessage[],
+): ChatMessage[] => {
+  const serverIds = new Set(server.map((message) => message.id));
+  const appended = local.filter((message) => !serverIds.has(message.id));
+  return [...server, ...appended];
+};
+
 const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   /** 防抖保存定时器。 */
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   /** initForUser 去重：进行中的拉取 Promise。 */
   let userInitPromise: Promise<void> | null = null;
+  /** 账号代次：reset 自增，作废在途 initForUser 的回写。 */
+  let accountEpoch = 0;
 
   /**
    * 取完成态、非 summary 的消息构造保存快照（storyCard 的音频置空不存）。
@@ -503,9 +521,14 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     if (userInitPromise) {
       return userInitPromise;
     }
+    const epoch = accountEpoch; // 捕获进入代次
+    const baselineIds = new Set(get().messages.map((message) => message.id)); // 进入时已有（访客/旧态）
     userInitPromise = (async () => {
       const dtos = await fetchMyConversation();
-      const messages: ChatMessage[] = dtos.map((dto) => ({
+      if (epoch !== accountEpoch) {
+        return; // 账号已切（登出/401）→ 放弃回写（项 4）
+      }
+      const serverMessages: ChatMessage[] = dtos.map((dto) => ({
         id: dto.messageId,
         role: dto.role as ChatMessageRole,
         content: dto.content,
@@ -514,18 +537,26 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         createdAt: dto.createdAt,
         metadata: dto.agentType ? { agentType: dto.agentType as AgentType } : undefined,
       }));
+      // await 窗口内本地新增（非 baseline）的消息，需在恢复后保留（项 3）
+      const appendedLocally = get().messages.filter(
+        (message) => !baselineIds.has(message.id),
+      );
       // 直接 set，不触发 scheduleSave，避免把恢复结果回写
-      set({ messages, syncEnabled: true });
+      set({ messages: mergeConversation(serverMessages, appendedLocally), syncEnabled: true });
     })()
       .catch((error) => {
         console.warn('[chatStore] initForUser failed', error);
       })
       .finally(() => {
-        userInitPromise = null;
+        if (epoch === accountEpoch) {
+          userInitPromise = null;
+        }
       });
     return userInitPromise;
   },
   reset: () => {
+    accountEpoch++; // 作废在途 initForUser 的回写
+    userInitPromise = null; // 让重新登录能起新请求
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;

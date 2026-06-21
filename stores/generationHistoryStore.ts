@@ -43,6 +43,8 @@ export type GenerationHistoryStore = GenerationHistoryState & GenerationHistoryA
 const generationHistoryStoreCreator: StateCreator<GenerationHistoryStore> = (set, get) => {
   /** initForUser 去重：进行中的拉取 Promise。 */
   let userInitPromise: Promise<void> | null = null;
+  /** 账号代次：reset 自增，作废在途 initForUser 的回写（防跨账号数据回流）。 */
+  let accountEpoch = 0;
 
   return {
     records: [],
@@ -55,15 +57,21 @@ const generationHistoryStoreCreator: StateCreator<GenerationHistoryStore> = (set
       if (userInitPromise) {
         return userInitPromise;
       }
+      const epoch = accountEpoch; // 捕获进入代次
       userInitPromise = (async () => {
         const records = await fetchMyGenerations();
+        if (epoch !== accountEpoch) {
+          return; // 期间 reset 过 → 放弃回写，勿落旧账号数据 / 勿重开同步
+        }
         set({ records, syncEnabled: true });
       })()
         .catch((error) => {
           console.warn('[generationHistoryStore] initForUser failed', error);
         })
         .finally(() => {
-          userInitPromise = null;
+          if (epoch === accountEpoch) {
+            userInitPromise = null; // 仅本代次才清句柄，勿清掉新登录起的请求
+          }
         });
       return userInitPromise;
     },
@@ -100,6 +108,8 @@ const generationHistoryStoreCreator: StateCreator<GenerationHistoryStore> = (set
     },
 
     reset: () => {
+      accountEpoch++; // 作废在途 initForUser 的回写
+      userInitPromise = null; // 让重新登录能起新请求（与 configStore 一致）
       set({ records: [], syncEnabled: false });
     },
   };

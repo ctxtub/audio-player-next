@@ -122,6 +122,8 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
   const persistApi = api as PersistApi;
   /** initForUser 去重：进行中的拉取 Promise。 */
   let userInitPromise: Promise<void> | null = null;
+  /** 账号代次：reset 自增，作废在途 initForUser 的回写。 */
+  let accountEpoch = 0;
 
   return {
     recordsMap: {},
@@ -240,6 +242,7 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
       if (userInitPromise) {
         return userInitPromise;
       }
+      const epoch = accountEpoch; // 捕获进入代次
       userInitPromise = (async () => {
         const list = await fetchMyPromptHistory();
         const recordsMap: Record<string, HistoryRecord> = {};
@@ -254,17 +257,24 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
             useCount: item.useCount,
           };
         });
+        if (epoch !== accountEpoch) {
+          return; // 期间 reset 过 → 放弃回写
+        }
         set({ recordsMap, syncEnabled: true, initialized: true });
       })()
         .catch((error) => {
           console.warn('[promptHistoryStore] initForUser failed', error);
         })
         .finally(() => {
-          userInitPromise = null;
+          if (epoch === accountEpoch) {
+            userInitPromise = null;
+          }
         });
       return userInitPromise;
     },
     reset: () => {
+      accountEpoch++; // 作废在途 initForUser 的回写
+      userInitPromise = null; // 让重新登录能起新请求
       if (isBrowserEnvironment()) {
         try {
           getSafeLocalStorage().removeItem(PROMPT_HISTORY_STORAGE_KEY);

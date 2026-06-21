@@ -169,6 +169,8 @@ type PersistApi = StoreApi<ConfigStore> & {
 const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
   const persistApi = api as PersistApi;
   let initializationPromise: Promise<void> | null = null;
+  /** initForUser 去重：进行中的拉取 Promise（并发合流）。 */
+  let userInitPromise: Promise<void> | null = null;
 
   const hydrateLocalConfig = async (): Promise<APIConfig | undefined> => {
     if (!isBrowserEnvironment()) {
@@ -308,37 +310,49 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
       }
     },
     isConfigValid: () => isValidConfig(get().apiConfig),
-    initForUser: async () => {
-      // 1) 取本地配置作为 seed（仅服务端无行时被消费）
-      const localConfig = await hydrateLocalConfig();
-      const seed = localConfig ? toPatch(localConfig) : undefined;
-      // 2) 并行拉取系统级音色与个人配置
-      const [remote, mine] = await Promise.all([
-        fetchAppConfig(),
-        fetchMyConfig(seed),
-      ]);
-      const voiceOptions = Array.isArray(remote.voicesList) ? remote.voicesList : [];
-      const hasVoice = (voice?: string) =>
-        !!voice && voiceOptions.some(option => option.value === voice);
-      // 3) 解析音色：服务端值优先，回落系统默认 / 列表首项
-      const resolvedVoice = hasVoice(mine.voiceId)
-        ? mine.voiceId
-        : hasVoice(remote.voiceId)
-          ? remote.voiceId
-          : voiceOptions[0]?.value ?? '';
+    initForUser: () => {
+      // 已按服务端加载则跳过；并发调用复用同一拉取（与其余三块契约一致）
+      if (get().syncEnabled) {
+        return Promise.resolve();
+      }
+      if (userInitPromise) {
+        return userInitPromise;
+      }
+      userInitPromise = (async () => {
+        // 1) 取本地配置作为 seed（仅服务端无行时被消费）
+        const localConfig = await hydrateLocalConfig();
+        const seed = localConfig ? toPatch(localConfig) : undefined;
+        // 2) 并行拉取系统级音色与个人配置
+        const [remote, mine] = await Promise.all([
+          fetchAppConfig(),
+          fetchMyConfig(seed),
+        ]);
+        const voiceOptions = Array.isArray(remote.voicesList) ? remote.voicesList : [];
+        const hasVoice = (voice?: string) =>
+          !!voice && voiceOptions.some(option => option.value === voice);
+        // 3) 解析音色：服务端值优先，回落系统默认 / 列表首项
+        const resolvedVoice = hasVoice(mine.voiceId)
+          ? mine.voiceId
+          : hasVoice(remote.voiceId)
+            ? remote.voiceId
+            : voiceOptions[0]?.value ?? '';
 
-      set({
-        apiConfig: {
-          playDuration: mine.playDuration,
-          voiceId: resolvedVoice,
-          speed: mine.speed,
-          floatingPlayerEnabled: mine.floatingPlayerEnabled,
-          themeMode: mine.themeMode,
-        },
-        voiceOptions,
-        isLoaded: true,
-        syncEnabled: true,
+        set({
+          apiConfig: {
+            playDuration: mine.playDuration,
+            voiceId: resolvedVoice,
+            speed: mine.speed,
+            floatingPlayerEnabled: mine.floatingPlayerEnabled,
+            themeMode: mine.themeMode,
+          },
+          voiceOptions,
+          isLoaded: true,
+          syncEnabled: true,
+        });
+      })().finally(() => {
+        userInitPromise = null;
       });
+      return userInitPromise;
     },
     reset: () => {
       if (saveTimer) {

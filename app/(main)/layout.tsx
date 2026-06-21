@@ -3,7 +3,7 @@ import styles from '@/styles/app.module.scss';
 import MainTabBar from '@/components/MainTabBar';
 import AudioControllerHost from '@/components/AudioControllerHost';
 import { FloatingPlayer } from '@/components/FloatingPlayer';
-import ConfigInitializer from '@/components/ConfigInitializer';
+import AccountSyncProvider from '@/components/AccountSyncProvider';
 import ThemeConfigBridge from '@/components/ThemeConfigBridge';
 /**
  * 主应用布局：包含底部导航、音频控制器。
@@ -14,7 +14,7 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   return (
-    <ConfigInitializer>
+    <AccountSyncProvider>
       <ThemeConfigBridge />
       <div className={styles.app}>
         <main className={styles.content}>
@@ -24,6 +24,6 @@ export default function MainLayout({
       </div>
       <AudioControllerHost />
       <FloatingPlayer />
-    </ConfigInitializer>
+    </AccountSyncProvider>
   );
 }

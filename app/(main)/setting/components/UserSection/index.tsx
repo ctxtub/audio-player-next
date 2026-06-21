@@ -6,10 +6,6 @@ import { useRouter } from 'next/navigation';
 
 import GlassButton from '@/components/ui/GlassButton';
 import { useAuthStore } from '@/stores/authStore';
-import { useConfigStore } from '@/stores/configStore';
-import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
-import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
-import { useChatStore } from '@/stores/chatStore';
 import styles from './index.module.scss';
 
 /**
@@ -24,10 +20,6 @@ const UserSection: React.FC = () => {
   const initialized = useAuthStore(state => state.initialized);
   const fetchProfile = useAuthStore(state => state.fetchProfile);
   const doLogout = useAuthStore(state => state.logout);
-  const resetConfig = useConfigStore(state => state.reset);
-  const resetPromptHistory = usePromptHistoryStore(state => state.reset);
-  const resetGenerationHistory = useGenerationHistoryStore(state => state.reset);
-  const resetChatSession = useChatStore(state => state.reset);
 
   const router = useRouter();
 
@@ -55,18 +47,15 @@ const UserSection: React.FC = () => {
   }, [isGuest, isLogin, nickname]);
 
   const handleLogout = useCallback(async () => {
+    // 登出成功后 authStore.isLogin 置假，accountSync 订阅自动清理四块账号数据
     const success = await doLogout();
     if (success) {
-      resetConfig();
-      resetPromptHistory();
-      resetGenerationHistory();
-      resetChatSession();
       GlassToast.show({ icon: 'success', content: '已登出' });
       router.push('/auth');
     } else {
       GlassToast.show({ icon: 'fail', content: useAuthStore.getState().error || '登出失败' });
     }
-  }, [doLogout, resetConfig, resetPromptHistory, resetGenerationHistory, resetChatSession, router]);
+  }, [doLogout, router]);
 
   const handleGoAuth = useCallback(() => {
     router.push('/auth?from=/setting');

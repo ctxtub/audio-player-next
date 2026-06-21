@@ -5,6 +5,8 @@
  * 将 prisma 细节从 tRPC router 剥离，便于复用与维护。
  */
 
+import { TRPCError } from '@trpc/server';
+
 import type { ThemeMode } from '@/types/theme';
 import { prisma } from '@/lib/db';
 import {
@@ -71,6 +73,12 @@ export const getOrCreateUserConfig = async (
     const existing = await prisma.userConfig.findUnique({ where: { userId } });
     if (existing) {
         return toDto(existing);
+    }
+    // 行不存在才建行：先确认用户仍存在，避免「会话指向已删除用户」时 create 撞外键约束（500）。
+    // 此种会话已失效，统一抛 UNAUTHORIZED，由客户端按未登录/会话失效处理（而非整屏卡死）。
+    const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!userExists) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'SESSION_USER_NOT_FOUND' });
     }
     const created = await prisma.userConfig.create({ data: buildCreateData(userId, seed) });
     return toDto(created);

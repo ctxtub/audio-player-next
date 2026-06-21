@@ -171,6 +171,8 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
   let initializationPromise: Promise<void> | null = null;
   /** initForUser 去重：进行中的拉取 Promise（并发合流）。 */
   let userInitPromise: Promise<void> | null = null;
+  /** 账号代次：reset 自增，作废在途 initForUser 的回写。 */
+  let accountEpoch = 0;
 
   const hydrateLocalConfig = async (): Promise<APIConfig | undefined> => {
     if (!isBrowserEnvironment()) {
@@ -318,6 +320,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
       if (userInitPromise) {
         return userInitPromise;
       }
+      const epoch = accountEpoch; // 捕获进入代次
       userInitPromise = (async () => {
         // 1) 取本地配置作为 seed（仅服务端无行时被消费）
         const localConfig = await hydrateLocalConfig();
@@ -337,6 +340,9 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
             ? remote.voiceId
             : voiceOptions[0]?.value ?? '';
 
+        if (epoch !== accountEpoch) {
+          return; // 期间 reset 过 → 放弃回写
+        }
         set({
           apiConfig: {
             playDuration: mine.playDuration,
@@ -350,11 +356,14 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
           syncEnabled: true,
         });
       })().finally(() => {
-        userInitPromise = null;
+        if (epoch === accountEpoch) {
+          userInitPromise = null;
+        }
       });
       return userInitPromise;
     },
     reset: () => {
+      accountEpoch++; // 作废在途 initForUser 的回写
       if (saveTimer) {
         clearTimeout(saveTimer);
         saveTimer = null;

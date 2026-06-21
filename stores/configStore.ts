@@ -355,11 +355,21 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
           isLoaded: true,
           syncEnabled: true,
         });
-      })().finally(() => {
-        if (epoch === accountEpoch) {
-          userInitPromise = null;
-        }
-      });
+      })()
+        .catch(async (error) => {
+          // 登录态配置拉取失败（如会话失效 UNAUTHORIZED / 网络错误）：
+          // 回落访客初始化以放行加载门，避免首屏永久卡在「配置加载中…」。
+          console.warn('[configStore] initForUser failed; 回落访客初始化放行加载门', error);
+          if (epoch !== accountEpoch || get().isLoaded) {
+            return;
+          }
+          await get().initialize();
+        })
+        .finally(() => {
+          if (epoch === accountEpoch) {
+            userInitPromise = null;
+          }
+        });
       return userInitPromise;
     },
     reset: () => {

@@ -360,6 +360,10 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
         saveTimer = null;
       }
       pendingPatch = {};
+      // 清空初始化记忆，使登出后「就地」重新初始化（访客/401 路径）能重跑 initialize/initForUser，
+      // 而非返回上一会话已 resolve 的旧 Promise 导致 isLoaded 卡在 false。
+      initializationPromise = null;
+      userInitPromise = null;
       try {
         getSafeLocalStorage().removeItem(CONFIG_STORAGE_KEY);
       } catch {

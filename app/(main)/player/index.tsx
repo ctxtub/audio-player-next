@@ -7,7 +7,7 @@ import GenerationPreview from '@/app/(main)/player/components/GenerationPreview'
 import AudioPlayer from '@/app/(main)/player/components/AudioPlayer';
 
 import { useConfigStore } from '@/stores/configStore';
-import InputStatusSection from './components/InputStatusSection';
+import HistoryPanel from './components/HistoryPanel';
 import styles from './index.module.scss';
 
 /**
@@ -38,9 +38,9 @@ const HomePage: React.FC = () => {
 
         <GenerationPreview />
 
-        <InputStatusSection />
-
         <AudioPlayer />
+
+        <HistoryPanel />
       </div>
     </div>
   );

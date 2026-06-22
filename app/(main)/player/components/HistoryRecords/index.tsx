@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useImperativeHandle, useMemo } from 'react';
 import Modal, { useModal } from '@/components/Modal';
-import { Play, Trash2 } from 'lucide-react';
+import { Wand2, Trash2 } from 'lucide-react';
 import {
   usePromptHistoryStore,
   selectSortMode,
@@ -61,7 +61,8 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
     onSelectPrompt(prompt);
   };
 
-  const handlePlayButtonClick = (prompt: string) => {
+  // 选择历史提示词：关闭弹窗后交给上层跳转创作页预填并自动发送（重新创作，非播放）。
+  const handleRegenerateClick = (prompt: string) => {
     closeModal();
     setTimeout(() => {
       handleSelectPrompt(prompt);
@@ -93,14 +94,15 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
                 </div>
                 <div className={styles.actionButtons}>
                   <button
-                    className={styles.playButton}
+                    className={styles.regenerateButton}
                     onClick={(e) => {
                       e.stopPropagation();
-                      handlePlayButtonClick(record.prompt);
+                      handleRegenerateClick(record.prompt);
                     }}
-                    aria-label="播放此提示词"
+                    aria-label="用此提示词重新创作"
+                    title="用此提示词重新创作"
                   >
-                    <Play size={16} strokeWidth={2} />
+                    <Wand2 size={16} strokeWidth={2} />
                   </button>
                   <button
                     className={styles.deleteButton}

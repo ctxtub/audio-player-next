@@ -1,7 +1,7 @@
 import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-import { beginChatStream } from '@/app/services/chatFlow';
+import { beginChatStream, AUTO_CONTINUE_PROMPT } from '@/app/services/chatFlow';
 
 /**
  * 预加载阶段的状态枚举：
@@ -90,7 +90,7 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
     const taskToken = Symbol('active-preload');
     const preloadTask = (async () => {
       // 预加载续写不计入生成历史
-      const { messageId: generatedId, audioUrl, content: generatedContent } = await beginChatStream('请继续故事', { recordHistory: false });
+      const { messageId: generatedId, audioUrl, content: generatedContent } = await beginChatStream(AUTO_CONTINUE_PROMPT, { recordHistory: false });
       let nextSegment = generatedContent;
 
       const currentState = get();

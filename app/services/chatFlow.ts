@@ -9,6 +9,13 @@ import { interactWithAgent } from './agentFlow';
 import { startStoryPlayback } from './storyFlow';
 
 /**
+ * 自动续写指令文案：预加载下一段故事时作为用户消息提交。
+ * 抽为共享常量供 preloadStore 发起续写、player 推导标题时排除续写指令复用，
+ * 避免文案在多处硬编码后产生漂移。
+ */
+export const AUTO_CONTINUE_PROMPT = '请继续故事';
+
+/**
  * 将未知异常标准化为 Error，便于上层展示 Toast。
  * @param error 捕获到的未知异常。
  */

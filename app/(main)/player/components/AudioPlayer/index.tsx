@@ -7,6 +7,7 @@ import GlassToast from '@/components/ui/GlassToast';
 import { usePlaybackStore, useFloatingPlayer } from '@/stores/playbackStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useConfigStore } from '@/stores/configStore';
+import { AUTO_CONTINUE_PROMPT } from '@/app/services/chatFlow';
 import styles from './index.module.scss';
 
 /**
@@ -37,12 +38,16 @@ const AudioPlayer: React.FC = () => {
   const setGlobalPlaybackRate = usePlaybackStore((state) => state.setPlaybackRate);
   const { resume, pause } = useFloatingPlayer();
 
-  /* 曲目信息：从最后一条用户消息和当前语音选项推导 */
+  /* 曲目信息：取故事会话「首条非续写指令」的用户消息作为标题，并叠加当前语音选项。
+     取首条而非末条，是为了让标题稳定呈现故事主题；排除自动续写指令「请继续故事」，
+     避免标题被预加载发起的续写消息覆盖（见 chatFlow.AUTO_CONTINUE_PROMPT）。 */
   const messages = useChatStore((state) => state.messages);
   const voiceOptions = useConfigStore((state) => state.voiceOptions);
   const voiceId = useConfigStore((state) => state.apiConfig.voiceId);
-  const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
-  const trackTitle = lastUserMsg ? lastUserMsg.content.slice(0, 20) : '音频故事';
+  const storyPromptMsg = messages.find(
+    (m) => m.role === 'user' && m.content.trim() !== AUTO_CONTINUE_PROMPT,
+  );
+  const trackTitle = storyPromptMsg ? storyPromptMsg.content.slice(0, 20) : '音频故事';
   const selectedVoice = voiceOptions.find((v) => v.value === voiceId);
   const trackSub = selectedVoice ? selectedVoice.label : 'AI 语音';
 

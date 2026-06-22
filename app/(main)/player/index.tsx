@@ -1,38 +1,24 @@
 'use client';
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import GlassToast from '@/components/ui/GlassToast';
 import PlaybackStatusBoard from '@/app/(main)/player/components/PlaybackStatusBoard';
 import GenerationPreview from '@/app/(main)/player/components/GenerationPreview';
 import AudioPlayer from '@/app/(main)/player/components/AudioPlayer';
 
 import { useConfigStore } from '@/stores/configStore';
-import { useChatStore } from '@/stores/chatStore';
-import { usePlaybackStore } from '@/stores/playbackStore';
-import {
-  beginStorySession,
-  resetStoryFlow,
-} from '@/app/services/storyFlow';
 import InputStatusSection from './components/InputStatusSection';
 import styles from './index.module.scss';
 
 /**
- * 首页页面组件，负责串联故事生成与音频播放交互。
- * @returns 首页 JSX 结构
+ * 播放器页：纯播放 + 历史视图。故事生成已统一收归创作（chat）页。
+ * @returns 播放器页 JSX 结构
  */
 const HomePage: React.FC = () => {
+  /** 路由：配置无效时跳转配置页。 */
   const router = useRouter();
 
-  // 故事状态
-  const storyInputText = useChatStore((state) => {
-    const lastUserMsg = state.messages.findLast((m) => m.role === 'user');
-    return lastUserMsg?.content || '';
-  });
-
-
-
-  // 配置初始化与校验能力（提示词历史的登录/访客初始化已由 AccountSyncProvider 全局接管）
+  // 配置加载与校验（登录/访客初始化已由 AccountSyncProvider 全局接管）
   const isConfigLoaded = useConfigStore(state => state.isLoaded);
   const configIsValid = useConfigStore(state => state.isConfigValid());
 
@@ -45,21 +31,6 @@ const HomePage: React.FC = () => {
     }
   }, [isConfigLoaded, configIsValid, router]);
 
-  // 输入框模块：提交生成故事请求
-  const handleInputSubmit = useCallback(
-    async (shortcutText: string) => {
-      try {
-        await usePlaybackStore.getState().ensureUnlocked();
-        await beginStorySession(shortcutText);
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : '发生未知错误';
-        GlassToast.show({ icon: 'fail', content: errorMessage, duration: 3000 });
-        resetStoryFlow();
-      }
-    },
-    []
-  );
-
   return (
     <div className={styles.homePage}>
       <div className={styles.pageSection}>
@@ -67,10 +38,7 @@ const HomePage: React.FC = () => {
 
         <GenerationPreview />
 
-        <InputStatusSection
-          inputText={storyInputText}
-          handleSubmit={handleInputSubmit}
-        />
+        <InputStatusSection />
 
         <AudioPlayer />
       </div>

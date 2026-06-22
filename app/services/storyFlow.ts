@@ -5,7 +5,6 @@ import { useChatStore } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
 import type { GenerationRecord } from '@/stores/generationHistoryStore';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
-import { beginChatStream } from './chatFlow';
 
 /**
  * 可播放段落对象，包含音频地址与文本内容，并标注来源（首段/预加载/即时生成）。
@@ -91,16 +90,6 @@ export const startStoryPlayback = async (
 
   // 3. 自动开始播放生成的音频
   await playbackStore.playAudio(audioUrl, messageId);
-};
-
-/**
- * 启动新的故事会话：清空旧状态、生成首段文本与音频，并初始化播放会话及启动播放。
- * @param prompt 用户输入的故事提示词
- */
-export const beginStorySession = async (prompt: string) => {
-  resetStoryFlow();
-  const { messageId, audioUrl } = await beginChatStream(prompt);
-  await startStoryPlayback(messageId, audioUrl);
 };
 
 /**

@@ -2,6 +2,7 @@ import { useChatStore } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
 import { useConfigStore } from '@/stores/configStore';
 import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
+import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
 import type { ChatConversationMessage } from '@/types/chat';
 import type { AgentMessage } from '@/types/agent';
 import { interactWithAgent } from './agentFlow';
@@ -116,11 +117,12 @@ const executeChatStream = async (
                 startStoryPlayback(lastMsg.id, audioUrl).catch(console.error);
               }
 
-              // 4. 记录到生成历史（仅用户主动发起的生成；预加载续写不记录）
+              // 4. 记录到生成历史 + 提示词历史（仅用户主动发起、真正生成了故事时记；预加载续写不记录）
               if (recordHistory) {
                 useGenerationHistoryStore
                   .getState()
                   .record(triggerPrompt, generatedContent, voiceId);
+                usePromptHistoryStore.getState().addOrUpdate(triggerPrompt);
               }
             } else {
               // 若无音频 URL，则按照普通对话消息结束流程

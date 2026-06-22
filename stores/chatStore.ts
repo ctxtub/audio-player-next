@@ -160,15 +160,13 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   let accountEpoch = 0;
 
   /**
-   * 取完成态、非 summary 的消息构造保存快照（storyCard 的音频置空不存）。
+   * 取完成态消息构造保存快照（含 summary 锚点，便于恢复后压缩上下文；storyCard 的音频置空不存）。
    * @param messages 当前消息列表。
    */
   const toSnapshot = (messages: ChatMessage[]): ChatMessageInput[] =>
     messages
       .filter(
-        (message) =>
-          (message.status === undefined || message.status === 'delivered') &&
-          message.metadata?.agentType !== 'summary_agent',
+        (message) => message.status === undefined || message.status === 'delivered',
       )
       .map((message) => {
         const parts = message.parts?.map((part) =>

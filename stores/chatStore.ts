@@ -82,6 +82,8 @@ type ChatStoreBaseState = {
   hasUnviewedResponse: boolean;
   /** 是否处于登录态（开启服务端持久化）。 */
   syncEnabled: boolean;
+  /** 跨页自动发送的待发提示词（来自 /player 历史记录选择，瞬态、不持久化）。 */
+  pendingAutoSend: string | null;
 };
 
 /**
@@ -102,6 +104,8 @@ type ChatStoreActions = {
   reset: () => void;
   /** 更新输入框的实时内容。 */
   setInputValue: (nextValue: string) => void;
+  /** 设置/清空跨页自动发送的待发提示词。 */
+  setPendingAutoSend: (prompt: string | null) => void;
   /**
    * 标记当前会话为已读，清除未读 AI 响应红点。
    */
@@ -208,6 +212,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   inputValue: '',
   hasUnviewedResponse: false,
   syncEnabled: false,
+  pendingAutoSend: null,
   dispatch: (action: ChatStoreAction) => {
     set((state) => {
       const messages = [...state.messages];
@@ -570,6 +575,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   },
   setInputValue: (nextValue) => {
     set({ inputValue: nextValue });
+  },
+  setPendingAutoSend: (prompt) => {
+    set({ pendingAutoSend: prompt });
   },
   markResponseAsViewed: () => {
     set({ hasUnviewedResponse: false });

@@ -107,6 +107,17 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     }
   }, []);
 
+  // 来自 /player 历史记录「选一条」的跨页自动发送：预填输入框并发送，仅消费一次。
+  useEffect(() => {
+    const pending = useChatStore.getState().pendingAutoSend;
+    if (!pending) {
+      return;
+    }
+    useChatStore.getState().setPendingAutoSend(null);
+    setInputValue(pending);
+    handleSubmit(pending);
+  }, [handleSubmit, setInputValue]);
+
   /**
    * 输入框内容变化时同步到 store，便于外部组件访问。 
    * @param next 最新的输入内容。

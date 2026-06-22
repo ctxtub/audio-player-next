@@ -139,7 +139,7 @@ export const authRouter = router({
     }),
 
     /**
-     * 获取当前登录状态（含访客模式）。
+     * 获取当前登录状态（含访客模式），并作为登录态唯一可信源。
      * Cookie 续签已移至 Next.js middleware 统一处理。
      */
     profile: publicProcedure.query(async ({ ctx }) => {
@@ -148,10 +148,22 @@ export const authRouter = router({
                 where: { id: ctx.session.userId },
                 select: { username: true },
             });
+            // 会话指向已删除/不存在用户（被删 / 库重置）→ 会话失效。
+            // 清 stale cookie（避免 middleware 每次请求续签复活），并以失效标记告知客户端跳转登录。
+            if (!dbUser) {
+                const cookieStore = await cookies();
+                cookieStore.delete(SESSION_COOKIE);
+                const isGuest = cookieStore.get(GUEST_COOKIE)?.value === '1';
+                return {
+                    isLogin: false as const,
+                    isGuest,
+                    sessionInvalidated: true as const,
+                };
+            }
             return {
                 isLogin: true as const,
                 isGuest: false as const,
-                user: { nickname: ctx.session.nickname, username: dbUser?.username ?? '' },
+                user: { nickname: ctx.session.nickname, username: dbUser.username ?? '' },
             };
         }
 

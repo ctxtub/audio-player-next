@@ -55,6 +55,10 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
         initialized: true,
         error: undefined,
       });
+      // 加载时已失效：服务端已清 stale cookie，此处直接跳登录页（cookie 已清，无 reverse-guard 回环）。
+      if ('sessionInvalidated' in profile && profile.sessionInvalidated && typeof window !== 'undefined') {
+        window.location.assign('/auth?session=expired');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : '获取登录状态失败';
       set({ isLogin: false, isGuest: false, nickname: '', username: '', loading: false, initialized: true, error: message });

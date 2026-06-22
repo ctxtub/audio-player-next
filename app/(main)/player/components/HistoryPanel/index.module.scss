@@ -1,0 +1,82 @@
+/* 播放器页历史面板 — Liquid Glass，平铺承载提示词/生成历史并分段切换 */
+.panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-4);
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--shadow-md);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-3) 0;
+    flex-shrink: 0;
+
+    /* 分段控件：轨道 + 两段，激活段填充强调色 */
+    .segmented {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      background: var(--bg-secondary);
+      border: 0.5px solid var(--border-subtle);
+      border-radius: var(--radius-full);
+
+      .segment {
+        padding: var(--space-2) var(--space-4);
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        line-height: var(--leading-sm);
+        font-weight: var(--weight-medium);
+        white-space: nowrap;
+        border-radius: var(--radius-full);
+        cursor: pointer;
+        transition: var(--transition-colors),
+          transform var(--duration-fast) var(--ease-default);
+
+        &:active {
+          transform: scale(0.97);
+        }
+
+        &.segmentActive {
+          background: var(--accent-primary);
+          color: var(--text-on-primary);
+          font-weight: var(--weight-semibold);
+          box-shadow: var(--shadow-sm);
+        }
+      }
+    }
+
+    /* 排序切换：仅提示词页展示，沿用原弹窗头部样式 */
+    .sortButton {
+      flex-shrink: 0;
+      font-size: var(--text-xs);
+      color: var(--accent-primary);
+      background: var(--accent-primary-subtle);
+      border: none;
+      cursor: pointer;
+      padding: var(--space-1) var(--space-3);
+      border-radius: var(--radius-full);
+      white-space: nowrap;
+      transition: var(--transition-colors);
+    }
+  }
+
+  /* 列表区：吃掉面板剩余高度，由内部列表滚动 */
+  .body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+}

@@ -1,8 +1,14 @@
-/* Player 页主容器 */
+/* Player 页主容器 — 撑满内容高度，使下方历史面板可 flex 填充 */
 .homePage {
   padding: var(--page-padding);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 
   .pageSection {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
   }

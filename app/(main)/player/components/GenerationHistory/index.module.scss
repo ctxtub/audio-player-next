@@ -1,10 +1,11 @@
-/* 生成历史列表 */
+/* 生成历史列表 — 内联于 HistoryPanel，min-height:0 保证 flex 内可滚动 */
 .historyList {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   padding: var(--space-4);
   flex: 1;
+  min-height: 0;
   gap: var(--space-3);
 
   .historyItem {

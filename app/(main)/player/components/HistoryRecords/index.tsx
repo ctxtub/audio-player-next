@@ -1,7 +1,6 @@
 'use client';
 
-import React, { forwardRef, useImperativeHandle, useMemo } from 'react';
-import Modal, { useModal } from '@/components/Modal';
+import React, { useMemo } from 'react';
 import { Wand2, Trash2 } from 'lucide-react';
 import {
   usePromptHistoryStore,
@@ -10,43 +9,39 @@ import {
 } from '@/stores/promptHistoryStore';
 import styles from './index.module.scss';
 
-export type { HistoryRecord } from '@/stores/promptHistoryStore';
-
 /**
- * 暴露给父组件的历史记录弹窗控制方法。
- */
-export interface HistoryRecordsRef {
-  showModal: () => void;
-}
-
-/**
- * 历史记录组件的入参定义。
+ * 提示词历史列表组件的入参定义。
  */
 interface HistoryRecordsProps {
+  /** 选择某条提示词「重新创作」时回调，交由上层跳转创作页预填并自动发送。 */
   onSelectPrompt: (prompt: string) => void;
 }
 
 /**
- * 历史记录弹窗组件，支持提示词排序与回放。
+ * 提示词历史内联列表：按当前排序模式展示历史提示词，支持「重新创作」与删除。
+ * 排序模式的切换入口由父级 HistoryPanel 头部承载；本组件仅按全局排序状态只读渲染。
+ * @param props.onSelectPrompt 选择提示词回调（重新创作）
+ * @returns 提示词历史列表 JSX
  */
-const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props, ref) => {
-  const { onSelectPrompt } = props;
-  const { isShow, showModal, closeModal } = useModal();
+const HistoryRecords: React.FC<HistoryRecordsProps> = ({ onSelectPrompt }) => {
+  /** 提示词记录表（账号维度同步）。 */
   const recordsMap = usePromptHistoryStore((state) => state.recordsMap);
+  /** 当前排序模式：频率 / 时间。 */
   const sortMode = usePromptHistoryStore(selectSortMode);
+  /** 删除某条提示词记录。 */
   const removeHistoryRecord = usePromptHistoryStore((state) => state.remove);
-  const setSortMode = usePromptHistoryStore((state) => state.setSortMode);
 
+  /** 按排序模式得到的有序记录列表。 */
   const historyRecords = useMemo(
     () => sortHistoryRecords(Object.values(recordsMap), sortMode),
-    [recordsMap, sortMode]
+    [recordsMap, sortMode],
   );
 
-  const toggleSortMethod = () => {
-    const nextMode = sortMode === 'frequency' ? 'recent' : 'frequency';
-    setSortMode(nextMode);
-  };
-
+  /**
+   * 格式化「最后使用」时间为简短中文日期。
+   * @param dateString ISO 时间字符串
+   * @returns 形如「6/22 14:30」的本地化文本
+   */
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('zh-CN', {
@@ -57,93 +52,48 @@ const HistoryRecords = forwardRef<HistoryRecordsRef, HistoryRecordsProps>((props
     });
   };
 
-  const handleSelectPrompt = (prompt: string) => {
-    onSelectPrompt(prompt);
-  };
-
-  // 选择历史提示词：关闭弹窗后交给上层跳转创作页预填并自动发送（重新创作，非播放）。
-  const handleRegenerateClick = (prompt: string) => {
-    closeModal();
-    setTimeout(() => {
-      handleSelectPrompt(prompt);
-    }, 100);
-  };
-
-  const renderSortButton = () => {
+  if (historyRecords.length === 0) {
     return (
-      <button onClick={toggleSortMethod} className={styles.sortButton}>
-        {sortMode === 'frequency' ? '按频率排序' : '按时间排序'}
-      </button>
+      <div className={styles.emptyHistory}>
+        <p>暂无历史记录</p>
+        <p className={styles.emptyHistoryHint}>生成故事后，您的提示词将会显示在这里</p>
+      </div>
     );
-  };
-
-  const renderHistoryContent = () => {
-    return (
-      <>
-        {historyRecords.length > 0 ? (
-          <div className={styles.historyList}>
-            {historyRecords.map((record, index) => (
-              <div key={index} className={styles.historyItem}>
-                <div className={styles.historyIndex}>{index + 1}</div>
-                <div className={styles.historyContent}>
-                  <div className={styles.historyPrompt}>{record.prompt}</div>
-                  <div className={styles.historyMeta}>
-                    <span className={styles.historyDate}>最后使用: {formatDate(record.lastUsed)}</span>
-                    <span className={styles.historyCount}>使用次数: {record.useCount}</span>
-                  </div>
-                </div>
-                <div className={styles.actionButtons}>
-                  <button
-                    className={styles.regenerateButton}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRegenerateClick(record.prompt);
-                    }}
-                    aria-label="用此提示词重新创作"
-                    title="用此提示词重新创作"
-                  >
-                    <Wand2 size={16} strokeWidth={2} />
-                  </button>
-                  <button
-                    className={styles.deleteButton}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeHistoryRecord(record.prompt);
-                    }}
-                    aria-label="删除此提示词"
-                  >
-                    <Trash2 size={16} strokeWidth={1.8} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className={styles.emptyHistory}>
-            <p>暂无历史记录</p>
-            <p className={styles.emptyHistoryHint}>生成故事后，您的提示词将会显示在这里</p>
-          </div>
-        )}
-      </>
-    );
-  };
-
-  useImperativeHandle(ref, () => ({
-    showModal,
-  }));
+  }
 
   return (
-    <Modal
-      isShow={isShow}
-      title="历史提示词记录"
-      headerExtra={renderSortButton()}
-      onClose={closeModal}
-    >
-      {renderHistoryContent()}
-    </Modal>
+    <div className={styles.historyList}>
+      {historyRecords.map((record, index) => (
+        <div key={record.prompt} className={styles.historyItem}>
+          <div className={styles.historyIndex}>{index + 1}</div>
+          <div className={styles.historyContent}>
+            <div className={styles.historyPrompt}>{record.prompt}</div>
+            <div className={styles.historyMeta}>
+              <span className={styles.historyDate}>最后使用: {formatDate(record.lastUsed)}</span>
+              <span className={styles.historyCount}>使用次数: {record.useCount}</span>
+            </div>
+          </div>
+          <div className={styles.actionButtons}>
+            <button
+              className={styles.regenerateButton}
+              onClick={() => onSelectPrompt(record.prompt)}
+              aria-label="用此提示词重新创作"
+              title="用此提示词重新创作"
+            >
+              <Wand2 size={16} strokeWidth={2} />
+            </button>
+            <button
+              className={styles.deleteButton}
+              onClick={() => removeHistoryRecord(record.prompt)}
+              aria-label="删除此提示词"
+            >
+              <Trash2 size={16} strokeWidth={1.8} />
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
   );
-});
-
-HistoryRecords.displayName = 'HistoryRecords';
+};
 
 export default HistoryRecords;

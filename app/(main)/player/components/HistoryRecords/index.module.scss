@@ -1,10 +1,11 @@
-/* 历史记录列表 — spec 3.17 */
+/* 提示词历史列表 — 内联于 HistoryPanel，min-height:0 保证 flex 内可滚动 */
 .historyList {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   padding: var(--space-4);
   flex: 1;
+  min-height: 0;
   gap: var(--space-3);
 
   .historyItem {
@@ -114,17 +115,6 @@
       }
     }
   }
-}
-
-.sortButton {
-  font-size: var(--text-xs);
-  color: var(--accent-primary);
-  background: var(--accent-primary-subtle);
-  border: none;
-  cursor: pointer;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  transition: var(--transition-colors);
 }
 
 .emptyHistory {

@@ -1,38 +1,34 @@
 'use client';
 
-import React, { forwardRef, useImperativeHandle, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Play, Trash2 } from 'lucide-react';
 
-import Modal, { useModal } from '@/components/Modal';
 import GlassToast from '@/components/ui/GlassToast';
 import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
 import { useAuthStore } from '@/stores/authStore';
 import { replayGeneration } from '@/app/services/storyFlow';
 import styles from './index.module.scss';
 
-/**
- * 暴露给父组件的生成历史弹窗控制方法。
- */
-export interface GenerationHistoryRef {
-  showModal: () => void;
-}
-
 /** 故事正文摘要的最大字符数。 */
 const EXCERPT_LIMIT = 60;
 
 /**
- * 生成历史弹窗：浏览历史生成的故事，支持回放（重合成）与删除。登录专属。
+ * 生成历史内联列表：浏览历史生成的故事，支持回放（重合成）与删除。登录专属。
+ * 访客显示「登录后查看」空状态；登录无数据显示「暂无生成历史」。
+ * @returns 生成历史列表 JSX
  */
-const GenerationHistory = forwardRef<GenerationHistoryRef>((_props, ref) => {
-  const { isShow, showModal, closeModal } = useModal();
+const GenerationHistory: React.FC = () => {
+  /** 生成历史记录（账号维度同步，登录可见）。 */
   const records = useGenerationHistoryStore((state) => state.records);
+  /** 删除某条生成历史。 */
   const removeRecord = useGenerationHistoryStore((state) => state.remove);
+  /** 登录态，决定是否展示数据或登录引导。 */
   const isLogin = useAuthStore((state) => state.isLogin);
 
-  useImperativeHandle(ref, () => ({ showModal }));
-
   /**
-   * 格式化生成时间。
+   * 格式化生成时间为简短中文日期。
+   * @param dateString ISO 时间字符串
+   * @returns 形如「6/22 14:30」的本地化文本
    */
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -46,6 +42,8 @@ const GenerationHistory = forwardRef<GenerationHistoryRef>((_props, ref) => {
 
   /**
    * 截取故事正文摘要。
+   * @param storyText 故事正文
+   * @returns 不超过 EXCERPT_LIMIT 字的单行摘要
    */
   const toExcerpt = (storyText: string) => {
     const flat = storyText.replace(/\s+/g, ' ').trim();
@@ -53,15 +51,13 @@ const GenerationHistory = forwardRef<GenerationHistoryRef>((_props, ref) => {
   };
 
   /**
-   * 回放某条历史：关闭弹窗后重新合成并播放。
+   * 回放某条历史：重新合成并播放，失败 Toast 提示。
+   * @param record 目标历史记录
    */
   const handleReplay = (record: (typeof records)[number]) => {
-    closeModal();
-    setTimeout(() => {
-      replayGeneration(record).catch(() => {
-        GlassToast.show({ icon: 'fail', content: '回放失败，请稍后重试' });
-      });
-    }, 100);
+    replayGeneration(record).catch(() => {
+      GlassToast.show({ icon: 'fail', content: '回放失败，请稍后重试' });
+    });
   };
 
   const content = useMemo(() => {
@@ -115,13 +111,7 @@ const GenerationHistory = forwardRef<GenerationHistoryRef>((_props, ref) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLogin, records]);
 
-  return (
-    <Modal isShow={isShow} title="生成历史" onClose={closeModal}>
-      {content}
-    </Modal>
-  );
-});
-
-GenerationHistory.displayName = 'GenerationHistory';
+  return content;
+};
 
 export default GenerationHistory;

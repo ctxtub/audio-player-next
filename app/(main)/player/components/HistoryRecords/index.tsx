@@ -1,13 +1,17 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Wand2, Trash2 } from 'lucide-react';
+import { Wand2 } from 'lucide-react';
 import {
   usePromptHistoryStore,
   selectSortMode,
   sortHistoryRecords,
 } from '@/stores/promptHistoryStore';
-import styles from './index.module.scss';
+import {
+  HistoryList,
+  HistoryListItem,
+  HistoryEmpty,
+} from '@/app/(main)/player/components/HistoryList';
 
 /**
  * 提示词历史列表组件的入参定义。
@@ -54,45 +58,33 @@ const HistoryRecords: React.FC<HistoryRecordsProps> = ({ onSelectPrompt }) => {
 
   if (historyRecords.length === 0) {
     return (
-      <div className={styles.emptyHistory}>
-        <p>暂无历史记录</p>
-        <p className={styles.emptyHistoryHint}>生成故事后，您的提示词将会显示在这里</p>
-      </div>
+      <HistoryEmpty title="暂无历史记录" hint="生成故事后，您的提示词将会显示在这里" />
     );
   }
 
   return (
-    <div className={styles.historyList}>
+    <HistoryList>
       {historyRecords.map((record, index) => (
-        <div key={record.prompt} className={styles.historyItem}>
-          <div className={styles.historyIndex}>{index + 1}</div>
-          <div className={styles.historyContent}>
-            <div className={styles.historyPrompt}>{record.prompt}</div>
-            <div className={styles.historyMeta}>
-              <span className={styles.historyDate}>最后使用: {formatDate(record.lastUsed)}</span>
-              <span className={styles.historyCount}>使用次数: {record.useCount}</span>
-            </div>
-          </div>
-          <div className={styles.actionButtons}>
-            <button
-              className={styles.regenerateButton}
-              onClick={() => onSelectPrompt(record.prompt)}
-              aria-label="用此提示词重新创作"
-              title="用此提示词重新创作"
-            >
-              <Wand2 size={16} strokeWidth={2} />
-            </button>
-            <button
-              className={styles.deleteButton}
-              onClick={() => removeHistoryRecord(record.prompt)}
-              aria-label="删除此提示词"
-            >
-              <Trash2 size={16} strokeWidth={1.8} />
-            </button>
-          </div>
-        </div>
+        <HistoryListItem
+          key={record.prompt}
+          index={index + 1}
+          title={record.prompt}
+          meta={
+            <>
+              <span>最后使用: {formatDate(record.lastUsed)}</span>
+              <span>使用次数: {record.useCount}</span>
+            </>
+          }
+          primaryAction={{
+            icon: <Wand2 size={16} strokeWidth={2} />,
+            label: '用此提示词重新创作',
+            onClick: () => onSelectPrompt(record.prompt),
+          }}
+          onDelete={() => removeHistoryRecord(record.prompt)}
+          deleteLabel="删除此提示词"
+        />
       ))}
-    </div>
+    </HistoryList>
   );
 };
 

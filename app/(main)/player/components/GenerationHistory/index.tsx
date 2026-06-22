@@ -1,13 +1,17 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { Play, Trash2 } from 'lucide-react';
+import React from 'react';
+import { Play } from 'lucide-react';
 
 import GlassToast from '@/components/ui/GlassToast';
 import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
 import { useAuthStore } from '@/stores/authStore';
 import { replayGeneration } from '@/app/services/storyFlow';
-import styles from './index.module.scss';
+import {
+  HistoryList,
+  HistoryListItem,
+  HistoryEmpty,
+} from '@/app/(main)/player/components/HistoryList';
 
 /** 故事正文摘要的最大字符数。 */
 const EXCERPT_LIMIT = 60;
@@ -60,58 +64,37 @@ const GenerationHistory: React.FC = () => {
     });
   };
 
-  const content = useMemo(() => {
-    if (!isLogin) {
-      return (
-        <div className={styles.emptyHistory}>
-          <p>登录后查看生成历史</p>
-          <p className={styles.emptyHistoryHint}>登录账号即可同步保存你生成的故事</p>
-        </div>
-      );
-    }
-    if (records.length === 0) {
-      return (
-        <div className={styles.emptyHistory}>
-          <p>暂无生成历史</p>
-          <p className={styles.emptyHistoryHint}>生成故事后会显示在这里，可随时回放</p>
-        </div>
-      );
-    }
+  if (!isLogin) {
     return (
-      <div className={styles.historyList}>
-        {records.map((record) => (
-          <div key={record.id} className={styles.historyItem}>
-            <div className={styles.historyContent}>
-              <div className={styles.historyPrompt}>{record.prompt}</div>
-              <div className={styles.historyExcerpt}>{toExcerpt(record.storyText)}</div>
-              <div className={styles.historyMeta}>
-                <span>{formatDate(record.createdAt)}</span>
-              </div>
-            </div>
-            <div className={styles.actionButtons}>
-              <button
-                className={styles.playButton}
-                onClick={() => handleReplay(record)}
-                aria-label="回放此故事"
-              >
-                <Play size={16} strokeWidth={2} />
-              </button>
-              <button
-                className={styles.deleteButton}
-                onClick={() => removeRecord(record.id)}
-                aria-label="删除此历史"
-              >
-                <Trash2 size={16} strokeWidth={1.8} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+      <HistoryEmpty title="登录后查看生成历史" hint="登录账号即可同步保存你生成的故事" />
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLogin, records]);
+  }
 
-  return content;
+  if (records.length === 0) {
+    return (
+      <HistoryEmpty title="暂无生成历史" hint="生成故事后会显示在这里，可随时回放" />
+    );
+  }
+
+  return (
+    <HistoryList>
+      {records.map((record) => (
+        <HistoryListItem
+          key={record.id}
+          title={record.prompt}
+          excerpt={toExcerpt(record.storyText)}
+          meta={<span>{formatDate(record.createdAt)}</span>}
+          primaryAction={{
+            icon: <Play size={16} strokeWidth={2} />,
+            label: '回放此故事',
+            onClick: () => handleReplay(record),
+          }}
+          onDelete={() => removeRecord(record.id)}
+          deleteLabel="删除此历史"
+        />
+      ))}
+    </HistoryList>
+  );
 };
 
 export default GenerationHistory;

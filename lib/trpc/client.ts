@@ -9,10 +9,36 @@ import {
     httpBatchLink,
     httpBatchStreamLink,
     splitLink,
+    type TRPCLink,
 } from '@trpc/client';
+import { observable } from '@trpc/server/observable';
 import superjson from 'superjson';
 
 import type { AppRouter } from './routers';
+
+/**
+ * 会话失效守卫 link：捕获非 auth.* 路径的 UNAUTHORIZED（运行中会话失效），
+ * 触发统一登出闭环（动态导入 sessionGuard，避免与 authStore 形成静态依赖环）。
+ * 置于链首以包裹全部下游 link（流式与非流式）。
+ */
+const sessionGuardLink: TRPCLink<AppRouter> = () => {
+    return ({ next, op }) =>
+        observable((observer) => {
+            const subscription = next(op).subscribe({
+                next: (value) => observer.next(value),
+                error: (err) => {
+                    if (err.data?.code === 'UNAUTHORIZED' && !op.path.startsWith('auth.')) {
+                        void import('@/lib/client/sessionGuard').then((m) =>
+                            m.maybeHandleSessionInvalidation()
+                        );
+                    }
+                    observer.error(err);
+                },
+                complete: () => observer.complete(),
+            });
+            return () => subscription.unsubscribe();
+        });
+};
 
 /**
  * 获取 API 基础 URL。
@@ -42,6 +68,7 @@ const STREAMING_PATHS = new Set(['agent.interact']);
  */
 export const trpc = createTRPCClient<AppRouter>({
     links: [
+        sessionGuardLink,
         splitLink({
             condition: (op) => STREAMING_PATHS.has(op.path),
             true: httpBatchStreamLink({

@@ -61,6 +61,13 @@ const AuthPage: React.FC = () => {
     if (storeError) setApiError(storeError);
   }, [storeError]);
 
+  // 失效会话登出闭环跳转而来：提示用户重新登录。
+  useEffect(() => {
+    if (searchParams.get('session') === 'expired') {
+      setApiError('登录已失效，请重新登录');
+    }
+  }, [searchParams]);
+
   /** 切换 Tab 时重置表单和错误 */
   const handleTabChange = useCallback((key: React.Key) => {
     setActiveTab(key as 'login' | 'register');

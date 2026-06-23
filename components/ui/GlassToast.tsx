@@ -3,6 +3,7 @@
 import { createRoot, type Root } from 'react-dom/client';
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, XCircle } from 'lucide-react';
+import styles from './GlassToast.module.scss';
 
 /**
  * Toast 配置项。
@@ -55,20 +56,7 @@ const ToastContent: React.FC<ToastConfig & { onDone: () => void }> = ({
   }, [duration, onDone]);
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 'var(--z-max, 9999)' as unknown as number,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        pointerEvents: 'none',
-      }}
-    >
+    <div className={styles.overlay}>
       <div
         style={{
           display: 'flex',

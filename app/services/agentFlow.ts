@@ -58,7 +58,6 @@ export const interactWithAgent = async (
             if (event.type === 'token') {
                 callbacks.onTextDelta(event.content);
             } else if (event.type === 'meta') {
-                console.log('Detected Intent in AgentFlow:', event.intent);
                 callbacks.onIntentDetected?.(event.intent as "Story" | "Chat" | "Guidance");
             } else if (event.type === 'audio_start') {
                 callbacks.onAudioStart?.();

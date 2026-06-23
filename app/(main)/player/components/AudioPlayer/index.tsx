@@ -98,6 +98,33 @@ const AudioPlayer: React.FC = () => {
     seekAudio(Math.max(0, Math.min(duration, percent * duration)));
   };
 
+  /** 进度条键盘可达：方向键 ±5 秒、Home/End 跳到首尾。 */
+  const handleProgressKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!hasAudio) return;
+    const STEP = 5;
+    let next: number | null = null;
+    switch (event.key) {
+      case 'ArrowLeft':
+      case 'ArrowDown':
+        next = currentTime - STEP;
+        break;
+      case 'ArrowRight':
+      case 'ArrowUp':
+        next = currentTime + STEP;
+        break;
+      case 'Home':
+        next = 0;
+        break;
+      case 'End':
+        next = duration;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    seekAudio(Math.max(0, Math.min(duration, next)));
+  };
+
   const toggleSpeedMenu = (event: React.MouseEvent) => {
     event.stopPropagation();
     setShowSpeedMenu((prev) => !prev);
@@ -124,7 +151,19 @@ const AudioPlayer: React.FC = () => {
 
       {/* 进度条 */}
       <div className={styles.progress}>
-        <div className={styles.progressTrack} onClick={handleProgressClick}>
+        <div
+          className={styles.progressTrack}
+          onClick={handleProgressClick}
+          onKeyDown={handleProgressKeyDown}
+          role="slider"
+          aria-label="播放进度"
+          aria-valuemin={0}
+          aria-valuemax={Math.floor(duration)}
+          aria-valuenow={Math.floor(currentTime)}
+          aria-valuetext={`${formatTime(currentTime)} / ${formatTime(duration)}`}
+          aria-disabled={!hasAudio}
+          tabIndex={hasAudio ? 0 : -1}
+        >
           <div className={styles.progressFill} style={{ width: `${progressPercent}%` }} />
         </div>
         <div className={styles.progressTimes}>
@@ -137,7 +176,7 @@ const AudioPlayer: React.FC = () => {
       <div className={styles.transport}>
         {/* 倍速选择器 */}
         <div className={styles.speedControl}>
-          <button className={styles.speedPill} onClick={toggleSpeedMenu} aria-label="播放速度">
+          <button type="button" className={styles.speedPill} onClick={toggleSpeedMenu} aria-label="播放速度">
             {playbackRate}x
           </button>
           <CSSTransition
@@ -156,6 +195,7 @@ const AudioPlayer: React.FC = () => {
               {PLAYBACK_RATES.map((rate) => (
                 <button
                   key={rate.value}
+                  type="button"
                   className={`${styles.speedOption} ${playbackRate === rate.value ? styles.active : ''}`}
                   onClick={() => handleSelectPlaybackRate(rate.value)}
                 >
@@ -168,6 +208,7 @@ const AudioPlayer: React.FC = () => {
 
         {/* 主播放按钮 */}
         <button
+          type="button"
           className={styles.playBtn}
           onClick={togglePlay}
           disabled={!hasAudio}
@@ -177,7 +218,7 @@ const AudioPlayer: React.FC = () => {
         </button>
 
         {/* 右侧占位按钮（视觉平衡） */}
-        <button className={styles.tbtn} disabled aria-label="下一首">
+        <button type="button" className={styles.tbtn} disabled aria-label="下一首">
           <SkipForward size={20} />
         </button>
       </div>

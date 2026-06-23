@@ -60,6 +60,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
     </div>
     <div className={styles.actionButtons}>
       <button
+        type="button"
         className={styles.primaryAction}
         onClick={primaryAction.onClick}
         aria-label={primaryAction.label}
@@ -67,7 +68,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
       >
         {primaryAction.icon}
       </button>
-      <button className={styles.deleteButton} onClick={onDelete} aria-label={deleteLabel}>
+      <button type="button" className={styles.deleteButton} onClick={onDelete} aria-label={deleteLabel}>
         <Trash2 size={16} strokeWidth={1.8} />
       </button>
     </div>

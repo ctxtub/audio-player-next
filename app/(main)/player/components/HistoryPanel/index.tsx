@@ -64,7 +64,7 @@ const HistoryPanel: React.FC = () => {
         </div>
 
         {activeTab === 'prompt' && (
-          <button className={styles.sortButton} onClick={toggleSortMode}>
+          <button type="button" className={styles.sortButton} onClick={toggleSortMode}>
             {sortMode === 'frequency' ? '按频率排序' : '按时间排序'}
           </button>
         )}

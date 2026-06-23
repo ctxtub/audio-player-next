@@ -18,29 +18,25 @@ export type PartRendererProps<T extends MessagePart = MessagePart> = {
 };
 
 /**
- * 渲染器注册表，根据片段类型映射到对应的渲染组件。
- * 使用 any 类型绕过泛型协变问题，在分发器中进行类型断言。
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const partRenderers: Record<string, FC<any>> = {
-    text: TextPartRenderer,
-    storyCard: StoryCardPartRenderer,
-    guidance: GuidancePartComponent,
-    summary: SummaryPartRenderer,
-};
-
-/**
- * 消息片段分发器，根据 part.type 自动选择渲染器。
+ * 消息片段分发器，按 part.type 判别联合分发到对应渲染器。
+ * 用 switch 让每个分支自动收窄 part 的具体子类型，无需注册表的 any 断言。
  * @param props.part 待渲染的消息片段
  * @param props.onPlayStory 故事播放回调
  */
 const MessagePartRenderer: FC<PartRendererProps> = ({ part, onPlayStory }) => {
-    const Renderer = partRenderers[part.type];
-    if (!Renderer) {
-        // 未知类型降级为空
-        return null;
+    switch (part.type) {
+        case 'text':
+            return <TextPartRenderer part={part} onPlayStory={onPlayStory} />;
+        case 'storyCard':
+            return <StoryCardPartRenderer part={part} onPlayStory={onPlayStory} />;
+        case 'guidance':
+            return <GuidancePartComponent part={part} />;
+        case 'summary':
+            return <SummaryPartRenderer part={part} />;
+        default:
+            // 未知类型降级为空
+            return null;
     }
-    return <Renderer part={part} onPlayStory={onPlayStory} />;
 };
 
 export default MessagePartRenderer;

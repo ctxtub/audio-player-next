@@ -1,0 +1,10 @@
+/* GlassToast 全屏居中蒙层：z-index 走 Design Token（带 fallback，兼容挂载于 body 时 token 未继承的情形） */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-max, 9999);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}

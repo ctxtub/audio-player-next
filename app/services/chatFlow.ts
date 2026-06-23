@@ -52,8 +52,11 @@ const executeChatStream = async (
   let streamErrored = false;
   let lastErrorMessage: string | undefined;
 
-  // 转换 ChatConversationMessage 到 AgentMessage
-  const agentMessages = context as unknown as AgentMessage[];
+  // 转换 ChatConversationMessage 到 AgentMessage：role 已收敛为同集，content 强制为字符串
+  const agentMessages: AgentMessage[] = context.map((message) => ({
+    role: message.role,
+    content: typeof message.content === 'string' ? message.content : '',
+  }));
 
   // 触发本次生成的用户提示词（上下文中最后一条 user 消息），用于生成历史记录
   const lastUserMessage = [...context].reverse().find((m) => m.role === 'user');
@@ -222,15 +225,4 @@ export const retryChatStream = async (): Promise<void> => {
 
   // 3. 执行流（用户主动重试，记录生成历史）
   await executeChatStream(context, true);
-};
-
-/**
- * 主动取消当前的聊天流式请求并清理状态。
- */
-export const cancelChatStream = () => {
-  if (globalAbortController) {
-    globalAbortController.abort();
-    globalAbortController = null;
-  }
-  useChatStore.getState().resetActiveSession();
 };

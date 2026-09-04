@@ -4,7 +4,7 @@
  * 提供文本转语音接口，返回 base64 编码的音频数据。
  */
 
-import { router, publicProcedure } from '../init';
+import { router, authedProcedure } from '../init';
 import { ttsInputSchema } from '../schemas/tts';
 import { synthesizeSpeech, getTtsConfig } from '@/lib/server/openai';
 
@@ -12,7 +12,7 @@ export const ttsRouter = router({
     /**
      * 语音合成接口。
      */
-    synthesize: publicProcedure
+    synthesize: authedProcedure
         .input(ttsInputSchema)
         .mutation(async ({ input }) => {
             const config = getTtsConfig();

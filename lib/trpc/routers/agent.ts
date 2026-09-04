@@ -1,4 +1,4 @@
-import { router, publicProcedure } from "../init";
+import { router, publicProcedure, authedProcedure } from "../init";
 import { graph } from "@/lib/agent/graph";
 import { HumanMessage, AIMessage, SystemMessage, BaseMessage } from "@langchain/core/messages";
 import { TRPCError } from "@trpc/server";
@@ -10,7 +10,7 @@ export const agentRouter = router({
      * 统一的 Agent 交互接口。
      * 接收标准的消息历史数组，自动派发给 LangGraph。
      */
-    interact: publicProcedure
+    interact: authedProcedure
         .input(interactSchema)
         .mutation(async function* ({ input, signal }) {
             const { messages } = input;

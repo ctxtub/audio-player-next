@@ -70,11 +70,11 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
 
     try {
       const result = await loginRequest({ username, password });
-      set({ isLogin: true, isGuest: false, nickname: result.user.nickname, loading: false, initialized: true, error: undefined });
+      set({ isLogin: true, isGuest: false, nickname: result.user.nickname, username: result.user.username, loading: false, initialized: true, error: undefined });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '登录失败，请稍后重试';
-      set({ loading: false, initialized: true, isLogin: false, isGuest: false, nickname: '', error: message });
+      set({ loading: false, initialized: true, isLogin: false, isGuest: false, nickname: '', username: '', error: message });
       return false;
     }
   },
@@ -84,7 +84,7 @@ export const useAuthStore = create<AuthStore>()((set, get) => ({
 
     try {
       const result = await registerRequest({ username, password, nickname });
-      set({ isLogin: true, isGuest: false, nickname: result.user.nickname, loading: false, initialized: true, error: undefined });
+      set({ isLogin: true, isGuest: false, nickname: result.user.nickname, username: result.user.username, loading: false, initialized: true, error: undefined });
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : '注册失败，请稍后重试';

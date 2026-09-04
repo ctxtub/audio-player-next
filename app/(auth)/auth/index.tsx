@@ -111,7 +111,7 @@ const AuthPage: React.FC = () => {
   const handleLoginSubmit = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     handleSubmit(
-      () => doLogin(loginUsername.trim(), loginPassword.trim()),
+      () => doLogin(loginUsername.trim(), loginPassword),
       '登录失败，请稍后重试',
     );
   }, [doLogin, handleSubmit, loginUsername, loginPassword]);
@@ -120,7 +120,7 @@ const AuthPage: React.FC = () => {
   const handleRegisterSubmit = useCallback((e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     handleSubmit(
-      () => doRegister(regUsername.trim(), regPassword.trim(), regNickname.trim() || undefined),
+      () => doRegister(regUsername.trim(), regPassword, regNickname.trim() || undefined),
       '注册失败，请稍后重试',
     );
   }, [doRegister, handleSubmit, regUsername, regPassword, regNickname]);

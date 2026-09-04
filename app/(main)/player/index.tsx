@@ -27,7 +27,7 @@ const HomePage: React.FC = () => {
       return;
     }
     if (!configIsValid) {
-      router.push('/config');
+      router.push('/setting');
     }
   }, [isConfigLoaded, configIsValid, router]);
 

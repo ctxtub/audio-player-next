@@ -15,6 +15,7 @@ import GlassToast from '@/components/ui/GlassToast';
 type ConfigStoreBaseState = {
   apiConfig: APIConfig;
   isLoaded: boolean;
+  initError: string | null;
   voiceOptions: VoiceOption[];
   /** 是否处于登录态（开启服务端回写）。 */
   syncEnabled: boolean;
@@ -238,13 +239,24 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
   };
 
   const runInitialization = async () => {
-    const localConfig = await hydrateLocalConfig();
-    const { config, voiceOptions } = await loadRemoteConfig(localConfig);
-    set({
-      apiConfig: config,
-      voiceOptions,
-      isLoaded: true,
-    });
+    try {
+      const localConfig = await hydrateLocalConfig();
+      const { config, voiceOptions } = await loadRemoteConfig(localConfig);
+      set({
+        apiConfig: config,
+        voiceOptions,
+        isLoaded: true,
+        initError: null,
+      });
+    } catch (error) {
+      set({
+        apiConfig: createEmptyConfig(),
+        voiceOptions: [],
+        isLoaded: false,
+        initError: error instanceof Error ? error.message : 'FAILED_TO_FETCH_REMOTE_CONFIG',
+      });
+      throw error;
+    }
   };
 
   /** 防抖回写定时器与待写 patch 累积。 */
@@ -284,6 +296,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
   return {
     apiConfig: createEmptyConfig(),
     isLoaded: false,
+    initError: null,
     voiceOptions: [],
     syncEnabled: false,
     initialize: () => {
@@ -293,6 +306,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
           set({
             apiConfig: createEmptyConfig(),
             isLoaded: false,
+            initError: error instanceof Error ? error.message : '配置加载失败',
             voiceOptions: [],
           });
           initializationPromise = null;
@@ -392,6 +406,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
         apiConfig: createEmptyConfig(),
         voiceOptions: [],
         isLoaded: false,
+        initError: null,
         syncEnabled: false,
       });
     },

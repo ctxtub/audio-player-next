@@ -239,7 +239,10 @@ export const synthesizeSpeech = async (
     const openAIConfig = getOpenAIConfig();
     const ttsConfig = getTtsConfig();
 
-    const openai = new OpenAI({ apiKey: openAIConfig.apiKey });
+    const openai = new OpenAI({
+        apiKey: openAIConfig.apiKey,
+        baseURL: openAIConfig.baseUrl,
+    });
 
     try {
         const response = await openai.audio.speech.create({

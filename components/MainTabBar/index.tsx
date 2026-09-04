@@ -84,11 +84,41 @@ const MainTabBar: React.FC = () => {
     [pathname, router],
   );
 
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLElement>) => {
+      const currentIndex = TABS.findIndex(tab => tab.key === activeKey);
+      if (currentIndex === -1) return;
+
+      let nextIndex = -1;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        nextIndex = (currentIndex + 1) % TABS.length;
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        nextIndex = (currentIndex - 1 + TABS.length) % TABS.length;
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        nextIndex = 0;
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        nextIndex = TABS.length - 1;
+      }
+
+      if (nextIndex !== -1 && nextIndex !== currentIndex) {
+        const nextTab = TABS[nextIndex];
+        if (nextTab) {
+          router.push(nextTab.path);
+        }
+      }
+    },
+    [activeKey, router],
+  );
+
   const hasUnviewedResponse = useChatStore(state => state.hasUnviewedResponse);
 
   return (
     <div className={styles.tabBarOuter}>
-      <nav className={styles.tabBar} role="tablist" aria-label="主导航">
+      <nav className={styles.tabBar} role="tablist" aria-label="主导航" onKeyDown={handleKeyDown}>
         {TABS.map(({ key, title, icon: Icon }) => {
           const isActive = activeKey === key;
           const isChat = key === 'chat';
@@ -100,6 +130,7 @@ const MainTabBar: React.FC = () => {
               key={key}
               role="tab"
               type="button"
+              tabIndex={isActive ? 0 : -1}
               aria-selected={isActive}
               className={`${styles.tabItem} ${isActive ? styles.tabItemActive : ''}`}
               onClick={() => handleTabClick(key)}

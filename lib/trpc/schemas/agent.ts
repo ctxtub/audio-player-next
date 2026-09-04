@@ -5,12 +5,14 @@ import { z } from "zod";
  * 遵循 OpenAI 风格的消息格式。
  */
 export const interactSchema = z.object({
-    messages: z.array(
-        z.object({
-            role: z.enum(["user", "assistant", "system"]),
-            content: z.string(),
-        })
-    ),
+    messages: z
+        .array(
+            z.object({
+                role: z.enum(["user", "assistant", "system"]),
+                content: z.string().max(10000),
+            })
+        )
+        .max(100),
     /**
      * Agent 配置参数，支持按命名空间扩展。
      */
@@ -28,12 +30,14 @@ export const interactSchema = z.object({
 });
 
 export const summarizeContextSchema = z.object({
-    messages: z.array(
-        z.object({
-            role: z.enum(["user", "assistant", "system"]),
-            content: z.string(),
-        })
-    ),
+    messages: z
+        .array(
+            z.object({
+                role: z.enum(["user", "assistant", "system"]),
+                content: z.string().max(10000),
+            })
+        )
+        .max(100),
 });
 
 export type InteractInput = z.infer<typeof interactSchema>;

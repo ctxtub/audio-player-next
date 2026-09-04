@@ -61,7 +61,10 @@ export const authRouter = router({
 
                 return {
                     success: true as const,
-                    user: { nickname: user.nickname ?? user.username },
+                    user: {
+                        nickname: user.nickname ?? user.username,
+                        username: user.username,
+                    },
                 };
             } catch (error) {
                 if (error instanceof TRPCError) throw error;
@@ -91,7 +94,10 @@ export const authRouter = router({
 
                 return {
                     success: true as const,
-                    user: { nickname: user.nickname ?? user.username },
+                    user: {
+                        nickname: user.nickname ?? user.username,
+                        username: user.username,
+                    },
                 };
             } catch (error) {
                 if (error instanceof TRPCError) throw error;

@@ -18,6 +18,7 @@ import { PageLoading } from '@/components/PageLoading';
 export const AccountSyncProvider: React.FC<PropsWithChildren> = ({ children }) => {
   /** 应用配置是否已加载（config 是唯一阻塞首屏的块）。 */
   const isConfigLoaded = useConfigStore(state => state.isLoaded);
+  const initError = useConfigStore(state => state.initError);
 
   const authInitialized = useAuthStore(state => state.initialized);
   const isLogin = useAuthStore(state => state.isLogin);
@@ -44,6 +45,35 @@ export const AccountSyncProvider: React.FC<PropsWithChildren> = ({ children }) =
       initAccountForGuest();
     }
   }, [authInitialized, isLogin]);
+
+  if (initError) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '16px', padding: '24px', textAlign: 'center' }}>
+        <p style={{ color: '#ef4444', fontSize: '16px' }}>配置加载失败: {initError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            if (isLogin) {
+              initAccountForUser();
+            } else {
+              initAccountForGuest();
+            }
+          }}
+          style={{
+            padding: '8px 20px',
+            borderRadius: '8px',
+            backgroundColor: '#2563eb',
+            color: '#fff',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '14px',
+          }}
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
 
   if (!authInitialized || !isConfigLoaded) {
     return <PageLoading message="配置加载中..." />;

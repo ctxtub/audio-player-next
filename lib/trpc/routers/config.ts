@@ -16,7 +16,7 @@ export const configRouter = router({
     /**
      * 获取系统级配置：音色白名单与系统默认音色（与用户无关，来自 env）。
      */
-    get: publicProcedure.mutation(() => {
+    get: publicProcedure.query(() => {
         const { voicesList, voiceId } = getTtsConfig();
 
         return { voicesList, voiceId };

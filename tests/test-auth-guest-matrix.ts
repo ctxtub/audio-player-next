@@ -1,10 +1,17 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { router, guardedProcedure, authedProcedure, publicProcedure, TRPCError } from '../lib/trpc/init';
 import { createContext, getSafeClientIp } from '../lib/trpc/context';
 import { encodeSession } from '../lib/session';
 
+import { configRouter } from '../lib/trpc/routers/config';
+import { prisma } from '../lib/db';
+
 process.env.SESSION_SECRET = 'test-secret-matrix-1234567890';
+
+
 
 async function runMatrixTests() {
     console.log('--- 1. Testing Safe Client IP Extraction & Header Priority ---');
@@ -143,7 +150,7 @@ async function runMatrixTests() {
 
     console.log('PASS: Guarded matrix passed (Anonymous: 401/401, Guest: 200/401, Authed: 200/200)');
 
-    console.log('--- 4. Static Audit: Personal Cloud Routers remain authedProcedure ---');
+    console.log('--- 4. Static Audit: Personal Cloud Routers & Config Router Procedures ---');
     const chatContent = fs.readFileSync('lib/trpc/routers/chatConversation.ts', 'utf-8');
     assert(chatContent.includes('getConversation: authedProcedure'), 'chat.getConversation must be authedProcedure');
     assert(chatContent.includes('saveConversation: authedProcedure'), 'chat.saveConversation must be authedProcedure');
@@ -162,11 +169,77 @@ async function runMatrixTests() {
     assert(!promptContent.includes('guardedProcedure'), 'promptHistory must not use guardedProcedure');
 
     const configContent = fs.readFileSync('lib/trpc/routers/config.ts', 'utf-8');
-    assert(configContent.includes('updateMine: authedProcedure'), 'config.updateMine must be authedProcedure');
-    assert(configContent.includes('getMine: authedProcedure'), 'config.getMine must be authedProcedure');
+    assert(configContent.includes('updateMine: guardedProcedure'), 'config.updateMine must be guardedProcedure');
+    assert(configContent.includes('getMine: guardedProcedure'), 'config.getMine must be guardedProcedure');
     assert(configContent.includes('get: publicProcedure'), 'config.get must be publicProcedure');
+    console.log('PASS: Static audit verified (personal routers remain authed, configRouter moved to guarded)');
 
-    console.log('PASS: All personal cloud routers strictly stay authedProcedure');
+    console.log('--- 5. Testing configRouter in guardedProcedure Matrix ---');
+    // Ensure clean state for test user and guest
+    await prisma.userConfig.deleteMany({ where: { userId: 42 } });
+    await prisma.user.deleteMany({ where: { id: 42 } });
+    if (guestCtx.guestId) {
+        await prisma.guestConfig.deleteMany({ where: { guestId: guestCtx.guestId } });
+    }
+
+    // Create authed test user
+    const authedUser = await prisma.user.create({
+        data: {
+            id: 42,
+            username: 'matrix_user_42',
+            password: 'hashedpassword',
+            nickname: 'Tester',
+        },
+    });
+
+    const configCallerAnon = configRouter.createCaller(anonCtx);
+    const configCallerGuest = configRouter.createCaller(guestCtx);
+    const configCallerAuthed = configRouter.createCaller(authedCtx);
+
+    // Anon: 401 on both getMine and updateMine
+    await assert.rejects(
+        async () => { await configCallerAnon.getMine(); },
+        (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
+        'Anonymous must receive UNAUTHORIZED on config.getMine'
+    );
+    await assert.rejects(
+        async () => { await configCallerAnon.updateMine({ speed: 1.5 }); },
+        (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
+        'Anonymous must receive UNAUTHORIZED on config.updateMine'
+    );
+
+    // Guest: 200 on both getMine and updateMine
+    const guestConfigGet = await configCallerGuest.getMine();
+    assert.strictEqual(guestConfigGet.speed, 1.0, 'Guest initial speed should default to 1.0');
+    assert.strictEqual(guestConfigGet.playDuration, 30, 'Guest initial playDuration should default to 30');
+
+    const guestConfigUpdate = await configCallerGuest.updateMine({ speed: 1.25, playDuration: 45 });
+    assert.strictEqual(guestConfigUpdate.speed, 1.25, 'Guest updated speed should be 1.25');
+    assert.strictEqual(guestConfigUpdate.playDuration, 45, 'Guest updated playDuration should be 45');
+
+    // Verify GuestConfig table contains the updated row
+    const guestDbRow = await prisma.guestConfig.findUnique({
+        where: { guestId: guestCtx.guestId! },
+    });
+    assert.strictEqual(guestDbRow?.speed, 1.25, 'GuestConfig DB row should have speed 1.25');
+
+    // Authed: 200 on both getMine and updateMine
+    const authedConfigGet = await configCallerAuthed.getMine();
+    assert.strictEqual(authedConfigGet.speed, 1.0, 'Authed initial speed should default to 1.0');
+
+    const authedConfigUpdate = await configCallerAuthed.updateMine({ speed: 2.0, themeMode: 'dark' });
+    assert.strictEqual(authedConfigUpdate.speed, 2.0, 'Authed updated speed should be 2.0');
+    assert.strictEqual(authedConfigUpdate.themeMode, 'dark', 'Authed updated themeMode should be dark');
+
+    // Verify UserConfig table contains the updated row
+    const userDbRow = await prisma.userConfig.findUnique({
+        where: { userId: authedUser.id },
+    });
+    assert.strictEqual(userDbRow?.speed, 2.0, 'UserConfig DB row should have speed 2.0');
+    assert.strictEqual(userDbRow?.themeMode, 'dark', 'UserConfig DB row should have themeMode dark');
+
+    console.log('PASS: configRouter guardedProcedure matrix verified (Anonymous: 401/401, Guest: 200/200, Authed: 200/200)');
+
 }
 
 const testPromise = runMatrixTests()

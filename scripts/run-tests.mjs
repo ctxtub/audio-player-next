@@ -15,6 +15,7 @@ const testFiles = [
   './tests/test-auth-guest-matrix.ts',
   './tests/test-rate-limit.ts',
   './tests/test-orphan-prevention.ts',
+  './tests/test-guest-config.ts',
 ];
 
 console.log('Running test suite...\n');

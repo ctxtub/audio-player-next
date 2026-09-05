@@ -16,6 +16,8 @@ const testFiles = [
   './tests/test-rate-limit.ts',
   './tests/test-orphan-prevention.ts',
   './tests/test-guest-config.ts',
+  './tests/test-guest-creative-sync.ts',
+  './tests/test-guest-creative-e2e-harness.ts',
 ];
 
 console.log('Running test suite...\n');

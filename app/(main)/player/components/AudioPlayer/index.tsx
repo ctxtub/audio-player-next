@@ -2,9 +2,10 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { CSSTransition } from 'react-transition-group';
-import { Play, Pause, SkipForward } from 'lucide-react';
+import { Play, Pause, RotateCcw } from 'lucide-react';
 import GlassToast from '@/components/ui/GlassToast';
 import { usePlaybackStore, useFloatingPlayer } from '@/stores/playbackStore';
+import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useConfigStore } from '@/stores/configStore';
 import { AUTO_CONTINUE_PROMPT } from '@/app/services/chatFlow';
@@ -36,6 +37,10 @@ const AudioPlayer: React.FC = () => {
   const isPlaying = usePlaybackStore((state) => state.isPlaying);
   const seekAudio = usePlaybackStore((state) => state.seekAudio);
   const setGlobalPlaybackRate = usePlaybackStore((state) => state.setPlaybackRate);
+  const isRehydratedReady = usePlaybackStore((state) => state.isRehydratedReady);
+  const storeTitle = usePlaybackStore((state) => state.title);
+  const currentParagraphIndex = usePlaybackStore((state) => state.currentParagraphIndex);
+  const totalParagraphs = usePlaybackStore((state) => state.totalParagraphs);
   const { resume, pause } = useFloatingPlayer();
 
   /* 曲目信息：取故事会话「首条非续写指令」的用户消息作为标题，并叠加当前语音选项。
@@ -47,11 +52,16 @@ const AudioPlayer: React.FC = () => {
   const storyPromptMsg = messages.find(
     (m) => m.role === 'user' && m.content.trim() !== AUTO_CONTINUE_PROMPT,
   );
-  const trackTitle = storyPromptMsg ? storyPromptMsg.content.slice(0, 20) : '音频故事';
+  const trackTitle = storeTitle || (storyPromptMsg ? storyPromptMsg.content.slice(0, 20) : '音频故事');
   const selectedVoice = voiceOptions.find((v) => v.value === voiceId);
-  const trackSub = selectedVoice ? selectedVoice.label : 'AI 语音';
+  const voiceLabel = selectedVoice ? selectedVoice.label : 'AI 语音';
+  const paragraphBadge = totalParagraphs > 1
+    ? `第 ${currentParagraphIndex + 1} / ${totalParagraphs} 段${isRehydratedReady ? ' 就绪' : ''}`
+    : (isRehydratedReady ? '断点就绪' : '');
+  const trackSub = paragraphBadge ? `${paragraphBadge} · ${voiceLabel}` : voiceLabel;
 
   const hasAudio = duration > 0;
+  const isReadyToPlay = duration > 0 || isRehydratedReady;
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   useEffect(() => {
@@ -77,11 +87,16 @@ const AudioPlayer: React.FC = () => {
   };
 
   const togglePlay = () => {
-    if (!hasAudio) {
+    if (!isReadyToPlay) {
       return;
     }
     if (isPlaying) {
       pause();
+    } else if (isRehydratedReady) {
+      usePlaybackProgressStore.getState().resumeRehydratedPlayback().catch((error) => {
+        const message = error instanceof Error ? error.message : '语音生成稍有延迟，请重试';
+        GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
+      });
     } else {
       resume().catch((error) => {
         const message = error instanceof Error ? error.message : '无法恢复播放';
@@ -211,15 +226,27 @@ const AudioPlayer: React.FC = () => {
           type="button"
           className={styles.playBtn}
           onClick={togglePlay}
-          disabled={!hasAudio}
+          disabled={!isReadyToPlay}
           aria-label={isPlaying ? '暂停' : '播放'}
         >
           {isPlaying ? <Pause size={28} /> : <Play size={28} />}
         </button>
 
-        {/* 右侧占位按钮（视觉平衡） */}
-        <button type="button" className={styles.tbtn} disabled aria-label="下一首">
-          <SkipForward size={20} />
+        {/* 右侧重播按钮（支持从头重播） */}
+        <button
+          type="button"
+          className={styles.tbtn}
+          onClick={() => {
+            usePlaybackProgressStore.getState().replayFromStart().catch((error) => {
+              const message = error instanceof Error ? error.message : '重播失败';
+              GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
+            });
+          }}
+          disabled={!isReadyToPlay && totalParagraphs <= 1}
+          aria-label="从头重播"
+          title="从头重播"
+        >
+          <RotateCcw size={20} />
         </button>
       </div>
     </div>

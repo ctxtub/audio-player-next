@@ -3,7 +3,9 @@ import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
+import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
 import type { GenerationRecord } from '@/stores/generationHistoryStore';
+import type { StoryCardPart } from '@/types/chat';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
 
 /**
@@ -88,6 +90,26 @@ export const startStoryPlayback = async (
   // 启动播放器会话
   playbackStore.markSessionStart(messageId, apiConfig.playDuration, options);
 
+  // 若存在真实消息且处于 delivered 态，注册断点活跃故事
+  if (!messageId.startsWith('replay-text-')) {
+    const msg = useChatStore.getState().messages.find((m) => m.id === messageId);
+    const storyCard = msg?.parts?.find((p): p is StoryCardPart => p.type === 'storyCard');
+    if (msg && msg.status === 'delivered' && storyCard && storyCard.storyText) {
+      usePlaybackProgressStore.getState().setActiveStory({
+        sourceType: 'chat',
+        sourceId: messageId,
+        sessionId: messageId,
+        title: '音频故事',
+        storyText: storyCard.storyText,
+        voiceId: apiConfig.voiceId,
+        speed: apiConfig.speed,
+        isOneShot: options?.oneShot ?? false,
+        remainingAllowedMs: apiConfig.playDuration * 60000,
+        totalAllowedMs: apiConfig.playDuration * 60000,
+      });
+    }
+  }
+
   // 3. 自动开始播放生成的音频
   await playbackStore.playAudio(audioUrl, messageId);
 };
@@ -116,17 +138,48 @@ const synthesizeAndPlayOnce = async (
  * @param record 生成历史记录。
  */
 export const replayGeneration = async (record: GenerationRecord): Promise<void> => {
-  const { voiceId } = useConfigStore.getState().apiConfig;
-  await synthesizeAndPlayOnce(record.storyText, record.voiceId || voiceId, `replay-${record.id}`);
+  const { voiceId, speed } = useConfigStore.getState().apiConfig;
+  const chosenVoice = record.voiceId || voiceId;
+  const sourceId = String(record.id);
+
+  usePlaybackProgressStore.getState().setActiveStory({
+    sourceType: 'generation',
+    sourceId,
+    title: record.prompt ? record.prompt.slice(0, 20) : '作品回放',
+    storyText: record.storyText,
+    voiceId: chosenVoice,
+    speed,
+    isOneShot: true,
+  });
+
+  await usePlaybackProgressStore.getState().playParagraph(0);
 };
 
 /**
  * 回放给定故事正文（恢复态故事卡片的"播放故事"）。
  * @param storyText 故事正文。
+ * @param messageId 可选：真实卡片 messageId
  */
-export const playStoryText = async (storyText: string): Promise<void> => {
-  const { voiceId } = useConfigStore.getState().apiConfig;
-  await synthesizeAndPlayOnce(storyText, voiceId, `replay-text-${Date.now()}`);
+export const playStoryText = async (storyText: string, messageId?: string): Promise<void> => {
+  const { voiceId, speed } = useConfigStore.getState().apiConfig;
+  const validId = messageId && !messageId.startsWith('replay-text-') ? messageId : '';
+
+  if (validId) {
+    usePlaybackProgressStore.getState().setActiveStory({
+      sourceType: 'chat',
+      sourceId: validId,
+      sessionId: validId,
+      title: '音频故事',
+      storyText,
+      voiceId,
+      speed,
+      isOneShot: true,
+    });
+    await usePlaybackProgressStore.getState().playParagraph(0);
+  } else {
+    // 降级：未传稳定标识时一次性合成播放，不持久化悬挂断点
+    await synthesizeAndPlayOnce(storyText, voiceId, `chat-${Date.now()}`);
+  }
 };
 
 /**
@@ -273,6 +326,7 @@ export const updatePlaybackProgress = (payload: { currentTime: number; duration:
  * 完整重置故事播放链路，清空播放、预加载与故事状态并取消定时器。
  */
 export const resetStoryFlow = () => {
+  usePlaybackProgressStore.getState().reset();
   usePlaybackStore.getState().reset();
   usePreloadStore.getState().reset();
   useGenerationStore.getState().reset();

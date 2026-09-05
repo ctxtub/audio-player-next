@@ -10,6 +10,7 @@ import {
   updatePlaybackProgress,
 } from '@/app/services/storyFlow';
 import { usePlaybackStore } from '@/stores/playbackStore';
+import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useChatStore } from '@/stores/chatStore';
 import type { AudioControllerHandle } from '@/types/audioPlayer';
@@ -57,6 +58,7 @@ const AudioControllerHost: React.FC = () => {
    * 标记是否需要忽略下一次 ended 事件（解锁使用的静音片段）。
    */
   const shouldIgnoreNextEndedRef = useRef(false);
+  const isTransitioningRef = useRef(false);
   const playbackRate = usePlaybackStore((state) => state.playbackRate);
   const registerAudioController = usePlaybackStore((state) => state.registerAudioController);
 
@@ -100,52 +102,36 @@ const AudioControllerHost: React.FC = () => {
         audioEl.pause();
         isUnlockedRef.current = true;
       } catch (error) {
-        console.error('解锁音频播放能力失败:', error);
-        throw error instanceof Error ? error : new Error('音频播放解锁失败');
+        console.warn('音频解锁失败，将在播放时重试:', error);
       } finally {
+        audioEl.src = previousState.src;
+        audioEl.currentTime = previousState.currentTime;
+        audioEl.preload = previousState.preload;
         audioEl.muted = previousState.muted;
         audioEl.volume = previousState.volume;
-        audioEl.preload = previousState.preload;
-
-        if (previousState.src) {
-          audioEl.src = previousState.src;
-          try {
-            audioEl.currentTime = previousState.currentTime;
-          } catch (seekError) {
-            console.error('还原音频播放进度失败:', seekError);
-          }
-        } else {
-          audioEl.removeAttribute('src');
-          audioEl.load();
-        }
         isUnlockingRef.current = false;
-        if (shouldIgnoreNextEndedRef.current) {
-          shouldIgnoreNextEndedRef.current = false;
-        }
+        unlockPromiseRef.current = null;
       }
     })();
 
     unlockPromiseRef.current = unlockPromise;
-
-    try {
-      await unlockPromise;
-    } finally {
-      unlockPromiseRef.current = null;
-    }
+    await unlockPromise;
   }, []);
 
   /**
-   * 启动新音频播放，负责重置状态与触发播放开始回调。
-   * @param audioUrl 音频文件地址
+   * 播放指定音频资源。
+   * @param audioUrl 音频地址
+   * @param messageId 关联消息 ID
    * @returns Promise<void>
    */
-
   const handlePlay = useCallback(
     async (audioUrl: string, messageId?: string) => {
       const audioEl = audioRef.current;
       if (!audioEl) {
         throw new Error('音频播放器尚未就绪');
       }
+
+      await handleUnlock();
 
       // 若播放的是最新预加载的段落，需重置 PreloadStore 状态，
       // 防止后续逻辑误判导致跳过下一次预加载。
@@ -160,7 +146,6 @@ const AudioControllerHost: React.FC = () => {
       // 同步当前播放地址到 Store，确保 StoryCard UI 状态正确
       // 使用 syncPlaybackState 避免递归调用 play
       usePlaybackStore.getState().syncPlaybackState(audioUrl, messageId);
-
 
       audioEl.src = audioUrl;
       audioEl.currentTime = 0;
@@ -180,7 +165,7 @@ const AudioControllerHost: React.FC = () => {
         throw error instanceof Error ? error : new Error(message);
       }
     },
-    [playbackRate]
+    [handleUnlock, playbackRate]
   );
 
   /**
@@ -207,7 +192,7 @@ const AudioControllerHost: React.FC = () => {
   }, []);
 
   /**
-   * 暂停当前播放并同步全局状态。
+   * 暂停当前播放并同步全局状态与断点。
    */
   const handlePause = useCallback(() => {
     const audioEl = audioRef.current;
@@ -216,6 +201,7 @@ const AudioControllerHost: React.FC = () => {
     }
     audioEl.pause();
     handlePlaybackPause();
+    usePlaybackProgressStore.getState().handleExplicitPause();
   }, []);
 
   /**
@@ -287,20 +273,37 @@ const AudioControllerHost: React.FC = () => {
       updatePlaybackProgress({ currentTime, duration });
       if (duration > 0) {
         const remaining = duration - currentTime;
-        // 仅当剩余时间不足且尚未触发过建议时尝试预加载
-        if (!hasTriggeredPreload.current && remaining <= 120) {
-          // 额外安全检查：只有当前播放的是最后一段音频时，才自动触发预加载。
-          // 避免用户回听旧片段时，错误地触发了后续生成。
-          const currentMessageId = usePlaybackStore.getState().currentMessageId;
-          const isLast = currentMessageId
-            ? useChatStore.getState().selectors.isLatestMessage(currentMessageId)
-            : false; // 如果没有 ID，保守起见不自动触发
+        const adaptiveThreshold = Math.min(10, Math.max(5, duration * 0.25));
 
-          if (isLast) {
+        // 仅在自适应窗口内触发预加载，且严格仅在播放态中触发（暂停态严禁预加载）
+        if (!hasTriggeredPreload.current && remaining <= adaptiveThreshold) {
+          const isPlaying = usePlaybackStore.getState().isPlaying;
+          if (!isPlaying) {
+            return;
+          }
+
+          const progressState = usePlaybackProgressStore.getState();
+          // 若当前为多自然段故事且存在下一段：触发自然段预加载（严格单一前瞻 lookahead = 1）
+          if (
+            progressState.sourceId &&
+            progressState.totalParagraphs > 1 &&
+            progressState.nextParagraphIndex + 1 < progressState.totalParagraphs
+          ) {
             hasTriggeredPreload.current = true;
-            handleNearEnd().catch((error) => {
-              console.error('预加载下一段音频失败:', error);
-            });
+            progressState.prefetchNextParagraph(progressState.nextParagraphIndex + 1);
+          } else {
+            // 聊天续写模式预加载
+            const currentMessageId = usePlaybackStore.getState().currentMessageId;
+            const isLast = currentMessageId
+              ? useChatStore.getState().selectors.isLatestMessage(currentMessageId)
+              : false;
+
+            if (isLast && !usePlaybackStore.getState().isOneShot) {
+              hasTriggeredPreload.current = true;
+              handleNearEnd().catch((error) => {
+                console.error('预加载下一段音频失败:', error);
+              });
+            }
           }
         }
       }
@@ -322,12 +325,31 @@ const AudioControllerHost: React.FC = () => {
       }
       handlePlaybackPause();
       try {
+        const progressStore = usePlaybackProgressStore.getState();
+        // 优先检查当前多段故事是否包含未播自然段
+        if (
+          progressStore.sourceId &&
+          progressStore.totalParagraphs > 1 &&
+          progressStore.nextParagraphIndex + 1 < progressStore.totalParagraphs
+        ) {
+          isTransitioningRef.current = true;
+          await progressStore.handleParagraphEnded();
+          isTransitioningRef.current = false;
+          return;
+        }
+
+        // 当前故事所有自然段播毕：主动注销断点
+        if (progressStore.sourceId && progressStore.totalParagraphs > 0) {
+          await progressStore.clearProgress();
+        }
+
         const nextSegment = await handleSegmentEnded();
         if (!nextSegment) {
           return;
         }
         await handlePlay(nextSegment.audioUrl, nextSegment.messageId);
       } catch (error) {
+        isTransitioningRef.current = false;
         const message = error instanceof Error ? error.message : '无法播放下一段音频';
         GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
       }

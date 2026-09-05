@@ -68,3 +68,58 @@ export const recordPromptHistory = async (
 export const removePromptHistory = async (userId: number, prompt: string): Promise<void> => {
     await prisma.promptHistory.deleteMany({ where: { userId, prompt } });
 };
+
+import type { Subject } from './subject';
+
+/**
+ * 列出当前主体（用户或具名访客）的提示词历史；读取时先剪除超过 30 天的记录。
+ */
+export const listPromptHistoryForSubject = async (
+    subject: Subject
+): Promise<PromptHistoryDTO[]> => {
+    if (subject.type === 'user') {
+        return listPromptHistory(subject.id);
+    }
+    const threshold = new Date(Date.now() - THIRTY_DAYS_MS);
+    await prisma.guestPromptHistory.deleteMany({
+        where: { guestId: subject.id, lastUsed: { lt: threshold } },
+    });
+    const rows = await prisma.guestPromptHistory.findMany({
+        where: { guestId: subject.id },
+        orderBy: { lastUsed: 'desc' },
+        take: 100,
+    });
+    return rows.map(toDto);
+};
+
+/**
+ * 记录当前主体的一次提示词使用：存在则次数 +1、刷新时间；否则新建。
+ */
+export const recordPromptHistoryForSubject = async (
+    subject: Subject,
+    prompt: string
+): Promise<PromptHistoryDTO> => {
+    if (subject.type === 'user') {
+        return recordPromptHistory(subject.id, prompt);
+    }
+    const now = new Date();
+    const row = await prisma.guestPromptHistory.upsert({
+        where: { guestId_prompt: { guestId: subject.id, prompt } },
+        update: { useCount: { increment: 1 }, lastUsed: now },
+        create: { guestId: subject.id, prompt, lastUsed: now, useCount: 1 },
+    });
+    return toDto(row);
+};
+
+/**
+ * 删除当前主体的某条提示词历史（不存在不报错）。
+ */
+export const removePromptHistoryForSubject = async (
+    subject: Subject,
+    prompt: string
+): Promise<void> => {
+    if (subject.type === 'user') {
+        return removePromptHistory(subject.id, prompt);
+    }
+    await prisma.guestPromptHistory.deleteMany({ where: { guestId: subject.id, prompt } });
+};

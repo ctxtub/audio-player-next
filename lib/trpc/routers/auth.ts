@@ -12,6 +12,8 @@ import { loginInputSchema, registerInputSchema } from '../schemas/auth';
 import { prisma } from '@/lib/db';
 import { encodeSession, assertSessionSecret, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
 import { migrateGuestConfigToUser } from '@/lib/server/unifiedConfig';
+import { migrateGuestCreativeRecordsToUser } from '@/lib/server/unifiedMigration';
+import { purgeExpiredGuestData } from '@/lib/server/guestGc';
 
 const GUEST_COOKIE = 'guest';
 const GUEST_COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
@@ -64,9 +66,10 @@ export const authRouter = router({
                 });
                 createdUserId = user.id;
 
-                // 访客注册时配置迁移：若存在 guestId 且有 GuestConfig，将个性化偏好拷贝至新 UserConfig
+                // 访客注册时配置与创作记录迁移：若存在 guestId，将个性化偏好与创作记录拷贝至新用户
                 if (ctx.guestId) {
                     await migrateGuestConfigToUser(ctx.guestId, user.id);
+                    await migrateGuestCreativeRecordsToUser(ctx.guestId, user.id);
                 }
 
                 await setAuthCookie(user.id, user.nickname ?? user.username);
@@ -79,7 +82,7 @@ export const authRouter = router({
                     },
                 };
             } catch (error) {
-                // 回滚机制：若已写入数据库但后续 Cookie/签名/配置设置失败，删除已建用户
+                // 回滚机制：若已写入数据库但后续 Cookie/签名/配置/创作记录设置失败，删除已建用户
                 if (createdUserId !== null) {
                     try {
                         await prisma.user.delete({ where: { id: createdUserId } });
@@ -152,12 +155,9 @@ export const authRouter = router({
             maxAge: GUEST_COOKIE_MAX_AGE,
         });
 
-        // 概率淘汰：2% 概率异步触发清理 30 天未更新的访客配置
+        // 概率淘汰：2% 概率异步触发清理 30 天未更新的访客数据（配置 + 创作记录）
         if (Math.random() < 0.02) {
-            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-            prisma.guestConfig.deleteMany({
-                where: { updatedAt: { lt: thirtyDaysAgo } },
-            }).catch((err: unknown) => console.warn('[GC] GuestConfig purge failed', err));
+            purgeExpiredGuestData().catch((err: unknown) => console.warn('[GC] Guest data purge failed', err));
         }
 
         return { success: true as const, guestId };

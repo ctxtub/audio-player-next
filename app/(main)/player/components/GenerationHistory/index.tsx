@@ -5,7 +5,6 @@ import { Play } from 'lucide-react';
 
 import GlassToast from '@/components/ui/GlassToast';
 import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
-import { useAuthStore } from '@/stores/authStore';
 import { replayGeneration } from '@/app/services/storyFlow';
 import {
   HistoryList,
@@ -22,12 +21,10 @@ const EXCERPT_LIMIT = 60;
  * @returns 生成历史列表 JSX
  */
 const GenerationHistory: React.FC = () => {
-  /** 生成历史记录（账号维度同步，登录可见）。 */
+  /** 生成历史记录（账号/访客维度云端同步）。 */
   const records = useGenerationHistoryStore((state) => state.records);
   /** 删除某条生成历史。 */
   const removeRecord = useGenerationHistoryStore((state) => state.remove);
-  /** 登录态，决定是否展示数据或登录引导。 */
-  const isLogin = useAuthStore((state) => state.isLogin);
 
   /**
    * 格式化生成时间为简短中文日期。
@@ -63,12 +60,6 @@ const GenerationHistory: React.FC = () => {
       GlassToast.show({ icon: 'fail', content: '回放失败，请稍后重试' });
     });
   };
-
-  if (!isLogin) {
-    return (
-      <HistoryEmpty title="登录后查看生成历史" hint="登录账号即可同步保存你生成的故事" />
-    );
-  }
 
   if (records.length === 0) {
     return (

@@ -1,5 +1,5 @@
-import { create, StateCreator, type StoreApi } from 'zustand';
-import { devtools, persist, createJSONStorage } from 'zustand/middleware';
+import { create, StateCreator } from 'zustand';
+import { devtools } from 'zustand/middleware';
 import type { APIConfig } from '@/types/appConfig';
 import type { ThemeMode } from '@/types/theme';
 import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
@@ -9,6 +9,19 @@ import { DEFAULT_USER_CONFIG, type UserConfigPatch } from '@/lib/trpc/schemas/co
 import { fetchMyConfig, saveMyConfig } from '@/lib/client/userConfig';
 import GlassToast from '@/components/ui/GlassToast';
 
+const CONFIG_STORAGE_KEY = 'config-store';
+
+/**
+ * 启动时防御式清理：彻底消除历史版本留在客户端的 config-store 键。
+ */
+if (isBrowserEnvironment()) {
+  try {
+    getSafeLocalStorage().removeItem(CONFIG_STORAGE_KEY);
+  } catch {
+    // ignore storage write failures
+  }
+}
+
 /**
  * 配置 store 的基础状态结构：记录当前配置、加载标记及可选语音列表。
  */
@@ -17,7 +30,7 @@ type ConfigStoreBaseState = {
   isLoaded: boolean;
   initError: string | null;
   voiceOptions: VoiceOption[];
-  /** 是否处于登录态（开启服务端回写）。 */
+  /** 是否处于同步状态（全量上云架构下始终为 true）。 */
   syncEnabled: boolean;
 };
 
@@ -26,12 +39,12 @@ type ConfigStoreBaseState = {
  */
 type ConfigStoreActions = {
   /**
-   * 初始化配置（本地 + 远端），确保仅执行一次。
+   * 初始化配置（统一从服务端拉取），确保仅执行一次。
    * @returns Promise<void>
    */
   initialize: () => Promise<void>;
   /**
-   * 合并更新配置，并写入持久化层。
+   * 合并更新配置，并防抖同步至服务端。
    * @param partial Partial<APIConfig> 待更新的字段片段
    * @returns void
    */
@@ -42,12 +55,12 @@ type ConfigStoreActions = {
    */
   isConfigValid: () => boolean;
   /**
-   * 登录后：拉取服务端配置（本地作 seed），开启回写。
+   * 登录态初始化：统一收敛为 initialize()。
    * @returns Promise<void>
    */
   initForUser: () => Promise<void>;
   /**
-   * 登出：重置为默认并清本地缓存，关闭回写。
+   * 登出：重置内存状态，作废在途网络请求，保留 theme-mode 防闪烁缓存。
    * @returns void
    */
   reset: () => void;
@@ -59,11 +72,6 @@ type ConfigStoreActions = {
 export type ConfigStore = ConfigStoreBaseState & ConfigStoreActions;
 
 /**
- * 持久化存储键名。
- */
-const CONFIG_STORAGE_KEY = 'config-store';
-
-/**
  * 构造初始配置对象。
  * @returns 默认配置
  */
@@ -72,6 +80,17 @@ const createEmptyConfig = (): APIConfig => ({
   voiceId: '',
   speed: 1,
   floatingPlayerEnabled: true,
+  themeMode: DEFAULT_USER_CONFIG.themeMode,
+});
+
+/**
+ * 构造系统级默认配置对象（用于网络故障时的内存兜底）。
+ */
+const createDefaultConfig = (): APIConfig => ({
+  playDuration: DEFAULT_USER_CONFIG.playDuration,
+  voiceId: DEFAULT_USER_CONFIG.voiceId,
+  speed: DEFAULT_USER_CONFIG.speed,
+  floatingPlayerEnabled: DEFAULT_USER_CONFIG.floatingPlayerEnabled,
   themeMode: DEFAULT_USER_CONFIG.themeMode,
 });
 
@@ -155,117 +174,18 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
 };
 
 /**
- * Zustand persist 中间件暴露的扩展 API。
+ * 配置 store 的状态创建器。
  */
-type PersistApi = StoreApi<ConfigStore> & {
-  persist: {
-    rehydrate: () => Promise<void> | void;
-    hasHydrated: () => boolean;
-  };
-};
-
-/**
- * 配置 store 的状态创建器，包含初始化与更新逻辑。
- */
-const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
-  const persistApi = api as PersistApi;
+const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
   let initializationPromise: Promise<void> | null = null;
-  /** initForUser 去重：进行中的拉取 Promise（并发合流）。 */
-  let userInitPromise: Promise<void> | null = null;
-  /** 账号代次：reset 自增，作废在途 initForUser 的回写。 */
   let accountEpoch = 0;
-
-  const hydrateLocalConfig = async (): Promise<APIConfig | undefined> => {
-    if (!isBrowserEnvironment()) {
-      return undefined;
-    }
-
-    if (persistApi.persist.hasHydrated()) {
-      const stored = get().apiConfig;
-      return isValidConfig(stored) ? stored : undefined;
-    }
-
-    try {
-      await persistApi.persist.rehydrate();
-      const stored = get().apiConfig;
-      return isValidConfig(stored) ? stored : undefined;
-    } catch (error) {
-      console.warn('[configStore] hydrateLocalConfig failed', error);
-      return undefined;
-    }
-  };
-
-  const loadRemoteConfig = async (
-    localConfig: APIConfig | undefined
-  ): Promise<{ config: APIConfig; voiceOptions: VoiceOption[] }> => {
-    try {
-      const remote = await fetchAppConfig();
-      const voiceOptions = Array.isArray(remote.voicesList) ? remote.voicesList : [];
-      const hasVoice = (voice?: string) =>
-        !!voice && voiceOptions.some(option => option.value === voice);
-
-      const playDuration =
-        localConfig && localConfig.playDuration > 0
-          ? localConfig.playDuration
-          : DEFAULT_USER_CONFIG.playDuration;
-
-      let resolvedVoice: string | undefined;
-
-      if (localConfig && hasVoice(localConfig.voiceId)) {
-        resolvedVoice = localConfig.voiceId;
-      } else if (hasVoice(remote.voiceId)) {
-        resolvedVoice = remote.voiceId;
-      }
-
-      if (!resolvedVoice) {
-        throw new Error('INVALID_VOICE');
-      }
-
-      const mergedConfig: APIConfig = {
-        playDuration,
-        voiceId: resolvedVoice,
-        speed: localConfig?.speed ?? DEFAULT_USER_CONFIG.speed,
-        floatingPlayerEnabled:
-          localConfig?.floatingPlayerEnabled ?? DEFAULT_USER_CONFIG.floatingPlayerEnabled,
-        themeMode: localConfig?.themeMode ?? DEFAULT_USER_CONFIG.themeMode,
-      };
-
-      return { config: mergedConfig, voiceOptions };
-    } catch (error) {
-      throw new Error(
-        error instanceof Error ? error.message : 'FAILED_TO_FETCH_REMOTE_CONFIG'
-      );
-    }
-  };
-
-  const runInitialization = async () => {
-    try {
-      const localConfig = await hydrateLocalConfig();
-      const { config, voiceOptions } = await loadRemoteConfig(localConfig);
-      set({
-        apiConfig: config,
-        voiceOptions,
-        isLoaded: true,
-        initError: null,
-      });
-    } catch (error) {
-      set({
-        apiConfig: createEmptyConfig(),
-        voiceOptions: [],
-        isLoaded: false,
-        initError: error instanceof Error ? error.message : 'FAILED_TO_FETCH_REMOTE_CONFIG',
-      });
-      throw error;
-    }
-  };
 
   /** 防抖回写定时器与待写 patch 累积。 */
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingPatch: UserConfigPatch = {};
 
   /**
-   * 将完整配置映射为可作为 seed/patch 的形状。
-   * @param config 当前完整配置。
+   * 将完整配置映射为可作为 patch 的形状。
    */
   const toPatch = (config: APIConfig): UserConfigPatch => ({
     playDuration: config.playDuration,
@@ -277,7 +197,6 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
 
   /**
    * 防抖 500ms 将累积 patch 回写服务端，失败保留乐观值并提示。
-   * @param patch 本次变更的增量字段。
    */
   const scheduleSave = (patch: UserConfigPatch) => {
     pendingPatch = { ...pendingPatch, ...patch };
@@ -293,21 +212,88 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
     }, 500);
   };
 
+  const runInitialization = async () => {
+    const currentEpoch = accountEpoch;
+    try {
+      if (isBrowserEnvironment()) {
+        try {
+          getSafeLocalStorage().removeItem(CONFIG_STORAGE_KEY);
+        } catch {}
+      }
+
+      // 并行拉取系统级音色配置与主体云端配置
+      const [remote, mine] = await Promise.all([
+        fetchAppConfig(),
+        fetchMyConfig(),
+      ]);
+
+      if (currentEpoch !== accountEpoch) {
+        return; // 期间登出过，放弃回写
+      }
+
+      const voiceOptions = Array.isArray(remote.voicesList) ? remote.voicesList : [];
+      const hasVoice = (voice?: string) =>
+        !!voice && voiceOptions.some(option => option.value === voice);
+
+      let resolvedVoice: string | undefined;
+      if (hasVoice(mine.voiceId)) {
+        resolvedVoice = mine.voiceId;
+      } else if (hasVoice(remote.voiceId)) {
+        resolvedVoice = remote.voiceId;
+      } else {
+        resolvedVoice = voiceOptions[0]?.value;
+      }
+
+      if (!resolvedVoice) {
+        throw new Error('INVALID_VOICE');
+      }
+
+      const nextConfig: APIConfig = {
+        playDuration: mine.playDuration,
+        voiceId: resolvedVoice,
+        speed: mine.speed,
+        floatingPlayerEnabled: mine.floatingPlayerEnabled,
+        themeMode: mine.themeMode,
+      };
+
+      set({
+        apiConfig: nextConfig,
+        voiceOptions,
+        isLoaded: true,
+        initError: null,
+        syncEnabled: true,
+      });
+    } catch (error) {
+      if (currentEpoch !== accountEpoch) {
+        return;
+      }
+      set({
+        apiConfig: createDefaultConfig(),
+        voiceOptions: [],
+        isLoaded: false,
+        initError: error instanceof Error ? error.message : 'FAILED_TO_FETCH_REMOTE_CONFIG',
+        syncEnabled: true,
+      });
+      throw error;
+    }
+  };
+
   return {
     apiConfig: createEmptyConfig(),
     isLoaded: false,
     initError: null,
     voiceOptions: [],
-    syncEnabled: false,
+    syncEnabled: true,
     initialize: () => {
       if (!initializationPromise) {
-        initializationPromise = runInitialization().catch(error => {
+        initializationPromise = runInitialization().catch((error) => {
           console.warn('[configStore] initialize failed', error);
           set({
-            apiConfig: createEmptyConfig(),
+            apiConfig: createDefaultConfig(),
             isLoaded: false,
-            initError: error instanceof Error ? error.message : '配置加载失败',
+            initError: error instanceof Error ? error.message : 'FAILED_TO_FETCH_REMOTE_CONFIG',
             voiceOptions: [],
+            syncEnabled: true,
           });
           initializationPromise = null;
           throw error;
@@ -321,126 +307,35 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get, api) => {
       set({
         apiConfig: nextConfig,
       });
-      if (get().syncEnabled) {
-        scheduleSave(toPatch(nextConfig));
-      }
+      scheduleSave(toPatch(nextConfig));
     },
     isConfigValid: () => isValidConfig(get().apiConfig),
-    initForUser: () => {
-      // 已按服务端加载则跳过；并发调用复用同一拉取（与其余三块契约一致）
-      if (get().syncEnabled) {
-        return Promise.resolve();
-      }
-      if (userInitPromise) {
-        return userInitPromise;
-      }
-      const epoch = accountEpoch; // 捕获进入代次
-      userInitPromise = (async () => {
-        // 1) 取本地配置作为 seed（仅服务端无行时被消费）
-        const localConfig = await hydrateLocalConfig();
-        const seed = localConfig ? toPatch(localConfig) : undefined;
-        // 2) 并行拉取系统级音色与个人配置
-        const [remote, mine] = await Promise.all([
-          fetchAppConfig(),
-          fetchMyConfig(seed),
-        ]);
-        const voiceOptions = Array.isArray(remote.voicesList) ? remote.voicesList : [];
-        const hasVoice = (voice?: string) =>
-          !!voice && voiceOptions.some(option => option.value === voice);
-        // 3) 解析音色：服务端值优先，回落系统默认 / 列表首项
-        const resolvedVoice = hasVoice(mine.voiceId)
-          ? mine.voiceId
-          : hasVoice(remote.voiceId)
-            ? remote.voiceId
-            : voiceOptions[0]?.value ?? '';
-
-        if (epoch !== accountEpoch) {
-          return; // 期间 reset 过 → 放弃回写
-        }
-        set({
-          apiConfig: {
-            playDuration: mine.playDuration,
-            voiceId: resolvedVoice,
-            speed: mine.speed,
-            floatingPlayerEnabled: mine.floatingPlayerEnabled,
-            themeMode: mine.themeMode,
-          },
-          voiceOptions,
-          isLoaded: true,
-          syncEnabled: true,
-        });
-      })()
-        .catch(async (error) => {
-          // 登录态配置拉取失败（如会话失效 UNAUTHORIZED / 网络错误）：
-          // 回落访客初始化以放行加载门，避免首屏永久卡在「配置加载中…」。
-          console.warn('[configStore] initForUser failed; 回落访客初始化放行加载门', error);
-          if (epoch !== accountEpoch || get().isLoaded) {
-            return;
-          }
-          await get().initialize();
-        })
-        .finally(() => {
-          if (epoch === accountEpoch) {
-            userInitPromise = null;
-          }
-        });
-      return userInitPromise;
-    },
+    initForUser: () => get().initialize(),
     reset: () => {
-      accountEpoch++; // 作废在途 initForUser 的回写
+      accountEpoch++;
       if (saveTimer) {
         clearTimeout(saveTimer);
         saveTimer = null;
       }
       pendingPatch = {};
-      // 清空初始化记忆，使登出后「就地」重新初始化（访客/401 路径）能重跑 initialize/initForUser，
-      // 而非返回上一会话已 resolve 的旧 Promise 导致 isLoaded 卡在 false。
       initializationPromise = null;
-      userInitPromise = null;
-      try {
-        getSafeLocalStorage().removeItem(CONFIG_STORAGE_KEY);
-      } catch {
-        // ignore storage 清理失败
+      if (isBrowserEnvironment()) {
+        try {
+          getSafeLocalStorage().removeItem(CONFIG_STORAGE_KEY);
+        } catch {}
       }
       set({
         apiConfig: createEmptyConfig(),
         voiceOptions: [],
         isLoaded: false,
         initError: null,
-        syncEnabled: false,
+        syncEnabled: true,
       });
     },
   };
 };
 
 /**
- * 带持久化与版本迁移能力的配置 store。
- */
-const persistedConfigStore = persist(configStoreCreator, {
-  name: CONFIG_STORAGE_KEY,
-  version: 1,
-  storage: createJSONStorage(getSafeLocalStorage),
-  partialize: (state) => ({
-    apiConfig: state.apiConfig,
-  }),
-  migrate: (persistedState: unknown) => {
-    const raw = (persistedState as { apiConfig?: Partial<APIConfig> } | undefined)?.apiConfig;
-    // 回填缺失的 themeMode（旧版本无此字段时用默认；已有则保留）
-    const config = raw
-      ? { ...raw, themeMode: raw.themeMode ?? DEFAULT_USER_CONFIG.themeMode }
-      : undefined;
-    if (isValidConfig(config)) {
-      return { apiConfig: config };
-    }
-
-    return {
-      apiConfig: createEmptyConfig(),
-    };
-  },
-  skipHydration: true,
-});
-
-/**
  * 配置 store Hook，提供配置读取与操作能力。
  */
-export const useConfigStore = create<ConfigStore>()(devtools(persistedConfigStore));
+export const useConfigStore = create<ConfigStore>()(devtools(configStoreCreator));

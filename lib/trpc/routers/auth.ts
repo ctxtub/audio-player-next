@@ -11,6 +11,7 @@ import { router, publicProcedure, TRPCError } from '../init';
 import { loginInputSchema, registerInputSchema } from '../schemas/auth';
 import { prisma } from '@/lib/db';
 import { encodeSession, assertSessionSecret, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
+import { migrateGuestConfigToUser } from '@/lib/server/unifiedConfig';
 
 const GUEST_COOKIE = 'guest';
 const GUEST_COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
@@ -65,21 +66,7 @@ export const authRouter = router({
 
                 // 访客注册时配置迁移：若存在 guestId 且有 GuestConfig，将个性化偏好拷贝至新 UserConfig
                 if (ctx.guestId) {
-                    const guestConfig = await prisma.guestConfig.findUnique({
-                        where: { guestId: ctx.guestId },
-                    });
-                    if (guestConfig) {
-                        await prisma.userConfig.create({
-                            data: {
-                                userId: user.id,
-                                playDurationMinutes: guestConfig.playDurationMinutes,
-                                voiceId: guestConfig.voiceId,
-                                speed: guestConfig.speed,
-                                floatingPlayerEnabled: guestConfig.floatingPlayerEnabled,
-                                themeMode: guestConfig.themeMode,
-                            },
-                        });
-                    }
+                    await migrateGuestConfigToUser(ctx.guestId, user.id);
                 }
 
                 await setAuthCookie(user.id, user.nickname ?? user.username);

@@ -1,7 +1,22 @@
 import assert from 'node:assert';
+import path from 'node:path';
+import { createRequire } from 'node:module';
 import { NextRequest } from 'next/server';
 import * as nextHeaders from 'next/headers';
 import { prisma } from '../lib/db';
+
+const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
+const glassToastPath = path.resolve(process.cwd(), 'components/ui/GlassToast.tsx');
+nodeRequire.cache[glassToastPath] = {
+    id: glassToastPath,
+    filename: glassToastPath,
+    loaded: true,
+    exports: { default: { show: () => {}, clear: () => {} } },
+} as unknown as NodeModule;
+
+const { useConfigStore } = nodeRequire('../stores/configStore') as {
+    useConfigStore: typeof import('../stores/configStore').useConfigStore;
+};
 import {
     getOrCreateConfig,
     updateConfig,
@@ -314,42 +329,93 @@ async function runGuestConfigTests() {
     '61st authed request must throw 429');
     console.log('PASS: GuestId key and dual-layer IP guard rate limiting verified');
 
-    console.log('=== 5. Testing Theme Priority Contract ===');
+    console.log('=== 5. Testing Theme Priority Contract & Store Reset ===');
     // Contract:
     // 1) First paint uses localStorage['theme-mode'] as FOUC cache
     // 2) After hydration, server value (GuestConfig or UserConfig) takes precedence and overwrites localStorage
     // 3) On theme change: write localStorage immediately + debounced server update
-    // 4) Logout does NOT clear theme-mode
+    // 4) Reset/Logout preserves theme-mode in localStorage while clearing config-store and in-memory state
 
-    // Simulate mock localStorage
     const storageMap = new Map<string, string>();
-    const mockStorage = {
+    const mockStorage: Storage = {
         getItem: (k: string) => storageMap.get(k) ?? null,
-        setItem: (k: string, v: string) => storageMap.set(k, v),
-        removeItem: (k: string) => storageMap.delete(k),
+        setItem: (k: string, v: string) => { storageMap.set(k, String(v)); },
+        removeItem: (k: string) => { storageMap.delete(k); },
+        clear: () => { storageMap.clear(); },
+        key: (index: number) => Array.from(storageMap.keys())[index] ?? null,
+        get length() { return storageMap.size; },
     };
 
-    // Step 1: Pre-existing localStorage (first paint cache)
-    mockStorage.setItem(THEME_MODE_STORAGE_KEY, 'light');
-    assert.strictEqual(mockStorage.getItem(THEME_MODE_STORAGE_KEY), 'light', 'First paint reads localStorage');
+    const originalWindow = (globalThis as Record<string, unknown>).window;
+    (globalThis as Record<string, unknown>).window = {
+        localStorage: mockStorage,
+    };
 
-    // Step 2: Hydration from server config (e.g. guest or user has 'dark')
-    const serverConfigTheme = 'dark';
-    // Server value takes precedence over client cache
-    if (mockStorage.getItem(THEME_MODE_STORAGE_KEY) !== serverConfigTheme) {
-        mockStorage.setItem(THEME_MODE_STORAGE_KEY, serverConfigTheme);
+    try {
+        // Step 1: Pre-existing localStorage (first paint cache)
+        mockStorage.setItem(THEME_MODE_STORAGE_KEY, 'light');
+        assert.strictEqual(mockStorage.getItem(THEME_MODE_STORAGE_KEY), 'light', 'First paint reads localStorage');
+
+        // Step 2: Hydration from server config (e.g. guest or user has 'dark')
+        const serverConfigTheme = 'dark';
+        if (mockStorage.getItem(THEME_MODE_STORAGE_KEY) !== serverConfigTheme) {
+            mockStorage.setItem(THEME_MODE_STORAGE_KEY, serverConfigTheme);
+        }
+        assert.strictEqual(mockStorage.getItem(THEME_MODE_STORAGE_KEY), 'dark', 'Server value takes precedence and overwrites localStorage');
+
+        // Step 3: User changes theme in UI to 'system'
+        const userSelectedTheme = 'system';
+        mockStorage.setItem(THEME_MODE_STORAGE_KEY, userSelectedTheme);
+        assert.strictEqual(mockStorage.getItem(THEME_MODE_STORAGE_KEY), 'system', 'Theme change writes localStorage immediately');
+
+        // Step 4: Real useConfigStore.getState().reset() against stubbed window/localStorage
+        mockStorage.setItem('config-store', JSON.stringify({ state: { themeMode: 'system' } }));
+        useConfigStore.setState({
+            apiConfig: {
+                playDuration: 60,
+                voiceId: 'alloy',
+                speed: 1.5,
+                floatingPlayerEnabled: true,
+                themeMode: 'system',
+            },
+            isLoaded: true,
+            initError: null,
+            voiceOptions: [],
+            syncEnabled: true,
+        });
+
+        assert.strictEqual(mockStorage.getItem(THEME_MODE_STORAGE_KEY), 'system');
+        assert.strictEqual(mockStorage.getItem('config-store') !== null, true);
+        assert.strictEqual(useConfigStore.getState().isLoaded, true);
+
+        // Call the real useConfigStore.getState().reset()
+        useConfigStore.getState().reset();
+
+        // Assert theme-mode is preserved on reset
+        assert.strictEqual(
+            mockStorage.getItem(THEME_MODE_STORAGE_KEY),
+            'system',
+            'theme-mode must be preserved in localStorage on reset'
+        );
+
+        // Assert config-store was purged from localStorage
+        assert.strictEqual(
+            mockStorage.getItem('config-store'),
+            null,
+            'config-store cache must be cleared from localStorage on reset'
+        );
+
+        // Assert in-memory store state was reset
+        const resetState = useConfigStore.getState();
+        assert.strictEqual(resetState.isLoaded, false, 'Store isLoaded should be reset to false');
+        assert.strictEqual(resetState.apiConfig.playDuration, 0, 'Store apiConfig should be reset to empty config');
+    } finally {
+        if (originalWindow === undefined) {
+            delete (globalThis as Record<string, unknown>).window;
+        } else {
+            (globalThis as Record<string, unknown>).window = originalWindow;
+        }
     }
-    assert.strictEqual(mockStorage.getItem(THEME_MODE_STORAGE_KEY), 'dark', 'Server value takes precedence and overwrites localStorage');
-
-    // Step 3: User changes theme in UI to 'system'
-    const userSelectedTheme = 'system';
-    mockStorage.setItem(THEME_MODE_STORAGE_KEY, userSelectedTheme);
-    assert.strictEqual(mockStorage.getItem(THEME_MODE_STORAGE_KEY), 'system', 'Theme change writes localStorage immediately');
-
-    // Step 4: Logout
-    // Simulated logout actions: clear auth session and config store, but preserve theme-mode
-    mockStorage.removeItem('config-store');
-    assert.strictEqual(mockStorage.getItem(THEME_MODE_STORAGE_KEY), 'system', 'Logout does NOT clear theme-mode in localStorage');
     console.log('PASS: Theme priority contract and persistence rules verified');
 }
 

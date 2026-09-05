@@ -96,13 +96,9 @@ export async function getOrCreateConfig(subject: ConfigSubject): Promise<UserCon
         });
         return toConfigDto(created);
     } else {
-        const existing = await prisma.guestConfig.findUnique({ where: { guestId: subject.id } });
-        if (existing) {
-            return toConfigDto(existing);
-        }
-
-        const created = await prisma.guestConfig.create({
-            data: {
+        const row = await prisma.guestConfig.upsert({
+            where: { guestId: subject.id },
+            create: {
                 guestId: subject.id,
                 playDurationMinutes: DEFAULT_USER_CONFIG.playDuration,
                 voiceId: DEFAULT_USER_CONFIG.voiceId,
@@ -110,8 +106,9 @@ export async function getOrCreateConfig(subject: ConfigSubject): Promise<UserCon
                 floatingPlayerEnabled: DEFAULT_USER_CONFIG.floatingPlayerEnabled,
                 themeMode: DEFAULT_USER_CONFIG.themeMode,
             },
+            update: {},
         });
-        return toConfigDto(created);
+        return toConfigDto(row);
     }
 }
 

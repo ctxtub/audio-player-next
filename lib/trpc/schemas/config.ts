@@ -1,7 +1,7 @@
 /**
  * 用户配置相关 Zod Schemas 与默认值。
  *
- * seed：首次建行时的初始值；patch：更新时的增量；DTO：返回前端的形状。
+ * patch：更新时的增量；DTO：返回前端的形状。
  */
 
 import { z } from 'zod';
@@ -27,11 +27,6 @@ export const userConfigPatchSchema = z.object({
 
 /** 增量更新类型。 */
 export type UserConfigPatch = z.infer<typeof userConfigPatchSchema>;
-
-/** 首次建行迁移用 Seed，与 patch 同形，但语义为初始值。 */
-export const userConfigSeedSchema = userConfigPatchSchema;
-/** Seed 类型。 */
-export type UserConfigSeed = z.infer<typeof userConfigSeedSchema>;
 
 /**
  * 返回前端的用户配置 DTO（前端语义命名）。

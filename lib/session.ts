@@ -17,13 +17,30 @@ interface SessionPayload {
     exp: number;
 }
 
-const getSessionSecret = (): string => {
+/**
+ * 校验 SESSION_SECRET 环境变量。若未设置则抛出异常。
+ */
+export const assertSessionSecret = (): string => {
     const secret = process.env.SESSION_SECRET;
     if (!secret) {
         throw new Error('SESSION_SECRET environment variable is required');
     }
     return secret;
 };
+
+export const getSessionSecret = assertSessionSecret;
+
+/**
+ * 生产环境下若未配置 SESSION_SECRET 则在启动加载时立即失败（fail-fast）。
+ * 构建阶段 (phase-production-build) 豁免，避免静态分析与构建中断。
+ */
+if (
+    process.env.NODE_ENV === 'production' &&
+    process.env.NEXT_PHASE !== 'phase-production-build' &&
+    !process.env.SESSION_SECRET
+) {
+    throw new Error('SESSION_SECRET environment variable is required in production');
+}
 
 // ============================================================================
 // Cross-platform HMAC-SHA256 (Edge Runtime & Node.js Compatible)

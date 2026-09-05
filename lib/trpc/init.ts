@@ -47,4 +47,15 @@ export const authedProcedure = t.procedure.use(async ({ ctx, next }) => {
     return next({ ctx: { ...ctx, session: ctx.session } });
 });
 
+/**
+ * 中间件：校验用户已登录或处于访客模式。
+ * 未登录且无有效访客 Cookie 时拒绝访问，返回 401 (UNAUTHORIZED)。
+ */
+export const guardedProcedure = t.procedure.use(async ({ ctx, next }) => {
+    if (!ctx.session && !ctx.isGuest) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: '请先登录或以访客身份访问' });
+    }
+    return next({ ctx });
+});
+
 export { TRPCError };

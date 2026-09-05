@@ -7,24 +7,54 @@ import { encodeSession } from '../lib/session';
 process.env.SESSION_SECRET = 'test-secret-matrix-1234567890';
 
 async function runMatrixTests() {
-    console.log('--- 1. Testing Safe Client IP Extraction ---');
+    console.log('--- 1. Testing Safe Client IP Extraction & Header Priority ---');
     assert.strictEqual(getSafeClientIp(null), '127.0.0.1', 'Null headers should fallback to 127.0.0.1');
-    
-    const xffHeaders = new Headers({
+    assert.strictEqual(getSafeClientIp(new Headers({})), '127.0.0.1', 'Empty headers should fallback to 127.0.0.1');
+
+    // Multi-header precedence: cf-connecting-ip takes precedence over x-real-ip and x-forwarded-for
+    const allHeaders = new Headers({
+        'cf-connecting-ip': ' 192.0.2.1 ',
+        'x-real-ip': ' 198.51.100.42 ',
+        'x-forwarded-for': ' 203.0.113.195 , 70.41.3.18 ',
+    });
+    assert.strictEqual(
+        getSafeClientIp(allHeaders),
+        '192.0.2.1',
+        'cf-connecting-ip must take precedence over x-real-ip and x-forwarded-for'
+    );
+
+    // Multi-header precedence: x-real-ip takes precedence over x-forwarded-for when cf-connecting-ip is absent
+    const realIpAndXffHeaders = new Headers({
+        'x-real-ip': ' 198.51.100.42 ',
+        'x-forwarded-for': ' 203.0.113.195 , 70.41.3.18 ',
+    });
+    assert.strictEqual(
+        getSafeClientIp(realIpAndXffHeaders),
+        '198.51.100.42',
+        'x-real-ip must take precedence over x-forwarded-for'
+    );
+
+    // Forged X-Forwarded-For alone (without trusted headers) yields its value only as last-resort fallback
+    const forgedXffAloneHeaders = new Headers({
         'x-forwarded-for': ' 203.0.113.195 , 70.41.3.18, 150.172.238.178 ',
     });
-    assert.strictEqual(getSafeClientIp(xffHeaders), '203.0.113.195', 'Should extract first trimmed IP from x-forwarded-for');
+    assert.strictEqual(
+        getSafeClientIp(forgedXffAloneHeaders),
+        '203.0.113.195',
+        'Forged x-forwarded-for alone yields first trimmed IP as last-resort fallback'
+    );
 
-    const xRealIpHeaders = new Headers({
-        'x-real-ip': ' 198.51.100.42 ',
-    });
-    assert.strictEqual(getSafeClientIp(xRealIpHeaders), '198.51.100.42', 'Should extract x-real-ip when x-forwarded-for is missing');
-
-    const cfHeaders = new Headers({
+    // Single trusted headers extract correctly
+    const cfAloneHeaders = new Headers({
         'cf-connecting-ip': ' 192.0.2.1 ',
     });
-    assert.strictEqual(getSafeClientIp(cfHeaders), '192.0.2.1', 'Should extract cf-connecting-ip');
-    console.log('PASS: getSafeClientIp works across all header formats');
+    assert.strictEqual(getSafeClientIp(cfAloneHeaders), '192.0.2.1', 'Should extract cf-connecting-ip when present alone');
+
+    const xRealIpAloneHeaders = new Headers({
+        'x-real-ip': ' 198.51.100.42 ',
+    });
+    assert.strictEqual(getSafeClientIp(xRealIpAloneHeaders), '198.51.100.42', 'Should extract x-real-ip when present alone');
+    console.log('PASS: getSafeClientIp correctly enforces trusted header priority (cf > x-real-ip > x-forwarded-for)');
 
     console.log('--- 2. Testing Context Cookie Parsing ---');
     const validSessionCookie = encodeSession(42, 'Tester');

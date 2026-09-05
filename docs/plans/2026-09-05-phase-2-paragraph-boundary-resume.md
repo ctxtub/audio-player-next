@@ -1,13 +1,14 @@
 # 技术方案与实施计划：阶段二 段落级断点续播 (Phase 2 Paragraph-Boundary Resume)
 
-> **文档类型**：实施方案与架构规范 (Implementation Plan & Architectural Specification)
+> **文档状态**：IMPLEMENTED (已实施并生产验证上线)
 > **创建日期**：2026-09-05
-> **基线版本**：commit `1c495a81ac5cf35b8a11f3c78fccbb5d55002d9b` (`main`)
-> **分支**：`docs/phase2-paragraph-resume`
-> **作者**：DOCUMENTATION-ONLY Planning Worker
-> **修订记录**：2026-09-05 审阅变更修复（闭环解决 7 项阻断性审查意见：稳定创作源标识、确定性分段与文本漂移检测、Prisma 模型 User 反向关系、服务端单调并发谓词与显式重播、自适应预加载窗口与成本限额、播放器双层 UI 模型与段内 Seek 契约、真实路由路径与全量测试用例完善）
+> **完成日期**：2026-09-05
+> **功能部署 SHA**：`e5f41beb2661af1133b579a3b73635610381b35a` (Short: `e5f41be`)
+> **镜像产物**：`ghcr.io/ctxtub/audio-player-next:sha-e5f41be` (`sha256:86357f37ad1b039c175331ee94339f87defccaa6ea30b967e7c48a196c1244c7`)
+> **分支**：`feat/paragraph-boundary-resume` -> `main`
+> **作者**：RELEASE Worker
+> **修订记录**：2026-09-05 实施完成并通过生产环境验证（闭环实施数据库模型迁移、主体感知服务、tRPC 路由、前端状态机与双层 UI 模型，并通过线上全链路冒烟与回放 API 验证）
 > **前序方案**：[Phase 1 Creative-Record Cloud Sync](../specs/2026-09-05-creative-record-cloud-sync.md)
-> **实施范围授权**：仅规划与设计文档，本阶段严禁修改业务代码、数据库模式、迁移脚本或生产环境。
 
 ---
 
@@ -943,3 +944,71 @@ export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeRes
 ### 任务 11：全量单元与 E2E 模拟验证套件
 - **目标路径**：
   - `tests/test-paragraph-resume.ts`：落实 TC-P2-01 至 TC-P2-17 的全量端到端自动化模拟用例集（覆盖稳定源校验、文本漂移重置、多标签页并发单调谓词与显式重播）。
+
+---
+
+## 十五、实施完成与生产验证证据 (Implementation & Production Verification Evidence)
+
+### 15.1 实施完成状态与代码审计
+
+| 任务项 | 涉及文件与模块 | 状态 |
+| :--- | :--- | :---: |
+| 任务 1：数据库模式与增量迁移 | `prisma/schema.prisma`<br>`prisma/migrations/20260905140000_add_playback_progress/migration.sql` | PASS |
+| 任务 2：tRPC 契约与传输对象 | `lib/trpc/schemas/playback.ts`, `types/playback.ts` | PASS |
+| 任务 3：服务端主体感知服务层 | `lib/server/playbackProgress.ts` | PASS |
+| 任务 4：tRPC 路由挂载与限流防护 | `lib/trpc/routers/playback.ts`, `lib/trpc/routers/index.ts` | PASS |
+| 任务 5：访客注册原子迁移集成 | `lib/server/unifiedMigration.ts`, `lib/trpc/routers/auth.ts` | PASS |
+| 任务 6：30 天生命周期 GC 服务扩充 | `lib/server/guestGc.ts` | PASS |
+| 任务 7：客户端存储状态机与持久化通信 | `lib/client/playbackProgress.ts`, `stores/playbackProgressStore.ts` | PASS |
+| 任务 8：全局账号同步生命周期接入 | `stores/accountSync.ts` | PASS |
+| 任务 9：音频控制链路、自适应预加载与文本切段 | `utils/segmentation.ts`, `stores/playbackStore.ts`, `app/services/storyFlow.ts`, `components/AudioControllerHost/index.tsx` | PASS |
+| 任务 10：视图层双层 UI 模型与断点就绪卡片 | `app/(main)/player/components/AudioPlayer/index.tsx`, `app/(main)/chat/components/MessageParts/StoryCardPart.tsx`, `components/FloatingPlayer/index.tsx` | PASS |
+| 任务 11：全量单元与 E2E 模拟验证套件 | `tests/test-paragraph-resume.ts` (TC-P2-01 至 TC-P2-17 全量通过) | PASS |
+
+### 15.2 质量门禁与安全审计
+
+- **代码质量门禁**：
+  - `yarn lint`：0 warnings, 0 errors.
+  - `yarn tsc --noEmit`：0 type errors.
+  - `yarn test`：11/11 测试套件通过（含 TC-P2-01 至 TC-P2-17 全部 17 项验收用例）.
+  - `yarn build`：生产环境打包成功（Next.js 15.5.9 standalone 产物，耗时 91s）.
+- **安全审计**：
+  - 完整扫描 `origin/main..e5f41be` 之间 11 个提交与 25 个变更文件，未引入任何 API Key、私钥、Token、密码、Cookie 或连接串；
+  - 生产数据库迁移脚本 `20260905140000_add_playback_progress` 纯增量（Additive Only），无破损风险；
+  - Docker 构建上下文与 `.dockerignore` 严格过滤测试、文档与环境变量；
+  - `.github/workflows/docker-push.yml` 维持最小特权权限模型。
+
+### 15.3 CI 构建与镜像发布
+
+- **触发提交**：`e5f41beb2661af1133b579a3b73635610381b35a`
+- **GitHub Actions Run ID**：`33968534154`
+- **GitHub Actions Run URL**：https://github.com/ctxtub/audio-player-next/actions/runs/33968534154
+- **工作流结论**：`success` (`docker-push` 3m40s, `notify` 3s)
+- **不可变镜像标签**：`ghcr.io/ctxtub/audio-player-next:sha-e5f41be`
+- **镜像 Manifest Digest**：`sha256:86357f37ad1b039c175331ee94339f87defccaa6ea30b967e7c48a196c1244c7`
+- **OCI Revision 标签**：`e5f41beb2661af1133b579a3b73635610381b35a`
+
+### 15.4 生产部署与备份证据
+
+- **生产数据备份**：
+  - 数据库备份：`/opt/1panel/docker/compose/audio-player-next/data/app.db.bak-20260905T132525Z-1c495a8`（135,168 字节，权限 0600，`PRAGMA integrity_check: ok`）
+  - Compose 备份：`/opt/1panel/docker/compose/audio-player-next/docker-compose.yml.bak-20260905T132525Z-1c495a8`
+- **容器重建**：
+  - 容器名称：`audio-player-next`（ID: `466b4fa27145...`）
+  - 镜像：`ghcr.io/ctxtub/audio-player-next:sha-e5f41be`
+  - 迁移执行：启动日志确认执行 `Applying migration 20260905140000_add_playback_progress`，迁移成功后以 498ms 就绪启动。
+
+### 15.5 生产在线回读与冒烟验证
+
+- **健康状态**：
+  - `http://127.0.0.1:38080/` 返回 HTTP 307 重定向至 `/chat`；
+  - `https://story.hoki.fun/` 返回 HTTP/2 307，Cloudflare 边缘路由正常；
+- **API 契约验证**：
+  - 匿名调用 `https://story.hoki.fun/api/trpc/playback.getProgress` 返回 HTTP 401 `UNAUTHORIZED`（`请先登录或以访客身份访问`），证明受保护路由正确挂载且鉴权拦截生效；
+- **访客端到端冒烟验证**：
+  - 通过 `agent-browser` 访问 `https://story.hoki.fun/auth` 并以访客模式（`guest=g_<uuid>`）接入，进入 `/player` 页面；
+  - 验证双层 UI 模型：“播放”与“从头重播”按设计保持在就绪/初始态；
+  - 验证 `window.localStorage` 仅保留 `theme-mode`，零业务数据泄漏；
+  - 验证调用 `playback.saveProgress` 保存进度（返回 200 OK）、`playback.getProgress` 读回进度（返回 200 OK，数据完全吻合）、`playback.clearProgress` 清理进度（返回 200 OK，重置为 `null`）；
+  - 全程零付费 API 调用，零新用户注册，零孤儿数据残留。
+

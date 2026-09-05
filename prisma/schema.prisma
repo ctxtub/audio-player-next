@@ -22,6 +22,7 @@ model User {
   promptHistory     PromptHistory[]
   generationHistory GenerationHistory[]
   chatMessages      ChatMessage[]
+  playbackProgress  UserPlaybackProgress?
 }
 
 /// 用户当前聊天会话的消息（单会话快照），与 User 多对一关联。
@@ -169,4 +170,81 @@ model GuestPromptHistory {
   @@index([guestId])
   @@index([updatedAt])
 }
+
+/// 用户断点播放进度表（每用户仅保留一条活跃播放锚点）
+model UserPlaybackProgress {
+  id                          Int      @id @default(autoincrement())
+  userId                      Int      @unique
+  user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// 播放源类型：'chat'（单会话故事卡片）| 'generation'（作品库历史条目）
+  sourceType                  String
+  /// 溯源唯一标识：chat 时为 ChatMessage.messageId，generation 时为 string(generationId)；严禁 replay-text-* 临时 ID
+  sourceId                    String
+  /// 会话标识（可选）
+  sessionId                   String?
+  /// 故事展示标题（用于断点恢复首屏展示，避免异步查主表）
+  title                       String
+
+  /// 正文内容哈希（基于规范化文本计算的 8-12 位短哈希，用于检测正文漂移）
+  contentHash                 String   @default("")
+  /// 分段算法版本号（默认 'v1'，升级切段规则时可感知历史不兼容）
+  segmentationVersion         String   @default("v1")
+
+  /// 上一次已完整听完的段落序号（从 0 开始；-1 表示该故事未听完首段）
+  lastCompletedParagraphIndex Int      @default(-1)
+  /// 下一次应当恢复播放的段落序号（通常为 lastCompletedParagraphIndex + 1，中途退出即重播此段）
+  nextParagraphIndex          Int      @default(0)
+  /// 该故事正文总段落数
+  totalParagraphs             Int      @default(1)
+
+  /// 合成语音参数上下文
+  voiceId                     String   @default("")
+  speed                       Float    @default(1.0)
+
+  /// 倒计时上下文：继承定时器剩余有效毫秒数
+  remainingAllowedMs          Int?
+  totalAllowedMs              Int?
+  /// 是否为一次性播放（作品库回放，不自动续写新章节）
+  isOneShot                   Boolean  @default(false)
+
+  updatedAt                   DateTime @updatedAt
+  createdAt                   DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// 访客断点播放进度表（具名访客 guestId 唯一索引，物理隔离且受 30 天 GC 管辖）
+model GuestPlaybackProgress {
+  id                          Int      @id @default(autoincrement())
+  guestId                     String   @unique
+
+  /// 播放源类型：'chat' | 'generation'
+  sourceType                  String
+  /// 溯源唯一标识：chat 时为 ChatMessage.messageId，generation 时为 string(generationId)；严禁 replay-text-* 临时 ID
+  sourceId                    String
+  sessionId                   String?
+  title                       String
+
+  contentHash                 String   @default("")
+  segmentationVersion         String   @default("v1")
+
+  lastCompletedParagraphIndex Int      @default(-1)
+  nextParagraphIndex          Int      @default(0)
+  totalParagraphs             Int      @default(1)
+
+  voiceId                     String   @default("")
+  speed                       Float    @default(1.0)
+
+  remainingAllowedMs          Int?
+  totalAllowedMs              Int?
+  isOneShot                   Boolean  @default(false)
+
+  updatedAt                   DateTime @updatedAt
+  createdAt                   DateTime @default(now())
+
+  @@index([guestId])
+  @@index([updatedAt])
+}
+
 

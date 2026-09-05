@@ -122,3 +122,51 @@ model GuestConfig {
   @@index([updatedAt])
 }
 
+/// 访客聊天会话消息表（单会话快照，以具名访客 guestId 索引）
+model GuestChatMessage {
+  id        Int      @id @default(autoincrement())
+  guestId   String
+  position  Int
+  messageId String
+  role      String
+  content   String
+  parts     String?
+  agentType String?
+  createdAt String?
+  updatedAt DateTime @updatedAt
+
+  @@index([guestId, position])
+  @@index([guestId])
+  @@index([updatedAt])
+}
+
+/// 访客生成的故事历史
+model GuestGenerationHistory {
+  id        Int      @id @default(autoincrement())
+  guestId   String
+  prompt    String
+  storyText String
+  voiceId   String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([guestId, createdAt])
+  @@index([guestId])
+  @@index([updatedAt])
+}
+
+/// 访客提示词历史
+model GuestPromptHistory {
+  id        Int      @id @default(autoincrement())
+  guestId   String
+  prompt    String
+  lastUsed  DateTime
+  useCount  Int      @default(1)
+  updatedAt DateTime @updatedAt
+
+  @@unique([guestId, prompt])
+  @@index([guestId, lastUsed])
+  @@index([guestId])
+  @@index([updatedAt])
+}
+

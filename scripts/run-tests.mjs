@@ -18,6 +18,7 @@ const testFiles = [
   './tests/test-guest-config.ts',
   './tests/test-guest-creative-sync.ts',
   './tests/test-guest-creative-e2e-harness.ts',
+  './tests/test-paragraph-resume.ts',
 ];
 
 console.log('Running test suite...\n');

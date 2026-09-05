@@ -159,9 +159,11 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
     let storyText = '';
 
     if (dto.sourceType === 'chat') {
-      await useChatStore.getState().initForUser();
-      const messages = useChatStore.getState().messages;
-      const msg = messages.find((m) => m.id === dto.sourceId);
+      let msg = useChatStore.getState().messages.find((m) => m.id === dto.sourceId);
+      if (!msg) {
+        await useChatStore.getState().initForUser();
+        msg = useChatStore.getState().messages.find((m) => m.id === dto.sourceId);
+      }
 
       if (!msg || msg.status !== 'delivered') {
         console.warn(
@@ -169,7 +171,7 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
         );
         get().reset();
         usePlaybackStore.getState().reset();
-        void clearPlaybackProgress();
+        void clearPlaybackProgress().catch(() => {});
         return false;
       }
 
@@ -180,15 +182,17 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
         );
         get().reset();
         usePlaybackStore.getState().reset();
-        void clearPlaybackProgress();
+        void clearPlaybackProgress().catch(() => {});
         return false;
       }
 
       storyText = storyCard.storyText;
     } else if (dto.sourceType === 'generation') {
-      await useGenerationHistoryStore.getState().initForUser();
-      const records = useGenerationHistoryStore.getState().records;
-      const record = records.find((r) => String(r.id) === dto.sourceId);
+      let record = useGenerationHistoryStore.getState().records.find((r) => String(r.id) === dto.sourceId);
+      if (!record) {
+        await useGenerationHistoryStore.getState().initForUser();
+        record = useGenerationHistoryStore.getState().records.find((r) => String(r.id) === dto.sourceId);
+      }
 
       if (!record || !record.storyText) {
         console.warn(
@@ -196,7 +200,7 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
         );
         get().reset();
         usePlaybackStore.getState().reset();
-        void clearPlaybackProgress();
+        void clearPlaybackProgress().catch(() => {});
         return false;
       }
 

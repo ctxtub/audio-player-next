@@ -13,6 +13,7 @@ import { prisma } from '@/lib/db';
 import { encodeSession, assertSessionSecret, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
 
 const GUEST_COOKIE = 'guest';
+const GUEST_COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
 
 /**
  * 写入登录态 Cookie。
@@ -36,7 +37,7 @@ export const authRouter = router({
      */
     register: publicProcedure
         .input(registerInputSchema)
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
             // 前置校验：确保会话密钥有效，避免后续因签名异常残留孤儿用户
             assertSessionSecret();
 
@@ -62,6 +63,25 @@ export const authRouter = router({
                 });
                 createdUserId = user.id;
 
+                // 访客注册时配置迁移：若存在 guestId 且有 GuestConfig，将个性化偏好拷贝至新 UserConfig
+                if (ctx.guestId) {
+                    const guestConfig = await prisma.guestConfig.findUnique({
+                        where: { guestId: ctx.guestId },
+                    });
+                    if (guestConfig) {
+                        await prisma.userConfig.create({
+                            data: {
+                                userId: user.id,
+                                playDurationMinutes: guestConfig.playDurationMinutes,
+                                voiceId: guestConfig.voiceId,
+                                speed: guestConfig.speed,
+                                floatingPlayerEnabled: guestConfig.floatingPlayerEnabled,
+                                themeMode: guestConfig.themeMode,
+                            },
+                        });
+                    }
+                }
+
                 await setAuthCookie(user.id, user.nickname ?? user.username);
 
                 return {
@@ -72,7 +92,7 @@ export const authRouter = router({
                     },
                 };
             } catch (error) {
-                // 回滚机制：若已写入数据库但后续 Cookie/签名设置失败，删除已建用户
+                // 回滚机制：若已写入数据库但后续 Cookie/签名/配置设置失败，删除已建用户
                 if (createdUserId !== null) {
                     try {
                         await prisma.user.delete({ where: { id: createdUserId } });
@@ -134,17 +154,26 @@ export const authRouter = router({
      */
     enterGuestMode: publicProcedure.mutation(async () => {
         const cookieStore = await cookies();
-        /** 不设 maxAge，使其成为 session cookie，浏览器关闭即过期 */
+        const guestId = `g_${crypto.randomUUID()}`;
         cookieStore.set({
             name: GUEST_COOKIE,
-            value: '1',
-            httpOnly: false,
+            value: guestId,
+            httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
             path: '/',
+            maxAge: GUEST_COOKIE_MAX_AGE,
         });
 
-        return { success: true as const };
+        // 概率淘汰：2% 概率异步触发清理 30 天未更新的访客配置
+        if (Math.random() < 0.02) {
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            prisma.guestConfig.deleteMany({
+                where: { updatedAt: { lt: thirtyDaysAgo } },
+            }).catch((err: unknown) => console.warn('[GC] GuestConfig purge failed', err));
+        }
+
+        return { success: true as const, guestId };
     }),
 
     /**
@@ -172,7 +201,8 @@ export const authRouter = router({
             if (!dbUser) {
                 const cookieStore = await cookies();
                 cookieStore.delete(SESSION_COOKIE);
-                const isGuest = cookieStore.get(GUEST_COOKIE)?.value === '1';
+                const guestVal = cookieStore.get(GUEST_COOKIE)?.value;
+                const isGuest = !!guestVal && (guestVal.startsWith('g_') || guestVal === '1');
                 return {
                     isLogin: false as const,
                     isGuest,
@@ -186,12 +216,10 @@ export const authRouter = router({
             };
         }
 
-        const cookieStore = await cookies();
-        const isGuest = cookieStore.get(GUEST_COOKIE)?.value === '1';
-
         return {
             isLogin: false as const,
-            isGuest,
+            isGuest: ctx.isGuest,
         };
     }),
 });
+

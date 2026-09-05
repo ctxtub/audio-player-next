@@ -3,27 +3,27 @@
 import React, { useEffect, useRef } from 'react';
 import { useTheme } from '@/components/ThemeProvider';
 import { useConfigStore } from '@/stores/configStore';
+import { THEME_MODE_STORAGE_KEY } from '@/components/ThemeProvider/themeConfig';
 
 /**
- * 主题水合桥（仅登录态生效）：登录后把服务端权威的 themeMode 一次性下发给 ThemeProvider。
+ * 主题水合桥（全主体通用）：首屏利用 localStorage['theme-mode'] 防闪烁；
+ * 客户端水合后，以服务端云端配置（GuestConfig 或 UserConfig）为准并回写覆盖 localStorage。
  *
- * 采用「单向下发」而非双向 diff——用户改主题由设置页显式写回配置（见 setting 页 onChange），
- * 因此这里无需回写逻辑，彻底规避「下发后 themeMode 尚未传播 → 被误判为用户改动 → 回写」的竞态
- * （含 React StrictMode 对 effect 的双调用）。
- *
- * hydratedRef 保证仅在「首次进入登录态」时下发一次；登出后（syncEnabled=false）复位，便于下次登录重新下发。
- * 访客/未登录时惰性，ThemeProvider 维持自有 localStorage 行为。
+ * 采用单向下发：
+ * - 当 configStore.isLoaded 为 true 时，服务端 themeMode 一次性生效覆盖本地；
+ * - 用户在 UI 切换主题时，由 ThemeProvider 立即写 localStorage，并由 configStore 防抖同步云端；
+ * - 登出时不清除 localStorage['theme-mode']；当 isLoaded 重置时复位 hydratedRef，便于下一次会话水合。
  */
 const ThemeConfigBridge: React.FC = () => {
   const { themeMode, setThemeMode } = useTheme();
-  const syncEnabled = useConfigStore(state => state.syncEnabled);
+  const isLoaded = useConfigStore(state => state.isLoaded);
   const configThemeMode = useConfigStore(state => state.apiConfig.themeMode);
 
-  /** 是否已完成首次「服务端 → ThemeProvider」下发。 */
+  /** 是否已完成「服务端权威值 → ThemeProvider」下发。 */
   const hydratedRef = useRef(false);
 
   useEffect(() => {
-    if (!syncEnabled) {
+    if (!isLoaded) {
       hydratedRef.current = false;
       return;
     }
@@ -31,9 +31,14 @@ const ThemeConfigBridge: React.FC = () => {
       hydratedRef.current = true;
       if (themeMode !== configThemeMode) {
         setThemeMode(configThemeMode);
+        try {
+          window.localStorage.setItem(THEME_MODE_STORAGE_KEY, configThemeMode);
+        } catch {
+          // ignore storage write failures
+        }
       }
     }
-  }, [syncEnabled, configThemeMode, themeMode, setThemeMode]);
+  }, [isLoaded, configThemeMode, themeMode, setThemeMode]);
 
   return null;
 };

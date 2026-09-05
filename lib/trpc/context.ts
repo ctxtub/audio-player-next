@@ -45,21 +45,22 @@ const parseCookiesFromHeader = (cookieHeader: string | null): Record<string, str
 
 /**
  * 提取客户端安全 IP 地址。
- * 依次检查 x-forwarded-for（取首个有效 IP）、x-real-ip、cf-connecting-ip，回退到 127.0.0.1。
+ * 依次检查 cf-connecting-ip、x-real-ip、x-forwarded-for（取首个有效 IP），回退到 127.0.0.1。
+ * 优先信任反向代理/CDN 注入的 cf-connecting-ip 与 x-real-ip，防止客户端伪造 x-forwarded-for 绕过速率限制。
  */
 export const getSafeClientIp = (
     headersList?: Headers | { get(name: string): string | null } | null
 ): string => {
     if (!headersList) return '127.0.0.1';
+    const cfConnectingIp = headersList.get('cf-connecting-ip');
+    if (cfConnectingIp?.trim()) return cfConnectingIp.trim();
+    const xRealIp = headersList.get('x-real-ip');
+    if (xRealIp?.trim()) return xRealIp.trim();
     const xForwardedFor = headersList.get('x-forwarded-for');
     if (xForwardedFor) {
         const clientIp = xForwardedFor.split(',')[0]?.trim();
         if (clientIp) return clientIp;
     }
-    const xRealIp = headersList.get('x-real-ip');
-    if (xRealIp?.trim()) return xRealIp.trim();
-    const cfConnectingIp = headersList.get('cf-connecting-ip');
-    if (cfConnectingIp?.trim()) return cfConnectingIp.trim();
     return '127.0.0.1';
 };
 

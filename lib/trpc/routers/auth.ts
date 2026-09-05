@@ -12,7 +12,10 @@ import { loginInputSchema, registerInputSchema } from '../schemas/auth';
 import { prisma } from '@/lib/db';
 import { encodeSession, assertSessionSecret, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
 import { migrateGuestConfigToUser } from '@/lib/server/unifiedConfig';
-import { migrateGuestCreativeRecordsToUser } from '@/lib/server/unifiedMigration';
+import {
+    migrateGuestCreativeRecordsToUser,
+    migrateGuestPlaybackProgressToUser,
+} from '@/lib/server/unifiedMigration';
 import { purgeExpiredGuestData } from '@/lib/server/guestGc';
 
 const GUEST_COOKIE = 'guest';
@@ -70,6 +73,7 @@ export const authRouter = router({
                 if (ctx.guestId) {
                     await migrateGuestConfigToUser(ctx.guestId, user.id);
                     await migrateGuestCreativeRecordsToUser(ctx.guestId, user.id);
+                    await migrateGuestPlaybackProgressToUser(ctx.guestId, user.id);
                 }
 
                 await setAuthCookie(user.id, user.nickname ?? user.username);

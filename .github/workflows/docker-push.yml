@@ -5,6 +5,11 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions: {}
 
 jobs:
   docker-push:
@@ -24,7 +29,7 @@ jobs:
           MESSAGE_TITLE="Docker镜像 编译开始"
           REPO_NAME=$(basename "${GITHUB_REPOSITORY}")
           COMMIT_ID=$(echo "${GITHUB_SHA}" | cut -c1-7)
-          MESSAGE_BODY="仓库：${REPO_NAME} 分支：${GITHUB_REF_NAME} 提交：${COMMIT_ID}"
+          MESSAGE_BODY="仓库：${REPO_NAME} 分支/标签：${GITHUB_REF_NAME} 提交：${COMMIT_ID}"
           ENCODED_TITLE=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_TITLE}")
           ENCODED_BODY=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_BODY}")
           curl -sS "${BARK_WEBHOOK}/${ENCODED_TITLE}/${ENCODED_BODY}"
@@ -43,20 +48,35 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_TOKEN }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Push image via script
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_REF_TYPE: ${{ github.ref_type }}
         run: |
           chmod +x scripts/push-ghcr.sh
-          ./scripts/push-ghcr.sh
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            ./scripts/push-ghcr.sh "${{ github.ref_name }}"
+          else
+            ./scripts/push-ghcr.sh "latest"
+          fi
 
   notify:
     needs: docker-push
     if: always()
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Send Bark notification
+        env:
+          BARK_WEBHOOK: ${{ secrets.BARK_WEBHOOK }}
         run: |
+          if [ -z "${BARK_WEBHOOK}" ]; then
+            echo "BARK_WEBHOOK 未配置，跳过完成通知"
+            exit 0
+          fi
           STATUS="${{ needs.docker-push.result }}"
           if [ "${STATUS}" = "success" ]; then
             MESSAGE_TITLE="Docker镜像 推送成功"
@@ -65,7 +85,7 @@ jobs:
           fi
           REPO_NAME=$(basename "${GITHUB_REPOSITORY}")
           COMMIT_ID=$(echo "${GITHUB_SHA}" | cut -c1-7)
-          MESSAGE_BODY="仓库：${REPO_NAME} 分支：${GITHUB_REF_NAME} 提交：${COMMIT_ID}"
+          MESSAGE_BODY="仓库：${REPO_NAME} 分支/标签：${GITHUB_REF_NAME} 提交：${COMMIT_ID}"
           ENCODED_TITLE=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_TITLE}")
           ENCODED_BODY=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_BODY}")
-          curl -sS "${{ secrets.BARK_WEBHOOK }}/${ENCODED_TITLE}/${ENCODED_BODY}"
+          curl -sS "${BARK_WEBHOOK}/${ENCODED_TITLE}/${ENCODED_BODY}"

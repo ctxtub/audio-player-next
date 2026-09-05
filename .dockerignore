@@ -11,3 +11,7 @@ artifacts
 Dockerfile
 README.md
 docs
+tests
+.env
+.env.*
+!.env.sample

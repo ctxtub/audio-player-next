@@ -5,6 +5,7 @@ import { Sparkles, Pause, Headphones } from 'lucide-react';
 import type { StoryCardPart } from '@/types/chat';
 import { useGenerationStore } from '@/stores/generationStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
+import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
 import { playStoryText } from '@/app/services/storyFlow';
 import StoryViewer from '@/app/(main)/chat/components/StoryViewer';
 import type { PartRendererProps } from './index';
@@ -23,6 +24,7 @@ const PREVIEW_MAX_LENGTH = 100;
  */
 const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
     part,
+    messageId,
     onPlayStory,
 }) => {
     const [showFullText, setShowFullText] = useState(false);
@@ -37,7 +39,12 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
     const isPlaybackPlaying = usePlaybackStore((state) => state.isPlaying);
     const pauseAudioPlayback = usePlaybackStore((state) => state.pauseAudioPlayback);
 
-    const isThisCardPlaying = isPlaybackPlaying && currentAudioUrl === part.audioUrl;
+    // 订阅断点续播状态
+    const activeProgressSourceId = usePlaybackProgressStore((state) => state.sourceId);
+    const activeNextIndex = usePlaybackProgressStore((state) => state.nextParagraphIndex);
+    const isThisCardResumePoint = Boolean(messageId && activeProgressSourceId === messageId && activeNextIndex > 0);
+
+    const isThisCardPlaying = isPlaybackPlaying && (currentAudioUrl === part.audioUrl || (activeProgressSourceId === messageId && isPlaybackPlaying));
 
     // 判断是否处于生成中状态（需要展示动效）
     // 只有当全局处于生成状态，且当前卡片没有音频地址（说明是正在生成的卡片）时，才展示动效
@@ -86,8 +93,8 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
         if (part.audioUrl) {
             onPlayStory?.(part.audioUrl);
         } else if (part.storyText) {
-            // 恢复态卡片无持久音频，按正文重新合成并一次性播放
-            void playStoryText(part.storyText);
+            // 恢复态卡片无持久音频，按正文重新合成并一次性播放（传递真实 messageId 建立断点定位）
+            void playStoryText(part.storyText, messageId);
         }
     };
 
@@ -161,7 +168,13 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
                         className={styles.playButton}
                         onClick={handlePlay}
                     >
-                        {isThisCardPlaying ? <><Pause size={14} strokeWidth={2} /> 暂停播放</> : <><Headphones size={14} strokeWidth={2} /> 播放故事</>}
+                        {isThisCardPlaying ? (
+                            <><Pause size={14} strokeWidth={2} /> 暂停播放</>
+                        ) : isThisCardResumePoint ? (
+                            <><Headphones size={14} strokeWidth={2} /> 从第 {activeNextIndex + 1} 段继续收听</>
+                        ) : (
+                            <><Headphones size={14} strokeWidth={2} /> 播放故事</>
+                        )}
                     </button>
                 </div>
             )}

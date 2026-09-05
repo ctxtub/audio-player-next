@@ -210,6 +210,7 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
               <MessagePartRenderer
                 key={index}
                 part={part}
+                messageId={message.id}
                 // 确保将当前消息 ID 传递出去，用于播放时的 ID 追踪
                 onPlayStory={(url) => onPlayStory?.(url, message.id || '')}
               />

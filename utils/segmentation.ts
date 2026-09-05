@@ -91,13 +91,18 @@ export function computeStoryContentHash(rawOrNormalizedText: string): string {
   const normalized = normalizeStoryText(rawOrNormalizedText);
   if (!normalized) return '';
 
-  let hash = 0xcbf29ce484222325n;
-  const prime = 0x100000001b3n;
+  let h1 = 0x811c9dc5;
+  let h2 = 0x84222325;
 
   for (let i = 0; i < normalized.length; i++) {
-    hash ^= BigInt(normalized.charCodeAt(i));
-    hash = BigInt.asUintN(64, hash * prime);
+    const code = normalized.charCodeAt(i);
+    h1 ^= code;
+    h1 = Math.imul(h1, 0x01000193);
+    h2 ^= code;
+    h2 = Math.imul(h2, 0x5bd1e995);
   }
 
-  return hash.toString(16).padStart(16, '0').slice(0, 12);
+  const hex1 = (h1 >>> 0).toString(16).padStart(8, '0');
+  const hex2 = (h2 >>> 0).toString(16).padStart(8, '0');
+  return (hex1 + hex2).slice(0, 12);
 }

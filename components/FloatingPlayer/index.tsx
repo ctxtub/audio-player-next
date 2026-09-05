@@ -6,6 +6,7 @@ import { Play, Pause } from 'lucide-react';
 import GlassToast from '@/components/ui/GlassToast';
 import { useConfigStore } from '@/stores/configStore';
 import { usePlaybackStore, useFloatingPlayer } from '@/stores/playbackStore';
+import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
 import {
   clampValue,
   shouldSkipPointerDown,
@@ -34,6 +35,9 @@ export const FloatingPlayer: React.FC = () => {
   const isVisible = usePlaybackStore((state) => state.isFloatingVisible);
   // 当前已加载的音频地址；为空表示尚无可控制的音轨
   const currentAudioUrl = usePlaybackStore((state) => state.currentAudioUrl);
+  const isRehydratedReady = usePlaybackStore((state) => state.isRehydratedReady);
+  const currentParagraphIndex = usePlaybackStore((state) => state.currentParagraphIndex);
+  const totalParagraphs = usePlaybackStore((state) => state.totalParagraphs);
   const isFloatingPlayerEnabled = useConfigStore(
     (state) => state.apiConfig.floatingPlayerEnabled
   );
@@ -127,13 +131,18 @@ export const FloatingPlayer: React.FC = () => {
   const togglePlay = useCallback(() => {
     if (isPlaying) {
       pause();
+    } else if (isRehydratedReady) {
+      usePlaybackProgressStore.getState().resumeRehydratedPlayback().catch((error) => {
+        const message = error instanceof Error ? error.message : '语音生成稍有延迟，请重试';
+        GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
+      });
     } else {
       resume().catch((error) => {
         const message = error instanceof Error ? error.message : '无法恢复播放';
         GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
       });
     }
-  }, [isPlaying, pause, resume]);
+  }, [isPlaying, isRehydratedReady, pause, resume]);
 
   useEffect(() => {
     if (isFloatingPlayerEnabled) {
@@ -160,9 +169,9 @@ export const FloatingPlayer: React.FC = () => {
     return `${minutesLabel}:${secondsLabel}`;
   }, [playbackRemainingMs]);
 
-  // 仅在「开启浮窗 + 处于可见态 + 已加载音轨」时显示；
+  // 仅在「开启浮窗 + 处于可见态 + 已加载音轨或断点就绪」时显示；
   // 空闲（无音轨）时不渲染，避免“待创作”胶囊在各页面默认位置遮挡正文内容。
-  const hasTrack = currentAudioUrl !== null;
+  const hasTrack = currentAudioUrl !== null || isRehydratedReady;
   const shouldShowFloatingPanel = isFloatingPlayerEnabled && isVisible && hasTrack;
 
   // 浮窗标题展示内容，依据播放状态切换默认文案与倒计时
@@ -170,8 +179,14 @@ export const FloatingPlayer: React.FC = () => {
     if (isPlaying && remainingTimeLabel) {
       return `${remainingTimeLabel}`;
     }
+    if (isRehydratedReady && remainingTimeLabel) {
+      return `${remainingTimeLabel}`;
+    }
+    if (isRehydratedReady) {
+      return totalParagraphs > 1 ? `第 ${currentParagraphIndex + 1}/${totalParagraphs} 段` : '断点就绪';
+    }
     return '待创作';
-  }, [isPlaying, remainingTimeLabel]);
+  }, [isPlaying, isRehydratedReady, remainingTimeLabel, totalParagraphs, currentParagraphIndex]);
 
   const floatingPanelClassName = [
     styles.floatingPanel,

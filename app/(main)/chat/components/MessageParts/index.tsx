@@ -13,6 +13,8 @@ import SummaryPartRenderer from './SummaryPart';
 export type PartRendererProps<T extends MessagePart = MessagePart> = {
     /** 待渲染的消息片段。 */
     part: T;
+    /** 关联的真实消息 ID。 */
+    messageId?: string;
     /** 可选的播放故事回调，由 StoryCardPart 使用。 */
     onPlayStory?: (audioUrl: string) => void;
 };
@@ -21,14 +23,15 @@ export type PartRendererProps<T extends MessagePart = MessagePart> = {
  * 消息片段分发器，按 part.type 判别联合分发到对应渲染器。
  * 用 switch 让每个分支自动收窄 part 的具体子类型，无需注册表的 any 断言。
  * @param props.part 待渲染的消息片段
+ * @param props.messageId 关联消息 ID
  * @param props.onPlayStory 故事播放回调
  */
-const MessagePartRenderer: FC<PartRendererProps> = ({ part, onPlayStory }) => {
+const MessagePartRenderer: FC<PartRendererProps> = ({ part, messageId, onPlayStory }) => {
     switch (part.type) {
         case 'text':
             return <TextPartRenderer part={part} onPlayStory={onPlayStory} />;
         case 'storyCard':
-            return <StoryCardPartRenderer part={part} onPlayStory={onPlayStory} />;
+            return <StoryCardPartRenderer part={part} messageId={messageId} onPlayStory={onPlayStory} />;
         case 'guidance':
             return <GuidancePartComponent part={part} />;
         case 'summary':

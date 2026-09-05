@@ -1,5 +1,5 @@
-import { create, type StateCreator, type StoreApi } from 'zustand';
-import { devtools, persist, createJSONStorage } from 'zustand/middleware';
+import { create, type StateCreator } from 'zustand';
+import { devtools } from 'zustand/middleware';
 import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
 import GlassToast from '@/components/ui/GlassToast';
 import {
@@ -106,20 +106,9 @@ const pruneRecords = (
 };
 
 /**
- * persist 中间件附加的 API 类型。
+ * 历史记录 store 构建函数，负责增删改与云端同步。
  */
-type PersistApi = StoreApi<PromptHistoryStore> & {
-  persist: {
-    rehydrate: () => Promise<void> | void;
-    hasHydrated: () => boolean;
-  };
-};
-
-/**
- * 历史记录 store 构建函数，负责持久化与增删改逻辑。
- */
-const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, api) => {
-  const persistApi = api as PersistApi;
+const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get) => {
   /** initForUser 去重：进行中的拉取 Promise。 */
   let userInitPromise: Promise<void> | null = null;
   /** 账号代次：reset 自增，作废在途 initForUser 的回写。 */
@@ -131,31 +120,15 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
     initialized: false,
     syncEnabled: false,
     hydrate: async () => {
-      if (get().initialized) {
-        return;
-      }
-
-      if (!isBrowserEnvironment()) {
-        set({ initialized: true });
-        return;
-      }
-
-      if (!persistApi.persist.hasHydrated()) {
-        await Promise.resolve(persistApi.persist.rehydrate());
-      }
-
-      set((state) => {
-        const { map, dirty } = pruneRecords(state.recordsMap);
-        if (dirty) {
-          return {
-            recordsMap: map,
-            initialized: true,
-          };
+      // 废弃并清理旧本地 prompt-history-store 缓存
+      if (isBrowserEnvironment()) {
+        try {
+          getSafeLocalStorage().removeItem(PROMPT_HISTORY_STORAGE_KEY);
+        } catch {
+          // ignore
         }
-        return {
-          initialized: true,
-        };
-      });
+      }
+      return get().initForUser();
     },
     addOrUpdate: (rawPrompt) => {
       const prompt = normalizePrompt(rawPrompt);
@@ -287,22 +260,11 @@ const promptHistoryStoreCreator: StateCreator<PromptHistoryStore> = (set, get, a
   };
 };
 
-const persistedPromptHistoryStore = persist(promptHistoryStoreCreator, {
-  name: PROMPT_HISTORY_STORAGE_KEY,
-  version: 1,
-  storage: createJSONStorage(getSafeLocalStorage),
-  partialize: (state) => ({
-    recordsMap: state.recordsMap,
-    sortMode: state.sortMode,
-  }),
-  skipHydration: true,
-});
-
 /**
- * 历史记录 store Hook，支持增删查提示词。
+ * 历史记录 store Hook，支持增删查提示词（全量云端化，无 local storage 业务持久化）。
  */
 export const usePromptHistoryStore = create<PromptHistoryStore>()(
-  devtools(persistedPromptHistoryStore, { name: 'prompt-history-store' })
+  devtools(promptHistoryStoreCreator, { name: 'prompt-history-store' })
 );
 
 /**

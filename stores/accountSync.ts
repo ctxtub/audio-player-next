@@ -39,17 +39,19 @@ const participants: AccountSyncParticipant[] = [
   {
     name: 'promptHistory',
     initForUser: () => usePromptHistoryStore.getState().initForUser(),
-    initForGuest: () => usePromptHistoryStore.getState().hydrate(),
+    initForGuest: () => usePromptHistoryStore.getState().initForUser(),
     reset: () => usePromptHistoryStore.getState().reset(),
   },
   {
     name: 'generationHistory',
     initForUser: () => useGenerationHistoryStore.getState().initForUser(),
+    initForGuest: () => useGenerationHistoryStore.getState().initForUser(),
     reset: () => useGenerationHistoryStore.getState().reset(),
   },
   {
     name: 'chat',
     initForUser: () => useChatStore.getState().initForUser(),
+    initForGuest: () => useChatStore.getState().initForUser(),
     reset: () => useChatStore.getState().reset(),
   },
 ];
@@ -66,7 +68,7 @@ export function initAccountForUser(): void {
 }
 
 /**
- * 访客/未登录初始化：仅触发具备本地初始化的块（登录专属块跳过）。
+ * 访客/未登录初始化：拉取访客专属服务端云端数据。
  */
 export function initAccountForGuest(): void {
   for (const p of participants) {
@@ -80,7 +82,7 @@ export function initAccountForGuest(): void {
 }
 
 /**
- * 登出/会话失效：同步清理所有块（清本地 + 关同步）。
+ * 登出/会话失效/身份切换：同步清理所有块（清本地 + 关同步）。
  */
 export function resetAccountData(): void {
   for (const p of participants) {
@@ -92,8 +94,8 @@ export function resetAccountData(): void {
 let subscribed = false;
 
 /**
- * 一次性挂载 authStore 订阅：isLogin 由真转假（手动登出 / 未来 401 / 会话过期）
- * 时自动清理所有账号数据。须在客户端挂载时调用（避免 SSR 顶层副作用）。
+ * 一次性挂载 authStore 订阅：isLogin 发生状态跃迁时（登录或登出）
+ * 自动清理所有账号数据，防止内存与防抖保存交叉污染，确保各主体云端数据独立可信。
  */
 export function ensureAccountSyncSubscribed(): void {
   if (subscribed) {
@@ -101,7 +103,7 @@ export function ensureAccountSyncSubscribed(): void {
   }
   subscribed = true;
   useAuthStore.subscribe((state, prevState) => {
-    if (prevState.isLogin && !state.isLogin) {
+    if (prevState.isLogin !== state.isLogin) {
       resetAccountData();
     }
   });

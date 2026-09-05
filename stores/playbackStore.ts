@@ -39,6 +39,30 @@ type PlaybackStoreBaseState = {
    * 一次性播放（如历史回放）：播完即止，不触发预加载续写。
    */
   isOneShot: boolean;
+  /**
+   * 是否处于断点水合完成的就绪待播态（停驻 PAUSED/READY，解封播放按钮）。
+   */
+  isRehydratedReady: boolean;
+  /**
+   * 创作源类型：'chat' | 'generation'
+   */
+  sourceType: 'chat' | 'generation' | null;
+  /**
+   * 溯源业务标识。
+   */
+  sourceId: string | null;
+  /**
+   * 故事展示标题。
+   */
+  title: string | null;
+  /**
+   * 当前自然段序号（从 0 开始）。
+   */
+  currentParagraphIndex: number;
+  /**
+   * 该故事总自然段数。
+   */
+  totalParagraphs: number;
 };
 
 /**
@@ -74,6 +98,27 @@ type PlaybackStoreActions = {
   hideFloatingPlayer: () => void;
   setCurrentAudioUrl: (url: string | null) => void;
   syncPlaybackState: (url: string, messageId?: string) => void;
+  /**
+   * 断点水合装载：置为就绪暂停态，解封播放按钮。
+   */
+  hydrateFromProgress: (payload: {
+    sessionId: string | null;
+    currentMessageId: string | null;
+    sourceType: 'chat' | 'generation' | null;
+    sourceId: string | null;
+    title: string;
+    remainingMs: number | null;
+    totalAllowedMs: number | null;
+    isOneShot: boolean;
+    currentParagraphIndex: number;
+    totalParagraphs: number;
+  }) => void;
+  clearRehydratedReady: () => void;
+  setParagraphInfo: (info: {
+    currentParagraphIndex: number;
+    totalParagraphs: number;
+    title?: string;
+  }) => void;
 };
 
 /**
@@ -100,6 +145,12 @@ const INITIAL_STATE: PlaybackStoreBaseState = {
   currentAudioUrl: null,
   currentMessageId: null,
   isOneShot: false,
+  isRehydratedReady: false,
+  sourceType: null,
+  sourceId: null,
+  title: null,
+  currentParagraphIndex: 0,
+  totalParagraphs: 1,
 };
 
 /**
@@ -301,6 +352,7 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         isFloatingVisible: true,
         currentAudioUrl: audioUrl,
         currentMessageId: messageId ?? null,
+        isRehydratedReady: false,
       });
       await controller.play(audioUrl, messageId);
     },
@@ -350,6 +402,38 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         currentAudioUrl: url,
         currentMessageId: messageId ?? null,
       });
+    },
+    hydrateFromProgress: (payload) => {
+      clearCountdown();
+      set({
+        sessionId: payload.sessionId,
+        currentMessageId: payload.currentMessageId,
+        sourceType: payload.sourceType,
+        sourceId: payload.sourceId,
+        title: payload.title,
+        remainingMs: payload.remainingMs,
+        totalAllowedMs: payload.totalAllowedMs,
+        isOneShot: payload.isOneShot,
+        currentSegmentIndex: payload.currentParagraphIndex,
+        currentParagraphIndex: payload.currentParagraphIndex,
+        totalParagraphs: payload.totalParagraphs,
+        isPlaying: false,
+        isRehydratedReady: true,
+        currentAudioUrl: null,
+        currentTime: 0,
+        duration: 0,
+        isFloatingVisible: true,
+      });
+    },
+    clearRehydratedReady: () => {
+      set({ isRehydratedReady: false });
+    },
+    setParagraphInfo: (info) => {
+      set((state) => ({
+        currentParagraphIndex: info.currentParagraphIndex,
+        totalParagraphs: info.totalParagraphs,
+        title: info.title !== undefined ? info.title : state.title,
+      }));
     },
   };
 };

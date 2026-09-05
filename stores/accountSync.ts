@@ -11,6 +11,8 @@ import { useConfigStore } from '@/stores/configStore';
 import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
 import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
 import { useChatStore } from '@/stores/chatStore';
+import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
+import { usePlaybackStore } from '@/stores/playbackStore';
 
 /**
  * 参与账号数据同步的一块数据的生命周期契约。
@@ -53,6 +55,15 @@ const participants: AccountSyncParticipant[] = [
     initForUser: () => useChatStore.getState().initForUser(),
     initForGuest: () => useChatStore.getState().initForUser(),
     reset: () => useChatStore.getState().reset(),
+  },
+  {
+    name: 'playbackProgress',
+    initForUser: () => usePlaybackProgressStore.getState().initForUser(),
+    initForGuest: () => usePlaybackProgressStore.getState().initForGuest(),
+    reset: () => {
+      usePlaybackProgressStore.getState().reset();
+      usePlaybackStore.getState().reset();
+    },
   },
 ];
 

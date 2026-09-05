@@ -615,7 +615,8 @@ async function runParagraphResumeTests() {
     assert.strictEqual(progressState16.nextParagraphIndex, 0, 'Drift must safely reset nextParagraphIndex to 0');
     assert.strictEqual(progressState16.lastCompletedParagraphIndex, -1, 'Drift must safely reset lastCompletedParagraphIndex to -1');
     assert(lastToast !== null, 'Drift notification toast must be displayed');
-    assert.strictEqual(lastToast.content, '故事正文已更新，将从开头重新播放');
+    const toastObj = lastToast as { icon?: string; content?: string } | null;
+    assert.strictEqual(toastObj?.content, '故事正文已更新，将从开头重新播放');
 
     console.log('PASS: TC-P2-16 verified');
 

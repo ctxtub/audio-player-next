@@ -82,3 +82,59 @@ export async function migrateGuestCreativeRecordsToUser(
         promptsMigrated: guestPrompts.length,
     };
 }
+
+/**
+ * 将指定 guestId 的断点播放进度迁移至指定用户（单行）。
+ * 保留访客原表记录供回滚/审计，由 30 天 GC 自然清理。
+ */
+export async function migrateGuestPlaybackProgressToUser(
+    guestId: string,
+    userId: number
+): Promise<boolean> {
+    const guestProgress = await prisma.guestPlaybackProgress.findUnique({
+        where: { guestId },
+    });
+    if (!guestProgress) {
+        return false;
+    }
+
+    await prisma.userPlaybackProgress.upsert({
+        where: { userId },
+        create: {
+            userId,
+            sourceType: guestProgress.sourceType,
+            sourceId: guestProgress.sourceId,
+            sessionId: guestProgress.sessionId,
+            title: guestProgress.title,
+            contentHash: guestProgress.contentHash,
+            segmentationVersion: guestProgress.segmentationVersion,
+            lastCompletedParagraphIndex: guestProgress.lastCompletedParagraphIndex,
+            nextParagraphIndex: guestProgress.nextParagraphIndex,
+            totalParagraphs: guestProgress.totalParagraphs,
+            voiceId: guestProgress.voiceId,
+            speed: guestProgress.speed,
+            remainingAllowedMs: guestProgress.remainingAllowedMs,
+            totalAllowedMs: guestProgress.totalAllowedMs,
+            isOneShot: guestProgress.isOneShot,
+        },
+        update: {
+            sourceType: guestProgress.sourceType,
+            sourceId: guestProgress.sourceId,
+            sessionId: guestProgress.sessionId,
+            title: guestProgress.title,
+            contentHash: guestProgress.contentHash,
+            segmentationVersion: guestProgress.segmentationVersion,
+            lastCompletedParagraphIndex: guestProgress.lastCompletedParagraphIndex,
+            nextParagraphIndex: guestProgress.nextParagraphIndex,
+            totalParagraphs: guestProgress.totalParagraphs,
+            voiceId: guestProgress.voiceId,
+            speed: guestProgress.speed,
+            remainingAllowedMs: guestProgress.remainingAllowedMs,
+            totalAllowedMs: guestProgress.totalAllowedMs,
+            isOneShot: guestProgress.isOneShot,
+        },
+    });
+
+    return true;
+}
+

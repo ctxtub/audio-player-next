@@ -1,18 +1,24 @@
-import { router, publicProcedure, authedProcedure } from "../init";
+import { router, publicProcedure, guardedProcedure } from "../init";
 import { graph } from "@/lib/agent/graph";
 import { HumanMessage, AIMessage, SystemMessage, BaseMessage } from "@langchain/core/messages";
 import { TRPCError } from "@trpc/server";
 import { interactSchema, summarizeContextSchema } from "../schemas/agent";
 import { summarizeContext } from "@/lib/agent/nodes/summary";
+import { enforceProcedureRateLimit } from "@/lib/server/rateLimit";
 
 export const agentRouter = router({
     /**
      * 统一的 Agent 交互接口。
      * 接收标准的消息历史数组，自动派发给 LangGraph。
      */
-    interact: authedProcedure
+    interact: guardedProcedure
         .input(interactSchema)
-        .mutation(async function* ({ input, signal }) {
+        .mutation(async function* ({ ctx, input, signal }) {
+            enforceProcedureRateLimit("agent:interact", ctx, {
+                guestLimit: 10,
+                authedLimit: 30,
+            });
+
             const { messages } = input;
 
             if (messages.length === 0) {

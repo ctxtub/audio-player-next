@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "node scripts/run-tests.mjs",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up",
     "docker:push": "./scripts/push-ghcr.sh"

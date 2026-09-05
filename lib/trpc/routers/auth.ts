@@ -10,7 +10,7 @@ import bcrypt from 'bcryptjs';
 import { router, publicProcedure, TRPCError } from '../init';
 import { loginInputSchema, registerInputSchema } from '../schemas/auth';
 import { prisma } from '@/lib/db';
-import { encodeSession, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
+import { encodeSession, assertSessionSecret, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
 
 const GUEST_COOKIE = 'guest';
 
@@ -37,6 +37,10 @@ export const authRouter = router({
     register: publicProcedure
         .input(registerInputSchema)
         .mutation(async ({ input }) => {
+            // 前置校验：确保会话密钥有效，避免后续因签名异常残留孤儿用户
+            assertSessionSecret();
+
+            let createdUserId: number | null = null;
             try {
                 const existing = await prisma.user.findUnique({
                     where: { username: input.username },
@@ -56,6 +60,7 @@ export const authRouter = router({
                         nickname: input.nickname ?? input.username,
                     },
                 });
+                createdUserId = user.id;
 
                 await setAuthCookie(user.id, user.nickname ?? user.username);
 
@@ -67,6 +72,14 @@ export const authRouter = router({
                     },
                 };
             } catch (error) {
+                // 回滚机制：若已写入数据库但后续 Cookie/签名设置失败，删除已建用户
+                if (createdUserId !== null) {
+                    try {
+                        await prisma.user.delete({ where: { id: createdUserId } });
+                    } catch (rollbackError) {
+                        console.error('Failed to rollback orphaned user:', rollbackError);
+                    }
+                }
                 if (error instanceof TRPCError) throw error;
                 throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: '注册失败，请稍后重试' });
             }

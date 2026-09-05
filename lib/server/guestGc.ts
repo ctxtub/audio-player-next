@@ -13,6 +13,7 @@ export interface PurgeResult {
     messagesDeleted: number;
     generationsDeleted: number;
     promptsDeleted: number;
+    playbackProgressDeleted: number;
 }
 
 /**
@@ -21,11 +22,12 @@ export interface PurgeResult {
 export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeResult> {
     const threshold = cutoffDate ?? new Date(Date.now() - THIRTY_DAYS_MS);
 
-    const [configs, messages, generations, prompts] = await Promise.all([
+    const [configs, messages, generations, prompts, playback] = await Promise.all([
         prisma.guestConfig.deleteMany({ where: { updatedAt: { lt: threshold } } }),
         prisma.guestChatMessage.deleteMany({ where: { updatedAt: { lt: threshold } } }),
         prisma.guestGenerationHistory.deleteMany({ where: { updatedAt: { lt: threshold } } }),
         prisma.guestPromptHistory.deleteMany({ where: { updatedAt: { lt: threshold } } }),
+        prisma.guestPlaybackProgress.deleteMany({ where: { updatedAt: { lt: threshold } } }),
     ]);
 
     return {
@@ -33,5 +35,6 @@ export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeRes
         messagesDeleted: messages.count,
         generationsDeleted: generations.count,
         promptsDeleted: prompts.count,
+        playbackProgressDeleted: playback.count,
     };
 }

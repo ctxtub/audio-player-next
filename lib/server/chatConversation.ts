@@ -86,3 +86,76 @@ export const saveConversation = async (
 
     await prisma.$transaction([deleteOp, createOp]);
 };
+
+import type { Subject } from './subject';
+
+const GUEST_CHAT_KEEP_LIMIT = 100;
+
+/**
+ * 确保 parts 内所有 storyCard 的 audioUrl 均置空（不存音频二进制或临时 URL）。
+ */
+const sanitizeParts = (parts?: Array<Record<string, unknown>>) => {
+    if (!parts) return null;
+    const cleaned = parts.map((p) => {
+        if (p && typeof p === 'object' && p.type === 'storyCard') {
+            return { ...p, audioUrl: '' };
+        }
+        return p;
+    });
+    return JSON.stringify(cleaned);
+};
+
+/**
+ * 读取当前主体（用户或具名访客）的会话消息（按 position 升序）。
+ */
+export const getConversationForSubject = async (
+    subject: Subject
+): Promise<ChatMessageDTO[]> => {
+    if (subject.type === 'user') {
+        return getConversation(subject.id);
+    }
+    const rows = await prisma.guestChatMessage.findMany({
+        where: { guestId: subject.id },
+        orderBy: { position: 'asc' },
+    });
+    return rows.map(toDto);
+};
+
+/**
+ * 以快照方式整条替换当前主体（用户或具名访客）的会话。
+ * 访客限制最多保留最近 GUEST_CHAT_KEEP_LIMIT 条。
+ */
+export const saveConversationForSubject = async (
+    subject: Subject,
+    messages: ChatMessageInput[]
+): Promise<void> => {
+    if (subject.type === 'user') {
+        return saveConversation(subject.id, messages);
+    }
+
+    const cappedMessages = messages.length > GUEST_CHAT_KEEP_LIMIT
+        ? messages.slice(-GUEST_CHAT_KEEP_LIMIT)
+        : messages;
+
+    const deleteOp = prisma.guestChatMessage.deleteMany({ where: { guestId: subject.id } });
+
+    if (cappedMessages.length === 0) {
+        await prisma.$transaction([deleteOp]);
+        return;
+    }
+
+    const createOp = prisma.guestChatMessage.createMany({
+        data: cappedMessages.map((message, index) => ({
+            guestId: subject.id,
+            position: index,
+            messageId: message.messageId,
+            role: message.role,
+            content: message.content,
+            parts: sanitizeParts(message.parts),
+            agentType: message.agentType ?? null,
+            createdAt: message.createdAt ?? null,
+        })),
+    });
+
+    await prisma.$transaction([deleteOp, createOp]);
+};

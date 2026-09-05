@@ -1,41 +1,51 @@
 /**
  * 生成历史 Router
  *
- * 当前登录用户生成的故事历史读写，全部需要认证。
+ * 当前登录用户或具名访客生成的故事历史读写，guarded。
  */
 
-import { router, authedProcedure } from '../init';
+import { router, guardedProcedure } from '../init';
 import { recordInputSchema, removeInputSchema } from '../schemas/generationHistory';
 import {
-    listGenerationHistory,
-    recordGenerationHistory,
-    removeGenerationHistory,
+    listGenerationHistoryForSubject,
+    recordGenerationHistoryForSubject,
+    removeGenerationHistoryForSubject,
 } from '@/lib/server/generationHistory';
+import { resolveSubject } from '@/lib/server/subject';
+import { enforceProcedureRateLimit } from '@/lib/server/rateLimit';
 
 export const generationHistoryRouter = router({
     /**
-     * 列出当前用户最近的生成历史。
+     * 列出当前主体最近的生成历史。
      */
-    list: authedProcedure.query(async ({ ctx }) => {
-        return listGenerationHistory(ctx.session.userId);
+    list: guardedProcedure.query(async ({ ctx }) => {
+        return listGenerationHistoryForSubject(resolveSubject(ctx));
     }),
 
     /**
      * 记录一次生成（写入后裁剪保留最近 100 条）。
      */
-    record: authedProcedure
+    record: guardedProcedure
         .input(recordInputSchema)
         .mutation(async ({ ctx, input }) => {
-            return recordGenerationHistory(ctx.session.userId, input);
+            enforceProcedureRateLimit('generationHistory:record', ctx, {
+                guestLimit: 20,
+                authedLimit: 60,
+            });
+            return recordGenerationHistoryForSubject(resolveSubject(ctx), input);
         }),
 
     /**
-     * 删除当前用户的某条生成历史。
+     * 删除当前主体的某条生成历史。
      */
-    remove: authedProcedure
+    remove: guardedProcedure
         .input(removeInputSchema)
         .mutation(async ({ ctx, input }) => {
-            await removeGenerationHistory(ctx.session.userId, input.id);
+            enforceProcedureRateLimit('generationHistory:remove', ctx, {
+                guestLimit: 20,
+                authedLimit: 60,
+            });
+            await removeGenerationHistoryForSubject(resolveSubject(ctx), input.id);
             return { success: true as const };
         }),
 });

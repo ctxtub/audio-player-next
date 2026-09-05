@@ -88,3 +88,71 @@ export const recordGenerationHistory = async (
 export const removeGenerationHistory = async (userId: number, id: number): Promise<void> => {
     await prisma.generationHistory.deleteMany({ where: { id, userId } });
 };
+
+import type { Subject } from './subject';
+
+/**
+ * 列出当前主体（用户或具名访客）最近的生成历史（最多 LIST_LIMIT 条，按时间倒序）。
+ */
+export const listGenerationHistoryForSubject = async (
+    subject: Subject
+): Promise<GenerationHistoryDTO[]> => {
+    if (subject.type === 'user') {
+        return listGenerationHistory(subject.id);
+    }
+    const rows = await prisma.guestGenerationHistory.findMany({
+        where: { guestId: subject.id },
+        orderBy: { createdAt: 'desc' },
+        take: LIST_LIMIT,
+    });
+    return rows.map(toDto);
+};
+
+/**
+ * 记录一次生成；写入后裁剪该主体仅保留最近 KEEP_LIMIT 条。
+ */
+export const recordGenerationHistoryForSubject = async (
+    subject: Subject,
+    input: { prompt: string; storyText: string; voiceId?: string }
+): Promise<GenerationHistoryDTO> => {
+    if (subject.type === 'user') {
+        return recordGenerationHistory(subject.id, input);
+    }
+
+    const created = await prisma.guestGenerationHistory.create({
+        data: {
+            guestId: subject.id,
+            prompt: input.prompt,
+            storyText: input.storyText,
+            voiceId: input.voiceId ?? '',
+        },
+    });
+
+    const keep = await prisma.guestGenerationHistory.findMany({
+        where: { guestId: subject.id },
+        orderBy: { createdAt: 'desc' },
+        take: KEEP_LIMIT,
+        select: { id: true },
+    });
+    const keepIds = keep.map((r) => r.id);
+    await prisma.guestGenerationHistory.deleteMany({
+        where: { guestId: subject.id, id: { notIn: keepIds } },
+    });
+
+    return toDto(created);
+};
+
+/**
+ * 删除当前主体的某条生成历史（按 id + guestId/userId，严格防越权）。
+ */
+export const removeGenerationHistoryForSubject = async (
+    subject: Subject,
+    id: number
+): Promise<void> => {
+    if (subject.type === 'user') {
+        return removeGenerationHistory(subject.id, id);
+    }
+    await prisma.guestGenerationHistory.deleteMany({
+        where: { id, guestId: subject.id },
+    });
+};

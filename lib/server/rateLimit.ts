@@ -146,29 +146,66 @@ export interface ProcedureRateLimitOptions {
     windowMs?: number;
 }
 
+export interface ProcedureRateLimitContext {
+    session: AuthSession | null;
+    isGuest: boolean;
+    clientIp: string;
+    guestId?: string | null;
+}
+
+/**
+ * 获取访客限流的双层键名（guestId 维度 + IP 维度）。
+ */
+export const getGuestRateLimitKeys = (prefix: string, guestId: string, clientIp: string) => ({
+    guestKey: `${prefix}:guest:${guestId}`,
+    ipKey: `${prefix}:guest:ip:${clientIp}`,
+});
+
 /**
  * 在 tRPC procedure 中校验并执行滑动窗口限流。
- * - 访客：根据安全 clientIp 限流，超出抛出 429 TOO_MANY_REQUESTS。
+ * - 访客：结合 guestId 维度（防止同 IP 相互干扰）与安全 clientIp 维度（防止轮换 uuid 刷接口），超出抛出 429 TOO_MANY_REQUESTS。
  * - 登录用户：根据 userId 限流，超出抛出 429 TOO_MANY_REQUESTS。
  */
 export const enforceProcedureRateLimit = (
     prefix: string,
-    ctx: { session: AuthSession | null; isGuest: boolean; clientIp: string },
+    ctx: ProcedureRateLimitContext,
     options: ProcedureRateLimitOptions,
     limiter: SlidingWindowRateLimiter = defaultRateLimiter
 ): void => {
     const isAuthed = !!ctx.session;
-    const key = isAuthed
-        ? `${prefix}:user:${ctx.session!.userId}`
-        : `${prefix}:guest:${ctx.clientIp}`;
-    const limit = isAuthed ? options.authedLimit : options.guestLimit;
     const windowMs = options.windowMs ?? 60_000;
 
-    const allowed = limiter.consume(key, limit, windowMs);
-    if (!allowed) {
-        throw new TRPCError({
-            code: 'TOO_MANY_REQUESTS',
-            message: '请求过于频繁，请稍后再试',
-        });
+    if (isAuthed) {
+        const key = `${prefix}:user:${ctx.session!.userId}`;
+        const allowed = limiter.consume(key, options.authedLimit, windowMs);
+        if (!allowed) {
+            throw new TRPCError({
+                code: 'TOO_MANY_REQUESTS',
+                message: '请求过于频繁，请稍后再试',
+            });
+        }
+    } else {
+        if (ctx.guestId) {
+            const { guestKey, ipKey } = getGuestRateLimitKeys(prefix, ctx.guestId, ctx.clientIp);
+            const guestAllowed = limiter.consume(guestKey, options.guestLimit, windowMs);
+            const ipAllowed = limiter.consume(ipKey, options.guestLimit, windowMs);
+
+            if (!guestAllowed || !ipAllowed) {
+                throw new TRPCError({
+                    code: 'TOO_MANY_REQUESTS',
+                    message: '请求过于频繁，请稍后再试',
+                });
+            }
+        } else {
+            const key = `${prefix}:guest:${ctx.clientIp}`;
+            const allowed = limiter.consume(key, options.guestLimit, windowMs);
+            if (!allowed) {
+                throw new TRPCError({
+                    code: 'TOO_MANY_REQUESTS',
+                    message: '请求过于频繁，请稍后再试',
+                });
+            }
+        }
     }
 };
+

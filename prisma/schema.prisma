@@ -95,3 +95,30 @@ model UserConfig {
   extras                String?
   updatedAt             DateTime @updatedAt
 }
+
+/// 访客个性化配置表，以具名访客标识 guestId 为唯一索引。
+model GuestConfig {
+  id                    Int      @id @default(autoincrement())
+  /// 具名访客标识符（格式如 g_1234567890abcdef...）
+  guestId               String   @unique
+  /// 允许播放时长，单位：分钟，范围 10-120
+  playDurationMinutes   Int      @default(30)
+  /// TTS 音色 ID，空字符串表示使用系统默认
+  voiceId               String   @default("")
+  /// 播放速率，范围 0.25-4.0，默认 1.0
+  speed                 Float    @default(1.0)
+  /// 是否启用浮动播放器
+  floatingPlayerEnabled Boolean  @default(true)
+  /// 主题模式：dark | light | system
+  themeMode             String   @default("system")
+  /// 预留扩展字段，存储 JSON 格式的配置项
+  extras                String?
+  /// 最后更新时间，用于清理策略索引
+  updatedAt             DateTime @updatedAt
+  /// 创建时间
+  createdAt             DateTime @default(now())
+
+  @@index([guestId])
+  @@index([updatedAt])
+}
+

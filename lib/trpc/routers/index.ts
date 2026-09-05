@@ -12,6 +12,7 @@ import { agentRouter } from './agent';
 import { promptHistoryRouter } from './promptHistory';
 import { generationHistoryRouter } from './generationHistory';
 import { chatConversationRouter } from './chatConversation';
+import { playbackRouter } from './playback';
 
 /**
  * 应用根 Router。
@@ -24,6 +25,7 @@ export const appRouter = router({
     promptHistory: promptHistoryRouter,
     generationHistory: generationHistoryRouter,
     chat: chatConversationRouter,
+    playback: playbackRouter,
 });
 
 /**

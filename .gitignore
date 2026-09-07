@@ -48,3 +48,9 @@ artifacts
 *.db-journal
 
 .claude
+
+# E2E 运行时证据与临时执行环境（永不提交；见 docs/e2e/README.md 及 docs/e2e/execution-isolation.md）
+.e2e-results/
+.e2e-results*/
+.e2e-runtime/
+.e2e-runtime*/

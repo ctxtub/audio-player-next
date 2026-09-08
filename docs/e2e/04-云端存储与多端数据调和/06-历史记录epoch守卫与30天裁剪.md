@@ -13,7 +13,7 @@
 ## 用例规格
 
 - 前置条件/夹具：`{{GUEST_FRESH}}`；mock 放慢流使 epoch 窗口可注入；`{{E2E_USER_A}}`/`{{E2E_USER_B}}` 就绪。
-- 步骤：1) 访客生成一次故事（记录 `GenerationHistory` 增量）；2) 触发预载续写（验证 `recordHistory=false` 不入库，联动 E2E-02-03）；3) 流在途时登出→登录 `{{E2E_USER_B}}`（epoch 跃迁）；4) 提示词历史重复使用同一 prompt ×2 → `useCount`；5) seed 一条 `createdAt` 超过 30 天的 `PromptHistory` 后读取列表。
+- 步骤：1) 访客生成一次故事（记录 `GenerationHistory` 增量）；2) 触发预载续写（验证 `recordHistory=false` 不入库，联动 E2E-02-03）；3) 流在途时登出→登录 `{{E2E_USER_B}}`（epoch 跃迁）；4) 提示词历史重复使用同一 prompt ×2 → `useCount`；5) seed 一条 `lastUsed` 超过 30 天的 `PromptHistory` 后读取列表。
 - UI 断言：历史面板/提示词建议不显示另一身份的条目；30 天旧条目不再出现。
 - 音频/浏览器断言：不适用。
 - 网络/数据断言：核心断言——预载不入历史库；epoch 跃迁后旧身份的在途写入结果被丢弃（`epoch !== accountEpoch`）；`useCount` 递增；读取时 30 天外行被 `deleteMany` 剪除。

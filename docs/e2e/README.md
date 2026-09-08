@@ -14,6 +14,7 @@
 docs/e2e/
 ├── README.md                               # 本文件：唯一权威核心入口与执行标准
 ├── execution-isolation.md                  # E2E 隔离执行环境设计（端口/数据库/Mock/夹具）
+├── fixtures.md                             # 测试 fixture 留存索引（tests/fixtures/ 合成数据资产）
 ├── MAINTENANCE.md                          # 测试资产维护规范与变更规则
 ├── 01-基础冒烟与页面基线/                   # 8 父用例（冷启动、镜像、路由守卫）
 ├── 02-交互并发与竞态防御/                   # 10 父用例（连击、互斥、预载续写干扰、清空）
@@ -262,6 +263,8 @@ docs/e2e/
    - **门禁要求**：代码提交前必须达成 `ALL TEST SUITES PASSED SUCCESSFULLY (exit code 0)`，并与 `yarn lint`、`yarn tsc --noEmit`、`yarn build` 并列作为四道硬门禁。
 3. **隔离约束**：
    单元测试严禁依赖外部网络或公网大模型，测试数据通过内存或临时 SQLite 测试库生成，用毕即销毁。
+   合成 fixture 资产索引见 [fixtures.md](./fixtures.md)（`tests/fixtures/`，Git tracked；
+   隔离库口径 SSOT：`setupIsolatedDb`，禁依赖 `prisma/dev.db` 回退）。
 
 ---
 

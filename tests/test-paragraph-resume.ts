@@ -1,28 +1,23 @@
 import assert from 'node:assert';
-import path from 'node:path';
 import { createRequire } from 'node:module';
 import * as nextHeaders from 'next/headers';
 import { prisma } from '../lib/db';
 import { TRPCError } from '@trpc/server';
+import {
+    createToastCapture,
+    installGlassToastStub,
+} from './fixtures/ui-stubs';
+import {
+    buildParagraphProgressSeed,
+    buildSquirrelStoryText,
+    buildStoryChatMessage,
+} from './fixtures/story-seeds';
+import { makeGuestContext, makeGuestId, makeMessageId } from './fixtures/subjects';
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
-const glassToastPath = path.resolve(process.cwd(), 'components/ui/GlassToast.tsx');
-let lastToast: { icon: string; content: string } | null = null;
-nodeRequire.cache[glassToastPath] = {
-    id: glassToastPath,
-    filename: glassToastPath,
-    loaded: true,
-    exports: {
-        default: {
-            show: (opts: { icon: string; content: string }) => {
-                lastToast = opts;
-            },
-            clear: () => {
-                lastToast = null;
-            },
-        },
-    },
-} as unknown as NodeModule;
+// 中文注释：toast 捕获器（供漂移通知断言读取末次提示）。
+const toastCapture = createToastCapture();
+installGlassToastStub(toastCapture);
 
 import {
     normalizeStoryText,
@@ -98,41 +93,23 @@ async function runParagraphResumeTests() {
     console.log('PASS: Segmentation, normalization, content hash and adaptive prefetch verified');
 
     console.log('=== TC-P2-01: 具名访客硬刷新段落断点恢复 ===');
-    const guestId1 = `g_resume_tc01_${Date.now()}`;
-    const guestCtx1 = { session: null, guestId: guestId1, isGuest: true, clientIp: '127.0.0.1' };
+    // 中文注释：访客身份与消息 ID 均取自 tracked 合成主体构造器。
+    const guestId1 = makeGuestId('resume_tc01');
+    const guestCtx1 = makeGuestContext(guestId1);
     const callerGuest1 = playbackRouter.createCaller(guestCtx1);
 
-    const storyMessageId1 = `msg_story_${Date.now()}`;
-    const para1 = "第一自然段：很久很久以前，在宁静的大森林深处住着一只聪明活泼的小松鼠，它有一条蓬松的大尾巴，每天清晨都在高高的树梢间欢快地跳来跳去，寻找新鲜的坚果与甘甜的露水。";
-    const para2 = "第二自然段：小松鼠每天早晨迎着金色的朝阳出门收集松果，仔细辨别每一颗果实是否饱满香甜，并将它们整齐地存放在自己温暖干燥的树洞深处，准备迎接即将到来的寒冷冬天。";
-    const para3 = "第三自然段：有一天它在一棵巨大的古老松树下发现了一颗闪闪发光的神奇松果，散发出奇异而温暖的柔和光芒，不仅照亮了周围湿漉漉的青苔，还散发出一种让人心情平静的香气。";
-    const para4 = "第四自然段：这颗发光的松果带领着好奇的小松鼠走进了森林最深处的奇妙花园，那里盛开着从未见过的美丽奇幻花朵，彩色的蝴蝶在花丛中翩翩起舞，宛如梦境一般美丽动人。";
-    const storyText1 = `${para1}\n${para2}\n${para3}\n${para4}`;
+    // 中文注释：故事底本取自 tracked 种子（与 {{E2E_STORY_4P}} 同构的 4 段固定文本）。
+    const storyMessageId1 = makeMessageId('story');
+    const storyText1 = buildSquirrelStoryText();
     const storyHash1 = computeStoryContentHash(storyText1);
 
     // Save story to guest chat in DB
     await saveConversationForSubject({ type: 'guest', id: guestId1 }, [
-        {
-            messageId: storyMessageId1,
-            role: 'assistant',
-            content: storyText1,
-            parts: [{ type: 'storyCard', storyText: storyText1, audioUrl: '' }],
-        },
+        buildStoryChatMessage(storyMessageId1, storyText1),
     ]);
 
     // Save progress: stopped at paragraph index 2 (third paragraph), completed paragraph 1
-    await callerGuest1.saveProgress({
-        sourceType: 'chat',
-        sourceId: storyMessageId1,
-        title: '小松鼠的故事',
-        contentHash: storyHash1,
-        segmentationVersion: SEGMENTATION_VERSION,
-        lastCompletedParagraphIndex: 1,
-        nextParagraphIndex: 2,
-        totalParagraphs: 4,
-        voiceId: 'alloy',
-        speed: 1.0,
-    });
+    await callerGuest1.saveProgress(buildParagraphProgressSeed(storyMessageId1, storyHash1));
 
     // Simulate page reload
     const fetched1 = await callerGuest1.getProgress();
@@ -607,15 +584,15 @@ async function runParagraphResumeTests() {
         syncEnabled: true,
     });
 
-    lastToast = null;
+    toastCapture.lastToast = null;
     const driftHydrated = await usePlaybackProgressStore.getState().hydrateFromDTO(driftDto);
     assert.strictEqual(driftHydrated, true);
 
     const progressState16 = usePlaybackProgressStore.getState();
     assert.strictEqual(progressState16.nextParagraphIndex, 0, 'Drift must safely reset nextParagraphIndex to 0');
     assert.strictEqual(progressState16.lastCompletedParagraphIndex, -1, 'Drift must safely reset lastCompletedParagraphIndex to -1');
-    assert(lastToast !== null, 'Drift notification toast must be displayed');
-    const toastObj = lastToast as { icon?: string; content?: string } | null;
+    assert(toastCapture.lastToast !== null, 'Drift notification toast must be displayed');
+    const toastObj = toastCapture.lastToast as { icon?: string; content?: string } | null;
     assert.strictEqual(toastObj?.content, '故事正文已更新，将从开头重新播放');
 
     console.log('PASS: TC-P2-16 verified');

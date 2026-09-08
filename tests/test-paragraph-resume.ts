@@ -1,8 +1,6 @@
 import assert from 'node:assert';
 import { createRequire } from 'node:module';
 import * as nextHeaders from 'next/headers';
-import { prisma } from '../lib/db';
-import { TRPCError } from '@trpc/server';
 import {
     createToastCapture,
     installGlassToastStub,
@@ -13,6 +11,7 @@ import {
     buildStoryChatMessage,
 } from './fixtures/story-seeds';
 import { makeGuestContext, makeGuestId, makeMessageId } from './fixtures/subjects';
+import { setupIsolatedDb } from './fixtures/isolated-db';
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
 // 中文注释：toast 捕获器（供漂移通知断言读取末次提示）。
@@ -25,17 +24,6 @@ import {
     computeStoryContentHash,
     SEGMENTATION_VERSION,
 } from '../utils/segmentation';
-import {
-    getPlaybackProgressForSubject,
-    savePlaybackProgressForSubject,
-    clearPlaybackProgressForSubject,
-} from '../lib/server/playbackProgress';
-import { purgeExpiredGuestData } from '../lib/server/guestGc';
-import { migrateGuestPlaybackProgressToUser } from '../lib/server/unifiedMigration';
-import { playbackRouter } from '../lib/trpc/routers/playback';
-import { authRouter } from '../lib/trpc/routers/auth';
-import { saveConversationForSubject } from '../lib/server/chatConversation';
-import { recordGenerationHistoryForSubject } from '../lib/server/generationHistory';
 
 const { usePlaybackStore } = nodeRequire('../stores/playbackStore') as {
     usePlaybackStore: typeof import('../stores/playbackStore').usePlaybackStore;
@@ -46,9 +34,6 @@ const { usePlaybackProgressStore } = nodeRequire('../stores/playbackProgressStor
 const { useChatStore } = nodeRequire('../stores/chatStore') as {
     useChatStore: typeof import('../stores/chatStore').useChatStore;
 };
-const { useGenerationHistoryStore } = nodeRequire('../stores/generationHistoryStore') as {
-    useGenerationHistoryStore: typeof import('../stores/generationHistoryStore').useGenerationHistoryStore;
-};
 const { resetAccountData } = nodeRequire('../stores/accountSync') as {
     resetAccountData: typeof import('../stores/accountSync').resetAccountData;
 };
@@ -56,6 +41,20 @@ const { resetAccountData } = nodeRequire('../stores/accountSync') as {
 process.env.SESSION_SECRET = 'test-secret-paragraph-resume-12345';
 
 async function runParagraphResumeTests() {
+    // 中文注释：R21 隔离库口径——先建隔离库再动态导入 DB 依赖，杜绝回退 prisma/dev.db。
+    const { dbPath, prisma } = await setupIsolatedDb('paragraph-resume');
+    console.log(`=== DB: isolated ${dbPath} ===`);
+    const { playbackRouter } = await import('../lib/trpc/routers/playback');
+    const { authRouter } = await import('../lib/trpc/routers/auth');
+    // 中文注释：TRPCError 须与 router 同一次动态导入取自同一模块实例，否则 instanceof 双实例失效。
+    const { TRPCError } = await import('@trpc/server');
+    const {
+        getPlaybackProgressForSubject,
+        savePlaybackProgressForSubject,
+        clearPlaybackProgressForSubject,
+    } = await import('../lib/server/playbackProgress');
+    const { purgeExpiredGuestData } = await import('../lib/server/guestGc');
+    const { saveConversationForSubject } = await import('../lib/server/chatConversation');
     console.log('=== 0. Testing Deterministic Segmentation, Normalization & Fingerprints ===');
 
     // 0.1 Normalization of CRLF and trailing whitespace

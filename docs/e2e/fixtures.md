@@ -23,6 +23,12 @@
 - `tests/test-paragraph-resume.ts` TC-P2-01（具名访客硬刷新段落断点恢复）消费
   `subjects` + `story-seeds`，TC-P2-16 消费 `ui-stubs` 捕获器：新增用例照此办理，
   优先复用既有 fixture，确需新种子时同步落盘本索引。
+- R21 隔离库口径确认（2026-09-08）：`test-paragraph-resume` 历史上未设置
+  `DATABASE_URL`，静态导入 `lib/db` 会隐式回退共享开发库 `prisma/dev.db`，
+  且访客行（`g_resume_*`/`g_sleep_*`/`g_reg_*`/`g_mono_*`/`g_exp_gc_*` 等）从不清理；
+  现已统一为 F1 口径——用例入口先调 `setupIsolatedDb('paragraph-resume')`
+  （库文件 `prisma/test-paragraph-resume.db`，gitignored），再动态导入全部
+  DB 依赖； ambient `DATABASE_URL` 不再决定写库去向。
 
 ## 新增 fixture 规则
 

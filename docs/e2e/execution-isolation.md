@@ -168,3 +168,18 @@ node -e "const{createClient}=require('@libsql/client');(async()=>{
      `restore` 同样受排他守卫约束，按快照恢复 `-wal`/`-shm`（快照中不存在的 sidecar 在目标库上清除）。
 - 禁止事项：手写 SQL 以外低阶修复（如 `.recover`）；未经快照的直接写库；
   对 `prisma/dev.db` 与生产库执行本流程（隔离库专用）。
+
+## 11. 流观察 hook 不消费流标准（缺陷 #7 实证固化）
+
+- 背景：旧观察 hook 用 `clone().text()` 读取 tRPC 流响应做 `network.json` 证据；
+  当应用已持有流 reader（流式端点常态）时 clone 必抛 body 消费类异常，旧实现
+  把它记为请求失败——成功流也被报取消类失败，观察证据失真。
+- 铁律（`scripts/e2e-stream-observe.mjs` 为跟踪实现，`tests/test-e2e-stream-observe.ts` 为契约测试）：
+  1. 流式响应（或 body 已锁定）只记可验证元数据（状态、content-type、响应建立），
+     绝不调用 clone/text/cancel，绝不消费或取消流；hook 原样返回响应原对象。
+  2. 消费/取消类异常（AbortError、terminated、`Body has already been consumed` 等）
+     verdict 一律为 `cancelled`，绝不记为失败；实现中不存在 `failed` verdict。
+  3. “流成功”证据固定为 UI + 后端日志 + 下游调用三角互证，hook 不对流做成功断言。
+  4. 非流响应保留安全 body 摘要（截断上限 + truncated 标记）；记录只含 pathname，
+     不记 query（批输入在 query 中，防载荷泄露）。
+- 禁止事项：对流式响应调用 clone/text；把取消类异常记为失败；用 hook body 断言流成功。

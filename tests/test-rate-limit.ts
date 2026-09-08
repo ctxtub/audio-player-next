@@ -57,6 +57,43 @@ async function runRateLimitTests() {
     assert.strictEqual(rejectLimiter.consume('user:reject', 2), true, 'Call after window slide must be allowed despite interim rejections');
     console.log('PASS: Rejected attempts do not count toward quota nor extend window');
 
+    console.log('--- 1c. Consecutive rejections vs single rejection: no amplification, no window shift ---');
+    currentTime = 5_000_000;
+    const burstLimiter = new SlidingWindowRateLimiter({
+        windowMs: 60_000,
+        maxKeys: 100,
+        nowFn: () => currentTime,
+    });
+    const t0 = currentTime;
+    assert.strictEqual(burstLimiter.consume('user:burst', 2), true, 'Burst call 1 allowed');
+    assert.strictEqual(burstLimiter.consume('user:burst', 2), true, 'Burst call 2 allowed');
+    // 单次被拒：窗口锚定在首次成功写入，resetMs 为完整窗口。
+    const singleReject = burstLimiter.checkAndConsume('user:burst', 2);
+    assert.strictEqual(singleReject.allowed, false, 'Single rejection must be rejected');
+    assert.strictEqual(singleReject.remaining, 0, 'Single rejection remaining must be 0');
+    assert.strictEqual(singleReject.resetMs, 60_000, 'Single rejection resetMs must equal full window');
+    // 连续多次被拒：每次仍被拒、remaining 恒为 0、resetMs 单调递减（窗口不被放大/延长）。
+    let prevResetMs = singleReject.resetMs;
+    for (let i = 1; i <= 4; i++) {
+        currentTime += 10_000;
+        const retry = burstLimiter.checkAndConsume('user:burst', 2);
+        assert.strictEqual(retry.allowed, false, `Consecutive rejection #${i} must still be rejected`);
+        assert.strictEqual(retry.remaining, 0, `Consecutive rejection #${i} remaining must stay 0`);
+        assert.ok(
+            retry.resetMs < prevResetMs,
+            `Consecutive rejection #${i} must not extend window (prev resetMs=${prevResetMs}, current=${retry.resetMs})`,
+        );
+        prevResetMs = retry.resetMs;
+    }
+    // 窗口锚定强区分：窗口仍以首次成功写入 t0 为准，而非最后一次被拒时刻。
+    // t0+59_999（仍在原窗口内）必须继续被拒；t0+60_001（原窗口滑过）必须放行，
+    // 证明连续被拒既未放大计数、也未改变后续放行行为。
+    currentTime = t0 + 59_999;
+    assert.strictEqual(burstLimiter.consume('user:burst', 2), false, 'Just before window slide must still be rejected despite interim rejections');
+    currentTime = t0 + 60_001;
+    assert.strictEqual(burstLimiter.consume('user:burst', 2), true, 'Just after window slide must be allowed despite consecutive rejections');
+    console.log('PASS: Consecutive rejections neither amplify count nor shift allow behavior');
+
     console.log('--- 2. Testing Bounded Memory & Capacity Protection ---');
     currentTime = 2_000_000;
     const boundedLimiter = new SlidingWindowRateLimiter({

@@ -25,6 +25,7 @@ const testFiles = [
   './tests/test-fix04-no-autocontinue.ts',
   './tests/test-restart-mock-managed.ts',
   './tests/test-e2e-db-guard.ts',
+  './tests/test-e2e-db-guard-regression.ts',
   './tests/test-e2e-stream-observe.ts',
   './tests/test-toast-terminal-priority.ts',
 ];

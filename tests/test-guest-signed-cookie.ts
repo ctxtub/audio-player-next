@@ -1,0 +1,176 @@
+import assert from 'node:assert';
+import { randomUUID } from 'node:crypto';
+import { router, guardedProcedure, TRPCError } from '../lib/trpc/init';
+import {
+    createContext,
+    buildGuestCookieHeader,
+    GUEST_COOKIE_MAX_AGE,
+} from '../lib/trpc/context';
+import { encodeGuestId, decodeGuestCookie } from '../lib/session';
+
+process.env.SESSION_SECRET = 'test-secret-signed-guest-fix02-12345';
+
+const testRouter = router({
+    guardedPing: guardedProcedure.query(() => ({ ok: true as const })),
+});
+
+async function runSignedGuestCookieTests() {
+    console.log('--- 1. 无 cookie → 匿名，guardedProcedure 401 ---');
+    const anonCtx = await createContext({
+        req: new Request('http://localhost:3000/api/trpc'),
+    });
+    assert.strictEqual(anonCtx.session, null);
+    assert.strictEqual(anonCtx.isGuest, false);
+    assert.strictEqual(anonCtx.guestId, null);
+    await assert.rejects(
+        async () => {
+            await testRouter.createCaller(anonCtx).guardedPing();
+        },
+        (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
+        '无 cookie 必须 401'
+    );
+
+    console.log('--- 2. 旧 guest=1 → 严格 401，且无 Set-Cookie ---');
+    const legacyHeaders = new Headers();
+    const legacyCtx = await createContext({
+        req: new Request('http://localhost:3000/api/trpc', {
+            headers: { cookie: 'guest=1' },
+        }),
+        resHeaders: legacyHeaders,
+    });
+    assert.strictEqual(legacyCtx.isGuest, false, 'guest=1 不得被视为访客');
+    assert.strictEqual(legacyCtx.guestId, null);
+    assert.strictEqual(
+        legacyHeaders.get('set-cookie'),
+        null,
+        'guest=1 不得下发升级 cookie'
+    );
+    await assert.rejects(
+        async () => {
+            await testRouter.createCaller(legacyCtx).guardedPing();
+        },
+        (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
+        'guest=1 必须 401'
+    );
+
+    console.log('--- 3. 裸 g_<uuid> / 伪造结构 → 401 ---');
+    for (const raw of [
+        `g_${randomUUID()}`,
+        'g_00000000-1111-4222-8333-444455556666',
+        'g_not-a-uuid',
+        'forged.payload.sig',
+        'a.b.c',
+        'g_',
+    ]) {
+        const resHeaders = new Headers();
+        const ctx = await createContext({
+            req: new Request('http://localhost:3000/api/trpc', {
+                headers: { cookie: `guest=${raw}` },
+            }),
+            resHeaders,
+        });
+        assert.strictEqual(ctx.isGuest, false, `裸/伪造值必须匿名: ${raw}`);
+        assert.strictEqual(ctx.guestId, null);
+        assert.strictEqual(resHeaders.get('set-cookie'), null, '伪造值不得下发 cookie');
+        await assert.rejects(
+            async () => {
+                await testRouter.createCaller(ctx).guardedPing();
+            },
+            (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
+            `裸/伪造值必须 401: ${raw}`
+        );
+    }
+
+    console.log('--- 4. 合法签名 guest cookie → guardedProcedure 放行 ---');
+    const gid = `g_${randomUUID()}`;
+    const signed = encodeGuestId(gid);
+    assert.notStrictEqual(signed, gid, '签名值不得是明文 guestId');
+    assert.ok(signed.includes('.'), '签名值须为 payload.signature 结构');
+    const validCtx = await createContext({
+        req: new Request('http://localhost:3000/api/trpc', {
+            headers: { cookie: `guest=${signed}` },
+        }),
+    });
+    assert.strictEqual(validCtx.isGuest, true);
+    assert.strictEqual(validCtx.guestId, gid);
+    const ping = await testRouter.createCaller(validCtx).guardedPing();
+    assert.strictEqual(ping.ok, true);
+
+    console.log('--- 5. payload 篡改 / 签名篡改 / 异密钥伪造 / 过期 → 401 ---');
+    const [payloadB64, sig] = signed.split('.');
+    const tamperedPayload =
+        payloadB64.slice(0, -1) + (payloadB64.endsWith('A') ? 'B' : 'A');
+    assert.strictEqual(decodeGuestCookie(`${tamperedPayload}.${sig}`), null);
+    const tamperedSig = sig.slice(0, -1) + (sig.endsWith('A') ? 'B' : 'A');
+    assert.strictEqual(decodeGuestCookie(`${payloadB64}.${tamperedSig}`), null);
+
+    const savedSecret = process.env.SESSION_SECRET;
+    process.env.SESSION_SECRET = 'totally-different-secret-99999';
+    const forgedByOtherSecret = encodeGuestId(`g_${randomUUID()}`);
+    process.env.SESSION_SECRET = savedSecret;
+    assert.strictEqual(decodeGuestCookie(forgedByOtherSecret), null, '异密钥伪造必须失败');
+
+    const expired = encodeGuestId(`g_${randomUUID()}`, -1);
+    assert.strictEqual(decodeGuestCookie(expired), null, '过期签名必须失败');
+
+    for (const bad of [
+        `${tamperedPayload}.${sig}`,
+        `${payloadB64}.${tamperedSig}`,
+        forgedByOtherSecret,
+        expired,
+    ]) {
+        const ctx = await createContext({
+            req: new Request('http://localhost:3000/api/trpc', {
+                headers: { cookie: `guest=${bad}` },
+            }),
+        });
+        assert.strictEqual(ctx.isGuest, false, '篡改/伪造/过期必须匿名');
+        await assert.rejects(
+            async () => {
+                await testRouter.createCaller(ctx).guardedPing();
+            },
+            (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
+            '篡改/伪造/过期必须 401'
+        );
+    }
+
+    console.log('--- 6. 签发格式：HttpOnly + SameSite + 30d + 可验签 ---');
+    const freshGid = `g_${randomUUID()}`;
+    const freshSigned = encodeGuestId(freshGid);
+    assert.strictEqual(decodeGuestCookie(freshSigned), freshGid, '签发后必须可验签还原');
+    const setCookie = buildGuestCookieHeader(freshSigned);
+    assert.ok(setCookie.startsWith('guest='), '须写入 guest cookie');
+    assert.ok(setCookie.includes('HttpOnly'), '须 HttpOnly');
+    assert.ok(setCookie.includes('SameSite=Lax'), '须 SameSite=Lax');
+    assert.ok(
+        setCookie.includes(`Max-Age=${GUEST_COOKIE_MAX_AGE}`),
+        '须 30 天 Max-Age'
+    );
+    assert.ok(!setCookie.includes(freshGid), 'Set-Cookie 不得泄露明文 guestId');
+
+    console.log('--- 7. 密钥缺失 → fail-closed（匿名，不抛错） ---');
+    process.env.SESSION_SECRET = savedSecret;
+    const goodToken = encodeGuestId(`g_${randomUUID()}`);
+    delete process.env.SESSION_SECRET;
+    assert.strictEqual(decodeGuestCookie(goodToken), null, '无密钥时验签必须失败');
+    const noSecretCtx = await createContext({
+        req: new Request('http://localhost:3000/api/trpc', {
+            headers: { cookie: `guest=${goodToken}` },
+        }),
+    });
+    assert.strictEqual(noSecretCtx.isGuest, false, '无密钥时必须匿名');
+    process.env.SESSION_SECRET = savedSecret;
+
+    console.log('ALL SIGNED GUEST COOKIE TESTS PASSED');
+}
+
+const testPromise = runSignedGuestCookieTests()
+    .then(() => {
+        console.log('ALL SIGNED GUEST COOKIE TESTS PASSED (done)');
+    })
+    .catch((err) => {
+        console.error('Test failed:', err);
+        process.exit(1);
+    });
+
+export default testPromise;

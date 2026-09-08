@@ -7,17 +7,17 @@
 import { cookies, headers } from 'next/headers';
 
 import type { AuthSession } from '@/types/auth';
-import { decodeSession, SESSION_COOKIE } from '@/lib/session';
+import { decodeSession, decodeGuestCookie, SESSION_COOKIE } from '@/lib/session';
 
 export const GUEST_COOKIE = 'guest';
 export const GUEST_COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
 
 /**
- * 构造访客 Cookie 的 Set-Cookie 头字符串。
+ * 构造访客 Cookie 的 Set-Cookie 头字符串（值为已签名 opaque token）。
  */
-export const buildGuestCookieHeader = (guestId: string): string => {
+export const buildGuestCookieHeader = (signedValue: string): string => {
     const isProd = process.env.NODE_ENV === 'production';
-    return `${GUEST_COOKIE}=${guestId}; Path=/; Max-Age=${GUEST_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax${isProd ? '; Secure' : ''}`;
+    return `${GUEST_COOKIE}=${signedValue}; Path=/; Max-Age=${GUEST_COOKIE_MAX_AGE}; HttpOnly; SameSite=Lax${isProd ? '; Secure' : ''}`;
 };
 
 /**
@@ -101,41 +101,12 @@ export const createContext = async (opts?: CreateContextOptions): Promise<Contex
 
     const session = sessionValue ? decodeSession(sessionValue) : null;
 
-    let guestId: string | null = null;
-    let needsUpgrade = false;
-
-    if (guestValue) {
-        if (guestValue.startsWith('g_')) {
-            guestId = guestValue;
-        } else if (guestValue === '1') {
-            // 存量旧版 guest=1 向上平滑升级为具名 g_<uuid>
-            guestId = `g_${crypto.randomUUID()}`;
-            needsUpgrade = true;
-        }
-    }
+    // 访客身份只承认 HMAC 签名合法且未过期的 Cookie 值。
+    // 旧式 guest=1、裸 g_<uuid>、伪造/篡改/过期签名一律视为匿名（guardedProcedure 返回 401），
+    // 不做平滑升级、不下发任何 Set-Cookie；合法身份须经 auth.enterGuestMode 重新建立。
+    const guestId: string | null = guestValue ? decodeGuestCookie(guestValue) : null;
 
     const isGuest = guestId !== null;
-
-    if (needsUpgrade && guestId) {
-        try {
-            const cookieStore = await cookies();
-            cookieStore.set({
-                name: GUEST_COOKIE,
-                value: guestId,
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                path: '/',
-                maxAge: GUEST_COOKIE_MAX_AGE,
-            });
-        } catch {
-            // 单元测试或只读上下文
-        }
-
-        if (opts?.resHeaders) {
-            opts.resHeaders.append('Set-Cookie', buildGuestCookieHeader(guestId));
-        }
-    }
 
     let reqHeaders: Headers | { get(name: string): string | null } | null = opts?.req?.headers ?? null;
     if (!reqHeaders) {

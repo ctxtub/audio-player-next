@@ -31,6 +31,7 @@ import {
     getGuestRateLimitKeys,
 } from '../lib/server/rateLimit';
 import { createContext } from '../lib/trpc/context';
+import { encodeGuestId, decodeGuestCookie } from '../lib/session';
 import { authRouter } from '../lib/trpc/routers/auth';
 import { middleware } from '../middleware';
 import { THEME_MODE_STORAGE_KEY } from '../components/ThemeProvider/themeConfig';
@@ -219,43 +220,51 @@ async function runGuestConfigTests() {
     }
     console.log('PASS: Register migration and rollback safety verified');
 
-    console.log('=== 3. Testing Legacy guest=1 Upgrade Path ===');
-    // 3.1 tRPC Context upgrade
+    console.log('=== 3. Testing Legacy guest=1 Strict Rejection (no upgrade) ===');
+    // 3.1 tRPC Context: guest=1 → 匿名，不下发升级 cookie
     const resHeaders = new Headers();
     const legacyReq = new Request('http://localhost:3000/api/trpc', {
         headers: { cookie: 'guest=1', 'x-real-ip': '1.2.3.4' },
     });
     const legacyCtx = await createContext({ req: legacyReq, resHeaders });
-    assert.strictEqual(legacyCtx.isGuest, true, 'isGuest must be true for legacy guest=1');
-    assert(Boolean(legacyCtx.guestId && legacyCtx.guestId.startsWith('g_')), 'guestId must be upgraded to g_<uuid>');
-    const setCookieHeader = resHeaders.get('set-cookie');
-    assert(setCookieHeader !== null, 'Set-Cookie header must be emitted for legacy guest=1 upgrade');
-    assert(setCookieHeader.includes('guest=g_'), 'Set-Cookie must contain upgraded g_<uuid>');
-    assert(setCookieHeader.includes('Max-Age=2592000'), 'Set-Cookie must have 30d max-age');
-    assert(setCookieHeader.includes('HttpOnly'), 'Set-Cookie must be HttpOnly');
+    assert.strictEqual(legacyCtx.isGuest, false, 'isGuest must be false for legacy guest=1');
+    assert.strictEqual(legacyCtx.guestId, null, 'guestId must be null for legacy guest=1');
+    assert.strictEqual(resHeaders.get('set-cookie'), null, 'No Set-Cookie may be emitted for legacy guest=1');
 
-    // 3.2 Middleware upgrade
+    // 3.1b tRPC Context: 裸 g_<uuid>（无签名）→ 匿名，不下发 cookie
+    const bareHeaders = new Headers();
+    const bareReq = new Request('http://localhost:3000/api/trpc', {
+        headers: { cookie: 'guest=g_00000000-1111-4222-8333-444455556666' },
+    });
+    const bareCtx = await createContext({ req: bareReq, resHeaders: bareHeaders });
+    assert.strictEqual(bareCtx.isGuest, false, 'isGuest must be false for unsigned g_<uuid>');
+    assert.strictEqual(bareCtx.guestId, null, 'guestId must be null for unsigned g_<uuid>');
+    assert.strictEqual(bareHeaders.get('set-cookie'), null, 'No Set-Cookie may be emitted for unsigned g_<uuid>');
+
+    // 3.2 Middleware：guest=1 访问受保护路径 → 重定向到 /auth，不补发访客 cookie
     const mockLegacyReq = new NextRequest('http://localhost:3000/player', {
         headers: { cookie: 'guest=1' },
     });
     const mwResponse = await middleware(mockLegacyReq);
-    const mwSetCookie = mwResponse.cookies.get('guest');
-    assert(mwSetCookie !== undefined, 'Middleware must reissue guest cookie on guest=1');
-    assert(mwSetCookie.value.startsWith('g_'), 'Reissued cookie must be g_<uuid>');
-    assert.strictEqual(mwSetCookie.maxAge, 30 * 24 * 60 * 60, 'Reissued cookie must have 30d maxAge');
-    assert.strictEqual(mwSetCookie.httpOnly, true, 'Reissued cookie must be httpOnly');
+    assert.ok(
+        mwResponse.headers.get('location')?.includes('/auth'),
+        'Middleware must redirect legacy guest=1 to /auth on protected paths'
+    );
+    assert.strictEqual(mwResponse.cookies.get('guest'), undefined, 'Middleware must not reissue guest cookie on guest=1');
 
-    // 3.3 Middleware sliding renewal for existing g_<uuid>
-    const existingGuestId = `g_existing_${Date.now()}`;
+    // 3.3 Middleware sliding renewal：仅对验签通过的签名 cookie 续签，且保持同一 gid
+    const existingSigned = encodeGuestId(`g_existing_${Date.now()}`);
+    const existingGid = decodeGuestCookie(existingSigned);
     const mockExistingReq = new NextRequest('http://localhost:3000/player', {
-        headers: { cookie: `guest=${existingGuestId}` },
+        headers: { cookie: `guest=${existingSigned}` },
     });
     const mwRenewalResponse = await middleware(mockExistingReq);
     const renewalCookie = mwRenewalResponse.cookies.get('guest');
-    assert(renewalCookie !== undefined, 'Middleware must renew guest cookie');
-    assert.strictEqual(renewalCookie.value, existingGuestId, 'Renewal must keep same guestId');
+    assert(renewalCookie !== undefined, 'Middleware must renew signed guest cookie');
+    assert.strictEqual(decodeGuestCookie(renewalCookie.value), existingGid, 'Renewal must keep same guestId');
     assert.strictEqual(renewalCookie.maxAge, 30 * 24 * 60 * 60, 'Renewal must reset 30d maxAge');
-    console.log('PASS: Legacy guest=1 upgrade and 30d sliding renewal verified in context & middleware');
+    assert.strictEqual(renewalCookie.httpOnly, true, 'Renewal must stay httpOnly');
+    console.log('PASS: Legacy guest=1 strict rejection and signed-cookie sliding renewal verified');
 
     console.log('=== 4. Testing Rate Limiting with GuestId and Dual-Layer IP Guard ===');
     const rateLimiter = new SlidingWindowRateLimiter({ windowMs: 60_000 });

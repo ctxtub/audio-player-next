@@ -131,6 +131,77 @@ const timingSafeEqual = (a: string, b: string): boolean => {
 };
 
 /**
+ * 访客 Cookie 签名有效期（秒），30 天，与访客 Cookie Max-Age 对齐。
+ */
+const GUEST_MAX_AGE = 30 * 24 * 60 * 60;
+
+export { GUEST_MAX_AGE };
+
+interface GuestPayload {
+    gid: string;
+    exp: number;
+}
+
+/**
+ * 签发访客身份 Cookie 值（HMAC-SHA256，与会话签名复用同一机制与密钥）。
+ *
+ * 格式为 `<payloadB64>.<signature>`，payload 内含访客 `gid` 与过期时间 `exp`。
+ * 密钥缺失时抛出异常（不以可猜静态值兜底），由调用方决定失败闭环。
+ */
+export const encodeGuestId = (guestId: string, expiresInSec: number = GUEST_MAX_AGE): string => {
+    const secret = getSessionSecret();
+    const exp = Math.floor(Date.now() / 1000) + expiresInSec;
+    const payload: GuestPayload = { gid: guestId, exp };
+    const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url');
+    const signature = hmacSha256(secret, payloadB64);
+    return `${payloadB64}.${signature}`;
+};
+
+/**
+ * 校验访客 Cookie 值并还原访客 `gid`。
+ *
+ * 无签名/伪造/过期/篡改/密钥缺失一律返回 null（调用方视为匿名，由 guardedProcedure 返回 401）。
+ */
+export const decodeGuestCookie = (value: string): string | null => {
+    try {
+        const secret = process.env.SESSION_SECRET;
+        if (!secret) {
+            return null;
+        }
+
+        const parts = value.split('.');
+        if (parts.length !== 2) {
+            return null;
+        }
+
+        const [payloadB64, signature] = parts;
+        if (!payloadB64 || !signature) {
+            return null;
+        }
+
+        const expectedSignature = hmacSha256(secret, payloadB64);
+        if (!timingSafeEqual(signature, expectedSignature)) {
+            return null;
+        }
+
+        const json = Buffer.from(payloadB64, 'base64url').toString('utf-8');
+        const parsed = JSON.parse(json) as Partial<GuestPayload>;
+
+        if (typeof parsed.exp !== 'number' || Math.floor(Date.now() / 1000) > parsed.exp) {
+            return null;
+        }
+
+        if (typeof parsed.gid === 'string' && parsed.gid.startsWith('g_') && parsed.gid.length > 2) {
+            return parsed.gid;
+        }
+
+        return null;
+    } catch {
+        return null;
+    }
+};
+
+/**
  * 将会话数据编码并附带 HMAC-SHA256 签名。
  */
 export const encodeSession = (userId: number, nickname: string): string => {

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { router, guardedProcedure, authedProcedure, publicProcedure, TRPCError } from '../lib/trpc/init';
 import { createContext, getSafeClientIp } from '../lib/trpc/context';
-import { encodeSession } from '../lib/session';
+import { encodeSession, encodeGuestId } from '../lib/session';
 
 import { configRouter } from '../lib/trpc/routers/config';
 import { chatConversationRouter } from '../lib/trpc/routers/chatConversation';
@@ -76,13 +76,26 @@ async function runMatrixTests() {
     assert.strictEqual(anonCtx.isGuest, false, 'Anon isGuest must be false');
     assert.strictEqual(anonCtx.clientIp, '127.0.0.1', 'Anon clientIp fallback');
 
-    // Guest mode ('guest=1')
-    const guestReq = new Request('http://localhost:3000/api/trpc', {
+    // Legacy guest mode ('guest=1') is strictly rejected: anonymous, never upgraded
+    const legacyReq = new Request('http://localhost:3000/api/trpc', {
         headers: { cookie: 'guest=1', 'x-real-ip': '10.0.0.5' },
+    });
+    const legacyHeaders = new Headers();
+    const legacyCtx = await createContext({ req: legacyReq, resHeaders: legacyHeaders });
+    assert.strictEqual(legacyCtx.session, null, 'Legacy guest session must be null');
+    assert.strictEqual(legacyCtx.isGuest, false, 'isGuest must be false for legacy guest=1');
+    assert.strictEqual(legacyCtx.guestId, null, 'guestId must be null for legacy guest=1');
+    assert.strictEqual(legacyHeaders.get('set-cookie'), null, 'No upgrade cookie for legacy guest=1');
+    assert.strictEqual(legacyCtx.clientIp, '10.0.0.5', 'Legacy IP preserved');
+
+    // Signed guest mode (issued by auth.enterGuestMode)
+    const signedGuestValue = encodeGuestId(`g_matrix_${Date.now()}`);
+    const guestReq = new Request('http://localhost:3000/api/trpc', {
+        headers: { cookie: `guest=${signedGuestValue}`, 'x-real-ip': '10.0.0.5' },
     });
     const guestCtx = await createContext({ req: guestReq });
     assert.strictEqual(guestCtx.session, null, 'Guest session must be null');
-    assert.strictEqual(guestCtx.isGuest, true, 'isGuest must be true for guest=1');
+    assert.strictEqual(guestCtx.isGuest, true, 'isGuest must be true for signed guest cookie');
     assert.strictEqual(guestCtx.clientIp, '10.0.0.5', 'Guest IP preserved');
 
     // Invalid guest value ('guest=0' or 'guest=true')

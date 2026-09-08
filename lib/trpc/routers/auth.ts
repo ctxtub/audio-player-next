@@ -10,16 +10,14 @@ import bcrypt from 'bcryptjs';
 import { router, publicProcedure, TRPCError } from '../init';
 import { loginInputSchema, registerInputSchema } from '../schemas/auth';
 import { prisma } from '@/lib/db';
-import { encodeSession, assertSessionSecret, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
+import { encodeSession, assertSessionSecret, encodeGuestId, decodeGuestCookie, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
+import { GUEST_COOKIE, GUEST_COOKIE_MAX_AGE } from '../context';
 import { migrateGuestConfigToUser } from '@/lib/server/unifiedConfig';
 import {
     migrateGuestCreativeRecordsToUser,
     migrateGuestPlaybackProgressToUser,
 } from '@/lib/server/unifiedMigration';
 import { purgeExpiredGuestData } from '@/lib/server/guestGc';
-
-const GUEST_COOKIE = 'guest';
-const GUEST_COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
 
 /**
  * 写入登录态 Cookie。
@@ -144,14 +142,18 @@ export const authRouter = router({
     }),
 
     /**
-     * 进入访客模式。
+     * 进入访客模式：签发 HMAC 签名访客 Cookie（HttpOnly）。
+     *
+     * Cookie 值为 opaque 签名 token（`<payloadB64>.<signature>`），不直接暴露明文 guestId；
+     * 响应体不再返回 guestId（调用方无需读取，凭 Cookie 即可访问受保护 API）。
+     * 密钥缺失时签发失败（失败闭环，不颁发无签名身份）。
      */
     enterGuestMode: publicProcedure.mutation(async () => {
         const cookieStore = await cookies();
         const guestId = `g_${crypto.randomUUID()}`;
         cookieStore.set({
             name: GUEST_COOKIE,
-            value: guestId,
+            value: encodeGuestId(guestId),
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'lax',
@@ -164,7 +166,7 @@ export const authRouter = router({
             purgeExpiredGuestData().catch((err: unknown) => console.warn('[GC] Guest data purge failed', err));
         }
 
-        return { success: true as const, guestId };
+        return { success: true as const };
     }),
 
     /**
@@ -193,7 +195,7 @@ export const authRouter = router({
                 const cookieStore = await cookies();
                 cookieStore.delete(SESSION_COOKIE);
                 const guestVal = cookieStore.get(GUEST_COOKIE)?.value;
-                const isGuest = !!guestVal && (guestVal.startsWith('g_') || guestVal === '1');
+                const isGuest = !!guestVal && decodeGuestCookie(guestVal) !== null;
                 return {
                     isLogin: false as const,
                     isGuest,

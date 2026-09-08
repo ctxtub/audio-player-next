@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { decodeSession, encodeSession, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
+import { decodeSession, encodeSession, decodeGuestCookie, encodeGuestId, SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session';
 
 const protectedPaths = ['/player', '/chat', '/setting', '/dashboard', '/profile'];
 
@@ -12,7 +12,8 @@ const isAuthenticated = (request: NextRequest): boolean => {
 
 const isGuest = (request: NextRequest): boolean => {
   const value = request.cookies.get('guest')?.value;
-  return !!value && (value.startsWith('g_') || value === '1');
+  // 仅承认签名合法且未过期的访客 Cookie；旧式 guest=1、裸 g_<uuid>、伪造/过期一律非访客。
+  return !!value && decodeGuestCookie(value) !== null;
 };
 
 export async function middleware(request: NextRequest) {
@@ -51,20 +52,23 @@ export async function middleware(request: NextRequest) {
       maxAge: SESSION_MAX_AGE,
     });
   } else if (guest) {
-    // 访客模式：若为旧版 guest=1 则升级为 g_<uuid>；若已有 g_<uuid> 则 30 天滑动续签
-    const guestId = (rawGuest && rawGuest.startsWith('g_'))
-      ? rawGuest
-      : `g_${crypto.randomUUID()}`;
-
-    response.cookies.set({
-      name: 'guest',
-      value: guestId,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: GUEST_COOKIE_MAX_AGE,
-    });
+    // 访客滑动续签：仅对验签通过的身份以同一 gid 重签（刷新 30 天过期），非法身份不续签、不升级。
+    const gid = rawGuest ? decodeGuestCookie(rawGuest) : null;
+    if (gid) {
+      try {
+        response.cookies.set({
+          name: 'guest',
+          value: encodeGuestId(gid),
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: GUEST_COOKIE_MAX_AGE,
+        });
+      } catch {
+        // 签名密钥缺失时不续签（失败闭环），保持原响应。
+      }
+    }
   }
 
   return response;

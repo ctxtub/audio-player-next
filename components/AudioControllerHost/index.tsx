@@ -13,6 +13,7 @@ import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useChatStore } from '@/stores/chatStore';
+import { createAudioEndedGuard } from '@/utils/audioEndedGuard';
 import type { AudioControllerHandle } from '@/types/audioPlayer';
 
 /**
@@ -55,9 +56,9 @@ const AudioControllerHost: React.FC = () => {
    */
   const isUnlockingRef = useRef(false);
   /**
-   * 标记是否需要忽略下一次 ended 事件（解锁使用的静音片段）。
+   * 解锁静音片段的 ended 守卫（R15：settled 清标记，防吞首个真实 ended）。
    */
-  const shouldIgnoreNextEndedRef = useRef(false);
+  const endedGuardRef = useRef(createAudioEndedGuard());
   const isTransitioningRef = useRef(false);
   const playbackRate = usePlaybackStore((state) => state.playbackRate);
   const registerAudioController = usePlaybackStore((state) => state.registerAudioController);
@@ -90,7 +91,7 @@ const AudioControllerHost: React.FC = () => {
 
     const unlockPromise = (async () => {
       isUnlockingRef.current = true;
-      shouldIgnoreNextEndedRef.current = true;
+      endedGuardRef.current.armForUnlock();
       audioEl.muted = true;
       audioEl.volume = 0;
       audioEl.preload = 'auto';
@@ -110,6 +111,8 @@ const AudioControllerHost: React.FC = () => {
         audioEl.muted = previousState.muted;
         audioEl.volume = previousState.volume;
         isUnlockingRef.current = false;
+        // 中文注释：R15——静音片段经 pause 收尾永不触发 ended，settled 即清标记。
+        endedGuardRef.current.settleUnlock();
         unlockPromiseRef.current = null;
       }
     })();
@@ -324,8 +327,8 @@ const AudioControllerHost: React.FC = () => {
     };
 
     const handleEnded = async () => {
-      if (shouldIgnoreNextEndedRef.current) {
-        shouldIgnoreNextEndedRef.current = false;
+      // 中文注释：仅跳过解锁窗口内置位的静音片段 ended（命中即消费一次）。
+      if (endedGuardRef.current.shouldSkipEnded()) {
         return;
       }
       handlePlaybackPause();

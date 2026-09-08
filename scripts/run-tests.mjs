@@ -28,6 +28,7 @@ const testFiles = [
   './tests/test-e2e-db-guard-regression.ts',
   './tests/test-e2e-stream-observe.ts',
   './tests/test-toast-terminal-priority.ts',
+  './tests/test-audio-ended-guard.ts',
 ];
 
 console.log('Running test suite...\n');

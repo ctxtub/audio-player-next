@@ -39,7 +39,8 @@ yarn dev -p 31111
 ### 3.1 服务端能力与路由规范
 - `POST /v1/chat/completions`：按请求序返回可配置的 SSE 故事流（固定 4 段文本，每段约 200 字，段落边界稳定），支持注入故障：`500`、慢速（延时发 token）、中途断流。
 - `POST /v1/audio/speech`：返回固定短 MP3 字节（约 2s），响应头含时长，保证 `<audio>` 断言（duration≈2s）稳定。
-- 故障注入开关由环境变量 `MOCK_FAIL_TTS=1`、`MOCK_FAIL_LLM=1`、`MOCK_SLOW_LLM_MS=…` 控制，另支持 `MOCK_FAIL_CONFIG=1`（`config.get` 失败）、`MOCK_FAIL_CONFIG_UPDATE=1`（`config.updateMine` 失败）、`MOCK_FAIL_MIGRATE_STEP=1`（注册迁移中途失败）、`MOCK_ABORT_LLM=1`（流中途断开）、`MOCK_SLOW_TTS_MS=…`（TTS 慢速，放大段落切换窗口），供 02/04/05/06 各功能套件复用。
+- 故障注入开关由环境变量 `MOCK_FAIL_TTS=1`、`MOCK_FAIL_LLM=1`、`MOCK_SLOW_LLM_MS=…` 控制，另支持 `MOCK_ABORT_LLM=1`（流中途断开）、`MOCK_SLOW_TTS_MS=…`（TTS 慢速，放大段落切换窗口），供 02/04/05/06 各功能套件复用。
+- 保留位声明（R4 实证固化）：`MOCK_FAIL_CONFIG`（`config.get` 失败）、`MOCK_FAIL_CONFIG_UPDATE`（`config.updateMine` 失败）、`MOCK_FAIL_MIGRATE_STEP`（注册迁移中途失败）在上游 Mock 与应用代码中**均无读取实现**（mock 仅头部注释透传记录）。`config.*`/注册迁移均为应用层 tRPC，不经过上游 Mock，故障须走应用层/调用侧等价注入（04-03 页内 fetch hook 范式、05-02 caller 写点包装范式）；01-05 初始化失败面运行时不可达，见各用例规范。
 
 ### 3.2 原子 DSH Worker 托管 Mock 生命周期契约（Canonical Execution Contract）
 每个原子 DSH Worker 独立拥有对其测试执行期间 Mock 服务的生命周期治理权，所有执行提示词必须强制遵守本契约：

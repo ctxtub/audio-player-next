@@ -49,13 +49,25 @@ if [ -n "${GIT_SHA}" ]; then
 fi
 
 # Build array of unique tags to publish: always include latest and sha-<shortSHA>
-declare -A SEEN_TAGS=()
+# Portable dedup via linear scan (macOS default bash 3.2 lacks `declare -A`).
 TAG_NAMES=()
+
+tag_seen() {
+  local needle="$1"
+  local count=${#TAG_NAMES[@]}
+  local i=0
+  while [ "$i" -lt "$count" ]; do
+    if [ "${TAG_NAMES[$i]}" = "$needle" ]; then
+      return 0
+    fi
+    i=$((i + 1))
+  done
+  return 1
+}
 
 add_tag() {
   local t="$1"
-  if [ -n "$t" ] && [ -z "${SEEN_TAGS[$t]:-}" ]; then
-    SEEN_TAGS[$t]=1
+  if [ -n "$t" ] && ! tag_seen "$t"; then
     TAG_NAMES+=("$t")
   fi
 }
@@ -94,12 +106,15 @@ if [ -n "${GIT_SHA}" ]; then
 fi
 BUILD_LABEL_ARGS+=(--label "org.opencontainers.image.source=https://github.com/${USERNAME}/${IMAGE_NAME}")
 
-BUILD_EXTRA_ARGS=()
+BUILD_EXTRA_PUSH_FLAG=""
 if [ "${PUSH_IMAGE:-true}" = "true" ] || [ "${PUSH_IMAGE:-true}" = "1" ]; then
-  BUILD_EXTRA_ARGS+=(--push)
+  BUILD_EXTRA_PUSH_FLAG="--push"
 fi
 
 echo "Building images for platforms: ${PLATFORMS}"
+# NOTE: ${BUILD_EXTRA_PUSH_FLAG} intentionally unquoted — empty value must vanish
+# entirely (bash < 4.4 errors on empty-array expansion under `set -u`); value is
+# a hardcoded literal so word-splitting cannot occur.
 docker buildx build \
   --builder "${BUILDER_NAME}" \
   --platform "${PLATFORMS}" \
@@ -108,7 +123,7 @@ docker buildx build \
   -f "${PROJECT_ROOT}/Dockerfile" \
   --provenance=false \
   --sbom=false \
-  "${BUILD_EXTRA_ARGS[@]}" \
+  ${BUILD_EXTRA_PUSH_FLAG} \
   "${PROJECT_ROOT}"
 
 if [ "${PUSH_IMAGE:-true}" = "true" ] || [ "${PUSH_IMAGE:-true}" = "1" ]; then

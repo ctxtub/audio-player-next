@@ -146,3 +146,25 @@ node -e "const{createClient}=require('@libsql/client');(async()=>{
    - **运行时与数据库资产持续复用**：应用服务（31111）与测试数据库（`.e2e-runtime/e2e.db`）跨用例保持存活，严禁跨用例重启应用或删除数据库。
    - **准入通过项保护**：已通过终态验证与完整证据核验的用例予以保护，队列仅调度待执行或未决项。
 3. **提交门禁**：全部执行 + 独立评审完成之前，测试资产不得 commit/push（本轮约定）。
+
+## 10. 写库单元防损坏标准流程（缺陷 #6，06-07 实证固化）
+
+- 背景：app dev server 常驻持有隔离库连接时，seed 并发写曾致 SQLite 页损坏；
+  后续轮以本流程规避成功，现固化为一切直接写库单元（seed/回滚/GC 准备）的强制流程。
+- 流程（`scripts/e2e-db-guard.mjs` 为跟踪执行器，`tests/test-e2e-db-guard.ts` 为契约测试）：
+  1. 准入 `check {{E2E_DB_URL}}`：共享/错误库（`prisma/dev.db`、`/app/data/app.db`、疑似生产库）
+     直接 `FORBIDDEN` 拒绝（路径先剥 `file:` 前缀与 query/fragment，再大小写不敏感规范比较，
+     已存在路径含 symlink 经 realpath 穿透复判）；库旁 `<db>.lock`、环境变量锁文件或活跃排他锁存在时 `LOCKED` 拒绝，
+     缺失库 `MISSING` 拒绝（建连接前，libsql 不得创建空库）；失败而不是硬写。
+  2. 写前 `snapshot {{E2E_DB_URL}}`（末行输出快照路径，损坏可回退）：与写库受同一排他守卫约束，
+     确认无锁后拷贝主库并附带 `-wal`/`-shm` 一致拷贝（WAL 安全）。
+  3. 串行单连接写库 `write {{E2E_DB_URL}} "<sql>"`：单 client（等价 `connection_limit=1`）+
+     `PRAGMA busy_timeout=5000`，一次一条语句，同连接随即 `integrity_check`；
+     Prisma 写库 URL 同步追加 `?busy_timeout=5000&connection_limit=1`；
+     同一用例内一次只跑一个写操作，严禁与常驻 app 写并发；
+     强制备份前置——目标库同目录无 `.snap-*.db` 快照时 `BACKUP_REQUIRED` 拒绝，须先 snapshot。
+  4. 每阶段 `verify {{E2E_DB_URL}}`（`PRAGMA integrity_check` 必须 `integrity=ok`）；
+     任一阶段失败即 `restore <快照> {{E2E_DB_URL}}` 后中止本单元并判 `UNVERIFIED`；
+     `restore` 同样受排他守卫约束，按快照恢复 `-wal`/`-shm`（快照中不存在的 sidecar 在目标库上清除）。
+- 禁止事项：手写 SQL 以外低阶修复（如 `.recover`）；未经快照的直接写库；
+  对 `prisma/dev.db` 与生产库执行本流程（隔离库专用）。

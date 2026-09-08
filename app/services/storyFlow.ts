@@ -7,6 +7,7 @@ import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
 import type { GenerationRecord } from '@/stores/generationHistoryStore';
 import type { StoryCardPart } from '@/types/chat';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
+import { computeStoryContentHash, normalizeStoryText } from '@/utils/segmentation';
 
 /**
  * 可播放段落对象，包含音频地址与文本内容，并标注来源（首段/预加载/即时生成）。
@@ -165,6 +166,20 @@ export const playStoryText = async (storyText: string, messageId?: string): Prom
   const validId = messageId && !messageId.startsWith('replay-text-') ? messageId : '';
 
   if (validId) {
+    // 断点恢复：若端侧已持有同一故事的真实断点（与按钮文案同源的 nextParagraphIndex），
+    // 则直接从该断点续播；否则回落为从头播放。指纹比对可防止正文漂移时误用旧断点。
+    const progressState = usePlaybackProgressStore.getState();
+    const incomingHash = computeStoryContentHash(normalizeStoryText(storyText));
+    const canResumeFromBreakpoint =
+      progressState.sourceId === validId &&
+      progressState.nextParagraphIndex > 0 &&
+      progressState.paragraphs.length > 0 &&
+      progressState.contentHash === incomingHash &&
+      progressState.nextParagraphIndex < progressState.totalParagraphs;
+    if (canResumeFromBreakpoint) {
+      await progressState.resumeRehydratedPlayback();
+      return;
+    }
     usePlaybackProgressStore.getState().setActiveStory({
       sourceType: 'chat',
       sourceId: validId,

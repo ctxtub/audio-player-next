@@ -20,3 +20,9 @@
 - 清理：清进度行、清 cookie。
 - 证据要求：`audio.json`、`ui-resume-tts-fail.png`、`db.txt`。
 - 溯源：`stores/playbackProgressStore.ts:325-336`（`playParagraph` 失败保留 `isRehydratedReady` 可重试）；`stores/playbackProgressStore.ts:361`（`clearRehydratedReady` 仅成功路径调用）；`components/AudioControllerHost/index.tsx:321-356`（段落切换失败面）。
+
+## Toast 语义定稿（缺陷 #9，接受现状）
+- 段落切换快速失败时，过程性 toast 可被后续终态失败 toast 经 `GlassToast` 单例替换（`components/ui/GlassToast.tsx:119-130`：`show` 清 `hideTimer` 后直接 `root?.render`，单容器、无队列/最短展示/多 toast）；终态失败提示优先。
+- 过程提示不构成成功/失败证据；成功/失败仅以本规范逐层断言（浮窗可重试态、`audio.paused`、进度行保留、同段重试）为准，不得以过程 toast 是否可见判分。
+- 仅当等待通常超过约 500–800ms 且需要防重复点击/解释等待时，才考虑播放器局部 loading 状态；本缺陷不做该 UI 改造。
+- 失败调用点：`stores/playbackProgressStore.ts:370`（`playParagraph` 合成失败终态提示）；`components/AudioControllerHost/index.tsx:358-362`（`handleEnded` 段落切换失败终态提示）。两者竞态时以后一次 `show` 为准。

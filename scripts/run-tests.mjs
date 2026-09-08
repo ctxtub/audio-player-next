@@ -26,6 +26,7 @@ const testFiles = [
   './tests/test-restart-mock-managed.ts',
   './tests/test-e2e-db-guard.ts',
   './tests/test-e2e-stream-observe.ts',
+  './tests/test-toast-terminal-priority.ts',
 ];
 
 console.log('Running test suite...\n');

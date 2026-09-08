@@ -22,6 +22,7 @@ const testFiles = [
   './tests/test-paragraph-resume.ts',
   './tests/test-storycard-resume-fix01.ts',
   './tests/test-fix03-resume-countdown.ts',
+  './tests/test-fix04-no-autocontinue.ts',
 ];
 
 console.log('Running test suite...\n');

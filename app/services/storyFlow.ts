@@ -211,6 +211,16 @@ export const handleNearEnd = async (): Promise<void> => {
     return;
   }
 
+  // 中文注释：段落级故事（含恢复态/一次性回放）由段落预载推进，严禁走聊天续写分支。
+  // 进度侧一次性标记与播放侧可能不同步，此处同时检查两者，避免最终段前误触“请继续故事”。
+  const progressStateForNearEnd = usePlaybackProgressStore.getState();
+  if (progressStateForNearEnd.isOneShot) {
+    return;
+  }
+  if (progressStateForNearEnd.sourceId && progressStateForNearEnd.totalParagraphs > 0) {
+    return;
+  }
+
   if (playbackState.remainingMs !== null && playbackState.remainingMs <= 0) {
     return;
   }
@@ -240,7 +250,9 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
   const remainingMs = playbackStore.remainingMs ?? 0;
 
   // 一次性播放（历史回放）：播完即止，不续写下一段
-  if (playbackStore.isOneShot) {
+  // 中文注释：段落路径（恢复卡/重合成）仅在进度侧持有一次性标记，播放侧可能未同步，故同时检查两者。
+  const progressStateForOneShot = usePlaybackProgressStore.getState();
+  if (playbackStore.isOneShot || progressStateForOneShot.isOneShot) {
     playbackStore.reset();
     usePreloadStore.getState().reset();
     clearPreloadRetryTimer();
@@ -279,8 +291,14 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
 
   // ChatStore 中无后续段落，尝试从预加载 Store 获取。
   // 场景：当前播放的是最后一段，或者预加载的内容尚未同步到 ChatStore。
+  // 中文注释：段落级故事播毕不得自动生成新聊天段，仅允许消费已存在的下一段；
+  // 此处直接返回，避免 requestPreload 触发“请继续故事”并增殖卡片。
 
   let result: { segment: string; audioUrl: string; messageId?: string } | null = null;
+  const progressStateForPreload = usePlaybackProgressStore.getState();
+  if (progressStateForPreload.sourceId && progressStateForPreload.totalParagraphs > 0) {
+    return null;
+  }
   const preloadState = usePreloadStore.getState();
 
   try {

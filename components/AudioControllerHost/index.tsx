@@ -293,12 +293,17 @@ const AudioControllerHost: React.FC = () => {
             progressState.prefetchNextParagraph(progressState.nextParagraphIndex + 1);
           } else {
             // 聊天续写模式预加载
+            // 中文注释：段落级故事与一次性回放严禁走聊天续写，仅无段落跟踪的 legacy 音频允许。
             const currentMessageId = usePlaybackStore.getState().currentMessageId;
             const isLast = currentMessageId
               ? useChatStore.getState().selectors.isLatestMessage(currentMessageId)
               : false;
+            const playbackOneShot = usePlaybackStore.getState().isOneShot;
+            const progressOneShot = progressState.isOneShot;
+            const isParagraphTracked =
+              !!progressState.sourceId && progressState.totalParagraphs > 0;
 
-            if (isLast && !usePlaybackStore.getState().isOneShot) {
+            if (isLast && !playbackOneShot && !progressOneShot && !isParagraphTracked) {
               hasTriggeredPreload.current = true;
               handleNearEnd().catch((error) => {
                 console.error('预加载下一段音频失败:', error);
@@ -326,21 +331,23 @@ const AudioControllerHost: React.FC = () => {
       handlePlaybackPause();
       try {
         const progressStore = usePlaybackProgressStore.getState();
-        // 优先检查当前多段故事是否包含未播自然段
-        if (
-          progressStore.sourceId &&
-          progressStore.totalParagraphs > 1 &&
-          progressStore.nextParagraphIndex + 1 < progressStore.totalParagraphs
-        ) {
-          isTransitioningRef.current = true;
-          await progressStore.handleParagraphEnded();
-          isTransitioningRef.current = false;
-          return;
-        }
-
-        // 当前故事所有自然段播毕：主动注销断点
+        // 中文注释：段落级故事（含故事卡/恢复重合成/一次性回放）统一走段落收尾；
+        // 最终段在段内 clearProgress 后即止，严禁落入聊天续写（防“请继续故事”与卡片增殖）。
+        // 有后续段时段内自动推进下一段（临段预载/推进语义不受影响）。
         if (progressStore.sourceId && progressStore.totalParagraphs > 0) {
-          await progressStore.clearProgress();
+          isTransitioningRef.current = true;
+          let continued = false;
+          try {
+            continued = await progressStore.handleParagraphEnded();
+          } finally {
+            isTransitioningRef.current = false;
+          }
+          if (continued) {
+            return;
+          }
+          // 中文注释：最终段已清理断点，复位预载锁后回到可再播，不触发 agent.interact。
+          usePreloadStore.getState().reset();
+          return;
         }
 
         const nextSegment = await handleSegmentEnded();

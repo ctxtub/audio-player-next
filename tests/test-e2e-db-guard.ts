@@ -12,7 +12,7 @@ import { createClient } from '@libsql/client';
  * 覆盖行为（06-07 实证：写前快照 + 每阶段 integrity_check）：
  * 1. verify 对健康库返回 ok（exit 0）。
  * 2. verify 对损坏库失败（exit 非 0），随后 restore 快照可恢复数据。
- * 3. 共享/错误库一律被拒绝：tmp 沙盒内 `prisma/dev.db` 誘饵（含大写/query/file:/symlink 变体）、
+ * 3. 共享/错误库一律被拒绝：tmp 沙盒内 `prisma/dev.db` 誘饵（含大写/query/fragment/file:/FILE:/symlink 变体）、
  *    生产库与疑似生产库；全程只用 tmp 路径，绝不 stat/read 真实开发库。
  * 4. 缺失库在建连接前拒绝：check/verify/snapshot/write/restore 对不存在路径失败且不产生文件副作用。
  * 5. 受管 app 占用（库旁锁标记或环境变量锁文件）时 check/write/snapshot/restore 失败而非硬写，解锁后恢复。
@@ -158,7 +158,7 @@ function makeDecoyDb(root: string, rel: string): string {
 
 /**
  * 用例 3：共享/错误库一律被拒绝（tmp 沙盒誘饵 + 变体），誘饵未被触碰（体积/mtime/内容哈希三重指纹）。
- * 变体：大写路径、query 参数、file: URL、symlink 指向誘饵、生产库字面量与沙盒形似路径、疑似生产库。
+ * 变体：大写路径、query 参数、fragment 片段、file:/FILE: URL、symlink 指向誘饵、生产库字面量与沙盒形似路径、疑似生产库。
  * 全程只用 tmp 路径，绝不 stat/read 真实 prisma/dev.db。
  */
 async function caseForbiddenVariants(): Promise<void> {
@@ -185,10 +185,18 @@ async function caseForbiddenVariants(): Promise<void> {
         // 中文注释：路径解析变体同样 FORBIDDEN（剥 query/fragment、大小写不敏感、file: 前缀、symlink 穿透）。
         const outQuery: string = expectGuardFail('check', `${decoy}?busy_timeout=5000`);
         assert.ok(outQuery.includes('FORBIDDEN'), `query 变体应 FORBIDDEN，实际=${outQuery}`);
+        const outFragment: string = expectGuardFail('check', `${decoy}#frag`);
+        assert.ok(outFragment.includes('FORBIDDEN'), `fragment 变体应 FORBIDDEN，实际=${outFragment}`);
+        const outQueryFragment: string = expectGuardFail('check', `${decoy}?busy_timeout=5000#frag`);
+        assert.ok(outQueryFragment.includes('FORBIDDEN'), `query+fragment 变体应 FORBIDDEN，实际=${outQueryFragment}`);
         const outUpper: string = expectGuardFail('check', upperDecoy);
         assert.ok(outUpper.includes('FORBIDDEN'), `大写变体应 FORBIDDEN，实际=${outUpper}`);
         const outFile: string = expectGuardFail('check', `file:${decoy}`);
         assert.ok(outFile.includes('FORBIDDEN'), `file: 变体应 FORBIDDEN，实际=${outFile}`);
+        const outFileUpper: string = expectGuardFail('check', `FILE:${decoy}`);
+        assert.ok(outFileUpper.includes('FORBIDDEN'), `FILE: 大写协议头变体应 FORBIDDEN，实际=${outFileUpper}`);
+        const outFileFragment: string = expectGuardFail('check', `FILE:${decoy}#frag`);
+        assert.ok(outFileFragment.includes('FORBIDDEN'), `FILE:+fragment 组合变体应 FORBIDDEN，实际=${outFileFragment}`);
         const linkPath: string = path.join(dirLower, 'link.db');
         symlinkSync(decoy, linkPath);
         const outLink: string = expectGuardFail('check', linkPath);

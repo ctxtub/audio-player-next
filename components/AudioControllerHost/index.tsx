@@ -59,7 +59,6 @@ const AudioControllerHost: React.FC = () => {
    * 解锁静音片段的 ended 守卫（R15：settled 清标记，防吞首个真实 ended）。
    */
   const endedGuardRef = useRef(createAudioEndedGuard());
-  const isTransitioningRef = useRef(false);
   const playbackRate = usePlaybackStore((state) => state.playbackRate);
   const registerAudioController = usePlaybackStore((state) => state.registerAudioController);
 
@@ -338,13 +337,9 @@ const AudioControllerHost: React.FC = () => {
         // 最终段在段内 clearProgress 后即止，严禁落入聊天续写（防“请继续故事”与卡片增殖）。
         // 有后续段时段内自动推进下一段（临段预载/推进语义不受影响）。
         if (progressStore.sourceId && progressStore.totalParagraphs > 0) {
-          isTransitioningRef.current = true;
-          let continued = false;
-          try {
-            continued = await progressStore.handleParagraphEnded();
-          } finally {
-            isTransitioningRef.current = false;
-          }
+          // 中文注释：R16——isTransitioningRef 经全仓确认只写不读，已移除；
+          // 段落推进直接 await，无过渡守卫。
+          const continued = await progressStore.handleParagraphEnded();
           if (continued) {
             return;
           }
@@ -359,7 +354,6 @@ const AudioControllerHost: React.FC = () => {
         }
         await handlePlay(nextSegment.audioUrl, nextSegment.messageId);
       } catch (error) {
-        isTransitioningRef.current = false;
         const message = error instanceof Error ? error.message : '无法播放下一段音频';
         GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
       }

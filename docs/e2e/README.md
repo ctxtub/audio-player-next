@@ -234,7 +234,7 @@ docs/e2e/
 | H-09 | isLatestMessage 门控语义边界→旧卡回放消费新卡预载 | `stores/chatStore.ts:584-593`、`components/AudioControllerHost/index.tsx:296-306` | [`E2E-03-11`](./03-播放状态与内核一致性/11-旧卡回放不消费新预载.md) |
 | H-10 | `remainingAllowedMs=null` 水合恢复→有声而 UI 未进入播放态 | `stores/playbackStore.ts:250`、`stores/playbackProgressStore.ts:249,262` | [`E2E-03-05`](./03-播放状态与内核一致性/05-断点恢复null预算播放状态.md) |
 | H-11 | 恢复卡（audioUrl 置空）回放结束后的续写/复位路径分歧 | `stores/chatStore.ts:166-183`、`app/services/storyFlow.ts:163-183` | [`E2E-03-10`](./03-播放状态与内核一致性/10-历史恢复卡回放重合成.md) |
-| H-12 | `isTransitioningRef` 置位后从未读取→ended 双跳守卫失效 | `components/AudioControllerHost/index.tsx:60-61,335,337,352` | [`E2E-03-06`](./03-播放状态与内核一致性/06-段落收尾ended双跳竞态防线.md) |
+| H-12 | `isTransitioningRef` 置位后从未读取→ended 双跳守卫失效（R16 已移除死守卫，假设关闭） | `components/AudioControllerHost/index.tsx`（历史行号 `60-61,335,337,352`，已清理） | [`E2E-03-06`](./03-播放状态与内核一致性/06-段落收尾ended双跳竞态防线.md) |
 | H-13 | 试音独立 Audio 与主播放双声源并存的可感知性 | `app/(main)/setting/components/VoiceServiceSection.tsx:30-44,80-84` | [`E2E-03-12`](./03-播放状态与内核一致性/12-设置页试音与主播放并发双声源.md) |
 | H-14 | 配置乐观保存失败不回滚→UI 与服务端值长期分歧 | `stores/configStore.ts:201-213` | [`E2E-04-03`](./04-云端存储与多端数据调和/03-配置乐观保存失败回滚.md) |
 | H-15 | 双标签同账号并发写→快照 last-writer-wins 整体覆盖无合并 | `lib/server/chatConversation.ts:63-88` | [`E2E-04-01`](./04-云端存储与多端数据调和/01-双标签同账号并发写入覆盖.md) |

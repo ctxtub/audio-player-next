@@ -19,4 +19,7 @@
 - 网络/数据断言：`saveProgress` 的 `nextParagraphIndex` 单调。
 - 清理：清进度行；恢复音频时长。
 - 证据要求：`console.json`、`db.txt`。
-- 溯源：`components/AudioControllerHost/index.tsx:60-61,335,337,352`（`isTransitioningRef` 置位后从未读取——守卫失效，**待验证假设 H-12**）。
+- 溯源：`components/AudioControllerHost/index.tsx`（R16 已清理：`isTransitioningRef`
+  经全仓 grep 确认只写不读、无隐性用途，死守卫已移除；H-12 假设就此关闭——
+  段落切换无过渡守卫，防线现由 `handleParagraphEnded` 内单调推进语义承担）。
+  历史行号归档：`index.tsx:60-61,335,337,352`（移除前）。

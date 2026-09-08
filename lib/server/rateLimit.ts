@@ -51,6 +51,8 @@ export class SlidingWindowRateLimiter {
 
     /**
      * 检查并消耗配额，返回详细状态。
+     * 限流语义：仅成功（allowed: true）时写入当前时间戳；被拒（allowed: false）时
+     * 不写入时间戳、不延长窗口，窗口仅随成功写入自然滑动。
      */
     checkAndConsume(key: string, limit: number, customWindowMs?: number): RateLimitStatus {
         const now = this.nowFn();
@@ -69,6 +71,7 @@ export class SlidingWindowRateLimiter {
         }
 
         if (timestamps.length >= limit) {
+            // 被拒路径：不写入时间戳、不延长窗口，直接返回当前窗口的重置时间。
             const oldestInWindow = timestamps[0] ?? now;
             const resetMs = Math.max(0, oldestInWindow + windowMs - now);
             return {
@@ -79,6 +82,7 @@ export class SlidingWindowRateLimiter {
             };
         }
 
+        // 成功路径：仅此处写入时间戳，失败/被拒尝试不计数。
         timestamps.push(now);
         const oldestInWindow = timestamps[0] ?? now;
         const resetMs = Math.max(0, oldestInWindow + windowMs - now);

@@ -124,7 +124,7 @@ docs/e2e/
 55. [`E2E-06-03` (AUT-BROWSER, P1)](./06-异常处理与接口限流/03-TTS合成失败停声不僵尸.md) — TTS 合成失败停声不僵尸
 56. [`E2E-06-04` (AUT-BROWSER, P1)](./06-异常处理与接口限流/04-流式生成中断failed标记与重试.md) — 流式生成中断 failed 标记与重试上下文
 57. [`E2E-06-05` (AUT-BROWSER, P2)](./06-异常处理与接口限流/05-断点与切换TTS失败重试边界.md) — 断点恢复/段落切换中 TTS 失败可重试边界
-58. [`E2E-06-01` (AUT-API+AUT-BROWSER, P0)](./06-异常处理与接口限流/01-访客429限流与重试烧配额.md) — 访客 agent 限流 429 与重试烧配额 (⚠️ H-17)
+58. [`E2E-06-01` (AUT-API+AUT-BROWSER, P0)](./06-异常处理与接口限流/01-访客429限流与重试烧配额.md) — 访客 agent 限流 429 与共同失败+失败标记增殖（被拒不计数，⚠️ H-17）
 
 - **人工排除项（manual_excluded，1 项）**：
   - [`E2E-06-08` (MANUAL, P3)](./06-异常处理与接口限流/08-bfcache与pageshow恢复探针.md) — bfcache/pageshow 恢复探针（人工探索性测试，移出自动化调度队列）
@@ -205,7 +205,7 @@ docs/e2e/
 - [`E2E-05-10` · 注册/登录校验失败与 sessionGuard 豁免](./05-认证授权与会话生命周期/10-校验失败与sessionGuard豁免.md)（P1｜AUT-BROWSER+AUT-API）
 
 ### 06-异常处理与接口限流
-- [`E2E-06-01` · 访客 agent 限流 429 与重试烧配额](./06-异常处理与接口限流/01-访客429限流与重试烧配额.md)（P0｜AUT-API+AUT-BROWSER｜⚠️ H-17）
+- [`E2E-06-01` · 访客 agent 限流 429 与共同失败+失败标记增殖](./06-异常处理与接口限流/01-访客429限流与重试烧配额.md)（P0｜AUT-API+AUT-BROWSER｜⚠️ H-17）
 - [`E2E-06-02` · TTS 限流分层与语音白名单 fallback](./06-异常处理与接口限流/02-TTS限流分层与语音白名单回退.md)（P2｜AUT-API）
 - [`E2E-06-03` · TTS 合成失败停声不僵尸](./06-异常处理与接口限流/03-TTS合成失败停声不僵尸.md)（P1｜AUT-BROWSER）
 - [`E2E-06-04` · 流式生成中断 failed 标记与重试上下文](./06-异常处理与接口限流/04-流式生成中断failed标记与重试.md)（P1｜AUT-BROWSER）
@@ -238,7 +238,7 @@ docs/e2e/
 | H-14 | 配置乐观保存失败不回滚→UI 与服务端值长期分歧 | `stores/configStore.ts:201-213` | [`E2E-04-03`](./04-云端存储与多端数据调和/03-配置乐观保存失败回滚.md) |
 | H-15 | 双标签同账号并发写→快照 last-writer-wins 整体覆盖无合并 | `lib/server/chatConversation.ts:63-88` | [`E2E-04-01`](./04-云端存储与多端数据调和/01-双标签同账号并发写入覆盖.md) |
 | H-16 | 1s 防抖 + sending 跳过、无 beforeunload flush→快速退出丢尾并悬空进度 | `stores/chatStore.ts:188-206`、`stores/playbackProgressStore.ts:157-186` | [`E2E-04-02`](./04-云端存储与多端数据调和/02-快速退出丢失尾部与悬空进度.md) |
-| H-17 | 访客限流窗口内预载重试链与人工操作互相挤兑→级联失败 | `lib/trpc/routers/agent.ts:17-19`、`stores/preloadStore.ts:109-126` | [`E2E-06-01`](./06-异常处理与接口限流/01-访客429限流与重试烧配额.md) |
+| H-17 | 访客限流窗口内预载重试链与人工操作共同失败+失败标记增殖（被拒不计数、不延长窗口） | `lib/trpc/routers/agent.ts:17-19`、`stores/preloadStore.ts:109-126`、`lib/server/rateLimit.ts:71-80` | [`E2E-06-01`](./06-异常处理与接口限流/01-访客429限流与重试烧配额.md) |
 | H-18 | 过期会话+有效访客 cookie 并存→middleware 静默放行为访客态（复活） | `middleware.ts:43-68`、`lib/trpc/routers/auth.ts:184-214` | [`E2E-05-07`](./05-认证授权与会话生命周期/07-过期会话加残留访客cookie静默复活.md) |
 | H-19 | 登出→再入访客每次新 `g_<uuid>`→旧访客行成孤儿且新身份完全隔离 | `lib/trpc/routers/auth.ts:149-168` | [`E2E-05-05`](./05-认证授权与会话生命周期/05-登出后再入访客新身份隔离.md) |
 | H-20 | 两次并发 `startStoryPlayback` 互相复位→首次会话状态悬挂 | `app/services/chatFlow.ts:127`、`app/services/storyFlow.ts:73-115` | [`E2E-02-05`](./02-交互并发与竞态防御/05-故事卡连击双发抑制.md) |

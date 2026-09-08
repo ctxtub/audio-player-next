@@ -31,6 +31,32 @@ async function runRateLimitTests() {
     assert.strictEqual(limiter.consume('user:1', 3), true, 'Call after window slide should be allowed');
     console.log('PASS: Sliding window consumption and time-based sliding pass');
 
+    console.log('--- 1b. Rejected attempts do not record timestamps nor extend window ---');
+    currentTime = 3_000_000;
+    const rejectLimiter = new SlidingWindowRateLimiter({
+        windowMs: 60_000,
+        maxKeys: 100,
+        nowFn: () => currentTime,
+    });
+    assert.strictEqual(rejectLimiter.consume('user:reject', 2), true, 'Reject-case call 1 allowed');
+    assert.strictEqual(rejectLimiter.consume('user:reject', 2), true, 'Reject-case call 2 allowed');
+    const firstReject = rejectLimiter.checkAndConsume('user:reject', 2);
+    assert.strictEqual(firstReject.allowed, false, '3rd call must be rejected');
+    const firstResetMs = firstReject.resetMs;
+    // Repeated rejections at later times must not push timestamps: resetMs must shrink, not extend.
+    currentTime += 10_000;
+    const secondReject = rejectLimiter.checkAndConsume('user:reject', 2);
+    assert.strictEqual(secondReject.allowed, false, '4th call must still be rejected');
+    assert.ok(
+        secondReject.resetMs < firstResetMs,
+        `Rejected attempts must not extend window (first resetMs=${firstResetMs}, second=${secondReject.resetMs})`,
+    );
+    // After the original window slides past the 2 successful timestamps, access is allowed again
+    // even though rejections happened in between.
+    currentTime += 51_000;
+    assert.strictEqual(rejectLimiter.consume('user:reject', 2), true, 'Call after window slide must be allowed despite interim rejections');
+    console.log('PASS: Rejected attempts do not count toward quota nor extend window');
+
     console.log('--- 2. Testing Bounded Memory & Capacity Protection ---');
     currentTime = 2_000_000;
     const boundedLimiter = new SlidingWindowRateLimiter({

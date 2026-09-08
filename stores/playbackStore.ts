@@ -114,6 +114,11 @@ type PlaybackStoreActions = {
     totalParagraphs: number;
   }) => void;
   clearRehydratedReady: () => void;
+  /**
+   * 补齐倒计时预算：仅填充仍为 null 的剩余/总额，不覆盖已有数值。
+   * @param budgetMs 回落预算（毫秒），必须为有限正数
+   */
+  ensureCountdownBudget: (budgetMs: number) => void;
   setParagraphInfo: (info: {
     currentParagraphIndex: number;
     totalParagraphs: number;
@@ -427,6 +432,22 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     },
     clearRehydratedReady: () => {
       set({ isRehydratedReady: false });
+    },
+    /**
+     * 补齐倒计时预算：仅在缺失时回填，不覆盖睡眠倒计时继承的已有数值。
+     * @param budgetMs 回落预算（毫秒），须为有限正数，否则直接忽略
+     */
+    ensureCountdownBudget: (budgetMs) => {
+      if (!Number.isFinite(budgetMs) || budgetMs <= 0) {
+        return;
+      }
+      const current = get();
+      if (current.remainingMs === null || current.totalAllowedMs === null) {
+        set({
+          remainingMs: current.remainingMs ?? budgetMs,
+          totalAllowedMs: current.totalAllowedMs ?? budgetMs,
+        });
+      }
     },
     setParagraphInfo: (info) => {
       set((state) => ({

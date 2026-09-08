@@ -21,6 +21,7 @@ const testFiles = [
   './tests/test-guest-creative-e2e-harness.ts',
   './tests/test-paragraph-resume.ts',
   './tests/test-storycard-resume-fix01.ts',
+  './tests/test-fix03-resume-countdown.ts',
 ];
 
 console.log('Running test suite...\n');

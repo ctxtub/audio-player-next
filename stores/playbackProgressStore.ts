@@ -321,7 +321,29 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
     }
 
     await usePlaybackStore.getState().ensureUnlocked();
-    const targetIndex = state.nextParagraphIndex;
+    // 中文注释：恢复态预算补齐——DTO 数值优先（水合已写入 playbackStore），缺失时回落到用户配置播放时长
+    // （与 startStoryPlayback 同源：playDuration 分钟→毫秒），避免 remainingMs=null 导致 start() 早返。
+    // 仅补齐 null 项，不覆盖睡眠倒计时继承的已有数值；新故事/一次性回放路径不经过此处，语义不受影响。
+    const playbackState = usePlaybackStore.getState();
+    if (playbackState.remainingMs === null || playbackState.totalAllowedMs === null) {
+      const playDurationMinutes = useConfigStore.getState().apiConfig.playDuration;
+      if (
+        typeof playDurationMinutes === 'number' &&
+        Number.isFinite(playDurationMinutes) &&
+        playDurationMinutes > 0
+      ) {
+        const fallbackBudgetMs = playDurationMinutes * 60000;
+        playbackState.ensureCountdownBudget(fallbackBudgetMs);
+        const latest = get();
+        if (latest.remainingAllowedMs === null || latest.totalAllowedMs === null) {
+          set({
+            remainingAllowedMs: latest.remainingAllowedMs ?? fallbackBudgetMs,
+            totalAllowedMs: latest.totalAllowedMs ?? fallbackBudgetMs,
+          });
+        }
+      }
+    }
+    const targetIndex = get().nextParagraphIndex;
     await get().playParagraph(targetIndex);
   },
 

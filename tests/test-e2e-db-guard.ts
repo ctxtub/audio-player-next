@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createClient } from '@libsql/client';
@@ -156,7 +157,7 @@ function makeDecoyDb(root: string, rel: string): string {
 }
 
 /**
- * 用例 3：共享/错误库一律被拒绝（tmp 沙盒誘饵 + 变体），誘饵未被触碰。
+ * 用例 3：共享/错误库一律被拒绝（tmp 沙盒誘饵 + 变体），誘饵未被触碰（体积/mtime/内容哈希三重指纹）。
  * 变体：大写路径、query 参数、file: URL、symlink 指向誘饵、生产库字面量与沙盒形似路径、疑似生产库。
  * 全程只用 tmp 路径，绝不 stat/read 真实 prisma/dev.db。
  */
@@ -168,6 +169,8 @@ async function caseForbiddenVariants(): Promise<void> {
     try {
         const decoy: string = makeDecoyDb(path.join(dirLower, 'sandbox'), path.join('prisma', 'dev.db'));
         const before = statSync(decoy);
+        // 中文注释：誘饵为已知固定内容，哈希前后比对证明拒绝发生在任何读写之前。
+        const beforeHash: string = createHash('sha256').update(readFileSync(decoy)).digest('hex');
         const upperDecoy: string = makeDecoyDb(path.join(dirUpper, 'sandbox'), path.join('PRISMA', 'DEV.DB'));
         const prodShaped: string = makeDecoyDb(path.join(dirProd, 'sandbox'), path.join('app', 'data', 'app.db'));
         const prodLike: string = path.join(dirProd, 'prod-backup.db');
@@ -199,6 +202,8 @@ async function caseForbiddenVariants(): Promise<void> {
         const after = statSync(decoy);
         assert.strictEqual(after.size, before.size, '誘饵体积不得变化');
         assert.strictEqual(after.mtimeMs, before.mtimeMs, '誘饵修改时间不得变化');
+        const afterHash: string = createHash('sha256').update(readFileSync(decoy)).digest('hex');
+        assert.strictEqual(afterHash, beforeHash, '誘饵内容哈希不得变化');
     } finally {
         rmSync(dirLower, { recursive: true, force: true });
         rmSync(dirUpper, { recursive: true, force: true });
@@ -243,6 +248,8 @@ async function caseLockRefused(): Promise<void> {
     const prevEnv: string | undefined = process.env.E2E_GUARD_APP_LOCK;
     try {
         const dbPath: string = await makeTempDb(dir, 'managed.db');
+        // 中文注释：先取一份有效快照，供锁下 restore 拒绝断言使用（快照缺失会先报 MISSING 而非 LOCKED）。
+        const lockedSnap: string = takeSnapshot(dbPath, dir);
         // 中文注释：库旁锁标记模拟常驻 app 占用（隔离的临时标记，不碰真实端口与资产）。
         writeFileSync(`${dbPath}.lock`, 'managed-app');
         const outCheck: string = expectGuardFail('check', dbPath);
@@ -251,13 +258,18 @@ async function caseLockRefused(): Promise<void> {
         assert.ok(outWrite.includes('LOCKED'), `占用时 write 应 LOCKED 而非硬写，实际=${outWrite}`);
         const outSnap: string = expectGuardFail('snapshot', dbPath);
         assert.ok(outSnap.includes('LOCKED'), `占用时 snapshot 应 LOCKED，实际=${outSnap}`);
+        const outRestore: string = expectGuardFail('restore', lockedSnap, dbPath);
+        assert.ok(outRestore.includes('LOCKED'), `占用时 restore 应 LOCKED 而非回退覆盖，实际=${outRestore}`);
         assert.deepStrictEqual(await readRows(dbPath), ['origin'], '拒绝写库后数据不得变化');
         // 中文注释：环境变量锁文件同样视为受管占用。
         const envLock: string = path.join(dir, 'app.lock');
         writeFileSync(envLock, 'managed-app');
         process.env.E2E_GUARD_APP_LOCK = envLock;
         rmSync(`${dbPath}.lock`, { force: true });
-        expectGuardFail('check', dbPath);
+        const outEnvCheck: string = expectGuardFail('check', dbPath);
+        assert.ok(outEnvCheck.includes('LOCKED'), `环境锁占用时 check 应 LOCKED，实际=${outEnvCheck}`);
+        const outEnvRestore: string = expectGuardFail('restore', lockedSnap, dbPath);
+        assert.ok(outEnvRestore.includes('LOCKED'), `环境锁占用时 restore 应 LOCKED 而非回退覆盖，实际=${outEnvRestore}`);
         rmSync(envLock, { force: true });
         delete process.env.E2E_GUARD_APP_LOCK;
         const checkOut: string = execFileSync('node', [guardScript, 'check', dbPath], { encoding: 'utf8' });

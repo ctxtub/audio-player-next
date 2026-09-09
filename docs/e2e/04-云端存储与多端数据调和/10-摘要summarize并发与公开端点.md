@@ -20,4 +20,4 @@
 - 清理：清空会话、清 cookie。
 - 证据要求：`network.json`、`db.txt`（消息序）。
 - 溯源：`lib/trpc/routers/agent.ts:103-112`（`summarize: guardedProcedure`＋guest 6/authed 20 限流）；`stores/chatStore.ts`（摘要插入与流 delta 目标分离）；回归测试 `tests/test-agent-summarize-guard.ts`（匿名 401 零 LLM/访客登录放行/限流边界）。
-- 备注：`745de3c` 前“无鉴权 200 可达”刻画已过期作废；匿名配额敞口已由 guardedProcedure＋限流收敛。`overlapProven:false`——并发交叠（流式 delta 与摘要插入错位互斥）实证仍待补；本例与 E2E-06-06 同属鉴权一致侧，不再构成矩阵两端。
+- 备注：`745de3c` 前“无鉴权 200 可达”刻画已过期作废；匿名配额敞口已由 guardedProcedure＋限流收敛。`overlapProven:false`——并发交叠（流式 delta 与摘要插入错位互斥）实证仍待补；本例与 E2E-06-06 同属鉴权一致侧，不再构成矩阵两端。W2D 重验（2026-09-09，隔离 `:32231`，见 `.e2e-results/E2E-W2D-04-10/report.md`）：匿名 401＋访客 6 放行/第 7 次 429＋登录 20 放行/第 21 次 429 活体全过；`overlapProven:false` 保持，判 CONDITIONAL-PASS。

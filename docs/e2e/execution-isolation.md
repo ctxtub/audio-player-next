@@ -76,7 +76,7 @@ yarn dev -p 31111
 ## 4. 数据准备与夹具
 
 - 注册类账号经 `/auth` UI 注册生成（同时验证注册链路），或用 `{{E2E_DB_URL}}` + Prisma 直插 seed 脚本（存 `.e2e-runtime/seed.mjs`）。
-- 访客身份：浏览器清 cookie 后经「访客进入」按钮创建，服务端生成 `g_<uuid>`；需要固定访客时用 seed 指定 `g_e2e_seed1` 这类**仓库内可见的假 ID**（不含真实凭证）。
+- 访客身份：浏览器清 cookie 后经「访客进入」按钮创建，服务端签发 `guest=<opaque 签名 token>`（验签还原出 `g_` 开头 gid，不以明文 `g_` 存放；响应体不返 `guestId`）；需要固定访客时用 seed 指定 `g_e2e_seed1` 这类**仓库内可见的假 ID**（仅 seed 名义 ID，不含真实凭证）。
 - 故事夹具：mock 上游固定 4 段文本 ⇒ `{{E2E_STORY_4P}}`；其段落哈希记为 `{{E2E_STORY_HASH}}`，供断点恢复断言。
 - 进度夹具：seed 一行 `UserPlaybackProgress`/`GuestPlaybackProgress`（指向 `{{E2E_STORY_4P}}` 源，`nextParagraphIndex=2`、`remainingAllowedMs=null|数值` 两变体）。
 

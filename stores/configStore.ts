@@ -196,7 +196,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
   });
 
   /**
-   * 防抖 500ms 将累积 patch 回写服务端，失败保留乐观值并提示。
+   * 防抖 500ms 将累积 patch 回写服务端，失败回滚到服务端值并提示。
    */
   const scheduleSave = (patch: UserConfigPatch) => {
     pendingPatch = { ...pendingPatch, ...patch };
@@ -205,9 +205,32 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
       const toSend = pendingPatch;
       pendingPatch = {};
       saveTimer = null;
+      const epochAtSend = accountEpoch;
       saveMyConfig(toSend).catch((error) => {
         console.warn('[configStore] saveMyConfig failed', error);
         GlassToast.show({ icon: 'fail', content: '配置同步失败，稍后重试' });
+        // H-14：保存失败回滚到服务端值（保留 toast，最小实现）。
+        fetchMyConfig()
+          .then((server) => {
+            if (epochAtSend !== accountEpoch) {
+              return;
+            }
+            if (saveTimer !== null || Object.keys(pendingPatch).length > 0) {
+              return;
+            }
+            set({
+              apiConfig: {
+                playDuration: server.playDuration,
+                voiceId: server.voiceId,
+                speed: server.speed,
+                floatingPlayerEnabled: server.floatingPlayerEnabled,
+                themeMode: server.themeMode,
+              },
+            });
+          })
+          .catch((rollbackError) => {
+            console.warn('[configStore] rollback fetch failed', rollbackError);
+          });
       });
     }, 500);
   };

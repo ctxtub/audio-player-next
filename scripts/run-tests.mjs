@@ -53,6 +53,14 @@ const testFiles = [
   './tests/test-audio-ended-guard.ts',
   './tests/test-audio-ended-guard-wiring.ts',
   './tests/test-chat-onboarding.ts',
+  './tests/test-h04-double-submit.ts',
+  './tests/test-h08-budget-exhaustion.ts',
+  './tests/test-h07-paragraph-guard.ts',
+  './tests/test-h03-preload-isolation.ts',
+  './tests/test-h16-exit-flush.ts',
+  './tests/test-h15-concurrent-write.ts',
+  './tests/test-h14-config-rollback.ts',
+  './tests/test-h06-logout-probe.ts',
 ];
 
 console.log('Running test suite...\n');

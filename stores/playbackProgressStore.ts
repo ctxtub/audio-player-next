@@ -344,6 +344,12 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
       }
     }
     const targetIndex = get().nextParagraphIndex;
+    // 中文注释：H-08 显式恢复链预算守卫（E2E-W2C-03-02）——回落补齐后仍已知耗尽时直接返回，
+    // 不再进入 playParagraph 合成/出声；null 未知预算与正常预算保持既有语义。
+    const resumeBudgetMs = usePlaybackStore.getState().remainingMs;
+    if (resumeBudgetMs !== null && resumeBudgetMs <= 0) {
+      return;
+    }
     await get().playParagraph(targetIndex, { explicit: true });
   },
 
@@ -352,6 +358,12 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
     if (paragraphIndex >= state.paragraphs.length) {
       // 全部播放完毕，清理进度
       await get().clearProgress();
+      return;
+    }
+    // 中文注释：H-08 预算耗尽守卫（E2E-W2C-03-02）——已知耗尽（非 null 且 <=0）时直接返回，
+    // 不合成、不出声、不推进 next；null 未知预算与正常预算保持既有语义（含 H-07 显式放行）。
+    const paragraphBudgetMs = usePlaybackStore.getState().remainingMs;
+    if (paragraphBudgetMs !== null && paragraphBudgetMs <= 0) {
       return;
     }
     // 中文注释：H-07 切换窗口守卫（入口快拦，仅限自动续播链）——暂停且已有在播轨道时自动续播不再覆盖暂停意图，

@@ -358,6 +358,12 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
       if (!controller) {
         throw new Error('音频播放器尚未注册');
       }
+      // 中文注释：H-08 预算耗尽守卫（E2E-W2C-03-02）——已知耗尽（非 null 且 <=0）时任何 playAudio 不得出声/切轨，
+      // 堵住绕过 start() 早退的显式恢复链；null 为未知预算（新故事/一次性回放），保持既有放行语义，正常预算放行。
+      const playBudgetMs = get().remainingMs;
+      if (playBudgetMs !== null && playBudgetMs <= 0) {
+        return;
+      }
       // 中文注释：H-07 切换窗口守卫（仅限自动续播链）——暂停且已有在播轨道时自动续播不再覆盖暂停意图；
       // 初始起播（无轨道）与播放态放行；用户显式点播（explicit:true）一律放行，不改变正常切换语义。
       // 显式放行不预置 isPlaying：依赖控制器 play 成功后的 handlePlaybackStart 置位，
@@ -381,6 +387,12 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
       const controller = get().audioController;
       if (!controller) {
         throw new Error('音频播放器尚未注册');
+      }
+      // 中文注释：H-08 预算耗尽守卫（E2E-W2C-03-02 点击 2 路径）——已知耗尽时 resume 不得续响音频元素，
+      // 否则暂停态 UI 下音频播至段尾；null 未知预算与正常预算保持既有语义。
+      const resumeBudgetMs = get().remainingMs;
+      if (resumeBudgetMs !== null && resumeBudgetMs <= 0) {
+        return;
       }
       set({ isFloatingVisible: true });
       await controller.resume();

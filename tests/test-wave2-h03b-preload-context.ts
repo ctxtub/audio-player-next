@@ -154,7 +154,7 @@ async function runH03bTests(): Promise<void> {
                 content: AUTO_CONTINUE_PROMPT,
                 status: 'delivered',
                 createdAt: nowIso,
-                metadata: { origin: 'preload' },
+                metadata: { origin: 'preload' } as unknown as import('../types/chat').ChatMessage['metadata'],
             },
         ],
     });
@@ -178,14 +178,17 @@ async function runH03bTests(): Promise<void> {
     lastSummarizeInput = null;
     await useChatStore.getState().checkAndSummarize();
     assert.ok(summarizeCalls >= 1, '桩必须真实拦截 summarizeContext（自证有效），否则本用例无意义');
+    assert.ok(lastSummarizeInput !== null, '摘要输入必须被捕获（桩有效）');
+    const capturedInput: Array<{ role: string; content: string }> = lastSummarizeInput as Array<{
+        role: string;
+        content: string;
+    }>;
     assert.ok(
-        lastSummarizeInput !== null &&
-            !lastSummarizeInput.some((m) => m.content === AUTO_CONTINUE_PROMPT),
+        !capturedInput.some((m: { role: string; content: string }) => m.content === AUTO_CONTINUE_PROMPT),
         'RED: 摘要输入不得含“请继续故事”指令泡',
     );
     assert.ok(
-        lastSummarizeInput !== null &&
-            lastSummarizeInput.some((m) => m.content === '摘要预载故事'),
+        capturedInput.some((m: { role: string; content: string }) => m.content === '摘要预载故事'),
         '预载故事正文应仍进摘要（仅排指令泡）',
     );
     console.log('PASS: H-03-b-04 summarize input excludes preload');

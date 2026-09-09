@@ -21,10 +21,10 @@ nodeRequire.cache[glassToastPath] = {
     },
 } as unknown as NodeModule;
 
-const { useConfigStore } = nodeRequire('../stores/configStore') as {
-    useConfigStore: typeof import('../stores/configStore').useConfigStore;
+const { useConfigStore } = nodeRequire('../../../stores/configStore') as {
+    useConfigStore: typeof import('../../../stores/configStore').useConfigStore;
 };
-const userConfigModule = nodeRequire('../lib/client/userConfig') as {
+const userConfigModule = nodeRequire('../../../lib/client/userConfig') as {
     saveMyConfig: (patch: unknown) => Promise<unknown>;
     fetchMyConfig: () => Promise<{
         playDuration: number;

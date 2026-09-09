@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { encodeSession, decodeSession } from '../lib/session';
+import { encodeSession, decodeSession } from '../../../lib/session';
 
 process.env.SESSION_SECRET = 'test-secret';
 const encoded = encodeSession(1, 'Alice');

@@ -18,8 +18,8 @@ nodeRequire.cache[glassToastPath] = {
   },
 } as unknown as NodeModule;
 
-const { usePlaybackStore } = nodeRequire('../stores/playbackStore') as {
-  usePlaybackStore: typeof import('../stores/playbackStore').usePlaybackStore;
+const { usePlaybackStore } = nodeRequire('../../../stores/playbackStore') as {
+  usePlaybackStore: typeof import('../../../stores/playbackStore').usePlaybackStore;
 };
 
 /** 中文注释：清理倒计时定时器并复位 store，避免用例间串扰。 */

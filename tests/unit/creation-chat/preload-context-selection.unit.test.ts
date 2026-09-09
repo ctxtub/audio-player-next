@@ -45,11 +45,11 @@ nodeRequire.cache[agentFlowPath] = {
     },
 } as unknown as NodeModule;
 
-const { useChatStore } = nodeRequire('../stores/chatStore') as {
-    useChatStore: typeof import('../stores/chatStore').useChatStore;
+const { useChatStore } = nodeRequire('../../../stores/chatStore') as {
+    useChatStore: typeof import('../../../stores/chatStore').useChatStore;
 };
-const chatStoreModule = nodeRequire('../stores/chatStore') as Record<string, unknown>;
-const { AUTO_CONTINUE_PROMPT } = nodeRequire('../app/services/chatFlow') as {
+const chatStoreModule = nodeRequire('../../../stores/chatStore') as Record<string, unknown>;
+const { AUTO_CONTINUE_PROMPT } = nodeRequire('../../../app/services/chatFlow') as {
     AUTO_CONTINUE_PROMPT: string;
 };
 
@@ -154,7 +154,7 @@ async function runH03bTests(): Promise<void> {
                 content: AUTO_CONTINUE_PROMPT,
                 status: 'delivered',
                 createdAt: nowIso,
-                metadata: { origin: 'preload' } as unknown as import('../types/chat').ChatMessage['metadata'],
+                metadata: { origin: 'preload' } as unknown as import('../../../types/chat').ChatMessage['metadata'],
             },
         ],
     });

@@ -75,8 +75,8 @@ nodeRequire.cache[userConfigPath] = {
     },
 } as unknown as NodeModule;
 
-const { useConfigStore } = nodeRequire('../stores/configStore') as {
-    useConfigStore: typeof import('../stores/configStore').useConfigStore;
+const { useConfigStore } = nodeRequire('../../../stores/configStore') as {
+    useConfigStore: typeof import('../../../stores/configStore').useConfigStore;
 };
 
 function sleep(ms: number): Promise<void> {

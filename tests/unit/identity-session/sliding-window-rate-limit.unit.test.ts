@@ -2,9 +2,9 @@ import assert from 'node:assert';
 import {
     SlidingWindowRateLimiter,
     enforceProcedureRateLimit,
-} from '../lib/server/rateLimit';
+} from '../../../lib/server/rateLimit';
 import { TRPCError } from '@trpc/server';
-import type { AuthSession } from '../types/auth';
+import type { AuthSession } from '../../../types/auth';
 
 async function runRateLimitTests() {
     console.log('--- 1. Testing SlidingWindowRateLimiter Core Algorithm ---');

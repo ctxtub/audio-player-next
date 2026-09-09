@@ -5,7 +5,7 @@ import {
     CHAT_ONBOARDING_SEEN_KEY,
     markOnboardingSeen,
     shouldShowOnboarding,
-} from '../utils/chatOnboarding';
+} from '../../../utils/chatOnboarding';
 
 /**
  * 创建内存 Storage stub（mockStorage 范式）。

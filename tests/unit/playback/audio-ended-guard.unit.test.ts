@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { createAudioEndedGuard } from '../utils/audioEndedGuard';
+import { createAudioEndedGuard } from '../../../utils/audioEndedGuard';
 
 /**
  * R15 回归：解锁残留标记不得吞掉首个真实 ended。

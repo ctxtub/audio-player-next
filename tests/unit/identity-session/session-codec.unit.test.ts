@@ -8,7 +8,7 @@ import {
     assertSessionSecret,
     getSessionSecret,
     SESSION_MAX_AGE,
-} from '../lib/session';
+} from '../../../lib/session';
 
 process.env.SESSION_SECRET = 'test-secret-session-branches-12345';
 const SECRET = process.env.SESSION_SECRET;

@@ -115,6 +115,8 @@ type ChatStoreBaseState = {
   hasUnviewedResponse: boolean;
   /** 是否处于登录态（开启服务端持久化）。 */
   syncEnabled: boolean;
+  /** 最近一次快照保存的失败原因（null 表示无失败；失败不静默丢，由调用方/退出 flush 断言）。 */
+  saveError: string | null;
   /** 跨页自动发送的待发提示词（来自 /player 历史记录选择，瞬态、不持久化）。 */
   pendingAutoSend: string | null;
 };
@@ -137,6 +139,12 @@ type ChatStoreActions = {
   reset: () => void;
   /** 更新输入框的实时内容。 */
   setInputValue: (nextValue: string) => void;
+  /**
+   * 退出前同步落盘：取消防抖定时器并立即保存当前快照（即使有 sending 在途，
+   * 已完结前缀仍落盘；在途消息本就不进快照）。
+   * @returns 保存是否执行且成功（未登录返回 false；失败置 saveError 并返回 false）。
+   */
+  flushPendingSave: () => Promise<boolean>;
   /** 设置/清空跨页自动发送的待发提示词。 */
   setPendingAutoSend: (prompt: string | null) => void;
   /**
@@ -233,10 +241,39 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       if (state.messages.some((message) => message.status === 'sending')) {
         return;
       }
-      saveMyConversation(toSnapshot(state.messages)).catch((error) => {
+      saveMyConversation(toSnapshot(state.messages)).then(() => {
+        set({ saveError: null });
+      }).catch((error) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        set({ saveError: reason });
         console.warn('[chatStore] saveMyConversation failed', error);
       });
     }, SAVE_DEBOUNCE_MS);
+  };
+
+  /**
+   * 退出前同步落盘：取消防抖并立即保存已完结快照，失败置标记位。
+   * @returns 保存是否执行且成功。
+   */
+  const flushPendingSave = async (): Promise<boolean> => {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    const state = get();
+    if (!state.syncEnabled) {
+      return false;
+    }
+    try {
+      await saveMyConversation(toSnapshot(state.messages));
+      set({ saveError: null });
+      return true;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      set({ saveError: reason });
+      console.warn('[chatStore] flushPendingSave failed', error);
+      return false;
+    }
   };
 
   return {
@@ -244,6 +281,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   inputValue: '',
   hasUnviewedResponse: false,
   syncEnabled: false,
+  saveError: null,
   pendingAutoSend: null,
   dispatch: (action: ChatStoreAction) => {
     set((state) => {
@@ -615,11 +653,13 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       inputValue: '',
       hasUnviewedResponse: false,
       syncEnabled: false,
+      saveError: null,
     });
   },
   setInputValue: (nextValue) => {
     set({ inputValue: nextValue });
   },
+  flushPendingSave,
   setPendingAutoSend: (prompt) => {
     set({ pendingAutoSend: prompt });
   },
@@ -713,3 +753,18 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
  * 导出聊天 store 的 Hook，供组件按需选择字段使用。
  */
 export const useChatStore = create<ChatStore>()(devtools(chatStoreCreator, { name: 'chat-store' }));
+
+/**
+ * 退出前落盘接线：页面卸载或隐藏时立即同步 pending 快照。
+ * 与防抖保存共用 toSnapshot，失败由 flushPendingSave 置 saveError 标记位，不静默丢。
+ * SSR/Node 下无 window 时跳过注册。
+ */
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  const handleChatExitFlush = () => {
+    useChatStore.getState().flushPendingSave().catch(() => {
+      // 中文注释：失败已由 saveError 标记位记录，此处仅防未处理拒绝。
+    });
+  };
+  window.addEventListener('beforeunload', handleChatExitFlush);
+  window.addEventListener('pagehide', handleChatExitFlush);
+}

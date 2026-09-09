@@ -108,6 +108,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
   }, []);
 
   // 来自 /player 历史记录「选一条」的跨页自动发送：预填输入框并发送，仅消费一次。
+  // 02-02 UX：发送中到达的 pending 不丢（保留待发），生成结束（isSending 翻转）重触发消费补发。
   useEffect(() => {
     const pending = useChatStore.getState().pendingAutoSend;
     if (!pending) {
@@ -121,7 +122,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     useChatStore.getState().setPendingAutoSend(null);
     setInputValue(pending);
     handleSubmit(pending);
-  }, [handleSubmit, setInputValue]);
+  }, [handleSubmit, setInputValue, isSending]);
 
   /**
    * 输入框内容变化时同步到 store，便于外部组件访问。 
@@ -135,13 +136,16 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
   );
 
   /**
-   * 点击推荐提问时快速填充输入框，如在发送中则提醒稍后再试。
+   * 点击推荐提问时快速填充输入框，发送中时预填并排队待生成结束自动发送。
    * @param value 推荐文案内容。
    */
   const handleSuggestionSelect = useCallback(
     (value: string) => {
       if (isSending) {
-        GlassToast.show({ icon: 'fail', content: '正在生成回答，请稍后再试' });
+        // 中文注释：02-02 UX——发送中点击仍预填输入框即时可见，并暂存 pending 待生成结束补发。
+        setInputValue(value);
+        useChatStore.getState().setPendingAutoSend(value);
+        GlassToast.show({ icon: 'fail', content: '正在生成，完成后自动发送' });
         return;
       }
       setInputValue(value);

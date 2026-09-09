@@ -113,6 +113,11 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     if (!pending) {
       return;
     }
+    // 中文注释：02-02 最小守卫——发送中时不旁路自动发送，且不消费 pending（保留待发）；正常路径行为不变。
+    const sending = useChatStore.getState().messages.some((message) => message.status === 'sending');
+    if (sending) {
+      return;
+    }
     useChatStore.getState().setPendingAutoSend(null);
     setInputValue(pending);
     handleSubmit(pending);

@@ -16,11 +16,23 @@ import { useChatStore } from '../stores/chatStore';
  * 复刻闭包快照行为（state 置位同 tick 内不可见、ref 置位同步可见），门模式由源码
  * 检测结果派生：无同步锁时仿真走 state-only（复现双发，RED），有锁时走
  * state-plus-ref（单次提交，GREEN）。
+ *
+ * 附带 02-02（同文件域顺手覆盖）：ChatLayout pendingAutoSend 消费副作用无
+ * sending 守卫。回归要求发送中时不旁路提交且保留待发，非发送中时自动发送
+ * 行为不变（一次提交并消费、预填输入框）；守卫有无同样由源码检测派生。
  */
 
 const COMPOSER_PATH = path.join(
     process.cwd(),
     'app/(main)/chat/components/Composer/Composer.tsx',
+);
+
+/**
+ * ChatLayout 源码路径（pendingAutoSend 跨页自动发送消费点）。
+ */
+const CHAT_LAYOUT_PATH = path.join(
+    process.cwd(),
+    'app/(main)/chat/components/ChatLayout/index.tsx',
 );
 
 /**
@@ -121,6 +133,66 @@ function modeFromSource(source: string): SubmitGateMode {
     return detectComposerSyncLock(source) ? 'state-plus-ref' : 'state-only';
 }
 
+/**
+ * 读取 ChatLayout 源码。
+ * @returns ChatLayout/index.tsx 全文。
+ */
+function readChatLayoutSource(): string {
+    return readFileSync(CHAT_LAYOUT_PATH, 'utf8');
+}
+
+/**
+ * 检测 pendingAutoSend 消费副作用是否具备 sending 守卫。
+ * 要求在取 pending 与 handleSubmit(pending) 之间存在发送中判定，
+ * 且判定位于提交之前（旁路不得先提交后检查）。
+ * @param source ChatLayout/index.tsx 全文。
+ * @returns 具备最小守卫时为 true。
+ */
+function detectPendingAutoSendGuard(source: string): boolean {
+    const anchor = 'useChatStore.getState().pendingAutoSend';
+    const anchorIdx = source.indexOf(anchor);
+    if (anchorIdx === -1) {
+        return false;
+    }
+    const tail = source.slice(anchorIdx, anchorIdx + 800);
+    const submitIdx = tail.indexOf('handleSubmit(pending)');
+    if (submitIdx === -1) {
+        return false;
+    }
+    const head = tail.slice(0, submitIdx);
+    return (
+        head.includes("status === 'sending'") ||
+        head.includes('status === "sending"') ||
+        head.includes('isSending')
+    );
+}
+
+/**
+ * 复刻 ChatLayout pendingAutoSend 消费副作用的判定语义，守卫有无由源码检测派生。
+ * @param guarded 源码是否具备 sending 守卫。
+ * @param submit 模拟 handleSubmit 的提交回调。
+ * @returns 消费结果：已发送 / 发送中跳过 / 无待发。
+ */
+function emulatePendingAutoSendEffect(
+    guarded: boolean,
+    submit: (content: string) => void,
+): 'sent' | 'skipped-sending' | 'skipped-empty' {
+    const pending = useChatStore.getState().pendingAutoSend;
+    if (!pending) {
+        return 'skipped-empty';
+    }
+    if (guarded) {
+        const sending = useChatStore.getState().messages.some((message) => message.status === 'sending');
+        if (sending) {
+            return 'skipped-sending';
+        }
+    }
+    useChatStore.getState().setPendingAutoSend(null);
+    useChatStore.getState().setInputValue(pending);
+    submit(pending);
+    return 'sent';
+}
+
 async function runH04DoubleSubmitTests(): Promise<void> {
     console.log('=== H-04-01: 同 tick 双 Enter 只产生一次提交/一次入库 ===');
     {
@@ -210,6 +282,86 @@ async function runH04DoubleSubmitTests(): Promise<void> {
         useChatStore.getState().reset();
     }
     console.log('PASS: H-04-03 失败释放锁且错误透出');
+
+    console.log('=== 02-02-01: pendingAutoSend 消费副作用最小守卫接线锁定 ===');
+    {
+        const source = readChatLayoutSource();
+        assert.ok(
+            source.includes('useChatStore.getState().pendingAutoSend'),
+            '须保留 pendingAutoSend 跨页自动发送消费点（仅消费一次）',
+        );
+        assert.ok(
+            detectPendingAutoSendGuard(source),
+            'pendingAutoSend 提交前必须具备 sending 守卫（发送中不得旁路自动发送）',
+        );
+        assert.ok(
+            source.includes('handleSubmit(pending)'),
+            '正常路径（非发送中）须保留 handleSubmit(pending) 自动发送行为',
+        );
+    }
+    console.log('PASS: 02-02-01 最小守卫接线锁定');
+
+    console.log('=== 02-02-02: 发送中时 pendingAutoSend 不得旁路提交且保留待发 ===');
+    {
+        const guarded = detectPendingAutoSendGuard(readChatLayoutSource());
+        useChatStore.getState().reset();
+        useChatStore.getState().setPendingAutoSend(null);
+        // 中文注释：制造一条发送中消息，复刻生成进行中的 store 现场。
+        useChatStore.getState().dispatch({ type: 'user.submit', content: '进行中的提问' });
+        useChatStore.getState().setPendingAutoSend('跨页自动发送探针');
+        let submitCalls = 0;
+        const result = emulatePendingAutoSendEffect(guarded, () => {
+            submitCalls += 1;
+        });
+        assert.strictEqual(
+            result,
+            'skipped-sending',
+            `发送中时必须跳过自动发送，实际 ${result}（guarded=${guarded}）`,
+        );
+        assert.strictEqual(
+            submitCalls,
+            0,
+            `发送中时旁路提交必须为 0 次，实际 ${submitCalls} 次（guarded=${guarded}）`,
+        );
+        assert.strictEqual(
+            useChatStore.getState().pendingAutoSend,
+            '跨页自动发送探针',
+            '发送中跳过时不得消费 pending（保留待发，不丢用户意图）',
+        );
+        useChatStore.getState().reset();
+        useChatStore.getState().setPendingAutoSend(null);
+    }
+    console.log('PASS: 02-02-02 发送中旁路被拦且待发保留');
+
+    console.log('=== 02-02-03: 非发送中时自动发送行为不变（一次提交并消费） ===');
+    {
+        const guarded = detectPendingAutoSendGuard(readChatLayoutSource());
+        useChatStore.getState().reset();
+        useChatStore.getState().setPendingAutoSend(null);
+        useChatStore.getState().setPendingAutoSend('跨页自动发送探针');
+        let submitCalls = 0;
+        let submittedContent = '';
+        const result = emulatePendingAutoSendEffect(guarded, (content) => {
+            submitCalls += 1;
+            submittedContent = content;
+        });
+        assert.strictEqual(result, 'sent', '非发送中时必须正常自动发送');
+        assert.strictEqual(submitCalls, 1, '非发送中时必须恰好提交一次');
+        assert.strictEqual(submittedContent, '跨页自动发送探针', '提交内容必须为 pending 原文');
+        assert.strictEqual(
+            useChatStore.getState().pendingAutoSend,
+            null,
+            '正常发送后必须消费 pending（仅一次）',
+        );
+        assert.strictEqual(
+            useChatStore.getState().inputValue,
+            '跨页自动发送探针',
+            '正常发送前必须预填输入框（既有行为保留）',
+        );
+        useChatStore.getState().reset();
+        useChatStore.getState().setPendingAutoSend(null);
+    }
+    console.log('PASS: 02-02-03 正常自动发送行为不变');
 
     console.log('\nALL H-04 DOUBLE-SUBMIT TEST CASES PASSED SUCCESSFULLY!');
 }

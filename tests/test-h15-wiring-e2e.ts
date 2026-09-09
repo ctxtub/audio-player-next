@@ -135,8 +135,11 @@ async function runH15WiringTests(): Promise<void> {
 
     console.log('=== H-15-WIRING-04: 客户端 CONFLICT 后刷新恢复 ===');
     const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
-    // 中文注释：GlassToast 可控桩——记录 CONFLICT 提示文案，断言 UX 不静默丢。
+    // 中文注释：GlassToast 可控桩——经 globalThis 注入（store 懒加载，避免 Node 启动解析 .tsx）。
     const toastCalls: Array<{ icon?: string; content: string }> = [];
+    (globalThis as { __H15_TOAST__?: { show: (c: { icon?: string; content: string }) => void } }).__H15_TOAST__ = {
+        show: (c: { icon?: string; content: string }) => { toastCalls.push(c); },
+    };
     const glassToastPath = path.resolve(process.cwd(), 'components/ui/GlassToast.tsx');
     nodeRequire.cache[glassToastPath] = {
         id: glassToastPath,
@@ -243,6 +246,7 @@ async function runH15WiringTests(): Promise<void> {
         '刷新后基线应更新为服务端新鲜序列',
     );
     useChatStore.getState().reset();
+    delete (globalThis as { __H15_TOAST__?: unknown }).__H15_TOAST__;
     console.log('PASS: H-15-WIRING-04 conflict refresh recovered');
 
     console.log('\nALL H-15 WIRING E2E TEST CASES PASSED SUCCESSFULLY!');

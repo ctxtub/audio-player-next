@@ -19,7 +19,6 @@ import {
 } from '@/utils/chatUtils';
 import type { ChatMessageInput } from '@/lib/trpc/schemas/chatConversation';
 import { fetchMyConversation, saveMyConversation } from '@/lib/client/chatConversation';
-import GlassToast from '@/components/ui/GlassToast';
 
 /**
  * 聊天 Store 的 Action 定义，统一管理所有对单条目消息状态的变更操作。
@@ -221,6 +220,32 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   };
 
   /**
+   * 显示基线冲突提示（懒加载 GlassToast，避免 Node 单测启动时解析 .tsx）。
+   * 测试可经 globalThis.__H15_TOAST__ 注入捕获桩；浏览器走真实 GlassToast。
+   */
+  const showConflictToast = (): void => {
+    const content = '会话已被其它标签页更新，已刷新';
+    try {
+      const stubbed = (globalThis as { __H15_TOAST__?: { show: (config: unknown) => void } }).__H15_TOAST__;
+      if (stubbed) {
+        stubbed.show({ icon: 'fail', content });
+        return;
+      }
+    } catch {
+      // 中文注释：取桩失败则继续走真实 Toast。
+    }
+    // 中文注释：浏览器懒加载真实 GlassToast；Node 无 DOM/解析失败时忽略，仅保留 saveError。
+    void import('@/components/ui/GlassToast')
+      .then((mod) => {
+        (mod.default as { show: (config: { icon: string; content: string }) => void }).show({
+          icon: 'fail',
+          content,
+        });
+      })
+      .catch(() => {});
+  };
+
+  /**
    * 取完成态消息构造保存快照（含 summary 锚点，便于恢复后压缩上下文；storyCard 的音频置空不存）。
    * @param messages 当前消息列表。
    */
@@ -272,11 +297,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         if (isConflictError(error)) {
           const reason = error instanceof Error ? error.message : String(error);
           set({ saveError: reason });
-          try {
-            GlassToast.show({ icon: 'fail', content: '会话已被其它标签页更新，已刷新' });
-          } catch {
-            // 中文注释：Node/测试环境无 DOM 时忽略 toast，仅保留 saveError 标记位。
-          }
+          showConflictToast();
           console.warn('[chatStore] saveMyConversation conflict', error);
           void refreshAfterConflict();
           return;
@@ -314,11 +335,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       if (isConflictError(error)) {
         const reason = error instanceof Error ? error.message : String(error);
         set({ saveError: reason });
-        try {
-          GlassToast.show({ icon: 'fail', content: '会话已被其它标签页更新，已刷新' });
-        } catch {
-          // 中文注释：Node/测试环境无 DOM 时忽略 toast，仅保留 saveError 标记位。
-        }
+        showConflictToast();
         console.warn('[chatStore] flushPendingSave conflict', error);
         await refreshAfterConflict();
         return false;

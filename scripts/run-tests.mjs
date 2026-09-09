@@ -51,6 +51,7 @@ const testFiles = [
   './tests/test-e2e-stream-observe.ts',
   './tests/test-toast-terminal-priority.ts',
   './tests/test-audio-ended-guard.ts',
+  './tests/test-chat-onboarding.ts',
 ];
 
 console.log('Running test suite...\n');

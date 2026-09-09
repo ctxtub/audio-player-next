@@ -9,6 +9,8 @@ import {
 } from 'react-aria-components';
 import { BookOpen, MessageCircle, Terminal, type LucideIcon } from 'lucide-react';
 import GlassButton from '@/components/ui/GlassButton';
+import { getSafeLocalStorage } from '@/utils/storage';
+import { markOnboardingSeen, shouldShowOnboarding } from '@/utils/chatOnboarding';
 import styles from './index.module.scss';
 
 /**
@@ -39,21 +41,20 @@ const ONBOARDING_CONFIG = {
 
 /**
  * 聊天页新手引导弹窗
- * 仅在当前会话（Session）首次进入时展示，介绍 Available Agents 及触发方式。
+ * 跨会话持久化（localStorage）：读到版本化已读键则不再展示，介绍 Available Agents 及触发方式。
  */
 const OnboardingModal: React.FC = () => {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const hasSeen = sessionStorage.getItem('chat_onboarding_seen');
-    if (!hasSeen) {
+    if (shouldShowOnboarding(getSafeLocalStorage())) {
       setVisible(true);
     }
   }, []);
 
   const handleClose = () => {
     setVisible(false);
-    sessionStorage.setItem('chat_onboarding_seen', 'true');
+    markOnboardingSeen(getSafeLocalStorage());
   };
 
   return (

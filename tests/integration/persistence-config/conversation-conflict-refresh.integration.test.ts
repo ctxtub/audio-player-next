@@ -1,11 +1,19 @@
 import assert from 'node:assert';
 import path from 'node:path';
-import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { prisma } from '../../lib/db';
-import { chatConversationRouter } from '../../lib/trpc/routers/chatConversation';
-import { saveConversationInputSchema } from '../../lib/trpc/schemas/chatConversation';
-import { TRPCError } from '../../lib/trpc/init';
+import { prisma } from '../../../lib/db';
+import { chatConversationRouter } from '../../../lib/trpc/routers/chatConversation';
+import { saveConversationInputSchema } from '../../../lib/trpc/schemas/chatConversation';
+import { TRPCError } from '../../../lib/trpc/init';
+
+/**
+ * 会话写入冲突刷新集成测试（任务11 STEP-3，L2）。
+ * 来源：tests/legacy/conversation-write-wiring.legacy.test.ts 中运行时部分逐字承接。
+ * 拆分：H-15-WIRING-01 文本锁已拆至 tests/static/conversation-write-wiring.static.test.ts；
+ * 本文件收容全部运行时断言（W00 schema 透传、W02 真并发竞速、W03 旧调用兼容、W04 客户端 CONFLICT 刷新），无一丢弃。
+ * 真 DB 交叠经隔离库真实跑受控库（router 直调 + Promise.all 真并发），与 pending-save-flush/keepalive-dedup/guest-* 均不重叠：
+ * 后者覆盖退出 flush/去重锁/访客 CRUD，未覆盖 router 基线透传 + CONFLICT 刷新恢复，故新建最小 integration 承接。
+ */
 
 /**
  * 构造待保存的单条会话消息。
@@ -64,18 +72,6 @@ async function runH15WiringTests(): Promise<void> {
         'schema 无基线时应保持可选缺省（向后兼容）',
     );
     console.log('PASS: H-15-WIRING-00 schema baseMessageIds');
-
-    console.log('=== H-15-WIRING-01: 接线静态锁定（router/client/store）===');
-    const routerSource = readFileSync(path.join(process.cwd(), 'lib', 'trpc', 'routers', 'chatConversation.ts'), 'utf8');
-    assert.ok(routerSource.includes('baseMessageIds'), 'RED: router 必须透传 baseMessageIds');
-    assert.ok(routerSource.includes('expectedMessageIds'), 'RED: router 必须映射为 expectedMessageIds');
-    const clientSource = readFileSync(path.join(process.cwd(), 'lib', 'client', 'chatConversation.ts'), 'utf8');
-    assert.ok(clientSource.includes('baseMessageIds'), 'RED: client saveMyConversation 必须接受 baseMessageIds');
-    const storeSource = readFileSync(path.join(process.cwd(), 'stores', 'chatStore.ts'), 'utf8');
-    assert.ok(storeSource.includes('CONFLICT'), 'RED: store 必须处理 CONFLICT');
-    assert.ok(storeSource.includes('会话已被其它标签页更新，已刷新'), 'RED: store CONFLICT toast 文案不得漂移');
-    assert.ok(storeSource.includes('GlassToast'), 'RED: store CONFLICT 必须经 GlassToast 提示');
-    console.log('PASS: H-15-WIRING-01 wiring locked');
 
     console.log('=== H-15-WIRING-02: 双 save 真并发竞速（一成一 CONFLICT）===');
     const guestId = `g_h15wiring_${stamp}`;
@@ -172,9 +168,9 @@ async function runH15WiringTests(): Promise<void> {
             },
         },
     } as unknown as NodeModule;
-    const chatStoreModule = nodeRequire('../../stores/chatStore') as Record<string, unknown>;
+    const chatStoreModule = nodeRequire('../../../stores/chatStore') as Record<string, unknown>;
     const { useChatStore } = chatStoreModule as {
-        useChatStore: typeof import('../../stores/chatStore').useChatStore;
+        useChatStore: typeof import('../../../stores/chatStore').useChatStore;
     };
     // 中文注释：读基线——initForUser 拉取成功后记 messageId 序列，保存时透传。
     useChatStore.getState().reset();

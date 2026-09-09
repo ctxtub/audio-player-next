@@ -4,14 +4,14 @@ import * as nextHeaders from 'next/headers';
 import {
     createToastCapture,
     installGlassToastStub,
-} from '../support/mocks/ui-state.mock';
+} from '../../support/mocks/ui-state.mock';
 import {
     buildParagraphProgressSeed,
     buildSquirrelStoryText,
     buildStoryChatMessage,
-} from '../support/fixtures/playback-story.fixture';
-import { makeGuestContext, makeGuestId, makeMessageId } from '../support/builders/auth-subject.builder';
-import { setupIsolatedDb } from '../support/db/isolated-db.helper';
+} from '../../support/fixtures/playback-story.fixture';
+import { makeGuestContext, makeGuestId, makeMessageId } from '../../support/builders/auth-subject.builder';
+import { setupIsolatedDb } from '../../support/db/isolated-db.helper';
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
 // 中文注释：toast 捕获器（供漂移通知断言读取末次提示）。
@@ -19,79 +19,48 @@ const toastCapture = createToastCapture();
 installGlassToastStub(toastCapture);
 
 import {
-    normalizeStoryText,
-    segmentStoryText,
     computeStoryContentHash,
     SEGMENTATION_VERSION,
-} from '../../utils/segmentation';
+} from '../../../utils/segmentation';
 
-const { usePlaybackStore } = nodeRequire('../../stores/playbackStore') as {
-    usePlaybackStore: typeof import('../../stores/playbackStore').usePlaybackStore;
+const { usePlaybackStore } = nodeRequire('../../../stores/playbackStore') as {
+    usePlaybackStore: typeof import('../../../stores/playbackStore').usePlaybackStore;
 };
-const { usePlaybackProgressStore } = nodeRequire('../../stores/playbackProgressStore') as {
-    usePlaybackProgressStore: typeof import('../../stores/playbackProgressStore').usePlaybackProgressStore;
+const { usePlaybackProgressStore } = nodeRequire('../../../stores/playbackProgressStore') as {
+    usePlaybackProgressStore: typeof import('../../../stores/playbackProgressStore').usePlaybackProgressStore;
 };
-const { useChatStore } = nodeRequire('../../stores/chatStore') as {
-    useChatStore: typeof import('../../stores/chatStore').useChatStore;
+const { useChatStore } = nodeRequire('../../../stores/chatStore') as {
+    useChatStore: typeof import('../../../stores/chatStore').useChatStore;
 };
-const { resetAccountData } = nodeRequire('../../stores/accountSync') as {
-    resetAccountData: typeof import('../../stores/accountSync').resetAccountData;
+const { resetAccountData } = nodeRequire('../../../stores/accountSync') as {
+    resetAccountData: typeof import('../../../stores/accountSync').resetAccountData;
 };
 
 process.env.SESSION_SECRET = 'test-secret-paragraph-resume-12345';
 
+/**
+ * 段落断点恢复集成测试（任务11 STEP-3，L2）。
+ * 来源：tests/legacy/paragraph-resume-mixed.legacy.test.ts 中跨 store/service 部分逐字承接（TC-P2-01~17）。
+ * 拆分：§0 纯函数（归一/切分/哈希/预取公式）已拆至 tests/unit/playback/paragraph-segmentation.unit.test.ts；
+ * 本文件仅收容跨 store/service 断言（DB 落库 + 水合 + 迁移 + GC + 限流 + 单调 + 漂移），无一丢弃。
+ * 全程隔离库，不碰 dev.db/app.db 与生产。
+ */
 async function runParagraphResumeTests() {
     // 中文注释：R21 隔离库口径——先建隔离库再动态导入 DB 依赖，杜绝回退 prisma/dev.db。
     const { dbPath, prisma } = await setupIsolatedDb('paragraph-resume');
     console.log(`=== DB: isolated ${dbPath} ===`);
-    const { playbackRouter } = await import('../../lib/trpc/routers/playback');
-    const { authRouter } = await import('../../lib/trpc/routers/auth');
+    const { playbackRouter } = await import('../../../lib/trpc/routers/playback');
+    const { authRouter } = await import('../../../lib/trpc/routers/auth');
     // 中文注释：TRPCError 须与 router 同经 lib/trpc/init 取自同一模块实例；
     // 直连 @trpc/server 的原生动态导入在全量套件共享 jiti 进程中会解析出第二实例，instanceof 恒 false。
-    const { TRPCError } = await import('../../lib/trpc/init');
+    const { TRPCError } = await import('../../../lib/trpc/init');
     const {
         getPlaybackProgressForSubject,
         savePlaybackProgressForSubject,
         clearPlaybackProgressForSubject,
-    } = await import('../../lib/server/playbackProgress');
-    const { purgeExpiredGuestData } = await import('../../lib/server/guestGc');
-    const { saveConversationForSubject } = await import('../../lib/server/chatConversation');
-    console.log('=== 0. Testing Deterministic Segmentation, Normalization & Fingerprints ===');
-
-    // 0.1 Normalization of CRLF and trailing whitespace
-    const rawText = "第一段故事。\r\n第二段故事。   \r\n第三段故事。  ";
-    const normalized = normalizeStoryText(rawText);
-    assert.strictEqual(normalized, "第一段故事。\n第二段故事。\n第三段故事。");
-
-    // 0.2 Long paragraph split (> 350 chars)
-    const longSentence = "这是一个很长很长的句子，充满了各种细节和波折。".repeat(20);
-    assert(longSentence.length > 350, "Sentence should be longer than 350 characters");
-    const splitChunks = segmentStoryText(longSentence);
-    assert(splitChunks.length >= 2, "Long paragraph must be split into multiple chunks");
-    for (const chunk of splitChunks) {
-        assert(chunk.length <= 350, `Chunk length ${chunk.length} must not exceed 350`);
-    }
-
-    // 0.3 Short dialogue forward merge (< 80 chars)
-    const shortDialogues = "“你好！”\n“你也好。”\n“今天天气真好啊。”\n“确实很晴朗。”\n这是一段稍微长一点的描述文字，用于承接刚才几句短小的对话。";
-    const mergedChunks = segmentStoryText(shortDialogues);
-    assert(mergedChunks.length < 5, "Short dialogues must be merged to prevent micro audio fragments");
-
-    // 0.4 Deterministic ContentHash (12 hex characters)
-    const hash1 = computeStoryContentHash("故事正文内容ABC");
-    const hash2 = computeStoryContentHash("故事正文内容ABC\r\n"); // normalizes to same text
-    assert.strictEqual(hash1.length, 12, "Hash must be 12 hex characters");
-    assert.strictEqual(hash1, hash2, "Normalized text must yield identical hash regardless of CRLF");
-
-    // 0.5 Adaptive prefetch window formula
-    const calcPrefetchThreshold = (duration: number) => Math.min(10, Math.max(5, duration * 0.25));
-    assert.strictEqual(calcPrefetchThreshold(40), 10);
-    assert.strictEqual(calcPrefetchThreshold(20), 5);
-    assert.strictEqual(calcPrefetchThreshold(60), 10);
-    assert.strictEqual(calcPrefetchThreshold(12), 5);
-
-    console.log('PASS: Segmentation, normalization, content hash and adaptive prefetch verified');
-
+    } = await import('../../../lib/server/playbackProgress');
+    const { purgeExpiredGuestData } = await import('../../../lib/server/guestGc');
+    const { saveConversationForSubject } = await import('../../../lib/server/chatConversation');
     console.log('=== TC-P2-01: 具名访客硬刷新段落断点恢复 ===');
     // 中文注释：访客身份与消息 ID 均取自 tracked 合成主体构造器。
     const guestId1 = makeGuestId('resume_tc01');

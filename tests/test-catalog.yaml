@@ -561,7 +561,7 @@ cases:
       - assertion_id: prefetch-equals-one
         display_name_zh: 前瞻恰为一
         surface: network
-    executable_ids: [exec-paragraph-resume-mixed-legacy]
+    executable_ids: [exec-paragraph-resume-mixed-legacy, exec-paragraph-segmentation]
     fixtures: []
     ci_tier: NONE
     owner: playback-kernel
@@ -776,7 +776,7 @@ cases:
       - assertion_id: stale-epoch-rejected
         display_name_zh: 旧纪元被拒
         surface: db
-    executable_ids: [exec-conversation-write-wiring-legacy]
+    executable_ids: [exec-conversation-write-wiring-legacy, exec-conversation-conflict-refresh]
     fixtures: []
     ci_tier: NONE
     owner: persistence-recovery
@@ -1026,7 +1026,7 @@ cases:
       - assertion_id: stale-epoch-no-read
         display_name_zh: 旧纪元不串读
         surface: db
-    executable_ids: [exec-batch-source-locks-legacy]
+    executable_ids: [exec-batch-source-locks-legacy, exec-agent-schema-bounds]
     fixtures: []
     ci_tier: NONE
     owner: auth-session
@@ -1339,54 +1339,69 @@ executables:
     case_ids: [breakpoint-resume-null-budget-state]
   - executable_id: exec-procedure-source-locks-legacy
     display_name_zh: 过程源码锁遗留
-    layer: L2
-    path: ./tests/legacy/procedure-source-locks.legacy.test.ts
+    layer: STATIC
+    path: ./tests/static/procedure-source-locks.static.test.ts
     case_ids: [protected-api-401-guard-matrix]
   - executable_id: exec-batch-source-locks-legacy
     display_name_zh: 批量源码锁遗留
-    layer: L2
-    path: ./tests/legacy/batch-source-locks.legacy.test.ts
+    layer: STATIC
+    path: ./tests/static/batch-source-locks.static.test.ts
     case_ids: [fast-account-switch-epoch-no-crossread]
   - executable_id: exec-paragraph-resume-mixed-legacy
     display_name_zh: 段落恢复混合遗留
     layer: L2
-    path: ./tests/legacy/paragraph-resume-mixed.legacy.test.ts
+    path: ./tests/integration/playback/paragraph-resume-mixed.integration.test.ts
     case_ids: [multi-paragraph-prefetch-progress-persist]
   - executable_id: exec-toast-terminal-priority-legacy
     display_name_zh: 提示终态优先级遗留
-    layer: L2
-    path: ./tests/legacy/toast-terminal-priority.legacy.test.ts
+    layer: L1
+    path: ./tests/unit/creation-chat/toast-terminal-priority.unit.test.ts
     case_ids: [failed-message-retry-context]
   - executable_id: exec-audio-ended-guard-wiring-legacy
     display_name_zh: 结束守卫接线遗留
-    layer: L2
-    path: ./tests/legacy/audio-ended-guard-wiring.legacy.test.ts
+    layer: STATIC
+    path: ./tests/static/audio-ended-guard-wiring.static.test.ts
     case_ids: [client-route-nav-play-continuity]
   - executable_id: exec-double-submit-legacy
     display_name_zh: 双发抑制遗留
     layer: L2
-    path: ./tests/legacy/double-submit.legacy.test.ts
+    path: ./tests/integration/creation-chat/reject-second-submit-while-streaming.integration.test.ts
     case_ids: [rapid-double-submit-guard]
   - executable_id: exec-conversation-write-wiring-legacy
     display_name_zh: 会话写入接线遗留
-    layer: L2
-    path: ./tests/legacy/conversation-write-wiring.legacy.test.ts
+    layer: STATIC
+    path: ./tests/static/conversation-write-wiring.static.test.ts
     case_ids: [history-epoch-guard-30day-prune]
   - executable_id: exec-keepalive-dedup-legacy
     display_name_zh: 保活去重遗留
     layer: L2
-    path: ./tests/legacy/keepalive-dedup.legacy.test.ts
+    path: ./tests/integration/persistence-config/keepalive-dedup.integration.test.ts
     case_ids: [clear-during-generate-no-orphan-audio]
   - executable_id: exec-pending-intent-ui-legacy
     display_name_zh: 待定意图界面遗留
-    layer: L2
-    path: ./tests/legacy/pending-intent-ui.legacy.test.ts
+    layer: L1
+    path: ./tests/unit/creation-chat/pending-intent-ui.unit.test.ts
     case_ids: [streaming-resubmit-mutex]
   - executable_id: exec-logout-probe-hardening-legacy
     display_name_zh: 登出探针加固遗留
     layer: L2
-    path: ./tests/legacy/logout-probe-hardening.legacy.test.ts
+    path: ./tests/integration/identity-session/logout-probe-hardening.integration.test.ts
     case_ids: [logout-dual-cookie-clean-reset]
+  - executable_id: exec-agent-schema-bounds
+    display_name_zh: 智能体模式边界
+    layer: L1
+    path: ./tests/unit/persistence-config/agent-schema-bounds.unit.test.ts
+    case_ids: [fast-account-switch-epoch-no-crossread]
+  - executable_id: exec-conversation-conflict-refresh
+    display_name_zh: 会话冲突刷新
+    layer: L2
+    path: ./tests/integration/persistence-config/conversation-conflict-refresh.integration.test.ts
+    case_ids: [history-epoch-guard-30day-prune]
+  - executable_id: exec-paragraph-segmentation
+    display_name_zh: 段落切分
+    layer: L1
+    path: ./tests/unit/playback/paragraph-segmentation.unit.test.ts
+    case_ids: [multi-paragraph-prefetch-progress-persist]
   - executable_id: exec-release-pipeline
     display_name_zh: 发布流水线
     layer: TOOLING

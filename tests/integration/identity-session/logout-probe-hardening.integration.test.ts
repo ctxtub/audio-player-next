@@ -3,7 +3,10 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
-// 中文注释：H-06 follow-up——登出探针 try/finally 永不阻断登出 + 探针返回深拷贝/深冻。
+// 中文注释：H-06 follow-up 加固集成测试（任务11 STEP-3，L2）。
+// 来源：tests/legacy/logout-probe-hardening.legacy.test.ts 全量承接（W2-01/W2-02/W2-03），无一丢弃。
+// 对照：tests/test-h06-logout-probe.ts（H-06 主探针）仅覆盖正常登出 reset→pause 采样 + 参与序列 + 前后快照；
+// 本文件覆盖其未覆盖的故障注入隔离（单块 reset 抛错不阻断 + finally 仍采样）与深拷贝/深冻隔离 + 接线静态锁定。
 // 全程内存，不碰 prisma/dev.db。
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
@@ -16,16 +19,16 @@ nodeRequire.cache[glassToastPath] = {
     exports: { default: { show: () => {}, clear: () => {} } },
 } as unknown as NodeModule;
 
-const { usePlaybackStore } = nodeRequire('../../stores/playbackStore') as {
-    usePlaybackStore: typeof import('../../stores/playbackStore').usePlaybackStore;
+const { usePlaybackStore } = nodeRequire('../../../stores/playbackStore') as {
+    usePlaybackStore: typeof import('../../../stores/playbackStore').usePlaybackStore;
 };
-const { useChatStore } = nodeRequire('../../stores/chatStore') as {
-    useChatStore: typeof import('../../stores/chatStore').useChatStore;
+const { useChatStore } = nodeRequire('../../../stores/chatStore') as {
+    useChatStore: typeof import('../../../stores/chatStore').useChatStore;
 };
-const { useConfigStore } = nodeRequire('../../stores/configStore') as {
-    useConfigStore: typeof import('../../stores/configStore').useConfigStore;
+const { useConfigStore } = nodeRequire('../../../stores/configStore') as {
+    useConfigStore: typeof import('../../../stores/configStore').useConfigStore;
 };
-const accountSync = nodeRequire('../../stores/accountSync') as typeof import('../../stores/accountSync');
+const accountSync = nodeRequire('../../../stores/accountSync') as typeof import('../../../stores/accountSync');
 
 function resetStoresForProbe(): void {
     accountSync.clearLogoutProbeSamples();

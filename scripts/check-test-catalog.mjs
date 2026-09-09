@@ -409,11 +409,12 @@ function collectDiskSuites(dir, out) {
   }
   for (const ent of entries) {
     const abs = path.join(dir, ent.name);
-    // 中文注释：排除测试支撑与自测元套件（catalog/runner 自验经 suite-worker 直跑，不进 runner 注册表，避免自指循环）。
+    // 中文注释：排除测试支撑与自测元套件（catalog/runner/ci 自验经 suite-worker 直跑，不进 runner 注册表，避免自指循环）。
     if (ent.isDirectory()) {
       if (abs.replace(/\\/g, '/').includes('tests/support')) continue;
       if (abs.replace(/\\/g, '/').includes('tests/tooling/catalog')) continue;
       if (abs.replace(/\\/g, '/').includes('tests/tooling/runner')) continue;
+      if (abs.replace(/\\/g, '/').includes('tests/tooling/ci')) continue;
       collectDiskSuites(abs, out);
     } else if (ent.isFile() && ent.name.endsWith('.ts')) {
       const rel = path.relative(repoRoot, abs).replace(/\\/g, '/');
@@ -421,6 +422,7 @@ function collectDiskSuites(dir, out) {
       if (rel.startsWith('tests/support/')) continue;
       if (rel.startsWith('tests/tooling/catalog/')) continue;
       if (rel.startsWith('tests/tooling/runner/')) continue;
+      if (rel.startsWith('tests/tooling/ci/')) continue;
       out.push(rel);
     }
   }

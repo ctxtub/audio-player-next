@@ -27,7 +27,7 @@ const ALLOWED_GROUPS = ['unit', 'integration', 'contract', 'tooling', 'static', 
 // 中文注释：unit 禁止导入 lib/db 的静态扫描正则。
 const LIB_DB_IMPORT_RE = /from\s+['"].*lib\/db['"]|require\(['"].*lib\/db['"]\)/;
 
-// 中文注释：套件注册表（42 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit/static 为 false）。
+// 中文注释：套件注册表（44 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit/static 为 false）。
 const SUITES = [
     { id: 'session-roundtrip', path: './tests/unit/identity-session/session-roundtrip.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'procedure-source-locks', path: './tests/static/procedure-source-locks.static.test.ts', group: 'static', needs_db: false },
@@ -42,7 +42,7 @@ const SUITES = [
     { id: 'guest-config-crud', path: './tests/integration/persistence-config/guest-config-crud.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'guest-creative-sync', path: './tests/integration/persistence-config/guest-creative-sync.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'guest-multisubject-lifecycle', path: './tests/integration/persistence-config/guest-multisubject-lifecycle.integration.test.ts', group: 'integration', needs_db: true },
-    { id: 'paragraph-resume-mixed', path: './tests/legacy/paragraph-resume-mixed.legacy.test.ts', group: 'legacy', needs_db: true },
+    { id: 'paragraph-resume-mixed', path: './tests/integration/playback/paragraph-resume-mixed.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'storycard-resume', path: './tests/integration/playback/storycard-resume.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'resume-countdown', path: './tests/integration/playback/resume-countdown.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'final-segment-stop', path: './tests/integration/playback/final-segment-stop.integration.test.ts', group: 'integration', needs_db: true },
@@ -63,14 +63,16 @@ const SUITES = [
     { id: 'optimistic-rollback', path: './tests/unit/persistence-config/optimistic-rollback.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'test-h06-logout-probe', path: './tests/test-h06-logout-probe.ts', group: 'integration', needs_db: true },
     { id: 'explicit-play-budget', path: './tests/integration/playback/explicit-play-budget.integration.test.ts', group: 'integration', needs_db: true },
-    { id: 'conversation-write-wiring', path: './tests/legacy/conversation-write-wiring.legacy.test.ts', group: 'legacy', needs_db: true },
+    { id: 'conversation-write-wiring', path: './tests/static/conversation-write-wiring.static.test.ts', group: 'static', needs_db: false },
     { id: 'preload-context-selection', path: './tests/unit/creation-chat/preload-context-selection.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'keepalive-dedup', path: './tests/integration/persistence-config/keepalive-dedup.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'pending-intent-ui', path: './tests/unit/creation-chat/pending-intent-ui.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'save-sequence', path: './tests/unit/persistence-config/save-sequence.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'agent-schema-bounds', path: './tests/unit/persistence-config/agent-schema-bounds.unit.test.ts', group: 'unit', needs_db: false },
-    { id: 'logout-probe-hardening', path: './tests/legacy/logout-probe-hardening.legacy.test.ts', group: 'legacy', needs_db: true },
+    { id: 'logout-probe-hardening', path: './tests/integration/identity-session/logout-probe-hardening.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'runner-database-path-safety', path: './tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts', group: 'tooling', needs_db: true },
+    { id: 'conversation-conflict-refresh', path: './tests/integration/persistence-config/conversation-conflict-refresh.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'paragraph-segmentation', path: './tests/unit/playback/paragraph-segmentation.unit.test.ts', group: 'unit', needs_db: false },
 ];
 
 /** 当前拥有的子进程（信号处理用）。 */

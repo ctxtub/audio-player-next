@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { spawnSync } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,9 +24,10 @@ if (!process.env.DATABASE_URL) {
   console.log(`=== DB: shared ${sharedDbPath} ===`);
 }
 
-const jiti = require('jiti')(path.join(cwd, 'index.js'), {
-  alias: { '@': cwd },
-});
+// 中文注释：每套件独立子进程执行——共享 jiti 单进程里跨套件的 globalThis/window/
+// require.cache/模块单例会互相污染（wave1 实测：h08 的 window 桩在 resolve 后复活，
+// 污染 h03 的 trpc init 求值）。套件内依赖 jiti；runner 自身只做进程编排与聚合退出码。
+// canonical loader 仍为 jiti（suite-worker.mjs），TRPCError 口径不变（lib/trpc/init）。
 
 const testFiles = [
   './tests/test-sec-01.ts',
@@ -66,17 +68,20 @@ const testFiles = [
 console.log('Running test suite...\n');
 for (const file of testFiles) {
   console.log(`=== Executing ${file} ===`);
-  try {
-    const res = await jiti(file);
-    if (res?.default && typeof res.default.then === 'function') {
-      await res.default;
-    } else if (res && typeof res.then === 'function') {
-      await res;
-    }
-    console.log(`PASS: ${file}\n`);
-  } catch (err) {
-    console.error(`FAIL: ${file}`, err);
+  const res = spawnSync(
+    process.execPath,
+    [path.join(cwd, 'scripts', 'suite-worker.mjs'), file],
+    {
+      cwd,
+      env: process.env,
+      stdio: 'inherit',
+      encoding: 'utf8',
+    },
+  );
+  if (res.status !== 0) {
+    console.error(`FAIL: ${file} (exit ${res.status})`);
     process.exit(1);
   }
+  console.log(`PASS: ${file}\n`);
 }
 console.log('ALL TEST SUITES PASSED SUCCESSFULLY (exit code 0)');

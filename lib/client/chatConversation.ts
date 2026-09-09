@@ -20,7 +20,10 @@ export const fetchMyConversation = async () => {
 /**
  * 快照保存当前用户的会话（整条替换）。
  * @param messages 待保存的消息快照。
+ * @param baseMessageIds H-15 基线：读取时的 messageId 序列，缺省保持旧调用兼容。
  */
-export const saveMyConversation = async (messages: ChatMessageInput[]) => {
-  return trpc.chat.saveConversation.mutate({ messages });
+export const saveMyConversation = async (messages: ChatMessageInput[], baseMessageIds?: string[]) => {
+  return trpc.chat.saveConversation.mutate(
+    baseMessageIds !== undefined ? { messages, baseMessageIds } : { messages },
+  );
 };

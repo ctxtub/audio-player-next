@@ -31,7 +31,10 @@ export const chatConversationRouter = router({
                 guestLimit: 20,
                 authedLimit: 60,
             });
-            await saveConversationForSubject(resolveSubject(ctx), input.messages);
+            // 中文注释：H-15 基线透传——有基线即启用 stale-write 拒绝，无基线保持旧行为兼容。
+            await saveConversationForSubject(resolveSubject(ctx), input.messages, input.baseMessageIds !== undefined
+                ? { expectedMessageIds: input.baseMessageIds }
+                : undefined);
             return { success: true as const };
         }),
 });

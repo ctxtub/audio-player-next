@@ -245,6 +245,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       .catch(() => {});
   };
 
+  /** H-16 退出 flush 在途去重锁：beforeunload+pagehide 双触发共享同一次保存。 */
+  let flushInFlight: Promise<boolean> | null = null;
+
   /**
    * 取完成态消息构造保存快照（含 summary 锚点，便于恢复后压缩上下文；storyCard 的音频置空不存）。
    * @param messages 当前消息列表。
@@ -311,39 +314,98 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
 
   /**
    * 退出前同步落盘：取消防抖并立即保存已完结快照，失败置标记位。
+   * H-16：fetch keepalive 送达保障（仅浏览器分支包装底层 fetch，基线透传与 saveError 主逻辑不变）
+   * ＋ in-flight 去重锁（双触发只存一次，结算后释放）。
    * @returns 保存是否执行且成功。
    */
   const flushPendingSave = async (): Promise<boolean> => {
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
+    if (flushInFlight) {
+      return flushInFlight;
     }
-    const state = get();
-    if (!state.syncEnabled) {
-      return false;
-    }
-    // 中文注释：H-15 基线透传——保存时带上读取/落盘基线，成功后更新基线。
-    const snapshot = toSnapshot(state.messages);
-    const baselineAtSend = baselineMessageIds;
-    try {
-      await saveMyConversation(snapshot, baselineAtSend);
-      baselineMessageIds = snapshot.map((message) => message.messageId);
-      set({ saveError: null });
-      return true;
-    } catch (error) {
-      // 中文注释：H-15 CONFLICT 不静默丢——置标记位＋toast＋initForUser 刷新。
-      if (isConflictError(error)) {
-        const reason = error instanceof Error ? error.message : String(error);
-        set({ saveError: reason });
-        showConflictToast();
-        console.warn('[chatStore] flushPendingSave conflict', error);
-        await refreshAfterConflict();
+    const runFlush = (async (): Promise<boolean> => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      const state = get();
+      if (!state.syncEnabled) {
         return false;
       }
-      const reason = error instanceof Error ? error.message : String(error);
-      set({ saveError: reason });
-      console.warn('[chatStore] flushPendingSave failed', error);
-      return false;
+      // H-16 keepalive：退出时浏览器可能取消异步请求，以 keepalive 语义透传底层 fetch。
+      // 仅浏览器环境（window 存在）包装 globalThis/window.fetch 并在 finally 还原；
+      // Node/桩环境（无 window）直接走基线透传，桩拦截不受影响。
+      const fetchScope = globalThis as unknown as Record<string, unknown>;
+      const originalFetch = fetchScope.fetch as typeof fetch | undefined;
+      const originalWindowFetch =
+        typeof window !== 'undefined'
+          ? (window as unknown as Record<string, unknown>).fetch as typeof fetch | undefined
+          : undefined;
+      let keepalivePatched = false;
+      if (typeof originalFetch === 'function' && typeof window !== 'undefined') {
+        try {
+          const keepaliveFetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) =>
+            (originalFetch as (...args: unknown[]) => Promise<unknown>)(input, {
+              ...((init as Record<string, unknown> | undefined) ?? {}),
+              keepalive: true,
+            })) as unknown as typeof fetch;
+          fetchScope.fetch = keepaliveFetch;
+          try {
+            (window as unknown as Record<string, unknown>).fetch = keepaliveFetch;
+          } catch {
+            // 忽略只读 window.fetch，还原时以 globalThis 为准。
+          }
+          keepalivePatched = true;
+        } catch {
+          // 补丁失败则走基线透传，不阻断保存。
+        }
+      }
+      try {
+        // 中文注释：H-15 基线透传——保存时带上读取/落盘基线，成功后更新基线。
+        const snapshot = toSnapshot(state.messages);
+        const baselineAtSend = baselineMessageIds;
+        await saveMyConversation(snapshot, baselineAtSend);
+        baselineMessageIds = snapshot.map((message) => message.messageId);
+        set({ saveError: null });
+        return true;
+      } catch (error) {
+        // 中文注释：H-15 CONFLICT 不静默丢——置标记位＋toast＋initForUser 刷新。
+        if (isConflictError(error)) {
+          const reason = error instanceof Error ? error.message : String(error);
+          set({ saveError: reason });
+          showConflictToast();
+          console.warn('[chatStore] flushPendingSave conflict', error);
+          await refreshAfterConflict();
+          return false;
+        }
+        const reason = error instanceof Error ? error.message : String(error);
+        set({ saveError: reason });
+        console.warn('[chatStore] flushPendingSave failed', error);
+        return false;
+      } finally {
+        if (keepalivePatched) {
+          try {
+            fetchScope.fetch = originalFetch as typeof fetch;
+          } catch {
+            // 忽略还原失败。
+          }
+          try {
+            if (typeof window !== 'undefined') {
+              (window as unknown as Record<string, unknown>).fetch = originalWindowFetch as typeof fetch;
+            }
+          } catch {
+            // 忽略还原失败。
+          }
+        }
+      }
+    })();
+    flushInFlight = runFlush;
+    try {
+      return await runFlush;
+    } finally {
+      if (flushInFlight === runFlush) {
+        flushInFlight = null;
+      }
+
     }
   };
 

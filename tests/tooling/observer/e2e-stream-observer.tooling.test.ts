@@ -4,14 +4,14 @@ import type {
     ObserveRecord,
     ObservingFetchOptions,
     StreamSuccessEvidence,
-} from '../scripts/e2e-stream-observe.mjs';
+} from '../../../scripts/e2e-stream-observe.mjs';
 import {
     NON_STREAM_PREVIEW_CAP,
     STREAM_SUCCESS_EVIDENCE,
     classifyObserveError,
     createObservingFetch,
     summarizeBodySafely,
-} from '../scripts/e2e-stream-observe.mjs';
+} from '../../../scripts/e2e-stream-observe.mjs';
 
 /**
  * tRPC 流观察 hook 契约测试（缺陷 #7，测试基建）。

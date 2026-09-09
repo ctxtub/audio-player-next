@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { createAudioEndedGuard } from '../utils/audioEndedGuard';
+import { createAudioEndedGuard } from '../../utils/audioEndedGuard';
 
 /**
  * R15 守卫接线集成锁：AudioControllerHost 对

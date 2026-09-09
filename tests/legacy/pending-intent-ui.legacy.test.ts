@@ -17,8 +17,8 @@ nodeRequire.cache[glassToastPath] = {
     exports: { default: { show: (opts: { icon?: string; content?: string }) => { toastCalls.push(opts); }, clear: () => {} } },
 } as unknown as NodeModule;
 
-const { useChatStore } = nodeRequire('../stores/chatStore') as {
-    useChatStore: typeof import('../stores/chatStore').useChatStore;
+const { useChatStore } = nodeRequire('../../stores/chatStore') as {
+    useChatStore: typeof import('../../stores/chatStore').useChatStore;
 };
 
 const CHAT_LAYOUT_PATH = path.join(

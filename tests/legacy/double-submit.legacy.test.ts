@@ -1,8 +1,8 @@
 import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { TRPCError } from '../lib/trpc/init';
-import { useChatStore } from '../stores/chatStore';
+import { TRPCError } from '../../lib/trpc/init';
+import { useChatStore } from '../../stores/chatStore';
 
 /**
  * H-04 回归测试——Composer 同帧双发防重（P0）。

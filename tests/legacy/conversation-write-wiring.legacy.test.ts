@@ -2,10 +2,10 @@ import assert from 'node:assert';
 import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { prisma } from '../lib/db';
-import { chatConversationRouter } from '../lib/trpc/routers/chatConversation';
-import { saveConversationInputSchema } from '../lib/trpc/schemas/chatConversation';
-import { TRPCError } from '../lib/trpc/init';
+import { prisma } from '../../lib/db';
+import { chatConversationRouter } from '../../lib/trpc/routers/chatConversation';
+import { saveConversationInputSchema } from '../../lib/trpc/schemas/chatConversation';
+import { TRPCError } from '../../lib/trpc/init';
 
 /**
  * 构造待保存的单条会话消息。
@@ -172,9 +172,9 @@ async function runH15WiringTests(): Promise<void> {
             },
         },
     } as unknown as NodeModule;
-    const chatStoreModule = nodeRequire('../stores/chatStore') as Record<string, unknown>;
+    const chatStoreModule = nodeRequire('../../stores/chatStore') as Record<string, unknown>;
     const { useChatStore } = chatStoreModule as {
-        useChatStore: typeof import('../stores/chatStore').useChatStore;
+        useChatStore: typeof import('../../stores/chatStore').useChatStore;
     };
     // 中文注释：读基线——initForUser 拉取成功后记 messageId 序列，保存时透传。
     useChatStore.getState().reset();

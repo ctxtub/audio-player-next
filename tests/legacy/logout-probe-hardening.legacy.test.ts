@@ -16,16 +16,16 @@ nodeRequire.cache[glassToastPath] = {
     exports: { default: { show: () => {}, clear: () => {} } },
 } as unknown as NodeModule;
 
-const { usePlaybackStore } = nodeRequire('../stores/playbackStore') as {
-    usePlaybackStore: typeof import('../stores/playbackStore').usePlaybackStore;
+const { usePlaybackStore } = nodeRequire('../../stores/playbackStore') as {
+    usePlaybackStore: typeof import('../../stores/playbackStore').usePlaybackStore;
 };
-const { useChatStore } = nodeRequire('../stores/chatStore') as {
-    useChatStore: typeof import('../stores/chatStore').useChatStore;
+const { useChatStore } = nodeRequire('../../stores/chatStore') as {
+    useChatStore: typeof import('../../stores/chatStore').useChatStore;
 };
-const { useConfigStore } = nodeRequire('../stores/configStore') as {
-    useConfigStore: typeof import('../stores/configStore').useConfigStore;
+const { useConfigStore } = nodeRequire('../../stores/configStore') as {
+    useConfigStore: typeof import('../../stores/configStore').useConfigStore;
 };
-const accountSync = nodeRequire('../stores/accountSync') as typeof import('../stores/accountSync');
+const accountSync = nodeRequire('../../stores/accountSync') as typeof import('../../stores/accountSync');
 
 function resetStoresForProbe(): void {
     accountSync.clearLogoutProbeSamples();

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const projectRoot = path.resolve(__dirname, '..');
+const projectRoot = path.resolve(__dirname, '../../..');
 const workflowPath = path.join(projectRoot, '.github/workflows/docker-push.yml');
 const scriptPath = path.join(projectRoot, 'scripts/push-ghcr.sh');
 

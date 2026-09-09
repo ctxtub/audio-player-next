@@ -62,8 +62,8 @@ nodeRequire.cache[chatConversationPath] = {
     },
 } as unknown as NodeModule;
 
-const { useChatStore } = nodeRequire('../stores/chatStore') as {
-    useChatStore: typeof import('../stores/chatStore').useChatStore;
+const { useChatStore } = nodeRequire('../../stores/chatStore') as {
+    useChatStore: typeof import('../../stores/chatStore').useChatStore;
 };
 
 function resetBaseline(): void {

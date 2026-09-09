@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import assert from 'node:assert';
-import { interactSchema, summarizeContextSchema } from '../lib/trpc/schemas/agent';
+import { interactSchema, summarizeContextSchema } from '../../lib/trpc/schemas/agent';
 
 // 1. BUG-01: Player redirect to /setting
 const playerContent = fs.readFileSync('app/(main)/player/index.tsx', 'utf-8');

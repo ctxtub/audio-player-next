@@ -1,11 +1,11 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
-import { TRPCError } from '../lib/trpc/init';
-import { createContext } from '../lib/trpc/context';
-import type { Context } from '../lib/trpc/context';
-import { agentRouter } from '../lib/trpc/routers/agent';
-import { encodeSession, encodeGuestId } from '../lib/session';
-import * as summaryModule from '../lib/agent/nodes/summary';
+import { TRPCError } from '../../../lib/trpc/init';
+import { createContext } from '../../../lib/trpc/context';
+import type { Context } from '../../../lib/trpc/context';
+import { agentRouter } from '../../../lib/trpc/routers/agent';
+import { encodeSession, encodeGuestId } from '../../../lib/session';
+import * as summaryModule from '../../../lib/agent/nodes/summary';
 
 process.env.SESSION_SECRET = 'test-secret-summarize-guard-12345';
 

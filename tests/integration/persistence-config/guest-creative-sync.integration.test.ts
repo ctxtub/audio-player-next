@@ -2,7 +2,7 @@ import assert from 'node:assert';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import * as nextHeaders from 'next/headers';
-import { prisma } from '../lib/db';
+import { prisma } from '../../../lib/db';
 import { TRPCError } from '@trpc/server';
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
@@ -17,32 +17,32 @@ nodeRequire.cache[glassToastPath] = {
 import {
     getConversationForSubject,
     saveConversationForSubject,
-} from '../lib/server/chatConversation';
+} from '../../../lib/server/chatConversation';
 import {
     listGenerationHistoryForSubject,
     recordGenerationHistoryForSubject,
     removeGenerationHistoryForSubject,
-} from '../lib/server/generationHistory';
+} from '../../../lib/server/generationHistory';
 import {
     listPromptHistoryForSubject,
     recordPromptHistoryForSubject,
     removePromptHistoryForSubject,
-} from '../lib/server/promptHistory';
-import { purgeExpiredGuestData } from '../lib/server/guestGc';
-import { migrateGuestCreativeRecordsToUser } from '../lib/server/unifiedMigration';
+} from '../../../lib/server/promptHistory';
+import { purgeExpiredGuestData } from '../../../lib/server/guestGc';
+import { migrateGuestCreativeRecordsToUser } from '../../../lib/server/unifiedMigration';
 import {
     SlidingWindowRateLimiter,
     enforceProcedureRateLimit,
-} from '../lib/server/rateLimit';
-import { chatConversationRouter } from '../lib/trpc/routers/chatConversation';
-import { generationHistoryRouter } from '../lib/trpc/routers/generationHistory';
-import { promptHistoryRouter } from '../lib/trpc/routers/promptHistory';
-import { authRouter } from '../lib/trpc/routers/auth';
-import { createContext } from '../lib/trpc/context';
-import { encodeSession } from '../lib/session';
+} from '../../../lib/server/rateLimit';
+import { chatConversationRouter } from '../../../lib/trpc/routers/chatConversation';
+import { generationHistoryRouter } from '../../../lib/trpc/routers/generationHistory';
+import { promptHistoryRouter } from '../../../lib/trpc/routers/promptHistory';
+import { authRouter } from '../../../lib/trpc/routers/auth';
+import { createContext } from '../../../lib/trpc/context';
+import { encodeSession } from '../../../lib/session';
 
-const { usePromptHistoryStore } = nodeRequire('../stores/promptHistoryStore') as {
-    usePromptHistoryStore: typeof import('../stores/promptHistoryStore').usePromptHistoryStore;
+const { usePromptHistoryStore } = nodeRequire('../../../stores/promptHistoryStore') as {
+    usePromptHistoryStore: typeof import('../../../stores/promptHistoryStore').usePromptHistoryStore;
 };
 
 process.env.SESSION_SECRET = 'test-secret-guest-creative-sync-12345';

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { NextRequest } from 'next/server';
 import * as nextHeaders from 'next/headers';
-import { prisma } from '../lib/db';
+import { prisma } from '../../../lib/db';
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
 const glassToastPath = path.resolve(process.cwd(), 'components/ui/GlassToast.tsx');
@@ -14,8 +14,8 @@ nodeRequire.cache[glassToastPath] = {
     exports: { default: { show: () => {}, clear: () => {} } },
 } as unknown as NodeModule;
 
-const { useConfigStore } = nodeRequire('../stores/configStore') as {
-    useConfigStore: typeof import('../stores/configStore').useConfigStore;
+const { useConfigStore } = nodeRequire('../../../stores/configStore') as {
+    useConfigStore: typeof import('../../../stores/configStore').useConfigStore;
 };
 import {
     getOrCreateConfig,
@@ -24,17 +24,17 @@ import {
     toConfigDto,
     mapPatchToDbFields,
     migrateGuestConfigToUser,
-} from '../lib/server/unifiedConfig';
+} from '../../../lib/server/unifiedConfig';
 import {
     SlidingWindowRateLimiter,
     enforceProcedureRateLimit,
     getGuestRateLimitKeys,
-} from '../lib/server/rateLimit';
-import { createContext } from '../lib/trpc/context';
-import { encodeGuestId, decodeGuestCookie } from '../lib/session';
-import { authRouter } from '../lib/trpc/routers/auth';
-import { middleware } from '../middleware';
-import { THEME_MODE_STORAGE_KEY } from '../components/ThemeProvider/themeConfig';
+} from '../../../lib/server/rateLimit';
+import { createContext } from '../../../lib/trpc/context';
+import { encodeGuestId, decodeGuestCookie } from '../../../lib/session';
+import { authRouter } from '../../../lib/trpc/routers/auth';
+import { middleware } from '../../../middleware';
+import { THEME_MODE_STORAGE_KEY } from '../../../components/ThemeProvider/themeConfig';
 import { TRPCError } from '@trpc/server';
 
 process.env.SESSION_SECRET = 'test-secret-guest-config-12345';

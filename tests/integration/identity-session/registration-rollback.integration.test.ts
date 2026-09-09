@@ -1,24 +1,13 @@
 import assert from 'node:assert';
-import fs from 'node:fs';
-import path from 'node:path';
 import * as nextHeaders from 'next/headers';
-
-// Configure test SQLite database
-const testDbPath = path.resolve(process.cwd(), 'prisma/test-orphan.db');
-process.env.DATABASE_URL = `file:${testDbPath}`;
+import { setupIsolatedDb } from '../../support/db/isolated-db.helper';
 
 async function runOrphanTests() {
-    // Clean up prior test DB if exists
-    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+    // 中文注释：收敛任务1显式偏差——复用 runner 已迁移的受控隔离库，不再自管 DATABASE_URL/自建 prisma/test-orphan.db。
+    const { prisma } = await setupIsolatedDb('registration-rollback');
 
-    const { execSync } = await import('node:child_process');
-    execSync(`DATABASE_URL="file:${testDbPath}" ./node_modules/.bin/prisma migrate deploy`, {
-        stdio: 'pipe',
-    });
-
-    const { prisma } = await import('../lib/db');
-    const { assertSessionSecret } = await import('../lib/session');
-    const { authRouter } = await import('../lib/trpc/routers/auth');
+    const { assertSessionSecret } = await import('../../../lib/session');
+    const { authRouter } = await import('../../../lib/trpc/routers/auth');
 
     console.log('--- 1. Testing Fail-Fast SESSION_SECRET Check ---');
     delete process.env.SESSION_SECRET;
@@ -146,10 +135,6 @@ async function runOrphanTests() {
     } finally {
         (nextHeaders as { cookies: unknown }).cookies = originalCookies;
         await prisma.$disconnect();
-        // Clean up test DB file
-        if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
-        const journalPath = `${testDbPath}-journal`;
-        if (fs.existsSync(journalPath)) fs.unlinkSync(journalPath);
     }
 
     console.log('PASS: Successful registration and re-registration verification complete');

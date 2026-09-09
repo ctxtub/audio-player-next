@@ -11,12 +11,12 @@
 
 import assert from 'node:assert';
 import * as nextHeaders from 'next/headers';
-import { prisma } from '../lib/db';
-import { chatConversationRouter } from '../lib/trpc/routers/chatConversation';
-import { generationHistoryRouter } from '../lib/trpc/routers/generationHistory';
-import { promptHistoryRouter } from '../lib/trpc/routers/promptHistory';
-import { authRouter } from '../lib/trpc/routers/auth';
-import { encodeSession } from '../lib/session';
+import { prisma } from '../../../lib/db';
+import { chatConversationRouter } from '../../../lib/trpc/routers/chatConversation';
+import { generationHistoryRouter } from '../../../lib/trpc/routers/generationHistory';
+import { promptHistoryRouter } from '../../../lib/trpc/routers/promptHistory';
+import { authRouter } from '../../../lib/trpc/routers/auth';
+import { encodeSession } from '../../../lib/session';
 
 process.env.SESSION_SECRET = 'test-secret-e2e-harness-12345';
 

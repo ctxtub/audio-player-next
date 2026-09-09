@@ -19,7 +19,7 @@ nodeRequire.cache[glassToastPath] = {
 } as unknown as NodeModule;
 
 // 中文注释：会话落库可控桩——成功态记录 payload；失败态抛 TRPCError 供标记位断言。
-import { TRPCError } from '../lib/trpc/init';
+import { TRPCError } from '../../../lib/trpc/init';
 let saveMode: 'success' | 'fail' = 'success';
 type ChatMessageInputLike = { messageId: string; role: string; content: string };
 const savedSnapshots: ChatMessageInputLike[][] = [];
@@ -40,9 +40,9 @@ nodeRequire.cache[chatConversationPath] = {
     },
 } as unknown as NodeModule;
 
-const chatStoreModule = nodeRequire('../stores/chatStore') as Record<string, unknown>;
+const chatStoreModule = nodeRequire('../../../stores/chatStore') as Record<string, unknown>;
 const { useChatStore } = chatStoreModule as {
-    useChatStore: typeof import('../stores/chatStore').useChatStore;
+    useChatStore: typeof import('../../../stores/chatStore').useChatStore;
 };
 
 // 中文注释：重置聊天 store 到干净基线并开启同步。

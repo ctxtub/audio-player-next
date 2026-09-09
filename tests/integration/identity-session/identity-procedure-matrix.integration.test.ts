@@ -2,15 +2,15 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import { router, guardedProcedure, authedProcedure, publicProcedure, TRPCError } from '../lib/trpc/init';
-import { createContext, getSafeClientIp } from '../lib/trpc/context';
-import { encodeSession, encodeGuestId } from '../lib/session';
+import { router, guardedProcedure, authedProcedure, publicProcedure, TRPCError } from '../../../lib/trpc/init';
+import { createContext, getSafeClientIp } from '../../../lib/trpc/context';
+import { encodeSession, encodeGuestId } from '../../../lib/session';
 
-import { configRouter } from '../lib/trpc/routers/config';
-import { chatConversationRouter } from '../lib/trpc/routers/chatConversation';
-import { generationHistoryRouter } from '../lib/trpc/routers/generationHistory';
-import { promptHistoryRouter } from '../lib/trpc/routers/promptHistory';
-import { prisma } from '../lib/db';
+import { configRouter } from '../../../lib/trpc/routers/config';
+import { chatConversationRouter } from '../../../lib/trpc/routers/chatConversation';
+import { generationHistoryRouter } from '../../../lib/trpc/routers/generationHistory';
+import { promptHistoryRouter } from '../../../lib/trpc/routers/promptHistory';
+import { prisma } from '../../../lib/db';
 
 process.env.SESSION_SECRET = 'test-secret-matrix-1234567890';
 

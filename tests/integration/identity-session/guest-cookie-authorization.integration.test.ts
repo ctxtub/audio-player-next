@@ -1,12 +1,12 @@
 import assert from 'node:assert';
 import { randomUUID } from 'node:crypto';
-import { router, guardedProcedure, TRPCError } from '../lib/trpc/init';
+import { router, guardedProcedure, TRPCError } from '../../../lib/trpc/init';
 import {
     createContext,
     buildGuestCookieHeader,
     GUEST_COOKIE_MAX_AGE,
-} from '../lib/trpc/context';
-import { encodeGuestId, decodeGuestCookie } from '../lib/session';
+} from '../../../lib/trpc/context';
+import { encodeGuestId, decodeGuestCookie } from '../../../lib/session';
 
 process.env.SESSION_SECRET = 'test-secret-signed-guest-fix02-12345';
 

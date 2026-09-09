@@ -357,6 +357,11 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
       if (!controller) {
         throw new Error('音频播放器尚未注册');
       }
+      // 中文注释：H-07 切换窗口守卫——暂停且已有在播轨道时不再续播，防覆盖暂停意图；
+      // 初始起播（无轨道）与播放态放行，不改变正常切换语义。
+      if (!get().isPlaying && get().currentAudioUrl !== null) {
+        return;
+      }
       set({
         isFloatingVisible: true,
         currentAudioUrl: audioUrl,

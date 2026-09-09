@@ -354,6 +354,14 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
       await get().clearProgress();
       return;
     }
+    // 中文注释：H-07 切换窗口守卫（入口快拦）——暂停且已有在播轨道时不再续播，省去无效合成；
+    // 初始起播（无轨道）与播放态放行，不改变正常切换语义。
+    if (
+      !usePlaybackStore.getState().isPlaying &&
+      usePlaybackStore.getState().currentAudioUrl !== null
+    ) {
+      return;
+    }
 
     const textToPlay = state.paragraphs[paragraphIndex];
     const voiceId = state.voiceId || useConfigStore.getState().apiConfig.voiceId;
@@ -370,6 +378,15 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
         GlassToast.show({ icon: 'fail', content: '语音生成稍有延迟，请重试' });
         throw err;
       }
+    }
+
+    // 中文注释：H-07 切换窗口守卫（合成后复检）——慢 TTS 放大的切换窗口内暂停须被尊重，
+    // 合成完成时若已暂停且有轨道则不再续播（防覆盖暂停意图）。
+    if (
+      !usePlaybackStore.getState().isPlaying &&
+      usePlaybackStore.getState().currentAudioUrl !== null
+    ) {
+      return;
     }
 
     // 消费预加载

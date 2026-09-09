@@ -211,6 +211,8 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         set({
           isPlaying: false,
         });
+        // 中文注释：H-08 预算耗尽声画一致——倒计时归零须联动暂停音频元素，否则 UI 暂停而音频续响。
+        get().audioController?.pause();
       }
     };
 
@@ -252,7 +254,9 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
      * @returns void
      */
     start: () => {
-      if (get().remainingMs === null) {
+      // 中文注释：H-08 预算耗尽早退——0 值与 null 同等视为无预算，不得放行（E2E-03-02）。
+      const remainingMs = get().remainingMs;
+      if (remainingMs === null || remainingMs <= 0) {
         return;
       }
       set({

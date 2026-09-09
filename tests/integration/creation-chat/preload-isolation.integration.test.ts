@@ -36,7 +36,7 @@ nodeRequire.cache[chatConversationPath] = {
 } as unknown as NodeModule;
 
 // 中文注释：Agent 交互可控桩——成功态模拟 Story 意图 + 文本增量 + 音频 + 完成；失败态走 onError。
-import { TRPCError } from '../lib/trpc/init';
+import { TRPCError } from '../../../lib/trpc/init';
 let stubMode: 'success' | 'fail' = 'success';
 const PRELOAD_STORY_TEXT = '预载故事正文-隔离测试';
 const PRELOAD_AUDIO_URL = 'blob:mock-preload-audio';
@@ -70,19 +70,19 @@ nodeRequire.cache[agentFlowPath] = {
     },
 } as unknown as NodeModule;
 
-const { useChatStore } = nodeRequire('../stores/chatStore') as {
-    useChatStore: typeof import('../stores/chatStore').useChatStore;
+const { useChatStore } = nodeRequire('../../../stores/chatStore') as {
+    useChatStore: typeof import('../../../stores/chatStore').useChatStore;
 } & Record<string, unknown>;
-const { usePreloadStore } = nodeRequire('../stores/preloadStore') as {
-    usePreloadStore: typeof import('../stores/preloadStore').usePreloadStore;
+const { usePreloadStore } = nodeRequire('../../../stores/preloadStore') as {
+    usePreloadStore: typeof import('../../../stores/preloadStore').usePreloadStore;
 };
-const { useGenerationHistoryStore } = nodeRequire('../stores/generationHistoryStore') as {
-    useGenerationHistoryStore: typeof import('../stores/generationHistoryStore').useGenerationHistoryStore;
+const { useGenerationHistoryStore } = nodeRequire('../../../stores/generationHistoryStore') as {
+    useGenerationHistoryStore: typeof import('../../../stores/generationHistoryStore').useGenerationHistoryStore;
 };
-const { usePromptHistoryStore } = nodeRequire('../stores/promptHistoryStore') as {
-    usePromptHistoryStore: typeof import('../stores/promptHistoryStore').usePromptHistoryStore;
+const { usePromptHistoryStore } = nodeRequire('../../../stores/promptHistoryStore') as {
+    usePromptHistoryStore: typeof import('../../../stores/promptHistoryStore').usePromptHistoryStore;
 };
-const { AUTO_CONTINUE_PROMPT } = nodeRequire('../app/services/chatFlow') as {
+const { AUTO_CONTINUE_PROMPT } = nodeRequire('../../../app/services/chatFlow') as {
     AUTO_CONTINUE_PROMPT: string;
 };
 
@@ -162,7 +162,7 @@ async function runH03Tests(): Promise<void> {
     console.log('PASS: H-03-01 draft preserved');
 
     console.log('=== H-03-02: 预载不产生可见用户气泡 ===');
-    const chatStoreModule = nodeRequire('../stores/chatStore') as Record<string, unknown>;
+    const chatStoreModule = nodeRequire('../../../stores/chatStore') as Record<string, unknown>;
     assert.strictEqual(
         typeof chatStoreModule.isPreloadUserMessage,
         'function',
@@ -261,7 +261,7 @@ async function runH03Tests(): Promise<void> {
     // 新语义仅 origin === 'preload' 判 true，无标记/origin user 一律可见。
     resetBaseline();
     useChatStore.setState({ syncEnabled: true });
-    const chatStoreModuleForH0307 = nodeRequire('../stores/chatStore') as Record<string, unknown>;
+    const chatStoreModuleForH0307 = nodeRequire('../../../stores/chatStore') as Record<string, unknown>;
     const isPreloadForH0307 = chatStoreModuleForH0307.isPreloadUserMessage as (message: {
         role: string;
         content: string;

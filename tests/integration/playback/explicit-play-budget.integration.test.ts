@@ -18,14 +18,14 @@ nodeRequire.cache[glassToastPath] = {
   },
 } as unknown as NodeModule;
 
-const { usePlaybackStore } = nodeRequire('../stores/playbackStore') as {
-  usePlaybackStore: typeof import('../stores/playbackStore').usePlaybackStore;
+const { usePlaybackStore } = nodeRequire('../../../stores/playbackStore') as {
+  usePlaybackStore: typeof import('../../../stores/playbackStore').usePlaybackStore;
 };
-const { usePlaybackProgressStore } = nodeRequire('../stores/playbackProgressStore') as {
-  usePlaybackProgressStore: typeof import('../stores/playbackProgressStore').usePlaybackProgressStore;
+const { usePlaybackProgressStore } = nodeRequire('../../../stores/playbackProgressStore') as {
+  usePlaybackProgressStore: typeof import('../../../stores/playbackProgressStore').usePlaybackProgressStore;
 };
-const { useConfigStore } = nodeRequire('../stores/configStore') as {
-  useConfigStore: typeof import('../stores/configStore').useConfigStore;
+const { useConfigStore } = nodeRequire('../../../stores/configStore') as {
+  useConfigStore: typeof import('../../../stores/configStore').useConfigStore;
 };
 
 // 中文注释：四段式故事正文，每段足够长以保证切分为 4 段。

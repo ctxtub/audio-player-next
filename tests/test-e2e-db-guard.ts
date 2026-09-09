@@ -115,6 +115,7 @@ async function caseHealthyVerify(): Promise<void> {
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
+    console.log('PASS: 用例1 健康库 verify 通过且快照只读');
 }
 
 /**
@@ -141,6 +142,7 @@ async function caseCorruptRestore(): Promise<void> {
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
+    console.log('PASS: 用例2 损坏库 verify 失败且 restore 恢复数据');
 }
 
 /**
@@ -217,6 +219,7 @@ async function caseForbiddenVariants(): Promise<void> {
         rmSync(dirUpper, { recursive: true, force: true });
         rmSync(dirProd, { recursive: true, force: true });
     }
+    console.log('PASS: 用例3 共享/错误库变体一律拒绝且誘饵无触碰');
 }
 
 /**
@@ -246,6 +249,7 @@ async function caseMissingRejects(): Promise<void> {
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
+    console.log('PASS: 用例4 缺失库建连接前拒绝且无文件副作用');
 }
 
 /**
@@ -298,6 +302,7 @@ async function caseLockRefused(): Promise<void> {
         }
         rmSync(dir, { recursive: true, force: true });
     }
+    console.log('PASS: 用例5 受管占用拒绝硬写且解锁后恢复');
 }
 
 /**
@@ -360,6 +365,7 @@ async function caseConcurrentBusy(): Promise<void> {
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
+    console.log('PASS: 用例6 并发写被拒且释放后串行写成功');
 }
 
 /**
@@ -381,6 +387,7 @@ async function caseBackupPrerequisite(): Promise<void> {
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
+    console.log('PASS: 用例7 无快照写库被拒且快照后可写');
 }
 
 /**
@@ -431,6 +438,7 @@ async function caseWalSnapshotRestore(): Promise<void> {
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
+    console.log('PASS: 用例8 快照 WAL 一致拷贝且 restore 恢复/清除 sidecar');
 }
 
 /**

@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "node scripts/run-tests.mjs",
+    "test:runner-database-safety": "node scripts/suite-worker.mjs ./tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up",
     "docker:push": "./scripts/push-ghcr.sh"

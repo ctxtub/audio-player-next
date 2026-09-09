@@ -20,4 +20,4 @@
 - 清理：删历史行；清 cookie。
 - 证据要求：`db.txt`（行集与 useCount）、`console.json`。
 - 溯源：`stores/preloadStore.ts:84-150`（`:93` `recordHistory:false`）；`stores/generationHistoryStore.ts:47,60-72`（epoch 捕获/校验）；`stores/promptHistoryStore.ts:115,218-233`（epoch）；`lib/server/promptHistory.ts:10-11,35-38,57-58`（30 天剪除、`useCount` upsert）。
-- 备注：删除同步（历史面板删除→DB deleteMany）并入本例步骤 2 后追加一次删除操作。
+- 备注：删除同步（历史面板删除→DB deleteMany）并入本例步骤 2 后追加一次删除操作。W2D（2026-09-09，隔离 `:32231`，见 `.e2e-results/E2E-W2D-05-09/report.md`＋`.e2e-results/E2E-W2D-CONV/report.md`）：预载不入库（GuestGenerationHistory 4＝故事数）＋epoch 捕获/校验代码确认（四 store＋accountSync，终态隔离活体 R1 565/R2 459/R3 482ms）；30 天裁剪与 useCount 未重跑，沿用既有结论。

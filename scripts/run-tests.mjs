@@ -1,8 +1,28 @@
 import { createRequire } from 'node:module';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const cwd = process.cwd();
+
+// 中文注释：共享隔离库——静态导入 lib/db 的套件需要一个带 schema 的库。
+// 运行器在加载任何用例前建好并注入 DATABASE_URL；只写 .e2e-runtime 隔离库，
+// 绝不触碰 prisma/dev.db、.env.local 与生产端口。外部已注入时予以尊重。
+const sharedDbPath = path.join(cwd, '.e2e-runtime', 'test-shared.db');
+if (!process.env.DATABASE_URL) {
+  fs.mkdirSync(path.dirname(sharedDbPath), { recursive: true });
+  if (fs.existsSync(sharedDbPath)) {
+    fs.unlinkSync(sharedDbPath);
+  }
+  execFileSync(path.join(cwd, 'node_modules', '.bin', 'prisma'), ['migrate', 'deploy'], {
+    env: { ...process.env, DATABASE_URL: `file:${sharedDbPath}` },
+    stdio: 'pipe',
+  });
+  process.env.DATABASE_URL = `file:${sharedDbPath}`;
+  console.log(`=== DB: shared ${sharedDbPath} ===`);
+}
+
 const jiti = require('jiti')(path.join(cwd, 'index.js'), {
   alias: { '@': cwd },
 });

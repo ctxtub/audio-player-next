@@ -1,0 +1,199 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://audio-player-next.local/schemas/test-catalog-v1.json",
+  "title": "测试资产目录 Catalog v1",
+  "description": "任务8 Catalog v1 规格：收录全部原子 case，旧编号只进 legacy_aliases，run_verdict 不属于 catalog。",
+  "type": "object",
+  "required": ["schema_version", "cases", "executables"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Catalog 模式版本，当前仅允许 1。"
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "description": "原子 case 列表（目标 61，含 PLANNED 悬空）。",
+      "items": { "$ref": "#/definitions/case" }
+    },
+    "executables": {
+      "type": "array",
+      "minItems": 1,
+      "description": "顶层唯一可执行注册表，case 通过 executable_ids 引用。",
+      "items": { "$ref": "#/definitions/executable" }
+    }
+  },
+  "definitions": {
+    "case": {
+      "type": "object",
+      "required": [
+        "case_id",
+        "display_name_zh",
+        "legacy_aliases",
+        "journey_id",
+        "user_goal",
+        "priority",
+        "primary_defense",
+        "secondary_defenses",
+        "lifecycle_status",
+        "risk_tags",
+        "spec_path",
+        "required_assertions",
+        "executable_ids",
+        "fixtures",
+        "ci_tier",
+        "owner"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "description": "语义名（英文 kebab-case），旧 E2E 编号只进 legacy_aliases。"
+        },
+        "display_name_zh": {
+          "type": "string",
+          "minLength": 1,
+          "description": "直述用户行为的中文名，命令行汇总以此为主。"
+        },
+        "legacy_aliases": {
+          "type": "array",
+          "description": "旧别名（E2E-XX-YY / H-XX 等），仅索引用。",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "journey_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "用户旅程标识（英文 kebab-case）。"
+        },
+        "user_goal": {
+          "type": "string",
+          "minLength": 1,
+          "description": "用户目标（中文直述）。"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["P0", "P1", "P2", "P3"]
+        },
+        "primary_defense": {
+          "type": "string",
+          "minLength": 1,
+          "description": "主防线（例：L1/L2/L3，允许层枚举值）。"
+        },
+        "secondary_defenses": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "lifecycle_status": {
+          "type": "string",
+          "enum": ["PLANNED", "ACTIVE", "BLOCKED", "MANUAL", "LEGACY-NON-COVERAGE", "RETIRED"]
+        },
+        "risk_tags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "spec_path": {
+          "type": "string",
+          "pattern": "^docs/e2e/.+\\.md(#.+)?$",
+          "description": "对应场景规范路径（允许带 # 锚点到原子小节）。"
+        },
+        "required_assertions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/assertion" }
+        },
+        "executable_ids": {
+          "type": "array",
+          "description": "引用的顶层 executable_id 列表；ACTIVE 必须非空，PLANNED/BLOCKED 允许为空但报告缺口。",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "fixtures": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "ci_tier": {
+          "type": "string",
+          "enum": ["CANDIDATE", "NIGHTLY", "RELEASE", "PATH_FILTERED", "NONE"]
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blocked_reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "lifecycle=BLOCKED 时必填。"
+        },
+        "manual_reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "lifecycle=MANUAL 时必填。"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "lifecycle_status": { "const": "BLOCKED" } } },
+          "then": { "required": ["blocked_reason"] }
+        },
+        {
+          "if": { "properties": { "lifecycle_status": { "const": "MANUAL" } } },
+          "then": { "required": ["manual_reason"] }
+        }
+      ]
+    },
+    "assertion": {
+      "type": "object",
+      "required": ["assertion_id", "display_name_zh"],
+      "additionalProperties": false,
+      "properties": {
+        "assertion_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "display_name_zh": {
+          "type": "string",
+          "minLength": 1
+        },
+        "surface": {
+          "type": "string",
+          "minLength": 1,
+          "description": "断言面（例：state/network/db/ui/audio，允许扩展）。"
+        }
+      }
+    },
+    "executable": {
+      "type": "object",
+      "required": ["executable_id", "display_name_zh", "layer", "path", "case_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "executable_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "description": "顶层唯一执行体标识。"
+        },
+        "display_name_zh": {
+          "type": "string",
+          "minLength": 1
+        },
+        "layer": {
+          "type": "string",
+          "enum": ["L1", "L2", "L3", "CONTRACT", "TOOLING", "STATIC"]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "迁移后真实套件路径（例：./tests/unit/...），必须落盘且与 runner 注册表一致（排除 support/**）。"
+        },
+        "case_ids": {
+          "type": "array",
+          "minItems": 1,
+          "description": "反向引用的 case_id 列表，必须与 case.executable_ids 双向一致。",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

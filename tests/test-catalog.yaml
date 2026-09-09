@@ -1,0 +1,1419 @@
+schema_version: 1
+cases:
+  - case_id: guest-cold-start-first-screen
+    display_name_zh: 访客冷启动首屏渲染
+    legacy_aliases: [E2E-01-01]
+    journey_id: smoke-baseline
+    user_goal: 以访客身份打开首页看到首屏且无错
+    priority: P0
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [smoke, cold-start]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/01-访客冷启动首屏渲染.md
+    required_assertions:
+      - assertion_id: first-screen-renders
+        display_name_zh: 首屏正确渲染
+        surface: ui
+      - assertion_id: audio-paused-on-entry
+        display_name_zh: 进入时音频为暂停
+        surface: audio
+    executable_ids: []
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: smoke-baseline
+  - case_id: guest-identity-cookie-upgrade
+    display_name_zh: 访客身份创建与凭证升级续签
+    legacy_aliases: [E2E-01-02]
+    journey_id: smoke-baseline
+    user_goal: 点击访客进入后凭证签发续签且可通行
+    priority: P1
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [auth, cookie]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/02-访客身份创建与cookie升级续签.md
+    required_assertions:
+      - assertion_id: guest-cookie-issued-and-renewed
+        display_name_zh: 访客凭证签发并续签
+        surface: network
+      - assertion_id: guest-row-persisted
+        display_name_zh: 访客行落库
+        surface: db
+    executable_ids: [exec-guest-cookie-authorization, exec-release-pipeline]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: smoke-baseline
+  - case_id: first-story-stream-autoplay
+    display_name_zh: 首个故事生成流式渲染与自动播放
+    legacy_aliases: [E2E-01-03]
+    journey_id: smoke-baseline
+    user_goal: 发送首个故事后流式可见并自动播放
+    priority: P1
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [creation, streaming]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/03-首个故事生成流式渲染与自动播放.md
+    required_assertions:
+      - assertion_id: stream-delta-ordered
+        display_name_zh: 流式增量有序
+        surface: ui
+      - assertion_id: autoplay-delivered-story
+        display_name_zh: 自动播放已送达故事
+        surface: audio
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: smoke-baseline
+  - case_id: triple-playback-mirror-consistent
+    display_name_zh: 三处播放镜像状态一致
+    legacy_aliases: [E2E-01-04]
+    journey_id: smoke-baseline
+    user_goal: 聊天浮窗播放器页三处状态同源
+    priority: P1
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [playback, mirror]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/04-三处播放镜像状态一致性.md
+    required_assertions:
+      - assertion_id: three-mirrors-same-source
+        display_name_zh: 三处镜像同源
+        surface: ui
+      - assertion_id: audio-continues-across-routes
+        display_name_zh: 跨路由音频连续
+        surface: audio
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: smoke-baseline
+  - case_id: config-init-gate-retry
+    display_name_zh: 配置初始化门控与错误屏重试
+    legacy_aliases: [E2E-01-05]
+    journey_id: smoke-baseline
+    user_goal: 配置未就绪时门控并可重试恢复
+    priority: P1
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [config, gate]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/05-配置初始化门控与错误屏重试.md
+    required_assertions:
+      - assertion_id: gate-blocks-unready
+        display_name_zh: 未就绪时门控
+        surface: ui
+      - assertion_id: retry-recovers
+        display_name_zh: 重试可恢复
+        surface: ui
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: smoke-baseline
+  - case_id: anon-guest-route-guard-open-redirect
+    display_name_zh: 匿名与访客路由守卫及开放重定向安全
+    legacy_aliases: [E2E-01-06-01, E2E-01-06]
+    journey_id: smoke-baseline
+    user_goal: 匿名被拦访客放行且站外跳转被截断
+    priority: P1
+    primary_defense: L1
+    secondary_defenses: [L2]
+    lifecycle_status: ACTIVE
+    risk_tags: [auth, guard]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/06-路由守卫与重定向安全.md#e2e-01-06-01
+    required_assertions:
+      - assertion_id: anon-redirects-to-auth
+        display_name_zh: 匿名重定向到登录
+        surface: ui
+      - assertion_id: open-redirect-clamped
+        display_name_zh: 开放重定向被截断
+        surface: network
+    executable_ids: [exec-session-roundtrip]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: smoke-baseline
+  - case_id: authed-reverse-guard-from-backjump
+    display_name_zh: 已登录反向守卫与来源回跳
+    legacy_aliases: [E2E-01-06-02, E2E-01-06]
+    journey_id: smoke-baseline
+    user_goal: 已登录访问登录页被弹回且来源回跳站内
+    priority: P1
+    primary_defense: L1
+    secondary_defenses: [L2]
+    lifecycle_status: ACTIVE
+    risk_tags: [auth, guard]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/06-路由守卫与重定向安全.md#e2e-01-06-02
+    required_assertions:
+      - assertion_id: authed-bounces-from-auth
+        display_name_zh: 已登录弹离登录页
+        surface: ui
+      - assertion_id: from-backjump-stays-insite
+        display_name_zh: 回跳限制站内
+        surface: network
+    executable_ids: [exec-session-codec]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: smoke-baseline
+  - case_id: hard-refresh-loses-playback
+    display_name_zh: 硬刷新丢失播放
+    legacy_aliases: [E2E-01-07]
+    journey_id: smoke-baseline
+    user_goal: 硬刷新后播放丢失符合已知例外语义
+    priority: P2
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [playback, refresh]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/07-硬刷新丢失播放.md
+    required_assertions:
+      - assertion_id: hard-refresh-clears-audio
+        display_name_zh: 硬刷新后无声
+        surface: audio
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: smoke-baseline
+  - case_id: mobile-viewport-float-overlap
+    display_name_zh: 移动端视口浮窗遮挡与开关
+    legacy_aliases: [E2E-01-08]
+    journey_id: smoke-baseline
+    user_goal: 小视口下浮窗不遮挡且开关有效
+    priority: P2
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [ui, viewport]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/08-移动端视口浮窗遮挡.md
+    required_assertions:
+      - assertion_id: float-does-not-block-input
+        display_name_zh: 浮窗不挡输入
+        surface: ui
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: smoke-baseline
+  - case_id: rapid-double-submit-guard
+    display_name_zh: 连续快速双发防重
+    legacy_aliases: [E2E-02-01, H-04]
+    journey_id: interactive-race
+    user_goal: 同帧连击只提交一次不重复落库
+    priority: P0
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: LEGACY-NON-COVERAGE
+    risk_tags: [race, double-submit]
+    spec_path: docs/e2e/02-交互并发与竞态防御/01-快速双发防重.md
+    required_assertions:
+      - assertion_id: single-submit-on-burst
+        display_name_zh: 连击只提交一次
+        surface: network
+    executable_ids: [exec-double-submit-legacy]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: interactive-race
+  - case_id: streaming-resubmit-mutex
+    display_name_zh: 流式生成中再次提交互斥
+    legacy_aliases: [E2E-02-02, H-02]
+    journey_id: interactive-race
+    user_goal: 流式中再次提交被互斥不污染旧流
+    priority: P0
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: LEGACY-NON-COVERAGE
+    risk_tags: [race, streaming]
+    spec_path: docs/e2e/02-交互并发与竞态防御/02-流式生成中再次提交互斥.md
+    required_assertions:
+      - assertion_id: second-submit-rejected-while-streaming
+        display_name_zh: 流式中再次提交被拒
+        surface: ui
+    executable_ids: [exec-pending-intent-ui-legacy]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: interactive-race
+  - case_id: preload-continue-no-chat-pollution
+    display_name_zh: 预载续写不污染聊天流
+    legacy_aliases: [E2E-02-03, H-03]
+    journey_id: interactive-race
+    user_goal: 预载续写不以用户消息污染聊天
+    priority: P0
+    primary_defense: L1
+    secondary_defenses: [L2]
+    lifecycle_status: ACTIVE
+    risk_tags: [preload, isolation]
+    spec_path: docs/e2e/02-交互并发与竞态防御/03-预载续写不污染聊天流.md
+    required_assertions:
+      - assertion_id: preload-not-as-user-message
+        display_name_zh: 预载不进用户流
+        surface: state
+      - assertion_id: input-kept-intact
+        display_name_zh: 输入框不受污染
+        surface: ui
+    executable_ids: [exec-preload-context-selection, exec-e2e-stream-observer]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: interactive-race
+  - case_id: clear-during-generate-no-orphan-audio
+    display_name_zh: 生成中清空防止孤儿播放
+    legacy_aliases: [E2E-02-04, H-05]
+    journey_id: interactive-race
+    user_goal: 生成中清空后完成回调不孤儿播放
+    priority: P0
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: LEGACY-NON-COVERAGE
+    risk_tags: [race, orphan]
+    spec_path: docs/e2e/02-交互并发与竞态防御/04-生成中清空防止孤儿播放.md
+    required_assertions:
+      - assertion_id: no-orphan-after-clear
+        display_name_zh: 清空后无孤儿声
+        surface: audio
+    executable_ids: [exec-keepalive-dedup-legacy]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: interactive-race
+  - case_id: story-card-double-tap-suppress
+    display_name_zh: 故事卡连击双发抑制
+    legacy_aliases: [E2E-02-05, H-20]
+    journey_id: interactive-race
+    user_goal: 故事卡连击只起一次播放不抖动
+    priority: P1
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [race, playback]
+    spec_path: docs/e2e/02-交互并发与竞态防御/05-故事卡连击双发抑制.md
+    required_assertions:
+      - assertion_id: single-playback-on-double-tap
+        display_name_zh: 连击只播一次
+        surface: audio
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: interactive-race
+  - case_id: suggest-click-blocked-while-sending
+    display_name_zh: 发送中建议项点击拦截
+    legacy_aliases: [E2E-02-06]
+    journey_id: interactive-race
+    user_goal: 发送中点建议项被拦截不跳会话
+    priority: P1
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [race, suggest]
+    spec_path: docs/e2e/02-交互并发与竞态防御/06-发送中建议项点击拦截.md
+    required_assertions:
+      - assertion_id: suggest-blocked-while-sending
+        display_name_zh: 发送中建议被拦
+        surface: ui
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: interactive-race
+  - case_id: draft-preserved-during-auto-continue
+    display_name_zh: 自动续写期间输入框草稿保留
+    legacy_aliases: [E2E-02-07, H-03]
+    journey_id: interactive-race
+    user_goal: 自动续写时手打草稿不被清空
+    priority: P2
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [preload, draft]
+    spec_path: docs/e2e/02-交互并发与竞态防御/07-自动续写期间输入框草稿保留.md
+    required_assertions:
+      - assertion_id: draft-survives-auto-continue
+        display_name_zh: 草稿在续写中保留
+        surface: ui
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: interactive-race
+  - case_id: tab-switch-unread-badge-consistent
+    display_name_zh: 生成中切标签页未读徽标一致
+    legacy_aliases: [E2E-02-08]
+    journey_id: interactive-race
+    user_goal: 切标签后未读徽标与生成终态一致
+    priority: P1
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [ui, badge]
+    spec_path: docs/e2e/02-交互并发与竞态防御/08-生成中切标签页未读徽标一致性.md
+    required_assertions:
+      - assertion_id: badge-matches-final
+        display_name_zh: 徽标与终态一致
+        surface: ui
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: interactive-race
+  - case_id: pause-resume-burst-final-consistent
+    display_name_zh: 暂停恢复快速连击终态一致
+    legacy_aliases: [E2E-02-09, H-01]
+    journey_id: interactive-race
+    user_goal: 暂停恢复连击后界面与声音终态一致
+    priority: P1
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [race, playback]
+    spec_path: docs/e2e/02-交互并发与竞态防御/09-暂停恢复快速连击状态终态一致.md
+    required_assertions:
+      - assertion_id: burst-ends-in-single-state
+        display_name_zh: 连击终态唯一
+        surface: audio
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: interactive-race
+  - case_id: failed-message-retry-context
+    display_name_zh: 失败消息重试上下文正确
+    legacy_aliases: [E2E-02-10]
+    journey_id: interactive-race
+    user_goal: 失败消息重试带正确上下文不串台
+    priority: P2
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: LEGACY-NON-COVERAGE
+    risk_tags: [retry, context]
+    spec_path: docs/e2e/02-交互并发与竞态防御/10-失败消息重试上下文正确性.md
+    required_assertions:
+      - assertion_id: retry-carries-right-context
+        display_name_zh: 重试上下文正确
+        surface: network
+    executable_ids: [exec-toast-terminal-priority-legacy]
+    fixtures: []
+    ci_tier: NONE
+    owner: interactive-race
+  - case_id: player-history-select-switch-creation
+    display_name_zh: 播放器选历史切换当前创作
+    legacy_aliases: [E2E-02-11, H-21]
+    journey_id: history-reuse-create
+    user_goal: 从播放器选历史后切到干净新创作
+    priority: P0
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [history, isolation]
+    spec_path: docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md
+    required_assertions:
+      - assertion_id: new-session-excludes-old
+        display_name_zh: 新会话不含旧文
+        surface: state
+      - assertion_id: old-kept-returnable
+        display_name_zh: 旧创作可返回
+        surface: ui
+    executable_ids: []
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: history-reuse-create
+  - case_id: tts-voice-fallback-browser-behavior
+    display_name_zh: 语音回退浏览器行为占位
+    legacy_aliases: [E2E-02-12]
+    journey_id: persistence-recovery
+    user_goal: 白名单外语音在浏览器侧回退默认且可播
+    priority: P2
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [tts, fallback]
+    spec_path: docs/e2e/06-异常处理与接口限流/02-TTS限流分层与语音白名单回退.md
+    required_assertions:
+      - assertion_id: fallback-voice-plays
+        display_name_zh: 回退语音可播
+        surface: audio
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: persistence-recovery
+  - case_id: countdown-exhaust-ui-audio-consistent
+    display_name_zh: 倒计时耗尽界面与音频一致
+    legacy_aliases: [E2E-03-01, H-01]
+    journey_id: playback-kernel
+    user_goal: 倒计时耗尽时界面暂停且真实停声
+    priority: P0
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [playback, budget]
+    spec_path: docs/e2e/03-播放状态与内核一致性/01-倒计时耗尽UI与音频一致性.md
+    required_assertions:
+      - assertion_id: ui-pause-matches-silence
+        display_name_zh: 界面暂停匹配停声
+        surface: audio
+      - assertion_id: countdown-exhaust-stops
+        display_name_zh: 耗尽即停
+        surface: state
+    executable_ids: [exec-resume-countdown, exec-mock-lifecycle]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: playback-kernel
+  - case_id: budget-exhausted-tap-play-audio-state
+    display_name_zh: 预算耗尽后点击播放音频状态
+    legacy_aliases: [E2E-03-02, H-08]
+    journey_id: playback-kernel
+    user_goal: 零预算点播放被拒且不偷播
+    priority: P0
+    primary_defense: L1
+    secondary_defenses: [L2]
+    lifecycle_status: ACTIVE
+    risk_tags: [playback, budget]
+    spec_path: docs/e2e/03-播放状态与内核一致性/02-预算耗尽后点击播放音频状态.md
+    required_assertions:
+      - assertion_id: zero-budget-rejects-start
+        display_name_zh: 零预算拒绝启动
+        surface: state
+    executable_ids: [exec-budget-exhaustion]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: playback-kernel
+  - case_id: logout-during-play-instant-silence
+    display_name_zh: 播放中登出立即停声与重置
+    legacy_aliases: [E2E-03-03, H-06]
+    journey_id: playback-kernel
+    user_goal: 播放中登出先停声再清状态
+    priority: P0
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [playback, logout]
+    spec_path: docs/e2e/03-播放状态与内核一致性/03-播放中登出立即停声与状态重置.md
+    required_assertions:
+      - assertion_id: pause-before-unload
+        display_name_zh: 停声先于卸载
+        surface: timeline
+      - assertion_id: state-reset-after-logout
+        display_name_zh: 登出后状态重置
+        surface: state
+    executable_ids: [exec-logout-playback-reset]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: playback-kernel
+  - case_id: pause-in-paragraph-switch-no-resume
+    display_name_zh: 段落切换窗口内暂停不续播
+    legacy_aliases: [E2E-03-04, H-07]
+    journey_id: playback-kernel
+    user_goal: 切换窗口内暂停不被慢请求覆盖续播
+    priority: P0
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [playback, race]
+    spec_path: docs/e2e/03-播放状态与内核一致性/04-段落切换窗口内暂停不续播.md
+    required_assertions:
+      - assertion_id: pause-survives-switch-window
+        display_name_zh: 暂停穿过切换窗
+        surface: audio
+    executable_ids: [exec-paragraph-transition-guard]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: playback-kernel
+  - case_id: breakpoint-resume-null-budget-state
+    display_name_zh: 断点恢复空预算播放状态
+    legacy_aliases: [E2E-03-05, H-10]
+    journey_id: playback-kernel
+    user_goal: 空预算断点恢复不 camouflage 成播放态
+    priority: P0
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [playback, resume]
+    spec_path: docs/e2e/03-播放状态与内核一致性/05-断点恢复null预算播放状态.md
+    required_assertions:
+      - assertion_id: null-budget-no-fake-playing
+        display_name_zh: 空预算不假播
+        surface: state
+    executable_ids: [exec-explicit-play-budget]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: playback-kernel
+  - case_id: segment-end-double-jump-guard
+    display_name_zh: 段落收尾结束双跳竞态防线
+    legacy_aliases: [E2E-03-06, H-12]
+    journey_id: playback-kernel
+    user_goal: 收尾结束事件不双跳不错段
+    priority: P2
+    primary_defense: L1
+    secondary_defenses: [L2]
+    lifecycle_status: ACTIVE
+    risk_tags: [playback, race]
+    spec_path: docs/e2e/03-播放状态与内核一致性/06-段落收尾ended双跳竞态防线.md
+    required_assertions:
+      - assertion_id: ended-single-advance
+        display_name_zh: 结束只推进一次
+        surface: state
+    executable_ids: [exec-audio-ended-guard]
+    fixtures: []
+    ci_tier: NIGHTLY
+    owner: playback-kernel
+  - case_id: multi-paragraph-prefetch-progress-persist
+    display_name_zh: 多段落前瞻预取推进与进度落库
+    legacy_aliases: [E2E-03-07]
+    journey_id: playback-kernel
+    user_goal: 多段推进时单前瞻且进度单调落库
+    priority: P1
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: LEGACY-NON-COVERAGE
+    risk_tags: [playback, prefetch]
+    spec_path: docs/e2e/03-播放状态与内核一致性/07-多段落前瞻预取推进与进度落库.md
+    required_assertions:
+      - assertion_id: prefetch-equals-one
+        display_name_zh: 前瞻恰为一
+        surface: network
+    executable_ids: [exec-paragraph-resume-mixed-legacy]
+    fixtures: []
+    ci_tier: NONE
+    owner: playback-kernel
+  - case_id: story-complete-clear-progress
+    display_name_zh: 故事播完清理进度收尾
+    legacy_aliases: [E2E-03-08]
+    journey_id: playback-kernel
+    user_goal: 播完后进度清理且不残留可播态
+    priority: P1
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [playback, complete]
+    spec_path: docs/e2e/03-播放状态与内核一致性/08-故事播完clearProgress收尾.md
+    required_assertions:
+      - assertion_id: progress-cleared-on-complete
+        display_name_zh: 播完清进度
+        surface: db
+    executable_ids: [exec-final-segment-stop]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: playback-kernel
+  - case_id: client-route-nav-play-continuity
+    display_name_zh: 客户端路由导航播放连续
+    legacy_aliases: [E2E-03-09]
+    journey_id: playback-kernel
+    user_goal: 客户端切路由时同一音频连续不重置
+    priority: P1
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: LEGACY-NON-COVERAGE
+    risk_tags: [playback, router]
+    spec_path: docs/e2e/03-播放状态与内核一致性/09-客户端路由导航播放连续性.md
+    required_assertions:
+      - assertion_id: same-audio-across-routes
+        display_name_zh: 同音频跨路由
+        surface: audio
+    executable_ids: [exec-audio-ended-guard-wiring-legacy]
+    fixtures: []
+    ci_tier: NONE
+    owner: playback-kernel
+  - case_id: history-restore-card-resynth
+    display_name_zh: 历史恢复卡回放重合成
+    legacy_aliases: [E2E-03-10, H-11]
+    journey_id: playback-kernel
+    user_goal: 历史恢复卡回放只播所选不续写
+    priority: P1
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [history, replay]
+    spec_path: docs/e2e/03-播放状态与内核一致性/10-历史恢复卡回放重合成.md
+    required_assertions:
+      - assertion_id: replay-matches-source
+        display_name_zh: 回放匹配来源
+        surface: state
+      - assertion_id: no-new-history-on-replay
+        display_name_zh: 回放不增历史
+        surface: db
+    executable_ids: [exec-storycard-resume]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: playback-kernel
+  - case_id: old-card-replay-no-consume-preload
+    display_name_zh: 旧卡回放不消费新预载
+    legacy_aliases: [E2E-03-11, H-09]
+    journey_id: playback-kernel
+    user_goal: 旧卡回放不吃掉新卡预载
+    priority: P2
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [history, preload]
+    spec_path: docs/e2e/03-播放状态与内核一致性/11-旧卡回放不消费新预载.md
+    required_assertions:
+      - assertion_id: old-replay-keeps-new-preload
+        display_name_zh: 旧播保留新预载
+        surface: state
+    executable_ids: [exec-preload-isolation]
+    fixtures: []
+    ci_tier: NIGHTLY
+    owner: playback-kernel
+  - case_id: setting-preview-dual-audio-source
+    display_name_zh: 设置页试音与主播放双声源
+    legacy_aliases: [E2E-03-12, H-13]
+    journey_id: playback-kernel
+    user_goal: 试音与主播并发时双声源可感知
+    priority: P2
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [playback, preview]
+    spec_path: docs/e2e/03-播放状态与内核一致性/12-设置页试音与主播放并发双声源.md
+    required_assertions:
+      - assertion_id: dual-source-perceivable
+        display_name_zh: 双声源可感知
+        surface: audio
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: playback-kernel
+  - case_id: dual-tab-same-account-write-cover
+    display_name_zh: 双标签同账号并发写入覆盖
+    legacy_aliases: [E2E-04-01, H-15]
+    journey_id: cloud-storage
+    user_goal: 双标签同账号写按快照覆盖不串读
+    priority: P1
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [cloud, concurrent]
+    spec_path: docs/e2e/04-云端存储与多端数据调和/01-双标签同账号并发写入覆盖.md
+    required_assertions:
+      - assertion_id: last-writer-wins-snapshot
+        display_name_zh: 快照整体覆盖
+        surface: db
+    executable_ids: [exec-stale-conversation-write]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: cloud-storage
+  - case_id: quick-exit-loses-tail-hanging-progress
+    display_name_zh: 快速退出丢失尾部与悬空进度
+    legacy_aliases: [E2E-04-02, H-16]
+    journey_id: cloud-storage
+    user_goal: 快速退出不丢尾且无悬空进度
+    priority: P0
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [cloud, flush]
+    spec_path: docs/e2e/04-云端存储与多端数据调和/02-快速退出丢失尾部与悬空进度.md
+    required_assertions:
+      - assertion_id: tail-persisted-before-exit
+        display_name_zh: 退出前尾部落库
+        surface: db
+      - assertion_id: no-hanging-progress
+        display_name_zh: 无悬空进度
+        surface: db
+    executable_ids: [exec-pending-save-flush]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: cloud-storage
+  - case_id: config-optimistic-save-rollback
+    display_name_zh: 配置乐观保存失败回滚
+    legacy_aliases: [E2E-04-03, H-14]
+    journey_id: cloud-storage
+    user_goal: 配置保存失败回滚不长期分歧
+    priority: P1
+    primary_defense: L1
+    secondary_defenses: [L2]
+    lifecycle_status: ACTIVE
+    risk_tags: [config, rollback]
+    spec_path: docs/e2e/04-云端存储与多端数据调和/03-配置乐观保存失败回滚.md
+    required_assertions:
+      - assertion_id: failed-save-rolls-back
+        display_name_zh: 失败回滚
+        surface: state
+    executable_ids: [exec-optimistic-rollback]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: cloud-storage
+  - case_id: progress-monotonic-guard-force-reset
+    display_name_zh: 进度单调递增守卫与强制重置
+    legacy_aliases: [E2E-04-04]
+    journey_id: persistence-recovery
+    user_goal: 进度只增不减且强制重置可通
+    priority: P1
+    primary_defense: L1
+    secondary_defenses: [L2]
+    lifecycle_status: ACTIVE
+    risk_tags: [persistence, monotonic]
+    spec_path: docs/e2e/04-云端存储与多端数据调和/04-进度单调递增守卫与forceReset.md
+    required_assertions:
+      - assertion_id: progress-monotonic
+        display_name_zh: 进度单调
+        surface: db
+    executable_ids: [exec-save-sequence, exec-e2e-db-guard-regression]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: persistence-recovery
+  - case_id: guest-user-table-isolation-zero-leak
+    display_name_zh: 访客与用户表级隔离零串读
+    legacy_aliases: [E2E-04-05]
+    journey_id: cloud-storage
+    user_goal: 访客与用户数据表级隔离零串读
+    priority: P1
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [cloud, isolation]
+    spec_path: docs/e2e/04-云端存储与多端数据调和/05-访客与用户表级隔离与零串读.md
+    required_assertions:
+      - assertion_id: zero-cross-read
+        display_name_zh: 零串读
+        surface: db
+    executable_ids: [exec-guest-multisubject-lifecycle, exec-e2e-db-guard]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: cloud-storage
+  - case_id: history-epoch-guard-30day-prune
+    display_name_zh: 历史纪元守卫与30天裁剪
+    legacy_aliases: [E2E-04-06]
+    journey_id: persistence-recovery
+    user_goal: 旧纪元不复活且30天外裁剪
+    priority: P2
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: LEGACY-NON-COVERAGE
+    risk_tags: [persistence, prune]
+    spec_path: docs/e2e/04-云端存储与多端数据调和/06-历史记录epoch守卫与30天裁剪.md
+    required_assertions:
+      - assertion_id: stale-epoch-rejected
+        display_name_zh: 旧纪元被拒
+        surface: db
+    executable_ids: [exec-conversation-write-wiring-legacy]
+    fixtures: []
+    ci_tier: NONE
+    owner: persistence-recovery
+  - case_id: onboarding-first-visit-unread-cross-session
+    display_name_zh: 首访标记与未读跨会话一致
+    legacy_aliases: [E2E-04-07]
+    journey_id: persistence-recovery
+    user_goal: 首访只弹一次且未读跨端一致
+    priority: P2
+    primary_defense: L1
+    secondary_defenses: [L2]
+    lifecycle_status: ACTIVE
+    risk_tags: [persistence, onboarding]
+    spec_path: docs/e2e/04-云端存储与多端数据调和/07-onboarding首访标记与未读跨会话.md
+    required_assertions:
+      - assertion_id: first-visit-once
+        display_name_zh: 首访仅一次
+        surface: state
+    executable_ids: [exec-onboarding-storage]
+    fixtures: []
+    ci_tier: NIGHTLY
+    owner: persistence-recovery
+  - case_id: theme-config-once-hydrate-dual-write
+    display_name_zh: 主题配置一次性水合并双写保留
+    legacy_aliases: [E2E-04-08]
+    journey_id: persistence-recovery
+    user_goal: 主题只水合一次且双写不丢
+    priority: P2
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [persistence, theme]
+    spec_path: docs/e2e/04-云端存储与多端数据调和/08-主题配置一次性水合与双写保留.md
+    required_assertions:
+      - assertion_id: theme-hydrates-once
+        display_name_zh: 主题一次水合
+        surface: state
+    executable_ids: [exec-guest-config-crud]
+    fixtures: []
+    ci_tier: NIGHTLY
+    owner: persistence-recovery
+  - case_id: guest-chat-100-limit-truncate
+    display_name_zh: 访客聊天100条上限截断
+    legacy_aliases: [E2E-04-09]
+    journey_id: persistence-recovery
+    user_goal: 访客聊天超100条截断不断尾
+    priority: P2
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [persistence, truncate]
+    spec_path: docs/e2e/04-云端存储与多端数据调和/09-访客聊天100条上限截断.md
+    required_assertions:
+      - assertion_id: over-limit-truncated
+        display_name_zh: 超限截断
+        surface: db
+    executable_ids: [exec-guest-creative-sync]
+    fixtures: []
+    ci_tier: NIGHTLY
+    owner: persistence-recovery
+  - case_id: summary-summarize-concurrent-public
+    display_name_zh: 摘要并发与公开端点
+    legacy_aliases: [E2E-04-10]
+    journey_id: cloud-storage
+    user_goal: 摘要并发不串且公开端点可达
+    priority: P1
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [cloud, summary]
+    spec_path: docs/e2e/04-云端存储与多端数据调和/10-摘要summarize并发与公开端点.md
+    required_assertions:
+      - assertion_id: concurrent-summary-isolated
+        display_name_zh: 并发摘要隔离
+        surface: network
+    executable_ids: [exec-agent-summarize-authorization]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: cloud-storage
+  - case_id: guest-register-3step-migrate-fidelity
+    display_name_zh: 访客注册三步迁移与数据保真
+    legacy_aliases: [E2E-05-01]
+    journey_id: auth-session
+    user_goal: 访客注册三步迁移数据不丢
+    priority: P0
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [auth, migrate]
+    spec_path: docs/e2e/05-认证授权与会话生命周期/01-访客注册三步迁移与数据保真.md
+    required_assertions:
+      - assertion_id: migrate-keeps-data
+        display_name_zh: 迁移保数据
+        surface: db
+      - assertion_id: no-duplicate-rows
+        display_name_zh: 无重复行
+        surface: db
+    executable_ids: []
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: auth-session
+  - case_id: register-interrupt-orphan-rollback
+    display_name_zh: 注册中断孤儿用户事务回滚
+    legacy_aliases: [E2E-05-02]
+    journey_id: auth-session
+    user_goal: 注册中断孤儿行被事务回滚
+    priority: P2
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [auth, rollback]
+    spec_path: docs/e2e/05-认证授权与会话生命周期/02-注册中断孤儿用户事务回滚.md
+    required_assertions:
+      - assertion_id: orphan-rolled-back
+        display_name_zh: 孤儿被回滚
+        surface: db
+    executable_ids: [exec-registration-rollback, exec-runner-database-path-safety]
+    fixtures: []
+    ci_tier: NIGHTLY
+    owner: auth-session
+  - case_id: login-existing-no-leak
+    display_name_zh: 登录既有账号无数据渗漏
+    legacy_aliases: [E2E-05-03]
+    journey_id: auth-session
+    user_goal: 带访客态登录既有账号不渗漏
+    priority: P0
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [auth, isolation]
+    spec_path: docs/e2e/05-认证授权与会话生命周期/03-登录既有账号无数据渗漏.md
+    required_assertions:
+      - assertion_id: no-leak-on-login
+        display_name_zh: 登录无渗漏
+        surface: db
+    executable_ids: []
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: auth-session
+  - case_id: logout-dual-cookie-clean-reset
+    display_name_zh: 登出双凭证清理与状态重置
+    legacy_aliases: [E2E-05-04]
+    journey_id: auth-session
+    user_goal: 登出清双凭证并重置前端状态
+    priority: P0
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: LEGACY-NON-COVERAGE
+    risk_tags: [auth, logout]
+    spec_path: docs/e2e/05-认证授权与会话生命周期/04-登出双cookie清理与状态重置.md
+    required_assertions:
+      - assertion_id: dual-cookie-cleared
+        display_name_zh: 双凭证清除
+        surface: network
+    executable_ids: [exec-logout-probe-hardening-legacy]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: auth-session
+  - case_id: relogin-new-guest-isolation
+    display_name_zh: 登出后再入访客新身份隔离
+    legacy_aliases: [E2E-05-05, H-19]
+    journey_id: auth-session
+    user_goal: 登出再入得全新访客且旧行隔离
+    priority: P2
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [auth, isolation]
+    spec_path: docs/e2e/05-认证授权与会话生命周期/05-登出后再入访客新身份隔离.md
+    required_assertions:
+      - assertion_id: new-guest-isolated
+        display_name_zh: 新访客隔离
+        surface: db
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: auth-session
+  - case_id: session-invalidated-closed-loop
+    display_name_zh: 会话失效闭环
+    legacy_aliases: [E2E-05-06]
+    journey_id: auth-session
+    user_goal: 会话失效后闭环提示不卡死
+    priority: P1
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [auth, session]
+    spec_path: docs/e2e/05-认证授权与会话生命周期/06-会话失效sessionInvalidated闭环.md
+    required_assertions:
+      - assertion_id: invalidated-loops-closed
+        display_name_zh: 失效闭环
+        surface: ui
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: auth-session
+  - case_id: expired-session-guest-cookie-revive
+    display_name_zh: 过期会话加残留访客凭证静默复活
+    legacy_aliases: [E2E-05-07, H-18]
+    journey_id: auth-session
+    user_goal: 过期会话遇残留访客凭证按语义复活
+    priority: P1
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [auth, session]
+    spec_path: docs/e2e/05-认证授权与会话生命周期/07-过期会话加残留访客cookie静默复活.md
+    required_assertions:
+      - assertion_id: revive-matches-semantics
+        display_name_zh: 复活合语义
+        surface: network
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: auth-session
+  - case_id: auth-reverse-guard-from-safety
+    display_name_zh: 登录页反向守卫与来源回跳安全
+    legacy_aliases: [E2E-05-08]
+    journey_id: auth-session
+    user_goal: 登录页反向守卫不误拦且回跳安全
+    priority: P2
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [auth, guard]
+    spec_path: docs/e2e/05-认证授权与会话生命周期/08-auth反向守卫与from回跳安全.md
+    required_assertions:
+      - assertion_id: reverse-guard-safe
+        display_name_zh: 反向守卫安全
+        surface: ui
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: auth-session
+  - case_id: fast-account-switch-epoch-no-crossread
+    display_name_zh: 快速账号切换纪元失效不串读
+    legacy_aliases: [E2E-05-09]
+    journey_id: auth-session
+    user_goal: 快速切号旧纪元失效不串读
+    priority: P1
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: LEGACY-NON-COVERAGE
+    risk_tags: [auth, epoch]
+    spec_path: docs/e2e/05-认证授权与会话生命周期/09-快速账号切换epoch失效不串读.md
+    required_assertions:
+      - assertion_id: stale-epoch-no-read
+        display_name_zh: 旧纪元不串读
+        surface: db
+    executable_ids: [exec-batch-source-locks-legacy]
+    fixtures: []
+    ci_tier: NONE
+    owner: auth-session
+  - case_id: register-login-validate-sessionguard-exempt
+    display_name_zh: 注册登录校验失败与守卫豁免
+    legacy_aliases: [E2E-05-10]
+    journey_id: auth-session
+    user_goal: 校验失败拦住且守卫豁免不误伤
+    priority: P1
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: ACTIVE
+    risk_tags: [auth, validate]
+    spec_path: docs/e2e/05-认证授权与会话生命周期/10-校验失败与sessionGuard豁免.md
+    required_assertions:
+      - assertion_id: invalid-blocked
+        display_name_zh: 非法被拦
+        surface: network
+      - assertion_id: guard-exempts-auth
+        display_name_zh: 守卫豁免登录页
+        surface: ui
+    executable_ids: [exec-identity-procedure-matrix]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: auth-session
+  - case_id: guest-429-limit-retry-burn-quota
+    display_name_zh: 访客限流与重试烧配额
+    legacy_aliases: [E2E-06-01, H-17]
+    journey_id: error-rate-limit
+    user_goal: 访客超限被拒且重试不烧配额
+    priority: P0
+    primary_defense: L1
+    secondary_defenses: [L2]
+    lifecycle_status: ACTIVE
+    risk_tags: [ratelimit, quota]
+    spec_path: docs/e2e/06-异常处理与接口限流/01-访客429限流与重试烧配额.md
+    required_assertions:
+      - assertion_id: rejected-not-counted
+        display_name_zh: 被拒不计数
+        surface: network
+      - assertion_id: window-not-extended
+        display_name_zh: 窗口不延长
+        surface: state
+    executable_ids: [exec-sliding-window-rate-limit]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: error-rate-limit
+  - case_id: tts-limit-tier-voice-fallback
+    display_name_zh: 语音合成限流分层与白名单回退
+    legacy_aliases: [E2E-06-02]
+    journey_id: error-rate-limit
+    user_goal: 分层限流且白名单外回退默认
+    priority: P2
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [tts, ratelimit]
+    spec_path: docs/e2e/06-异常处理与接口限流/02-TTS限流分层与语音白名单回退.md
+    required_assertions:
+      - assertion_id: tiered-limit-holds
+        display_name_zh: 分层限流成立
+        surface: network
+      - assertion_id: fallback-to-default
+        display_name_zh: 回退默认语音
+        surface: network
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: error-rate-limit
+  - case_id: tts-synthesize-fail-no-zombie
+    display_name_zh: 语音合成失败停声不僵尸
+    legacy_aliases: [E2E-06-03]
+    journey_id: error-rate-limit
+    user_goal: 合成失败即停声不留僵尸态
+    priority: P1
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [tts, fail]
+    spec_path: docs/e2e/06-异常处理与接口限流/03-TTS合成失败停声不僵尸.md
+    required_assertions:
+      - assertion_id: fail-stops-no-zombie
+        display_name_zh: 失败停声无僵尸
+        surface: audio
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: error-rate-limit
+  - case_id: stream-interrupt-failed-retry
+    display_name_zh: 流式中断失败标记与重试
+    legacy_aliases: [E2E-06-04]
+    journey_id: error-rate-limit
+    user_goal: 流中断标失败且重试上下文对
+    priority: P1
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [stream, retry]
+    spec_path: docs/e2e/06-异常处理与接口限流/04-流式生成中断failed标记与重试.md
+    required_assertions:
+      - assertion_id: interrupted-marks-failed
+        display_name_zh: 中断标失败
+        surface: ui
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: error-rate-limit
+  - case_id: breakpoint-switch-tts-fail-retry-bound
+    display_name_zh: 断点与切换语音失败重试边界
+    legacy_aliases: [E2E-06-05]
+    journey_id: error-rate-limit
+    user_goal: 断点切换中语音失败可重试有界
+    priority: P2
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [tts, retry]
+    spec_path: docs/e2e/06-异常处理与接口限流/05-断点与切换TTS失败重试边界.md
+    required_assertions:
+      - assertion_id: retry-bounded
+        display_name_zh: 重试有界
+        surface: ui
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: error-rate-limit
+  - case_id: protected-api-401-guard-matrix
+    display_name_zh: 直连受保护接口401守卫矩阵
+    legacy_aliases: [E2E-06-06]
+    journey_id: error-rate-limit
+    user_goal: 直连受保护接口一律401
+    priority: P1
+    primary_defense: L2
+    secondary_defenses: [L3]
+    lifecycle_status: LEGACY-NON-COVERAGE
+    risk_tags: [auth, guard]
+    spec_path: docs/e2e/06-异常处理与接口限流/06-直连受保护API之401守卫矩阵.md
+    required_assertions:
+      - assertion_id: direct-hits-401
+        display_name_zh: 直连均401
+        surface: network
+    executable_ids: [exec-procedure-source-locks-legacy]
+    fixtures: []
+    ci_tier: NONE
+    owner: error-rate-limit
+  - case_id: guest-data-30day-gc-clean
+    display_name_zh: 访客数据30天清理
+    legacy_aliases: [E2E-06-07]
+    journey_id: error-rate-limit
+    user_goal: 30天外访客数据被清理
+    priority: P2
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: PLANNED
+    risk_tags: [gc, prune]
+    spec_path: docs/e2e/06-异常处理与接口限流/07-访客数据30天GC清理.md
+    required_assertions:
+      - assertion_id: expired-gc-cleaned
+        display_name_zh: 过期被清
+        surface: db
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: error-rate-limit
+  - case_id: bfcache-pageshow-recover-probe
+    display_name_zh: 往返缓存恢复探针
+    legacy_aliases: [E2E-06-08]
+    journey_id: error-rate-limit
+    user_goal: 往返缓存恢复后可人工确认
+    priority: P3
+    primary_defense: L3
+    secondary_defenses: []
+    lifecycle_status: MANUAL
+    risk_tags: [bfcache, manual]
+    spec_path: docs/e2e/06-异常处理与接口限流/08-bfcache与pageshow恢复探针.md
+    required_assertions:
+      - assertion_id: manual-recover-observed
+        display_name_zh: 人工确认恢复
+        surface: ui
+    executable_ids: []
+    fixtures: []
+    ci_tier: NONE
+    owner: error-rate-limit
+    manual_reason: 需要人工在真实浏览器确认往返缓存恢复
+executables:
+  - executable_id: exec-session-roundtrip
+    display_name_zh: 会话往返编解码
+    layer: L1
+    path: ./tests/unit/identity-session/session-roundtrip.unit.test.ts
+    case_ids: [anon-guest-route-guard-open-redirect]
+  - executable_id: exec-session-codec
+    display_name_zh: 会话编解码分支
+    layer: L1
+    path: ./tests/unit/identity-session/session-codec.unit.test.ts
+    case_ids: [authed-reverse-guard-from-backjump]
+  - executable_id: exec-sliding-window-rate-limit
+    display_name_zh: 滑动窗口限流
+    layer: L1
+    path: ./tests/unit/identity-session/sliding-window-rate-limit.unit.test.ts
+    case_ids: [guest-429-limit-retry-burn-quota]
+  - executable_id: exec-audio-ended-guard
+    display_name_zh: 音频结束守卫
+    layer: L1
+    path: ./tests/unit/playback/audio-ended-guard.unit.test.ts
+    case_ids: [segment-end-double-jump-guard]
+  - executable_id: exec-onboarding-storage
+    display_name_zh: 引导存储
+    layer: L1
+    path: ./tests/unit/creation-chat/onboarding-storage.unit.test.ts
+    case_ids: [onboarding-first-visit-unread-cross-session]
+  - executable_id: exec-budget-exhaustion
+    display_name_zh: 预算耗尽
+    layer: L1
+    path: ./tests/unit/playback/budget-exhaustion.unit.test.ts
+    case_ids: [budget-exhausted-tap-play-audio-state]
+  - executable_id: exec-optimistic-rollback
+    display_name_zh: 乐观回滚
+    layer: L1
+    path: ./tests/unit/persistence-config/optimistic-rollback.unit.test.ts
+    case_ids: [config-optimistic-save-rollback]
+  - executable_id: exec-save-sequence
+    display_name_zh: 保存序列
+    layer: L1
+    path: ./tests/unit/persistence-config/save-sequence.unit.test.ts
+    case_ids: [progress-monotonic-guard-force-reset]
+  - executable_id: exec-preload-context-selection
+    display_name_zh: 预载上下文选择
+    layer: L1
+    path: ./tests/unit/creation-chat/preload-context-selection.unit.test.ts
+    case_ids: [preload-continue-no-chat-pollution]
+  - executable_id: exec-identity-procedure-matrix
+    display_name_zh: 身份过程矩阵
+    layer: L2
+    path: ./tests/integration/identity-session/identity-procedure-matrix.integration.test.ts
+    case_ids: [register-login-validate-sessionguard-exempt]
+  - executable_id: exec-guest-cookie-authorization
+    display_name_zh: 访客Cookie鉴权
+    layer: L2
+    path: ./tests/integration/identity-session/guest-cookie-authorization.integration.test.ts
+    case_ids: [guest-identity-cookie-upgrade]
+  - executable_id: exec-agent-summarize-authorization
+    display_name_zh: 摘要鉴权
+    layer: L2
+    path: ./tests/integration/identity-session/agent-summarize-authorization.integration.test.ts
+    case_ids: [summary-summarize-concurrent-public]
+  - executable_id: exec-registration-rollback
+    display_name_zh: 注册回滚
+    layer: L2
+    path: ./tests/integration/identity-session/registration-rollback.integration.test.ts
+    case_ids: [register-interrupt-orphan-rollback]
+  - executable_id: exec-guest-config-crud
+    display_name_zh: 访客配置增删改查
+    layer: L2
+    path: ./tests/integration/persistence-config/guest-config-crud.integration.test.ts
+    case_ids: [theme-config-once-hydrate-dual-write]
+  - executable_id: exec-guest-creative-sync
+    display_name_zh: 访客创作同步
+    layer: L2
+    path: ./tests/integration/persistence-config/guest-creative-sync.integration.test.ts
+    case_ids: [guest-chat-100-limit-truncate]
+  - executable_id: exec-guest-multisubject-lifecycle
+    display_name_zh: 访客多主体生命周期
+    layer: L2
+    path: ./tests/integration/persistence-config/guest-multisubject-lifecycle.integration.test.ts
+    case_ids: [guest-user-table-isolation-zero-leak]
+  - executable_id: exec-storycard-resume
+    display_name_zh: 故事卡恢复
+    layer: L2
+    path: ./tests/integration/playback/storycard-resume.integration.test.ts
+    case_ids: [history-restore-card-resynth]
+  - executable_id: exec-resume-countdown
+    display_name_zh: 倒计时恢复
+    layer: L2
+    path: ./tests/integration/playback/resume-countdown.integration.test.ts
+    case_ids: [countdown-exhaust-ui-audio-consistent]
+  - executable_id: exec-final-segment-stop
+    display_name_zh: 末段停止
+    layer: L2
+    path: ./tests/integration/playback/final-segment-stop.integration.test.ts
+    case_ids: [story-complete-clear-progress]
+  - executable_id: exec-paragraph-transition-guard
+    display_name_zh: 段落切换守卫
+    layer: L2
+    path: ./tests/integration/playback/paragraph-transition-guard.integration.test.ts
+    case_ids: [pause-in-paragraph-switch-no-resume]
+  - executable_id: exec-preload-isolation
+    display_name_zh: 预载隔离
+    layer: L2
+    path: ./tests/integration/creation-chat/preload-isolation.integration.test.ts
+    case_ids: [old-card-replay-no-consume-preload]
+  - executable_id: exec-pending-save-flush
+    display_name_zh: 待保存落盘
+    layer: L2
+    path: ./tests/integration/persistence-config/pending-save-flush.integration.test.ts
+    case_ids: [quick-exit-loses-tail-hanging-progress]
+  - executable_id: exec-stale-conversation-write
+    display_name_zh: 陈旧会话写入
+    layer: L2
+    path: ./tests/test-h15-concurrent-write.ts
+    case_ids: [dual-tab-same-account-write-cover]
+  - executable_id: exec-logout-playback-reset
+    display_name_zh: 登出播放重置
+    layer: L2
+    path: ./tests/test-h06-logout-probe.ts
+    case_ids: [logout-during-play-instant-silence]
+  - executable_id: exec-explicit-play-budget
+    display_name_zh: 显式播放预算
+    layer: L2
+    path: ./tests/integration/playback/explicit-play-budget.integration.test.ts
+    case_ids: [breakpoint-resume-null-budget-state]
+  - executable_id: exec-procedure-source-locks-legacy
+    display_name_zh: 过程源码锁遗留
+    layer: L2
+    path: ./tests/legacy/procedure-source-locks.legacy.test.ts
+    case_ids: [protected-api-401-guard-matrix]
+  - executable_id: exec-batch-source-locks-legacy
+    display_name_zh: 批量源码锁遗留
+    layer: L2
+    path: ./tests/legacy/batch-source-locks.legacy.test.ts
+    case_ids: [fast-account-switch-epoch-no-crossread]
+  - executable_id: exec-paragraph-resume-mixed-legacy
+    display_name_zh: 段落恢复混合遗留
+    layer: L2
+    path: ./tests/legacy/paragraph-resume-mixed.legacy.test.ts
+    case_ids: [multi-paragraph-prefetch-progress-persist]
+  - executable_id: exec-toast-terminal-priority-legacy
+    display_name_zh: 提示终态优先级遗留
+    layer: L2
+    path: ./tests/legacy/toast-terminal-priority.legacy.test.ts
+    case_ids: [failed-message-retry-context]
+  - executable_id: exec-audio-ended-guard-wiring-legacy
+    display_name_zh: 结束守卫接线遗留
+    layer: L2
+    path: ./tests/legacy/audio-ended-guard-wiring.legacy.test.ts
+    case_ids: [client-route-nav-play-continuity]
+  - executable_id: exec-double-submit-legacy
+    display_name_zh: 双发抑制遗留
+    layer: L2
+    path: ./tests/legacy/double-submit.legacy.test.ts
+    case_ids: [rapid-double-submit-guard]
+  - executable_id: exec-conversation-write-wiring-legacy
+    display_name_zh: 会话写入接线遗留
+    layer: L2
+    path: ./tests/legacy/conversation-write-wiring.legacy.test.ts
+    case_ids: [history-epoch-guard-30day-prune]
+  - executable_id: exec-keepalive-dedup-legacy
+    display_name_zh: 保活去重遗留
+    layer: L2
+    path: ./tests/legacy/keepalive-dedup.legacy.test.ts
+    case_ids: [clear-during-generate-no-orphan-audio]
+  - executable_id: exec-pending-intent-ui-legacy
+    display_name_zh: 待定意图界面遗留
+    layer: L2
+    path: ./tests/legacy/pending-intent-ui.legacy.test.ts
+    case_ids: [streaming-resubmit-mutex]
+  - executable_id: exec-logout-probe-hardening-legacy
+    display_name_zh: 登出探针加固遗留
+    layer: L2
+    path: ./tests/legacy/logout-probe-hardening.legacy.test.ts
+    case_ids: [logout-dual-cookie-clean-reset]
+  - executable_id: exec-release-pipeline
+    display_name_zh: 发布流水线
+    layer: TOOLING
+    path: ./tests/tooling/release/release-pipeline.tooling.test.ts
+    case_ids: [guest-identity-cookie-upgrade]
+  - executable_id: exec-mock-lifecycle
+    display_name_zh: Mock生命周期
+    layer: TOOLING
+    path: ./tests/tooling/mock/mock-lifecycle.tooling.test.ts
+    case_ids: [countdown-exhaust-ui-audio-consistent]
+  - executable_id: exec-e2e-db-guard
+    display_name_zh: 数据库守卫
+    layer: TOOLING
+    path: ./tests/tooling/db-guard/e2e-db-guard.tooling.test.ts
+    case_ids: [guest-user-table-isolation-zero-leak]
+  - executable_id: exec-e2e-db-guard-regression
+    display_name_zh: 数据库守卫回归
+    layer: TOOLING
+    path: ./tests/tooling/db-guard/e2e-db-guard-regression.tooling.test.ts
+    case_ids: [progress-monotonic-guard-force-reset]
+  - executable_id: exec-e2e-stream-observer
+    display_name_zh: 流观察器
+    layer: TOOLING
+    path: ./tests/tooling/observer/e2e-stream-observer.tooling.test.ts
+    case_ids: [preload-continue-no-chat-pollution]
+  - executable_id: exec-runner-database-path-safety
+    display_name_zh: 运行器路径安全
+    layer: TOOLING
+    path: ./tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts
+    case_ids: [register-interrupt-orphan-rollback]

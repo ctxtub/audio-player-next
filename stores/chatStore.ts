@@ -613,8 +613,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
 
     // 确定普通消息的起始点：如果存在 Summary，则从 Summary 之后开始找；否则从头开始
     const normalMessagesStartIndex = summaryMsgIndex !== -1 ? summaryMsgIndex + 1 : 0;
+    // H-03-b：TRIGGER 计入排除预载指令泡（仅 origin === 'preload' 的 user 泡；预载故事助手卡仍计入/仍摘要）。
     const normalMessages = messages.slice(normalMessagesStartIndex).filter(m =>
-      ['user', 'assistant'].includes(m.role) && m.metadata?.agentType !== 'summary_agent'
+      ['user', 'assistant'].includes(m.role) && m.metadata?.agentType !== 'summary_agent' && !isPreloadUserMessage(m as ChatMessage)
     );
 
     // 3. 检查数量是否超过触发阈值
@@ -788,7 +789,24 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         ? messages.slice(lastSummaryIndex)
         : messages;
 
-      return mapMessagesToContext(effectiveMessages);
+      // H-03-b：历史轮次排预载指令泡，本轮保留供续写触发。
+      // 仅最后一条 user（本轮触发，含预载“请继续故事”）原样保留，其余历史 isPreloadUserMessage 一律过滤；
+      // 预载故事助手卡不受影响（仍进上下文/仍可摘要）。
+      let lastUserIndex = -1;
+      for (let index = effectiveMessages.length - 1; index >= 0; index--) {
+        if (effectiveMessages[index].role === 'user') {
+          lastUserIndex = index;
+          break;
+        }
+      }
+      const withoutHistoricalPreload = effectiveMessages.filter((message, index) => {
+        if (index === lastUserIndex) {
+          return true;
+        }
+        return !isPreloadUserMessage(message);
+      });
+
+      return mapMessagesToContext(withoutHistoricalPreload);
     },
     latestMessage: () => {
       const messages = get().messages;

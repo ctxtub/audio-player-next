@@ -82,7 +82,7 @@ type PlaybackStoreActions = {
   reset: () => void;
   registerAudioController: (controller: AudioControllerHandle | null) => void;
   ensureUnlocked: () => Promise<void>;
-  playAudio: (audioUrl: string, messageId?: string) => Promise<void>;
+  playAudio: (audioUrl: string, messageId?: string, options?: { explicit?: boolean }) => Promise<void>;
   resumeAudio: () => Promise<void>;
   pauseAudioPlayback: () => void;
   seekAudio: (time: number) => void;
@@ -350,16 +350,19 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
      * 播放指定音频地址，若控制器尚未注册则抛出异常。
      * @param audioUrl string 音频文件地址
      * @param messageId string (可选) 关联的故事消息 ID
+     * @param options.explicit boolean (可选) 是否为用户显式点播；不传视为自动续播链
      * @returns Promise<void>
      */
-    playAudio: async (audioUrl: string, messageId?: string) => {
+    playAudio: async (audioUrl: string, messageId?: string, options?: { explicit?: boolean }) => {
       const controller = get().audioController;
       if (!controller) {
         throw new Error('音频播放器尚未注册');
       }
-      // 中文注释：H-07 切换窗口守卫——暂停且已有在播轨道时不再续播，防覆盖暂停意图；
-      // 初始起播（无轨道）与播放态放行，不改变正常切换语义。
-      if (!get().isPlaying && get().currentAudioUrl !== null) {
+      // 中文注释：H-07 切换窗口守卫（仅限自动续播链）——暂停且已有在播轨道时自动续播不再覆盖暂停意图；
+      // 初始起播（无轨道）与播放态放行；用户显式点播（explicit:true）一律放行，不改变正常切换语义。
+      // 显式放行不预置 isPlaying：依赖控制器 play 成功后的 handlePlaybackStart 置位，
+      // 合成失败/播放中断时暂停态得以保留，语义最干净。
+      if (!get().isPlaying && get().currentAudioUrl !== null && !options?.explicit) {
         return;
       }
       set({
@@ -486,9 +489,10 @@ export const useFloatingPlayer = () => {
   const hideFloatingPlayer = usePlaybackStore((state) => state.hideFloatingPlayer);
 
   const play = useCallback(
-    async (audioUrl: string, messageId?: string) => {
+    async (audioUrl: string, messageId?: string, options?: { explicit?: boolean }) => {
       showFloatingPlayer();
-      await playAudio(audioUrl, messageId);
+      // 中文注释：浮窗 play 即用户显式点播入口，缺省按显式放行（auto 须显式传 { explicit: false }）。
+      await playAudio(audioUrl, messageId, { explicit: options?.explicit ?? true });
     },
     [playAudio, showFloatingPlayer]
   );

@@ -69,7 +69,7 @@ interface PlaybackProgressActions {
     initialNextIndex?: number;
   }) => void;
   resumeRehydratedPlayback: () => Promise<void>;
-  playParagraph: (paragraphIndex: number) => Promise<void>;
+  playParagraph: (paragraphIndex: number, options?: { explicit?: boolean }) => Promise<void>;
   prefetchNextParagraph: (paragraphIndex: number) => Promise<void>;
   handleParagraphEnded: () => Promise<boolean>;
   handleExplicitPause: () => void;
@@ -344,21 +344,22 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
       }
     }
     const targetIndex = get().nextParagraphIndex;
-    await get().playParagraph(targetIndex);
+    await get().playParagraph(targetIndex, { explicit: true });
   },
 
-  playParagraph: async (paragraphIndex: number) => {
+  playParagraph: async (paragraphIndex: number, options?: { explicit?: boolean }) => {
     const state = get();
     if (paragraphIndex >= state.paragraphs.length) {
       // 全部播放完毕，清理进度
       await get().clearProgress();
       return;
     }
-    // 中文注释：H-07 切换窗口守卫（入口快拦）——暂停且已有在播轨道时不再续播，省去无效合成；
-    // 初始起播（无轨道）与播放态放行，不改变正常切换语义。
+    // 中文注释：H-07 切换窗口守卫（入口快拦，仅限自动续播链）——暂停且已有在播轨道时自动续播不再覆盖暂停意图，
+    // 省去无效合成；初始起播（无轨道）与播放态放行；用户显式点播（explicit:true）一律放行。
     if (
       !usePlaybackStore.getState().isPlaying &&
-      usePlaybackStore.getState().currentAudioUrl !== null
+      usePlaybackStore.getState().currentAudioUrl !== null &&
+      !options?.explicit
     ) {
       return;
     }
@@ -380,11 +381,12 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
       }
     }
 
-    // 中文注释：H-07 切换窗口守卫（合成后复检）——慢 TTS 放大的切换窗口内暂停须被尊重，
-    // 合成完成时若已暂停且有轨道则不再续播（防覆盖暂停意图）。
+    // 中文注释：H-07 切换窗口守卫（合成后复检，仅限自动续播链）——慢 TTS 放大的切换窗口内暂停须被尊重，
+    // 合成完成时自动续播若已暂停且有轨道则不再续播（防覆盖暂停意图）；显式点播放行。
     if (
       !usePlaybackStore.getState().isPlaying &&
-      usePlaybackStore.getState().currentAudioUrl !== null
+      usePlaybackStore.getState().currentAudioUrl !== null &&
+      !options?.explicit
     ) {
       return;
     }
@@ -404,7 +406,7 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
     });
 
     const msgId = state.sourceType === 'chat' ? state.sourceId ?? undefined : undefined;
-    await usePlaybackStore.getState().playAudio(audioUrl, msgId);
+    await usePlaybackStore.getState().playAudio(audioUrl, msgId, { explicit: options?.explicit });
   },
 
   prefetchNextParagraph: async (paragraphIndex: number) => {
@@ -473,6 +475,7 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
         nextParagraphIndex: next,
       });
       await get().saveProgressImmediate({ forceReset: false });
+      // 中文注释：H-07 自动续播链——段落自然结束的推进不带 explicit，暂停窗口守卫继续拦截。
       await get().playParagraph(next);
       return true;
     } else {
@@ -497,7 +500,7 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
       lastCompletedParagraphIndex: -1,
     });
     await get().saveProgressImmediate({ forceReset: true });
-    await get().playParagraph(0);
+    await get().playParagraph(0, { explicit: true });
   },
 
   saveProgressDebounced: (options) => {

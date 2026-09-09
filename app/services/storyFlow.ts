@@ -112,6 +112,7 @@ export const startStoryPlayback = async (
   }
 
   // 3. 自动开始播放生成的音频
+  // 中文注释：H-07 自动链——此处经 reset() 已清空在播轨道（currentAudioUrl=null），窗口守卫天然放行，无需 explicit。
   await playbackStore.playAudio(audioUrl, messageId);
 };
 
@@ -153,7 +154,7 @@ export const replayGeneration = async (record: GenerationRecord): Promise<void> 
     isOneShot: true,
   });
 
-  await usePlaybackProgressStore.getState().playParagraph(0);
+  await usePlaybackProgressStore.getState().playParagraph(0, { explicit: true });
 };
 
 /**
@@ -190,7 +191,7 @@ export const playStoryText = async (storyText: string, messageId?: string): Prom
       speed,
       isOneShot: true,
     });
-    await usePlaybackProgressStore.getState().playParagraph(0);
+    await usePlaybackProgressStore.getState().playParagraph(0, { explicit: true });
   } else {
     // 降级：未传稳定标识时一次性合成播放，不持久化悬挂断点
     await synthesizeAndPlayOnce(storyText, voiceId, `chat-${Date.now()}`);

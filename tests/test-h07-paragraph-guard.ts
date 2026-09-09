@@ -202,8 +202,8 @@ async function runH07Tests(): Promise<void> {
   assert.strictEqual(playCalls, 1, '初始起播（无轨道）必须放行，不得被窗口守卫误伤');
   console.log('PASS: H-07-03 initial-start-preserved verified');
 
-  // 用例四：playAudio 直调守卫——暂停且有轨道时不得续播。
-  console.log('--- H-07-04: playAudio 暂停窗口守卫 ---');
+  // 用例四：playAudio 直调守卫——暂停且有轨道时自动链不得续播，显式点播必须放行。
+  console.log('--- H-07-04: playAudio 暂停窗口守卫（auto 拦截 / explicit 放行） ---');
   resetStores();
   installController();
   usePlaybackStore.setState({
@@ -215,14 +215,26 @@ async function runH07Tests(): Promise<void> {
   });
   playCalls = 0;
   await usePlaybackStore.getState().playAudio('blob:mock-next-track', SOURCE_ID);
-  assert.strictEqual(playCalls, 0, '暂停窗口内 playAudio 不得调用 controller.play');
+  assert.strictEqual(playCalls, 0, '暂停窗口内自动 playAudio 不得调用 controller.play');
   assert.strictEqual(
     usePlaybackStore.getState().currentAudioUrl,
     'blob:mock-current-track',
-    '暂停窗口内 playAudio 不得切换轨道',
+    '暂停窗口内自动 playAudio 不得切换轨道',
   );
+  console.log('PASS: H-07-04-auto paused-window-no-continue verified');
+  // 用例四之二：同态下显式点播必须放行并切轨。
+  playCalls = 0;
+  await usePlaybackStore.getState().playAudio('blob:mock-next-track', SOURCE_ID, { explicit: true });
+  assert.strictEqual(playCalls, 1, '暂停窗口内显式 playAudio 必须调用 controller.play 出声');
+  assert.strictEqual(
+    usePlaybackStore.getState().currentAudioUrl,
+    'blob:mock-next-track',
+    '暂停窗口内显式 playAudio 必须切换到新轨道',
+  );
+  console.log('PASS: H-07-04-explicit paused-window-explicit-continues verified');
   // 对照：播放态直调必须放行。
   usePlaybackStore.setState({ isPlaying: true });
+  playCalls = 0;
   await usePlaybackStore.getState().playAudio('blob:mock-next-track', SOURCE_ID);
   assert.strictEqual(playCalls, 1, '播放态 playAudio 必须放行');
   // 对照：无轨道初始直调必须放行。
@@ -239,6 +251,47 @@ async function runH07Tests(): Promise<void> {
   await usePlaybackStore.getState().playAudio('blob:mock-first-track', SOURCE_ID);
   assert.strictEqual(playCalls, 1, '无轨道初始 playAudio 必须放行');
   console.log('PASS: H-07-04 playAudio-guard verified');
+
+  // 用例五：暂停有轨态显式 playParagraph 必须出声（回归：显式点新卡不得被自动链守卫拦截）。
+  console.log('--- H-07-05: 暂停窗口内显式 playParagraph 必须放行 ---');
+  resetStores();
+  installController();
+  seedActiveStory();
+  usePlaybackStore.setState({
+    isPlaying: false,
+    remainingMs: 30 * 60000,
+    totalAllowedMs: 30 * 60000,
+    currentAudioUrl: 'blob:mock-current-track',
+    currentMessageId: SOURCE_ID,
+  });
+  synthRequests.length = 0;
+  playCalls = 0;
+  await usePlaybackProgressStore.getState().playParagraph(1, { explicit: true });
+  assert.strictEqual(playCalls, 1, '暂停窗口内显式 playParagraph 必须调用 controller.play 出声');
+  assert.notStrictEqual(
+    usePlaybackStore.getState().currentAudioUrl,
+    'blob:mock-current-track',
+    '暂停窗口内显式 playParagraph 必须切换到新合成轨道',
+  );
+  console.log('PASS: H-07-05 paused-window-explicit-continues verified');
+
+  // 用例六：暂停有轨态显式 replayFromStart 必须出声（重播键为显式入口）。
+  console.log('--- H-07-06: 暂停窗口内显式 replayFromStart 必须放行 ---');
+  resetStores();
+  installController();
+  seedActiveStory();
+  usePlaybackStore.setState({
+    isPlaying: false,
+    remainingMs: 30 * 60000,
+    totalAllowedMs: 30 * 60000,
+    currentAudioUrl: 'blob:mock-current-track',
+    currentMessageId: SOURCE_ID,
+  });
+  synthRequests.length = 0;
+  playCalls = 0;
+  await usePlaybackProgressStore.getState().replayFromStart();
+  assert.strictEqual(playCalls, 1, '暂停窗口内显式 replayFromStart 必须调用 controller.play 出声');
+  console.log('PASS: H-07-06 paused-window-replay-continues verified');
 
   console.log('\nALL H-07 PARAGRAPH-GUARD TEST CASES PASSED SUCCESSFULLY!');
 }

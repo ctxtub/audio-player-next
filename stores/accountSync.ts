@@ -113,11 +113,27 @@ function samplePlaybackForProbe(): LogoutProbePlaybackSnapshot {
 }
 
 /**
- * 读取登出探针采样（返回拷贝，调用方不得改写内部暂存）。
- * @returns 采样拷贝
+ * 深冻单条探针采样：participants 数组与播放快照均拷贝后冻结，顶层亦冻结。
+ * 快照为一层扁平结构，展开拷贝即深拷贝；调用方任何改写均不触内部暂存。
+ * @param sample 内部暂存的原始采样。
+ * @returns 深拷贝且深冻的采样。
+ */
+function freezeLogoutProbeSample(sample: LogoutProbeSample): LogoutProbeSample {
+  return Object.freeze({
+    at: sample.at,
+    participants: Object.freeze([...sample.participants]),
+    playbackBefore: Object.freeze({ ...sample.playbackBefore }),
+    playbackAfter: Object.freeze({ ...sample.playbackAfter }),
+  }) as LogoutProbeSample;
+}
+
+/**
+ * 读取登出探针采样（返回深拷贝 + 深冻，调用方不得改写内部暂存）。
+ * @returns 采样拷贝（冻结数组内冻结对象）
  */
 export function getLogoutProbeSamples(): LogoutProbeSample[] {
-  return [...logoutProbeSamples];
+  const copies = logoutProbeSamples.map((sample) => freezeLogoutProbeSample(sample));
+  return Object.freeze(copies) as LogoutProbeSample[];
 }
 
 /**
@@ -156,22 +172,47 @@ export function initAccountForGuest(): void {
 /**
  * 登出/会话失效/身份切换：同步清理所有块（清本地 + 关同步）。
  * H-06 探针仅在前后采样播放快照并记录参与序列，不改任何清理行为。
+ * H-06 follow-up：try/finally 永不阻断登出——单块 reset 抛错仅告警并继续其余块，
+ * 探针采样与记录包在 finally/内层 try/catch，任何探针异常不外抛阻断登出。
  */
 export function resetAccountData(): void {
-  const playbackBefore = samplePlaybackForProbe();
   const at = Date.now();
-  for (const p of participants) {
-    p.reset();
+  let playbackBefore: LogoutProbePlaybackSnapshot;
+  try {
+    playbackBefore = samplePlaybackForProbe();
+  } catch (error) {
+    console.warn('[accountSync] probe before failed', error);
+    playbackBefore = { isPlaying: false, currentAudioUrl: null, hasController: false };
   }
-  const playbackAfter = samplePlaybackForProbe();
-  logoutProbeSamples.push({
-    at,
-    participants: participants.map((p) => p.name),
-    playbackBefore,
-    playbackAfter,
-  });
-  if (logoutProbeSamples.length > LOGOUT_PROBE_KEEP) {
-    logoutProbeSamples.splice(0, logoutProbeSamples.length - LOGOUT_PROBE_KEEP);
+  try {
+    for (const p of participants) {
+      try {
+        p.reset();
+      } catch (error) {
+        console.warn(`[accountSync] ${p.name} reset failed`, error);
+      }
+    }
+  } finally {
+    let playbackAfter: LogoutProbePlaybackSnapshot;
+    try {
+      playbackAfter = samplePlaybackForProbe();
+    } catch (error) {
+      console.warn('[accountSync] probe after failed', error);
+      playbackAfter = { isPlaying: false, currentAudioUrl: null, hasController: false };
+    }
+    try {
+      logoutProbeSamples.push({
+        at,
+        participants: participants.map((p) => p.name),
+        playbackBefore,
+        playbackAfter,
+      });
+      if (logoutProbeSamples.length > LOGOUT_PROBE_KEEP) {
+        logoutProbeSamples.splice(0, logoutProbeSamples.length - LOGOUT_PROBE_KEEP);
+      }
+    } catch (error) {
+      console.warn('[accountSync] probe record failed', error);
+    }
   }
 }
 

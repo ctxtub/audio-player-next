@@ -1,4 +1,4 @@
-import { SEGMENTATION_VERSION } from '../../utils/segmentation';
+import { SEGMENTATION_VERSION } from '../../../utils/segmentation';
 
 /**
  * 段落断点恢复场景的合成故事种子（与 `{{E2E_STORY_4P}}` 同构的 4 段固定文本）。

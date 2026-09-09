@@ -4,14 +4,14 @@ import * as nextHeaders from 'next/headers';
 import {
     createToastCapture,
     installGlassToastStub,
-} from './fixtures/ui-stubs';
+} from './support/mocks/ui-state.mock';
 import {
     buildParagraphProgressSeed,
     buildSquirrelStoryText,
     buildStoryChatMessage,
-} from './fixtures/story-seeds';
-import { makeGuestContext, makeGuestId, makeMessageId } from './fixtures/subjects';
-import { setupIsolatedDb } from './fixtures/isolated-db';
+} from './support/fixtures/playback-story.fixture';
+import { makeGuestContext, makeGuestId, makeMessageId } from './support/builders/auth-subject.builder';
+import { setupIsolatedDb } from './support/db/isolated-db.helper';
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
 // 中文注释：toast 捕获器（供漂移通知断言读取末次提示）。

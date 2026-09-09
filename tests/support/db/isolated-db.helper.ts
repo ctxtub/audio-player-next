@@ -48,12 +48,12 @@ function getControlledDbPath(): string {
  */
 export async function setupIsolatedDb(suiteName: string): Promise<{
     dbPath: string;
-    prisma: typeof import('../../lib/db').prisma;
+    prisma: typeof import('../../../lib/db').prisma;
 }> {
     // 中文注释：suiteName 仅为兼容参数，不再决定路径；runner 已逐 suite 隔离迁移。
     void suiteName;
     const dbPath = getControlledDbPath();
-    const { prisma } = await import('../../lib/db');
+    const { prisma } = await import('../../../lib/db');
     return { dbPath, prisma };
 }
 

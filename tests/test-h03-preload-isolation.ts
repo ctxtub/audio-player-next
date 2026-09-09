@@ -17,16 +17,17 @@ nodeRequire.cache[glassToastPath] = {
     exports: { default: { show: () => {}, clear: () => {} } },
 } as unknown as NodeModule;
 
-// 中文注释：会话落库捕获桩——拦截 tRPC 快照保存，记录每次 payload 供“不落库”断言。
+// 中文注释：会话落库捕获桩——拦截 tRPC 快照保存，记录每次 payload 供“不落库”断言；fetch 桩可注入服务端行以模拟重载恢复。
 const chatConversationPath = path.resolve(process.cwd(), 'lib/client/chatConversation.ts');
 type ChatMessageInputLike = { messageId: string; role: string; content: string };
 const savedSnapshots: ChatMessageInputLike[][] = [];
+let stubFetchRows: ChatMessageInputLike[] = [];
 nodeRequire.cache[chatConversationPath] = {
     id: chatConversationPath,
     filename: chatConversationPath,
     loaded: true,
     exports: {
-        fetchMyConversation: async () => [],
+        fetchMyConversation: async () => stubFetchRows,
         saveMyConversation: async (messages: ChatMessageInputLike[]) => {
             savedSnapshots.push(messages);
             return { ok: true };
@@ -92,6 +93,7 @@ function resetBaseline(): void {
     useGenerationHistoryStore.getState().reset();
     usePromptHistoryStore.getState().reset();
     savedSnapshots.length = 0;
+    stubFetchRows = [];
     stubMode = 'success';
 }
 
@@ -252,6 +254,99 @@ async function runH03Tests(): Promise<void> {
         '预载失败也不得清空人工草稿',
     );
     console.log('PASS: H-03-06 draft preserved on failure');
+
+    console.log('=== H-03-07: 人工同文「请继续故事」重载不丢失（H-03-a 回归）===');
+    // 中文注释：复现人工同文 5 字消息的数据丢失路径——落库时 origin 不持久化，重载后无标记；
+    // 旧内容回退逻辑会把重载后的无标记同文误判为 preload（ChatLog 隐藏 + toSnapshot 剔除 → 下次保存从服务端删除）。
+    // 新语义仅 origin === 'preload' 判 true，无标记/origin user 一律可见。
+    resetBaseline();
+    useChatStore.setState({ syncEnabled: true });
+    const chatStoreModuleForH0307 = nodeRequire('../stores/chatStore') as Record<string, unknown>;
+    const isPreloadForH0307 = chatStoreModuleForH0307.isPreloadUserMessage as (message: {
+        role: string;
+        content: string;
+        metadata?: unknown;
+    }) => boolean;
+    // 中文注释：人工提交同文（origin 默认为 user），Finish 置完结以便进入快照。
+    useChatStore.getState().dispatch({ type: 'user.submit', content: AUTO_CONTINUE_PROMPT } as Parameters<
+        ReturnType<typeof useChatStore.getState>['dispatch']
+    >[0]);
+    useChatStore.getState().dispatch({
+        type: 'stream.finish',
+        payload: { type: 'done', finishReason: 'stop' },
+    } as Parameters<ReturnType<typeof useChatStore.getState>['dispatch']>[0]);
+    const manualUser = useChatStore.getState().messages.find(
+        (message) => message.role === 'user' && message.content === AUTO_CONTINUE_PROMPT,
+    );
+    assert.ok(manualUser, '人工同文消息应已入流');
+    assert.strictEqual(
+        isPreloadForH0307(manualUser),
+        false,
+        'RED: 人工提交同文（origin user）不得判为预载',
+    );
+    // 中文注释：走 toSnapshot 落库（flush 直调，不等 1s 防抖），断言人工同文必须进快照。
+    savedSnapshots.length = 0;
+    const firstFlush = await useChatStore.getState().flushPendingSave();
+    assert.strictEqual(firstFlush, true, '登录态下 flush 应执行保存');
+    assert.ok(savedSnapshots.length >= 1, '人工提交后应产生至少一次快照保存');
+    const firstSnapshot = savedSnapshots[savedSnapshots.length - 1];
+    assert.ok(
+        firstSnapshot.some((message) => message.role === 'user' && message.content === AUTO_CONTINUE_PROMPT),
+        'RED: 人工同文必须进入快照（落库）',
+    );
+    // 中文注释：模拟服务端往返——快照 DTO 无 origin 列；重载经 initForUser 恢复（origin 丢失为无标记）。
+    stubFetchRows = firstSnapshot.map((message) => ({ ...message }));
+    useChatStore.getState().reset();
+    assert.strictEqual(useChatStore.getState().messages.length, 0, '重载前本地应已清空');
+    await useChatStore.getState().initForUser();
+    const recovered = useChatStore.getState().messages;
+    const recoveredUser = recovered.find(
+        (message) => message.role === 'user' && message.content === AUTO_CONTINUE_PROMPT,
+    );
+    assert.ok(recoveredUser, '重载恢复后人工同文不得丢失');
+    assert.strictEqual(
+        isPreloadForH0307(recoveredUser),
+        false,
+        'RED: 重载后无标记同文被误判 preload 隐藏（H-03-a 数据丢失）',
+    );
+    // 中文注释：ChatLog 可见性口径——过滤后仍可见。
+    const visibleRecovered = recovered.filter((message) => !isPreloadForH0307(message));
+    assert.ok(
+        visibleRecovered.some((message) => message.role === 'user' && message.content === AUTO_CONTINUE_PROMPT),
+        'RED: 重载后人工同文在 ChatLog 仍可见',
+    );
+    // 中文注释：重载后的下次保存仍须包含该同文，否则会从服务端删除。
+    savedSnapshots.length = 0;
+    const secondFlush = await useChatStore.getState().flushPendingSave();
+    assert.strictEqual(secondFlush, true, '重载后 flush 应执行保存');
+    assert.strictEqual(savedSnapshots.length, 1, '重载后 flush 应产生一次保存');
+    assert.ok(
+        savedSnapshots[0].some((message) => message.role === 'user' && message.content === AUTO_CONTINUE_PROMPT),
+        'RED: 重载后下次保存剔除同文会导致服务端删除',
+    );
+    // 中文注释：锁定新语义——仅 origin preload 隐藏；origin user / 无标记 / 非 user 一律可见。
+    // 历史预载泡（修前落库的无标记指令泡）重载后一次性可见，为接受的 cosmetic 代价。
+    assert.strictEqual(
+        isPreloadForH0307({ role: 'user', content: AUTO_CONTINUE_PROMPT, metadata: { origin: 'preload' } }),
+        true,
+        'origin preload 仍须隐藏',
+    );
+    assert.strictEqual(
+        isPreloadForH0307({ role: 'user', content: AUTO_CONTINUE_PROMPT, metadata: { origin: 'user' } }),
+        false,
+        'origin user 不得隐藏',
+    );
+    assert.strictEqual(
+        isPreloadForH0307({ role: 'user', content: AUTO_CONTINUE_PROMPT }),
+        false,
+        '无标记同文一律可见（含历史预载泡一次性可见）',
+    );
+    assert.strictEqual(
+        isPreloadForH0307({ role: 'assistant', content: AUTO_CONTINUE_PROMPT, metadata: { origin: 'preload' } }),
+        false,
+        '非 user 角色不得判预载',
+    );
+    console.log('PASS: H-03-07 manual same-text survives reload');
 
     console.log('\nALL H-03 PRELOAD ISOLATION TEST CASES PASSED SUCCESSFULLY!');
 }

@@ -31,14 +31,10 @@ export type ChatMessageOrigin = 'user' | 'preload';
 export const CHAT_PRELOAD_ORIGIN: ChatMessageOrigin = 'preload';
 
 /**
- * 预载续写指令原文（与 chatFlow.AUTO_CONTINUE_PROMPT 同值）。
- * 此处用字面量而非常量导入，避免与 app/services/chatFlow 形成循环依赖。
- */
-const PRELOAD_CONTINUE_TEXT = '请继续故事';
-
-/**
  * 判断是否为预载续写产生的用户指令泡（渲染与落库时需隐藏）。
- * 新数据以 metadata.origin 为准；无标记的历史数据回退按原文比对。
+ * 仅以 metadata.origin === 'preload' 为准；无标记（含重载恢复丢失 origin）一律视为人工消息，
+ * 避免人工同文「请继续故事」被误判隐藏并在下次保存时从服务端删除（H-03-a）。
+ * 历史预载泡（修前落库的无标记指令泡）重载后一次性可见，为接受的 cosmetic 代价。
  * @param message 待判断的聊天消息。
  * @returns 预载指令泡返回 true，其余返回 false。
  */
@@ -47,13 +43,7 @@ export const isPreloadUserMessage = (message: ChatMessage): boolean => {
     return false;
   }
   const origin = (message.metadata as { origin?: string } | undefined)?.origin;
-  if (origin === CHAT_PRELOAD_ORIGIN) {
-    return true;
-  }
-  if (origin !== undefined) {
-    return false;
-  }
-  return message.content.trim() === PRELOAD_CONTINUE_TEXT;
+  return origin === CHAT_PRELOAD_ORIGIN;
 };
 
 export type ChatStoreAction =

@@ -89,8 +89,9 @@ const preloadStoreCreator: StateCreator<PreloadStore> = (set, get) => ({
 
     const taskToken = Symbol('active-preload');
     const preloadTask = (async () => {
-      // 预加载续写不计入生成历史
-      const { messageId: generatedId, audioUrl, content: generatedContent } = await beginChatStream(AUTO_CONTINUE_PROMPT, { recordHistory: false });
+      // 预加载续写不计入生成历史，且以 preload 来源入流：不清空人工草稿，
+      // 指令泡按来源标记在渲染与落库时隐藏（见 chatStore.isPreloadUserMessage）。
+      const { messageId: generatedId, audioUrl, content: generatedContent } = await beginChatStream(AUTO_CONTINUE_PROMPT, { recordHistory: false, origin: 'preload' });
       let nextSegment = generatedContent;
 
       const currentState = get();

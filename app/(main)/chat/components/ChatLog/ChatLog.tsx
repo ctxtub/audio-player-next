@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { MessageCircle } from 'lucide-react';
 import MessageBubble from './MessageBubble';
+import { isPreloadUserMessage } from '@/stores/chatStore';
 import styles from './ChatLog.module.scss';
 import type { ChatLogProps } from './types';
 
@@ -88,7 +89,13 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
     [className],
   );
 
-  const hasMessages = messages.length > 0;
+  /** 过滤预载续写指令泡后的可见消息（预载指令不进入聊天流展示）。 */
+  const visibleMessages = useMemo(
+    () => messages.filter((message) => !isPreloadUserMessage(message)),
+    [messages],
+  );
+
+  const hasMessages = visibleMessages.length > 0;
 
   /** 滚动容器类名，根据空状态追加去除底部内边距的样式。 */
   const scrollContainerClassName = useMemo(
@@ -107,7 +114,7 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
       <div ref={scrollContainerRef} className={scrollContainerClassName}>
         {hasMessages ? (
           <div className={styles.messagesList}>
-            {messages.map((message) => (
+            {visibleMessages.map((message) => (
               <MessageBubble
                 key={message.id}
                 message={message}

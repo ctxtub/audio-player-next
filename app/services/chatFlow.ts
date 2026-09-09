@@ -1,4 +1,5 @@
 import { useChatStore } from '@/stores/chatStore';
+import type { ChatMessageOrigin } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
 import { useConfigStore } from '@/stores/configStore';
 import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
@@ -182,14 +183,16 @@ const executeChatStream = async (
 /**
  * 开启新的聊天流式请求：准备上下文并发起调用。
  * @param content 用户输入的文本内容。
+ * @param options.recordHistory 是否记入生成历史与提示词历史（预载续写传 false）。
+ * @param options.origin 消息来源（预载续写传 'preload'，用于隔离用户草稿与可见气泡）。
  * @returns 包含生成的消息 ID 和音频 URL
  */
 export const beginChatStream = async (
   content: string,
-  options?: { recordHistory?: boolean },
+  options?: { recordHistory?: boolean; origin?: ChatMessageOrigin },
 ): Promise<{ messageId: string; audioUrl: string; content: string }> => {
   // 1. 提交用户消息
-  useChatStore.getState().dispatch({ type: 'user.submit', content });
+  useChatStore.getState().dispatch({ type: 'user.submit', content, origin: options?.origin });
 
   // 2. 获取上下文消息列表
   const context = useChatStore.getState().selectors.conversationMessages();

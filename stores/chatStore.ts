@@ -23,9 +23,42 @@ import { fetchMyConversation, saveMyConversation } from '@/lib/client/chatConver
 /**
  * 聊天 Store 的 Action 定义，统一管理所有对单条目消息状态的变更操作。
  */
+export type ChatMessageOrigin = 'user' | 'preload';
+
+/**
+ * 预载来源标记常量，写入消息 metadata.origin。
+ */
+export const CHAT_PRELOAD_ORIGIN: ChatMessageOrigin = 'preload';
+
+/**
+ * 预载续写指令原文（与 chatFlow.AUTO_CONTINUE_PROMPT 同值）。
+ * 此处用字面量而非常量导入，避免与 app/services/chatFlow 形成循环依赖。
+ */
+const PRELOAD_CONTINUE_TEXT = '请继续故事';
+
+/**
+ * 判断是否为预载续写产生的用户指令泡（渲染与落库时需隐藏）。
+ * 新数据以 metadata.origin 为准；无标记的历史数据回退按原文比对。
+ * @param message 待判断的聊天消息。
+ * @returns 预载指令泡返回 true，其余返回 false。
+ */
+export const isPreloadUserMessage = (message: ChatMessage): boolean => {
+  if (message.role !== 'user') {
+    return false;
+  }
+  const origin = (message.metadata as { origin?: string } | undefined)?.origin;
+  if (origin === CHAT_PRELOAD_ORIGIN) {
+    return true;
+  }
+  if (origin !== undefined) {
+    return false;
+  }
+  return message.content.trim() === PRELOAD_CONTINUE_TEXT;
+};
+
 export type ChatStoreAction =
   // 用户触发
-  | { type: 'user.submit'; content: string } // 提交新消息
+  | { type: 'user.submit'; content: string; origin?: ChatMessageOrigin } // 提交新消息
   | { type: 'user.retry' }                   // 重试上一条失败消息
   // 流式更新
   | { type: 'stream.delta'; content: string }          // 追加内容
@@ -165,6 +198,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
    */
   const toSnapshot = (messages: ChatMessage[]): ChatMessageInput[] =>
     messages
+      .filter((message) => !isPreloadUserMessage(message))
       .filter(
         (message) => message.status === undefined || message.status === 'delivered',
       )
@@ -217,14 +251,26 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
 
       switch (action.type) {
         case 'user.submit': {
+          // 预载续写标记来源：保留人工草稿并打标，渲染与落库时按标记隐藏指令泡。
+          const submitOrigin: ChatMessageOrigin = action.origin ?? 'user';
           const userMsg = withPersona<ChatMessage>({
             id: createTempMessageId('user'),
             role: 'user',
             content: action.content,
             status: 'sending',
             createdAt: createTimestamp(),
+            metadata: { origin: submitOrigin } as ChatMessage['metadata'],
           });
-          const assistantMsg = withPersona(createAssistantPlaceholder());
+          const assistantBase = createAssistantPlaceholder();
+          const assistantMsg = withPersona({
+            ...assistantBase,
+            metadata: { ...assistantBase.metadata, origin: submitOrigin } as ChatMessage['metadata'],
+          });
+          if (submitOrigin === CHAT_PRELOAD_ORIGIN) {
+            return {
+              messages: [...messages, userMsg, assistantMsg],
+            };
+          }
           return {
             messages: [...messages, userMsg, assistantMsg],
             inputValue: '',

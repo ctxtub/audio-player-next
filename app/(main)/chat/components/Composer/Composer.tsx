@@ -47,6 +47,8 @@ const Composer: React.FC<ComposerProps> = ({
   const [internalValue, setInternalValue] = useState(value ?? '');
   /** 本地发送中状态，用于在 props isSending 前后衔接提交锁。 */
   const [isLocalSending, setIsLocalSending] = useState(false);
+  /** 同步提交锁，与 isLocalSending 双保险，堵住同 tick 双发的竞态窗口（setState 同 tick 内不可见，ref 置位同步可见）。 */
+  const submittingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   /**
@@ -113,6 +115,10 @@ const Composer: React.FC<ComposerProps> = ({
    * 提交发送逻辑，进行空值校验并处理异常 Toast。
    */
   const handleSubmit = useCallback(async () => {
+    // 中文注释：同步锁先行——同 tick 内第二次调用在此被拦，不再依赖异步 setState。
+    if (submittingRef.current) {
+      return;
+    }
     if (effectiveDisabled) {
       return;
     }
@@ -123,6 +129,7 @@ const Composer: React.FC<ComposerProps> = ({
       return;
     }
 
+    submittingRef.current = true;
     setIsLocalSending(true);
     try {
       await onSubmit(trimmed);
@@ -138,6 +145,7 @@ const Composer: React.FC<ComposerProps> = ({
           : '发送失败，请稍后重试';
       GlassToast.show({ icon: 'fail', content: message });
     } finally {
+      submittingRef.current = false;
       setIsLocalSending(false);
     }
   }, [effectiveDisabled, handleChange, internalValue, onSubmit, showEmptyContentWarning]);

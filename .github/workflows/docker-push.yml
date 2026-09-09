@@ -12,7 +12,70 @@ on:
 permissions: {}
 
 jobs:
+  # 任务10质量门（同 workflow needs 语义）：GitHub needs 跨 workflow 不生效，
+  # 故在本文件内定义 quality job 供镜像 job 同 SHA 依赖；原 push/tags/dispatch
+  # 触发语义保留。workflow_run + 成功判定替代方案已评估未采用（会改变触发语义），限制如实记录。
+  quality:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Detect tooling-changes (path-filter)
+        run: |
+          echo "检测 tooling 敏感路径（path-filter 步骤级阻断语义）…"
+          echo "敏感路径：scripts/** .github/workflows/** tests/tooling/** prisma/schema.prisma"
+          CHANGED="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || true)"
+          if [ -z "${CHANGED}" ]; then
+            CHANGED="$(git status --porcelain 2>/dev/null || true)"
+          fi
+          echo "${CHANGED}"
+          HIT="false"
+          echo "${CHANGED}" | grep -E -q '^(scripts/|\.github/workflows/|tests/tooling/|prisma/schema\.prisma)' && HIT="true" || true
+          if [ "${HIT}" = "true" ]; then
+            echo "命中 tooling 路径，执行强制门 yarn test:tooling"
+            yarn test:tooling
+          else
+            echo "未命中 tooling 路径，跳过强制门"
+          fi
+
+      - name: Static check
+        run: yarn test:static
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Typecheck
+        run: yarn tsc --noEmit --incremental false
+
+      - name: L1 unit tests
+        run: yarn test:unit
+
+      - name: L2 integration tests
+        run: yarn test:integration
+
+      - name: Contract (transitional NOT_APPLICABLE)
+        run: |
+          echo "NOT_APPLICABLE"
+          exit 0
+
+      - name: Build
+        run: yarn build
+
   docker-push:
+    needs: quality
     runs-on: ubuntu-latest
     permissions:
       contents: read

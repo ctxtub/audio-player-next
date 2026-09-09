@@ -1,0 +1,108 @@
+# 候选版本质量门：候选分支 push / 手动触发，质量 job 通过后才允许镜像 job（同 workflow 同 SHA 依赖）。
+name: Candidate Quality Gate
+
+on:
+  push:
+    branches:
+      - main
+      - 'candidate/**'
+      - 'release/**'
+      - 'chore/**'
+      - 'feat/**'
+      - 'fix/**'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  quality:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Detect tooling-changes (path-filter)
+        run: |
+          echo "检测 tooling 敏感路径（path-filter 步骤级阻断语义，GitHub paths 仅触发过滤故此处步骤级阻断）…"
+          echo "敏感路径：scripts/** .github/workflows/** tests/tooling/** prisma/schema.prisma"
+          CHANGED="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || true)"
+          if [ -z "${CHANGED}" ]; then
+            CHANGED="$(git status --porcelain 2>/dev/null || true)"
+          fi
+          echo "${CHANGED}"
+          HIT="false"
+          echo "${CHANGED}" | grep -E -q '^(scripts/|\.github/workflows/|tests/tooling/|prisma/schema\.prisma)' && HIT="true" || true
+          if [ "${HIT}" = "true" ]; then
+            echo "命中 tooling 路径，执行强制门 yarn test:tooling"
+            yarn test:tooling
+          else
+            echo "未命中 tooling 路径，跳过强制门"
+          fi
+
+      - name: Static check
+        run: yarn test:static
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Typecheck
+        run: yarn tsc --noEmit --incremental false
+
+      - name: L1 unit tests
+        run: yarn test:unit
+
+      - name: L2 integration tests
+        run: yarn test:integration
+
+      - name: Contract (transitional NOT_APPLICABLE)
+        run: |
+          echo "NOT_APPLICABLE"
+          exit 0
+
+      - name: Build
+        run: yarn build
+
+  image:
+    name: Candidate Image (sha tag)
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Build and push candidate image (sha tag)
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_REF_TYPE: ${{ github.ref_type }}
+        run: |
+          chmod +x scripts/push-ghcr.sh
+          ./scripts/push-ghcr.sh "latest"

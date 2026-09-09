@@ -19,6 +19,7 @@ import {
 } from '@/utils/chatUtils';
 import type { ChatMessageInput } from '@/lib/trpc/schemas/chatConversation';
 import { fetchMyConversation, saveMyConversation } from '@/lib/client/chatConversation';
+import GlassToast from '@/components/ui/GlassToast';
 
 /**
  * 聊天 Store 的 Action 定义，统一管理所有对单条目消息状态的变更操作。
@@ -189,6 +190,35 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   let userInitPromise: Promise<void> | null = null;
   /** 账号代次：reset 自增，作废在途 initForUser 的回写。 */
   let accountEpoch = 0;
+  /** H-15 基线：上次读取/落盘成功的 messageId 序列（内存，不持久化）。 */
+  let baselineMessageIds: string[] | undefined = undefined;
+
+  /**
+   * 判断是否为基线冲突错误（服务端 CONFLICT 拒写）。
+   * @param error 待判断的保存错误。
+   */
+  const isConflictError = (error: unknown): boolean => {
+    if (typeof error === 'object' && error !== null) {
+      if ((error as { code?: unknown }).code === 'CONFLICT') {
+        return true;
+      }
+      if ((error as { data?: { code?: unknown } }).data?.code === 'CONFLICT') {
+        return true;
+      }
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return message.includes('CONFLICT') || message.includes('其它标签页');
+  };
+
+  /**
+   * CONFLICT 后经 initForUser 口径刷新服务端快照（不静默丢，已置 saveError+toast）。
+   */
+  const refreshAfterConflict = async (): Promise<void> => {
+    // 中文注释：解 syncEnabled 以允许 initForUser 重拉；窗口内新增由其合并保留。
+    set({ syncEnabled: false });
+    userInitPromise = null;
+    await get().initForUser();
+  };
 
   /**
    * 取完成态消息构造保存快照（含 summary 锚点，便于恢复后压缩上下文；storyCard 的音频置空不存）。
@@ -231,9 +261,26 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       if (state.messages.some((message) => message.status === 'sending')) {
         return;
       }
-      saveMyConversation(toSnapshot(state.messages)).then(() => {
+      // 中文注释：H-15 基线透传——保存时带上读取/落盘基线，成功后更新基线。
+      const snapshot = toSnapshot(state.messages);
+      const baselineAtSend = baselineMessageIds;
+      saveMyConversation(snapshot, baselineAtSend).then(() => {
+        baselineMessageIds = snapshot.map((message) => message.messageId);
         set({ saveError: null });
       }).catch((error) => {
+        // 中文注释：H-15 CONFLICT 不静默丢——置标记位＋toast＋initForUser 刷新。
+        if (isConflictError(error)) {
+          const reason = error instanceof Error ? error.message : String(error);
+          set({ saveError: reason });
+          try {
+            GlassToast.show({ icon: 'fail', content: '会话已被其它标签页更新，已刷新' });
+          } catch {
+            // 中文注释：Node/测试环境无 DOM 时忽略 toast，仅保留 saveError 标记位。
+          }
+          console.warn('[chatStore] saveMyConversation conflict', error);
+          void refreshAfterConflict();
+          return;
+        }
         const reason = error instanceof Error ? error.message : String(error);
         set({ saveError: reason });
         console.warn('[chatStore] saveMyConversation failed', error);
@@ -254,11 +301,28 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     if (!state.syncEnabled) {
       return false;
     }
+    // 中文注释：H-15 基线透传——保存时带上读取/落盘基线，成功后更新基线。
+    const snapshot = toSnapshot(state.messages);
+    const baselineAtSend = baselineMessageIds;
     try {
-      await saveMyConversation(toSnapshot(state.messages));
+      await saveMyConversation(snapshot, baselineAtSend);
+      baselineMessageIds = snapshot.map((message) => message.messageId);
       set({ saveError: null });
       return true;
     } catch (error) {
+      // 中文注释：H-15 CONFLICT 不静默丢——置标记位＋toast＋initForUser 刷新。
+      if (isConflictError(error)) {
+        const reason = error instanceof Error ? error.message : String(error);
+        set({ saveError: reason });
+        try {
+          GlassToast.show({ icon: 'fail', content: '会话已被其它标签页更新，已刷新' });
+        } catch {
+          // 中文注释：Node/测试环境无 DOM 时忽略 toast，仅保留 saveError 标记位。
+        }
+        console.warn('[chatStore] flushPendingSave conflict', error);
+        await refreshAfterConflict();
+        return false;
+      }
       const reason = error instanceof Error ? error.message : String(error);
       set({ saveError: reason });
       console.warn('[chatStore] flushPendingSave failed', error);
@@ -614,6 +678,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         createdAt: dto.createdAt,
         metadata: dto.agentType ? { agentType: dto.agentType as AgentType } : undefined,
       }));
+      // 中文注释：H-15 读取成功记基线（内存，不持久化），供下次保存透传。
+      baselineMessageIds = dtos.map((dto) => dto.messageId);
       // await 窗口内本地新增（非 baseline）的消息，需在恢复后保留（项 3）
       const appendedLocally = get().messages.filter(
         (message) => !baselineIds.has(message.id),
@@ -634,6 +700,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   reset: () => {
     accountEpoch++; // 作废在途 initForUser 的回写
     userInitPromise = null; // 让重新登录能起新请求
+    baselineMessageIds = undefined; // 中文注释：H-15 登出清基线，避免跨账号透传。
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;

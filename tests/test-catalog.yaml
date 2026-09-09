@@ -485,7 +485,7 @@ cases:
       - assertion_id: state-reset-after-logout
         display_name_zh: 登出后状态重置
         surface: state
-    executable_ids: [exec-logout-playback-reset]
+    executable_ids: [exec-logout-playback-reset, exec-browser-harness]
     fixtures: []
     ci_tier: CANDIDATE
     owner: playback-kernel
@@ -1432,3 +1432,8 @@ executables:
     layer: TOOLING
     path: ./tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts
     case_ids: [register-interrupt-orphan-rollback]
+  - executable_id: exec-browser-harness
+    display_name_zh: 浏览器harness自测
+    layer: TOOLING
+    path: ./tests/tooling/browser/browser-harness.tooling.test.ts
+    case_ids: [logout-during-play-instant-silence]

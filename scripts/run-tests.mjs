@@ -71,6 +71,7 @@ const SUITES = [
     { id: 'agent-schema-bounds', path: './tests/unit/persistence-config/agent-schema-bounds.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'logout-probe-hardening', path: './tests/integration/identity-session/logout-probe-hardening.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'runner-database-path-safety', path: './tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts', group: 'tooling', needs_db: true },
+    { id: 'browser-harness', path: './tests/tooling/browser/browser-harness.tooling.test.ts', group: 'tooling', needs_db: true },
     { id: 'conversation-conflict-refresh', path: './tests/integration/persistence-config/conversation-conflict-refresh.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'paragraph-segmentation', path: './tests/unit/playback/paragraph-segmentation.unit.test.ts', group: 'unit', needs_db: false },
 ];

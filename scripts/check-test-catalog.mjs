@@ -410,8 +410,11 @@ function collectDiskSuites(dir, out) {
   for (const ent of entries) {
     const abs = path.join(dir, ent.name);
     // 中文注释：排除测试支撑与自测元套件（catalog/runner/ci 自验经 suite-worker 直跑，不进 runner 注册表，避免自指循环）。
+    // 中文注释：tests/system/** 系 Playwright 浏览器域（harness/spec/reporter/fixtures），由 playwright 直接执行，
+    // 无 default 导出、runner suite-worker 无法执行，故同步排除（任务13：任务12 遗留三方不一致的修复）。
     if (ent.isDirectory()) {
       if (abs.replace(/\\/g, '/').includes('tests/support')) continue;
+      if (abs.replace(/\\/g, '/').includes('tests/system')) continue;
       if (abs.replace(/\\/g, '/').includes('tests/tooling/catalog')) continue;
       if (abs.replace(/\\/g, '/').includes('tests/tooling/runner')) continue;
       if (abs.replace(/\\/g, '/').includes('tests/tooling/ci')) continue;
@@ -420,6 +423,7 @@ function collectDiskSuites(dir, out) {
       const rel = path.relative(repoRoot, abs).replace(/\\/g, '/');
       if (!rel.startsWith('tests/')) continue;
       if (rel.startsWith('tests/support/')) continue;
+      if (rel.startsWith('tests/system/')) continue;
       if (rel.startsWith('tests/tooling/catalog/')) continue;
       if (rel.startsWith('tests/tooling/runner/')) continue;
       if (rel.startsWith('tests/tooling/ci/')) continue;

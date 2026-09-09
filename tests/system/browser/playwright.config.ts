@@ -1,24 +1,24 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * 真实浏览器 spike 配置（任务12）。
+ * 浏览器测试配置（任务13 harness 接管服务管理）。
  *
- * 说明：
- * - 不设 webServer：被测 production server 为快照隔离手动启动
- *  （.e2e-runtime/task12-snapshot，端口 31111），启动命令与耗时见 green.log；
- * - 双 project：chromium + webkit（serial，retries=0，spike 如实记录不重试）；
- * - 固定 MP3 由本地 mock 上游（localhost:9301）提供，见 scripts/dev/mock-openai.mjs。
+ * - 服务来源：harness globalSetup/globalTeardown 启停 isolation production
+ *   server + 可编程 mock（不用 Playwright 内建 webServer）；
+ * - 双 project：chromium + webkit（serial，retries=0，如实记录不重试）；
+ * - reporter：line（控制台）+ harness jsonl-reporter（results.jsonl 证据）。
  */
 export default defineConfig({
     testDir: ".",
     testMatch: "smoke.spec.ts",
     timeout: 60000,
+    globalTimeout: 30 * 60 * 1000,
     fullyParallel: false,
+    workers: 1,
     retries: 0,
-    reporter: [["line"]],
-    use: {
-        baseURL: "http://localhost:31111",
-    },
+    reporter: [["line"], ["./harness/jsonl-reporter.ts"]],
+    globalSetup: "./harness/global-setup.mjs",
+    globalTeardown: "./harness/global-teardown.mjs",
     projects: [
         {
             name: "chromium",

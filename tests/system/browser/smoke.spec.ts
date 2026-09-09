@@ -1,32 +1,29 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./harness/fixtures";
 
 /**
- * 真实浏览器技术栈 spike 烟雾用例（任务12）。
+ * 真实浏览器烟雾用例（任务13：已迁移至 harness，不再自管服务启停）。
+ *
+ * 服务来源：globalSetup 拉起的 isolation production server（harnessEnv.appUrl）
+ * 与可编程 mock（harnessEnv.mockMp3Url）；证据由 fixtures 自动记录 manifest。
  *
  * 覆盖矩阵：
- * ① production server（localhost:31111）首屏可达；
- * ② 固定 MP3（本地 mock 上游 localhost:9301）触发浏览器自然 loadedmetadata/ended 真媒体事件；
+ * ① production server 首屏可达；
+ * ② 固定 MP3 触发浏览器自然 loadedmetadata/ended 真媒体事件；
  * ④ Safari/Chromium autoplay 与手势策略实测记录（只记录、不硬断言 autoplay 允许与否）。
  *
  * 注意：本文件不使用 dispatchEvent 合成媒体事件；ended 必须由浏览器解码播放自然产生。
  */
 
-/** 被测 production server 首屏地址（快照隔离启动；契约端口 31111，见 spike-matrix.md 端口说明）。 */
-const APP_URL = process.env.SPIKE_APP_URL ?? "http://localhost:31111/";
-
-/** 本地 mock 上游的固定 MP3 地址（scripts/dev/mock-openai.mjs；契约端口 9301，见端口说明）。 */
-const MOCK_MP3_URL = process.env.SPIKE_MOCK_MP3_URL ?? "http://localhost:9301/fixture.mp3";
-
-test("production 首屏 200 可达", async ({ page }) => {
-    // 中文注释：首屏响应即矩阵①的浏览器侧断言（curl 断言另见 green.log）。
-    const response = await page.goto(APP_URL, { waitUntil: "domcontentloaded", timeout: 15000 });
+test("production 首屏 200 可达", async ({ page, harnessEnv }) => {
+    // 中文注释：首屏响应即矩阵①的浏览器侧断言（harness 地址来自 globalSetup 指针）。
+    const response = await page.goto(harnessEnv.appUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
     expect(response?.status()).toBe(200);
     await expect(page.locator("body")).toBeVisible();
 });
 
-test("固定 MP3 自然产生 loadedmetadata/ended 真媒体事件", async ({ page }) => {
+test("固定 MP3 自然产生 loadedmetadata/ended 真媒体事件", async ({ page, harnessEnv }) => {
     // 中文注释：先打开被测首屏拿到可用页面上下文，再挂载真实 <audio> 元素。
-    await page.goto(APP_URL, { waitUntil: "domcontentloaded", timeout: 15000 });
+    await page.goto(harnessEnv.appUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
     const result = await page.evaluate(async (src) => {
         const audio = new Audio();
         audio.src = src;
@@ -67,18 +64,18 @@ test("固定 MP3 自然产生 loadedmetadata/ended 真媒体事件", async ({ pa
             );
         });
         return { duration: loaded.duration, readyState: loaded.readyState, ended: true };
-    }, MOCK_MP3_URL);
+    }, harnessEnv.mockMp3Url);
     // 中文注释：loadedmetadata 已自然触发（duration 有限正数），ended 已自然触发。
-    // 中文注释：打印自然事件实测值，供 spike-matrix.md 摘录。
+    // 中文注释：打印自然事件实测值，供证据摘录。
     console.log(`[media-events] ${JSON.stringify(result)}`);
     expect(result.ended).toBe(true);
     expect(result.readyState).toBeGreaterThanOrEqual(1);
     expect(result.duration).toBeGreaterThan(0);
 });
 
-test("autoplay 与手势策略实测记录", async ({ page }) => {
+test("autoplay 与手势策略实测记录", async ({ page, harnessEnv }) => {
     // 中文注释：本用例只做实测记录；是否允许自动播放如实输出到控制台，不做通过性断言。
-    await page.goto(APP_URL, { waitUntil: "domcontentloaded", timeout: 15000 });
+    await page.goto(harnessEnv.appUrl, { waitUntil: "domcontentloaded", timeout: 15000 });
     const measured = await page.evaluate(async (src) => {
         const probe = async (muted: boolean): Promise<string> => {
             const audio = new Audio(src);
@@ -97,8 +94,8 @@ test("autoplay 与手势策略实测记录", async ({ page }) => {
             mutedAutoplay: await probe(true),
             unmutedAutoplay: await probe(false),
         };
-    }, MOCK_MP3_URL);
-    // 中文注释：打印到测试输出，供 spike-matrix.md 逐项摘录。
+    }, harnessEnv.mockMp3Url);
+    // 中文注释：打印到测试输出，供证据摘录。
     console.log(`[autoplay-probe] ${JSON.stringify(measured)}`);
     expect(typeof measured.isSecureContext).toBe("boolean");
 });

@@ -63,6 +63,13 @@ const testFiles = [
   './tests/test-h15-concurrent-write.ts',
   './tests/test-h14-config-rollback.ts',
   './tests/test-h06-logout-probe.ts',
+  './tests/test-h08-explicit-budget.ts',
+  './tests/test-h15-wiring-e2e.ts',
+  './tests/test-wave2-h03b-preload-context.ts',
+  './tests/test-wave2-h16-keepalive-dedup.ts',
+  './tests/test-wave2-0202-ux.ts',
+  './tests/test-wave2-h14-saveseq.ts',
+  './tests/test-wave2-h06-probe-hardening.ts',
 ];
 
 console.log('Running test suite...\n');

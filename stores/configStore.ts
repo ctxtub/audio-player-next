@@ -6,7 +6,9 @@ import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
 import type { VoiceOption } from '@/types/ttsGenerate';
 import { fetchAppConfig } from '@/lib/client/appConfig';
 import { DEFAULT_USER_CONFIG, type UserConfigPatch } from '@/lib/trpc/schemas/config';
-import { fetchMyConfig, saveMyConfig } from '@/lib/client/userConfig';
+// H-14：经命名空间调用用户配置客户端，使 require.cache 先占桩在静态导入后仍经属性查找命中
+// （回应 R2“桩可能没拦截”：命名导入快照语义下事后变异可能失效，命名空间属性查找恒 live）。
+import * as userConfigClient from '@/lib/client/userConfig';
 import GlassToast from '@/components/ui/GlassToast';
 
 const CONFIG_STORAGE_KEY = 'config-store';
@@ -183,6 +185,8 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
   /** 防抖回写定时器与待写 patch 累积。 */
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingPatch: UserConfigPatch = {};
+  /** H-14 单调保存序列：每次 update 新编辑自增，发送时捕获代次，旧回滚按代次丢弃。 */
+  let saveSeq = 0;
 
   /**
    * 将完整配置映射为可作为 patch 的形状。
@@ -197,6 +201,8 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
 
   /**
    * 防抖 500ms 将累积 patch 回写服务端，失败回滚到服务端值并提示。
+   * H-14：单调 saveSeq 守卫——发送捕获 seqAtSend，回滚仅当无新编辑（seq 未变）才应用；
+   * 在途/乱序旧回滚一律丢弃，新编辑不被旧回滚覆盖。
    */
   const scheduleSave = (patch: UserConfigPatch) => {
     pendingPatch = { ...pendingPatch, ...patch };
@@ -206,13 +212,18 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
       pendingPatch = {};
       saveTimer = null;
       const epochAtSend = accountEpoch;
-      saveMyConfig(toSend).catch((error) => {
+      const seqAtSend = saveSeq;
+      userConfigClient.saveMyConfig(toSend).catch((error) => {
         console.warn('[configStore] saveMyConfig failed', error);
         GlassToast.show({ icon: 'fail', content: '配置同步失败，稍后重试' });
         // H-14：保存失败回滚到服务端值（保留 toast，最小实现）。
-        fetchMyConfig()
+        userConfigClient.fetchMyConfig()
           .then((server) => {
             if (epochAtSend !== accountEpoch) {
+              return;
+            }
+            // H-14 saveSeq：在途已有新编辑/新保存时丢弃旧回滚（乱序亦然）。
+            if (seqAtSend !== saveSeq) {
               return;
             }
             if (saveTimer !== null || Object.keys(pendingPatch).length > 0) {
@@ -247,7 +258,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
       // 并行拉取系统级音色配置与主体云端配置
       const [remote, mine] = await Promise.all([
         fetchAppConfig(),
-        fetchMyConfig(),
+        userConfigClient.fetchMyConfig(),
       ]);
 
       if (currentEpoch !== accountEpoch) {
@@ -325,6 +336,8 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
       return initializationPromise;
     },
     update: (partial) => {
+      // H-14：新编辑递增单调序列，作废在途旧回滚（旧回滚按 seqAtSend !== saveSeq 丢弃）。
+      saveSeq += 1;
       const current = get().apiConfig;
       const nextConfig = mergeConfig(current, partial);
       set({

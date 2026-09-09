@@ -241,7 +241,7 @@ docs/e2e/
 | H-16 | 1s 防抖 + sending 跳过、无 beforeunload flush→快速退出丢尾并悬空进度 | `stores/chatStore.ts:188-206`、`stores/playbackProgressStore.ts:157-186` | [`E2E-04-02`](./04-云端存储与多端数据调和/02-快速退出丢失尾部与悬空进度.md) |
 | H-17 | 访客限流窗口内预载重试链与人工操作共同失败+失败标记增殖（被拒不计数、不延长窗口） | `lib/trpc/routers/agent.ts:17-19`、`stores/preloadStore.ts:109-126`、`lib/server/rateLimit.ts:71-80` | [`E2E-06-01`](./06-异常处理与接口限流/01-访客429限流与重试烧配额.md) |
 | H-18 | 过期会话+有效访客 cookie 并存→middleware 静默放行为访客态（复活） | `middleware.ts:43-68`、`lib/trpc/routers/auth.ts:184-214` | [`E2E-05-07`](./05-认证授权与会话生命周期/07-过期会话加残留访客cookie静默复活.md) |
-| H-19 | 登出→再入访客每次新 `g_<uuid>`→旧访客行成孤儿且新身份完全隔离 | `lib/trpc/routers/auth.ts:149-168` | [`E2E-05-05`](./05-认证授权与会话生命周期/05-登出后再入访客新身份隔离.md) |
+| H-19 | 登出→再入访客每次新 `guest=<opaque 签名 token>`（验签还原出 `g_` 开头 gid）→旧访客行成孤儿且新身份完全隔离 | `lib/trpc/routers/auth.ts:149-168` | [`E2E-05-05`](./05-认证授权与会话生命周期/05-登出后再入访客新身份隔离.md) |
 | H-20 | 两次并发 `startStoryPlayback` 互相复位→首次会话状态悬挂 | `app/services/chatFlow.ts:127`、`app/services/storyFlow.ts:73-115` | [`E2E-02-05`](./02-交互并发与竞态防御/05-故事卡连击双发抑制.md) |
 
 ---

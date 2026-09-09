@@ -17,6 +17,7 @@
     "test:static": "node scripts/check-test-catalog.mjs",
     "test:catalog": "node scripts/suite-worker.mjs ./tests/tooling/catalog/catalog-checker.tooling.test.ts",
     "test:runner-database-safety": "node scripts/suite-worker.mjs ./tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts",
+    "test:browser:smoke": "playwright test --config tests/system/browser/playwright.config.ts tests/system/browser --project=chromium --project=webkit",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up",
     "docker:push": "./scripts/push-ghcr.sh"

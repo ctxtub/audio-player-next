@@ -21,8 +21,8 @@ export const SUITE_TIMEOUT_EXIT_CODE = 4;
 export const RUN_ID_RE = /^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$/;
 /** suite ID 格式。 */
 export const SUITE_ID_RE = /^[a-z0-9][a-z0-9-]{0,95}$/;
-/** 层级后缀集合（剥离用）。 */
-const LAYER_SUFFIX_RE = /\.(unit|integration|contract|tooling|legacy)\.test\.ts$/;
+/** 层级后缀集合（剥离用，含 static）。 */
+const LAYER_SUFFIX_RE = /\.(unit|integration|contract|tooling|legacy|static)\.test\.ts$/;
 const BROWSER_SUFFIX = '.browser.spec.ts';
 
 /**

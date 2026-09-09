@@ -27,11 +27,11 @@ const ALLOWED_GROUPS = ['unit', 'integration', 'contract', 'tooling', 'static', 
 // 中文注释：unit 禁止导入 lib/db 的静态扫描正则。
 const LIB_DB_IMPORT_RE = /from\s+['"].*lib\/db['"]|require\(['"].*lib\/db['"]\)/;
 
-// 中文注释：套件注册表（41 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit 为 false）。
+// 中文注释：套件注册表（42 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit/static 为 false）。
 const SUITES = [
     { id: 'session-roundtrip', path: './tests/unit/identity-session/session-roundtrip.unit.test.ts', group: 'unit', needs_db: false },
-    { id: 'procedure-source-locks', path: './tests/legacy/procedure-source-locks.legacy.test.ts', group: 'legacy', needs_db: true },
-    { id: 'batch-source-locks', path: './tests/legacy/batch-source-locks.legacy.test.ts', group: 'legacy', needs_db: true },
+    { id: 'procedure-source-locks', path: './tests/static/procedure-source-locks.static.test.ts', group: 'static', needs_db: false },
+    { id: 'batch-source-locks', path: './tests/static/batch-source-locks.static.test.ts', group: 'static', needs_db: false },
     { id: 'release-pipeline', path: './tests/tooling/release/release-pipeline.tooling.test.ts', group: 'tooling', needs_db: true },
     { id: 'identity-procedure-matrix', path: './tests/integration/identity-session/identity-procedure-matrix.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'guest-cookie-authorization', path: './tests/integration/identity-session/guest-cookie-authorization.integration.test.ts', group: 'integration', needs_db: true },
@@ -52,7 +52,7 @@ const SUITES = [
     { id: 'e2e-stream-observer', path: './tests/tooling/observer/e2e-stream-observer.tooling.test.ts', group: 'tooling', needs_db: true },
     { id: 'toast-terminal-priority', path: './tests/legacy/toast-terminal-priority.legacy.test.ts', group: 'legacy', needs_db: true },
     { id: 'audio-ended-guard', path: './tests/unit/playback/audio-ended-guard.unit.test.ts', group: 'unit', needs_db: false },
-    { id: 'audio-ended-guard-wiring', path: './tests/legacy/audio-ended-guard-wiring.legacy.test.ts', group: 'legacy', needs_db: true },
+    { id: 'audio-ended-guard-wiring', path: './tests/static/audio-ended-guard-wiring.static.test.ts', group: 'static', needs_db: false },
     { id: 'onboarding-storage', path: './tests/unit/creation-chat/onboarding-storage.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'double-submit', path: './tests/legacy/double-submit.legacy.test.ts', group: 'legacy', needs_db: true },
     { id: 'budget-exhaustion', path: './tests/unit/playback/budget-exhaustion.unit.test.ts', group: 'unit', needs_db: false },
@@ -68,6 +68,7 @@ const SUITES = [
     { id: 'keepalive-dedup', path: './tests/legacy/keepalive-dedup.legacy.test.ts', group: 'legacy', needs_db: true },
     { id: 'pending-intent-ui', path: './tests/legacy/pending-intent-ui.legacy.test.ts', group: 'legacy', needs_db: true },
     { id: 'save-sequence', path: './tests/unit/persistence-config/save-sequence.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'agent-schema-bounds', path: './tests/unit/persistence-config/agent-schema-bounds.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'logout-probe-hardening', path: './tests/legacy/logout-probe-hardening.legacy.test.ts', group: 'legacy', needs_db: true },
     { id: 'runner-database-path-safety', path: './tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts', group: 'tooling', needs_db: true },
 ];

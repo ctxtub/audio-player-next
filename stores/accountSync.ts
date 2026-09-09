@@ -68,6 +68,67 @@ const participants: AccountSyncParticipant[] = [
 ];
 
 /**
+ * H-06 登出停声时序探针的播放快照（卸载瞬间采样，纯观测）。
+ */
+export type LogoutProbePlaybackSnapshot = {
+  /** 采样瞬间是否处于播放中。 */
+  isPlaying: boolean;
+  /** 采样瞬间当前音频地址。 */
+  currentAudioUrl: string | null;
+  /** 采样瞬间是否已注册音频控制器。 */
+  hasController: boolean;
+};
+
+/**
+ * H-06 登出停声时序探针的一次采样（reset 链前后各一次快照，纯观测）。
+ */
+export type LogoutProbeSample = {
+  /** 采样时间戳（毫秒）。 */
+  at: number;
+  /** 本次清理的参与块序列。 */
+  participants: string[];
+  /** 清理前（卸载瞬间）播放快照。 */
+  playbackBefore: LogoutProbePlaybackSnapshot;
+  /** 清理后播放快照。 */
+  playbackAfter: LogoutProbePlaybackSnapshot;
+};
+
+/** 探针采样环形保留（只记最近若干条，防内存增长）。 */
+const LOGOUT_PROBE_KEEP = 20;
+
+/** 探针采样暂存（仅内存，不持久化）。 */
+const logoutProbeSamples: LogoutProbeSample[] = [];
+
+/**
+ * 采样当前播放快照（纯读，不触控制器行为）。
+ * @returns 当前播放快照
+ */
+function samplePlaybackForProbe(): LogoutProbePlaybackSnapshot {
+  const state = usePlaybackStore.getState();
+  return {
+    isPlaying: state.isPlaying,
+    currentAudioUrl: state.currentAudioUrl,
+    hasController: state.audioController !== null,
+  };
+}
+
+/**
+ * 读取登出探针采样（返回拷贝，调用方不得改写内部暂存）。
+ * @returns 采样拷贝
+ */
+export function getLogoutProbeSamples(): LogoutProbeSample[] {
+  return [...logoutProbeSamples];
+}
+
+/**
+ * 清空登出探针采样（测试隔离用，不触登出行为）。
+ * @returns void
+ */
+export function clearLogoutProbeSamples(): void {
+  logoutProbeSamples.length = 0;
+}
+
+/**
  * 登录态初始化：触发所有块拉取服务端数据（各自幂等，失败互不影响）。
  */
 export function initAccountForUser(): void {
@@ -94,10 +155,23 @@ export function initAccountForGuest(): void {
 
 /**
  * 登出/会话失效/身份切换：同步清理所有块（清本地 + 关同步）。
+ * H-06 探针仅在前后采样播放快照并记录参与序列，不改任何清理行为。
  */
 export function resetAccountData(): void {
+  const playbackBefore = samplePlaybackForProbe();
+  const at = Date.now();
   for (const p of participants) {
     p.reset();
+  }
+  const playbackAfter = samplePlaybackForProbe();
+  logoutProbeSamples.push({
+    at,
+    participants: participants.map((p) => p.name),
+    playbackBefore,
+    playbackAfter,
+  });
+  if (logoutProbeSamples.length > LOGOUT_PROBE_KEEP) {
+    logoutProbeSamples.splice(0, logoutProbeSamples.length - LOGOUT_PROBE_KEEP);
   }
 }
 

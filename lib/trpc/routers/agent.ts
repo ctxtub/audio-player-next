@@ -1,4 +1,4 @@
-import { router, publicProcedure, guardedProcedure } from "../init";
+import { router, guardedProcedure } from "../init";
 import { graph } from "@/lib/agent/graph";
 import { HumanMessage, AIMessage, SystemMessage, BaseMessage } from "@langchain/core/messages";
 import { TRPCError } from "@trpc/server";
@@ -100,10 +100,17 @@ export const agentRouter = router({
     /**
      * 总结上下文接口。
      * 用于前端触发的历史消息折叠与总结。
+     * 鉴权与 interact 对齐：登录用户或具名访客放行，匿名 401；
+     * 每次调用消耗一次 LLM 配额，按较低频的归档场景限流（guest 6 / authed 20 次/分钟）。
      */
-    summarize: publicProcedure
+    summarize: guardedProcedure
         .input(summarizeContextSchema)
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
+            enforceProcedureRateLimit("agent:summarize", ctx, {
+                guestLimit: 6,
+                authedLimit: 20,
+            });
+
             const { messages } = input;
 
             if (messages.length === 0) {

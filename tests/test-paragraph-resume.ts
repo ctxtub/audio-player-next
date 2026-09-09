@@ -46,8 +46,9 @@ async function runParagraphResumeTests() {
     console.log(`=== DB: isolated ${dbPath} ===`);
     const { playbackRouter } = await import('../lib/trpc/routers/playback');
     const { authRouter } = await import('../lib/trpc/routers/auth');
-    // 中文注释：TRPCError 须与 router 同一次动态导入取自同一模块实例，否则 instanceof 双实例失效。
-    const { TRPCError } = await import('@trpc/server');
+    // 中文注释：TRPCError 须与 router 同经 lib/trpc/init 取自同一模块实例；
+    // 直连 @trpc/server 的原生动态导入在全量套件共享 jiti 进程中会解析出第二实例，instanceof 恒 false。
+    const { TRPCError } = await import('../lib/trpc/init');
     const {
         getPlaybackProgressForSubject,
         savePlaybackProgressForSubject,

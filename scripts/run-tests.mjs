@@ -35,6 +35,7 @@ const testFiles = [
   './tests/test-auth-guest-matrix.ts',
   './tests/test-guest-signed-cookie.ts',
   './tests/test-agent-summarize-guard.ts',
+  './tests/test-session-branches.ts',
   './tests/test-rate-limit.ts',
   './tests/test-orphan-prevention.ts',
   './tests/test-guest-config.ts',

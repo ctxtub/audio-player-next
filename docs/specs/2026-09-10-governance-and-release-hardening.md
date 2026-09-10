@@ -87,9 +87,9 @@
 3. `latest` 晋升 = 对**已验证不可变 digest 的无重构建 retag**（`docker buildx imagetools create --tag <image>:latest <image>@<digest>` 或等价 registry 侧复制；禁止为晋升重跑 `buildx build`）：
    - 双显式输入缺一不可：`source_digest`（或 `source_ref`，必须精确指向本次已过三门（见第 5 条）的不可变产物 digest/ref）+ `promote_latest == true`。任一缺失/模糊（如“最新 main”“模糊 tag”）即拒绝晋升。
    - 晋升后做 registry digest/OCI 回读：`docker buildx imagetools inspect <image>:latest`（或等价）确认 digest == 源 digest，且 OCI `revision`/`source` label 与源一致；回读失配即 FAIL 并在证据中记录。
-4. 单一串行发布者：全仓仅一个含 `packages: write` 的发布 job（`docker-push.yml` 的 `docker-push` job）；发布 job（及 workflow）设全局串行 `concurrency: group: image-publisher-global / cancel-in-progress: false`，杜绝并发 `latest`/tag 竞写。
-5. 同 SHA 三门串联（同一 workflow 内 `needs` 链，跨 workflow `needs` 不生效故必须同文件）：
-   `quality`（static/lint/tsc/L1/L2/contract/build + tooling path-filter + secret 扫描门，见第 6 条）→ `tier-gate`（WS3 完整性门，发布路径以 `--select=RELEASE` 运行）→ `browser-smoke`（P0 Chromium + WebKit，`retries=0`，`yarn test:browser:smoke`）→ `docker-push`（publisher）。任一失败即阻断发布；`timing-observe`（nightly `--repeat-each=3 webkit`）保持纯信息、`continue-on-error` 仅限其 job 且不参与发布门。
+4. 单串行写入路径：全仓恰两个写入能力 job（`docker-push.yml:docker-push` 构建推送 + `docker-push.yml:promote-latest` retag 晋升），共享同一 `concurrency: group: image-publisher-global / cancel-in-progress: false`，且 `promote-latest needs docker-push`；禁止第三个 `packages:write`，杜绝并发 `latest`/tag 竞写。
+5. 同 SHA 三门 fan-in（同一 workflow 内汇聚，跨 workflow `needs` 不生效故必须同文件，三门同在 `docker-push.yml`）：
+   `quality`（static/lint/tsc/L1/L2/contract/build + tooling path-filter + secret 扫描门，见第 6 条）先行（廉价筛）；`tier-gate`（WS3 完整性门，发布路径以 `--select=RELEASE` 运行）与 `browser-smoke`（P0 Chromium + WebKit，`retries=0`，`yarn test:browser:smoke`）可并行；发布者 `docker-push needs: [quality, tier-gate, browser-smoke]`，任一失败即不发布。`timing-observe`（nightly `--repeat-each=3 webkit`）保持纯信息、`continue-on-error` 仅限其 job 且不参与发布门。
 6. 发布链路供应链硬化（与 8-WS 结构并存，不新增 WS）：
    - Action 全 pin 到 full SHA：全部 4 个 workflow 的 `uses:` 改为 `<owner>/<repo>@<full-SHA> # <tag> <date> <reason>` 口径（如 `actions/checkout@<sha> # v4 …`），禁止浮动 tag-only 引用；新增 Tooling 断言锁定（无 `uses:.*@v\d+(\s|$)` 残留）。
    - Secret 扫描门：`quality` 首个 step 跑有界 secret 扫描（只查 tracked 文件，见 plan §7），命中即 FAIL 阻断发布链。
@@ -102,7 +102,7 @@
 - [ ] `push-ghcr.sh` 无参/默认行为只含 ref tag + `sha-<short>`，永不含 `latest`；文件内无 `add_tag "latest"` 及等价同构建打 `latest` 路径；tag 输入去重保持。
 - [ ] `latest` 只能由显式晋升 step 产生：Tooling 断言晋升 step 含 `imagetools create`（或等价）且其运行条件同时要求 `source_digest`（或 `source_ref`）非空与 `promote_latest == true`；缺任一输入即跳过/拒绝（负例断言覆盖）。
 - [ ] 晋升后 registry digest/OCI 回读断言存在（`imagetools inspect` 或等价 + digest/label 比对），回读失配即 FAIL。
-- [ ] 全仓恰一个 `packages: write` 发布 job + 全局串行 `concurrency`；全部 `uses:` 为 full-SHA pin（无 tag-only 残留）；SBOM/provenance 启用（或已验证替代）；发布 workflow 有脱敏工件上传 + 显式 `retention-days` + secret 扫描门。
+- [ ] 全仓恰两个写入能力 job（`docker-push.yml:docker-push` 构建推送 + `docker-push.yml:promote-latest` retag 晋升）+ 共享串行组 `image-publisher-global / cancel-in-progress: false` + 集合锁定断言（禁止第三个 `packages:write`）；全部 `uses:` 为 full-SHA pin（无 tag-only 残留）；SBOM/provenance 启用（或已验证替代）；发布 workflow 有脱敏工件上传 + 显式 `retention-days` + secret 扫描门。
 - [ ] 发布 job 的 `needs` 链含 quality + tier + browser（同文件），tag SHA 下任一门失败即不发布（Tooling 负例断言）。
 - [ ] `release-pipeline.tooling.test.ts` 与 `candidate-quality-workflow.tooling.test.ts` 按新语义更新并通过。
 

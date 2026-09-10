@@ -146,7 +146,7 @@ node -e "const net=require('net');const ps=[38080,31111,31120,31121,9301];(async
 | Commit | 主题（Conventional Commits） | 含 WS | 主要文件 |
 |---|---|---|---|
 | C1 | `ci(checks): ordinary branches checks-only, drop candidate image publisher` | WS1 | `candidate-quality.yml`、`candidate-quality-workflow.tooling.test.ts`、`change-workflow.md`（一句） |
-| C2 | `ci(release): tag/explicit-dispatch immutable publisher, retag-only latest, serialized same-SHA gates` | WS2 | `docker-push.yml`、`push-ghcr.sh`、`browser.yml`/`nightly-browser.yml`（pins）、`release-pipeline.tooling.test.ts`、`candidate-quality-workflow.tooling.test.ts` |
+| C2 | `ci(release): tag/explicit-dispatch immutable publisher, retag-only latest, serialized same-SHA gates` | WS2 | `docker-push.yml`、`push-ghcr.sh`、`browser.yml`/`nightly-browser.yml`（pins）、`release-pipeline.tooling.test.ts`、`candidate-quality-workflow.tooling.test.ts`；注：`scripts/check-tier-gate.mjs` 为 fail-closed 占位（永不返回 0），完整实现归 C3 |
 | C3 | `test(tier): candidate/release P0/P1 gate with tracked expiring waivers` | WS3 | `scripts/check-tier-gate.mjs`、`check-test-catalog.mjs`（导出共用解析函数）、`tests/tier-waivers.yaml`、`tests/tooling/tier/*`、`package.json`、`docker-push.yml`（tier 接线）、`README.md`（一句） |
 | C4 | `test(browser): reject dirty tree and target-sha mismatch before archive` | WS4 | `harness/app-server.mjs`、`browser-harness.tooling.test.ts` |
 | C5 | `test(evidence): versioned Node+browser assertion join schema` | WS5 | `evidence-schema.v1.json`、`evidence-schema.mjs`、`run-tests.mjs`、`jsonl-reporter.ts`、`evidence-recorder.mjs`、`fixtures.ts`、`evidence.md`、新 Tooling 测试 |

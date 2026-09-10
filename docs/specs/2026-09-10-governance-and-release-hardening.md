@@ -238,7 +238,7 @@
 
 ### 验收标准
 
-- [ ] `grep -ri "DSH\|STARTED_MOCK\|mock.pid\|9301\|10800\|503/429" docs/testing/ docs/engineering/` 零命中（除本规范自身的变更说明与 archive 索引）。
+- [ ] `grep -ri "DSH\|STARTED_MOCK\|mock.pid\|9301\|10800\|503/429" docs/testing/ docs/engineering/` 零命中（除本规范自身的变更说明与 archive 索引及 `docs/engineering/agent-collaboration.md` 的 WS8 路由句精确行例外）。
 - [ ] 执行文档中端口/路径/所有权描述与 harness 代码一致（抽查：`31120-31150`、`active.json`、`app-handle-<run>.json`、`ownedMock`）。
 - [ ] 任务 manifest + 结项 schema 样例通过专用 Tooling 校验测试（D5 落点，不并入 checker）。
 - [ ] CI 工件清单含明确黑名单（`.env*`、DB、secret）与脱敏规则引用。

@@ -1,6 +1,10 @@
 # 多 Agent 协作标准
 
-本文件定义项目无关具体模型的协作协议；Hermes/DSH 的调用、恢复和监督技巧放在本地 skill，不在仓库复制。
+本文件定义项目无关具体模型的协作协议；Hermes/DSH 的调用、恢复和监督技巧放在本地 skill，不在仓库复制；其中 DSH 调用/恢复/监督走本地 DSH skill。
+
+Hermes 调用/恢复走本地 Hermes skill。
+
+长任务监督（超时、中断恢复、重叠写者防范）走本地 long-task-supervision skill。
 
 ## 角色与权限
 

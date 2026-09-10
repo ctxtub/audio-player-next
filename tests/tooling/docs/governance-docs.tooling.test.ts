@@ -41,7 +41,7 @@ const scanAllowPrefixes: string[] = ['docs/specs/', 'docs/plans/', 'docs/archive
 // 不是 DSH Worker 调度/超时/退避/PID 政策，见 spec §WS7 决策 5）。
 // 允许的是整句精确匹配，文件内其余任何关键词命中仍失败。
 const agentCollabRoutingLine: string =
-    '本文件定义项目无关具体模型的协作协议；Hermes/DSH 的调用、恢复和监督技巧放在本地 skill，不在仓库复制。';
+    '本文件定义项目无关具体模型的协作协议；Hermes/DSH 的调用、恢复和监督技巧放在本地 skill，不在仓库复制；其中 DSH 调用/恢复/监督走本地 DSH skill。';
 
 /**
  * 递归收集目录下全部 .md 文件（相对仓库根，斜杠统一）。
@@ -364,10 +364,26 @@ async function caseArtifactsIndex(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * C8 预留位：当前 suite 在 C7 范围内为 no-op（仅声明扩展契约，不做断言）。
+ * C8：agent-collaboration.md 三条显式路由断言（WS8 仓库侧）。
+ * 仓库内只断言路由句存在（Hermes/DSH/long-task-supervision + 本地 skill 名），不抄操作步骤。
  */
 async function caseAgentCollaborationRoutesReservedForC8(): Promise<void> {
-    console.log('SKIP: agent-collaboration.md 三路由断言为 C8 扩展位（C7 只覆盖 WS7 范围）');
+    const rel: string = 'docs/engineering/agent-collaboration.md';
+    const raw: string = readFileSync(path.join(repoRoot, rel), 'utf8');
+    // 中文注释：WS8 仓库侧三路由——Hermes 调用/恢复 → 本地 Hermes skill；
+    // DSH 调用/恢复/监督 → 本地 DSH skill；长任务监督（超时、中断恢复、重叠写者防范）
+    // → 本地 long-task-supervision skill（显式点名）。
+    assert.ok(raw.includes('Hermes'), 'agent-collaboration.md 须含 Hermes 路由');
+    assert.ok(raw.includes('本地 Hermes skill'), 'agent-collaboration.md 须链本地 Hermes skill（Hermes 调用/恢复路由）');
+    assert.ok(raw.includes('DSH'), 'agent-collaboration.md 须含 DSH 路由');
+    assert.ok(raw.includes('本地 DSH skill'), 'agent-collaboration.md 须链本地 DSH skill（DSH 调用/恢复/监督路由）');
+    assert.ok(raw.includes('long-task-supervision'), 'agent-collaboration.md 须点名 long-task-supervision（长任务监督独立路由）');
+    for (const anchor of ['超时', '中断恢复', '重叠写者']) {
+        assert.ok(raw.includes(anchor), `agent-collaboration.md 长任务监督路由须含：${anchor}`);
+    }
+    // 中文注释：spec §WS7 决策 5 保留语义——原路由指针句核心表述须保留（不在仓库复制）。
+    assert.ok(raw.includes('不在仓库复制'), 'agent-collaboration.md 须保留原路由句（不在仓库复制）');
+    console.log('PASS: agent-collaboration.md 含 Hermes/DSH/long-task-supervision 三条显式路由');
 }
 
 /**

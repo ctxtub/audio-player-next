@@ -168,6 +168,35 @@ async function caseEvidenceRecorder(): Promise<void> {
         assert.strictEqual(manifest['case_id'], 'tooling-selftest-case', 'manifest case_id 须一致');
         assert.ok(VERDICTS.includes(String(manifest['verdict'])), 'manifest verdict 须为合法枚举');
         assert.ok(Array.isArray(manifest['steps']) && (manifest['steps'] as unknown[]).length === 2, 'manifest steps 须记录两步');
+        // 中文注释：Fix 9——manifest 必须含独立可复算的 runner/harness 两类哈希（等价物不接受缺失）。
+        const hashes = manifest['hashes'] as Record<string, unknown>;
+        assert.ok(hashes && typeof hashes === 'object', 'manifest 须含 hashes 对象');
+        for (const key of ['fixture', 'mock', 'spec', 'runner', 'harness']) {
+            assert.ok(typeof hashes[key] === 'string' && (hashes[key] as string).length === 64, `hashes.${key} 须为 64 位 hex`);
+        }
+        // 中文注释：Fix 9——runner 哈希独立复算（直读 playwright.config.ts）。
+        const { createHash } = await import('node:crypto');
+        const expectedRunner: string = createHash('sha256')
+            .update(readFileSync(path.join(repoRoot, 'tests', 'system', 'browser', 'playwright.config.ts')))
+            .digest('hex');
+        assert.strictEqual(hashes['runner'], expectedRunner, 'hashes.runner 须与独立复算一致');
+        assert.strictEqual(
+            hashes['runner_path'],
+            path.join('tests', 'system', 'browser', 'playwright.config.ts'),
+            'hashes.runner_path 须标明复算口径',
+        );
+        // 中文注释：Fix 9——harness 组合哈希独立复算（按 harness_files 清单逐文件复算后比对）。
+        const harnessFiles = hashes['harness_files'] as unknown;
+        assert.ok(Array.isArray(harnessFiles) && harnessFiles.length > 0, 'hashes.harness_files 须为非空清单');
+        const perFile: string[] = (harnessFiles as string[]).map((rel: string) =>
+            createHash('sha256').update(readFileSync(path.join(repoRoot, rel))).digest('hex'),
+        );
+        const expectedHarness: string = createHash('sha256').update(perFile.join('\n')).digest('hex');
+        assert.strictEqual(hashes['harness'], expectedHarness, 'hashes.harness 须与独立复算一致');
+        assert.ok(
+            Array.isArray(hashes['harness_missing']) && (hashes['harness_missing'] as unknown[]).length === 0,
+            'harness 清单文件须全部存在（harness_missing 为空）',
+        );
     } finally {
         rmSync(tmpRoot, { recursive: true, force: true });
     }
@@ -219,9 +248,14 @@ async function caseJsonlReporter(): Promise<void> {
  */
 async function main(): Promise<void> {
     await caseAppServerLifecycle();
+    console.log('PASS: 用例1 app-server 启停与端口释放');
     await caseMockServer();
+    console.log('PASS: 用例2 mock 端点与 Range 206');
     await caseEvidenceRecorder();
+    console.log('PASS: 用例3 evidence-recorder manifest（含 Fix 9 runner/harness 独立复算哈希）');
     await caseJsonlReporter();
+    console.log('PASS: 用例4 jsonl-reporter 行字段');
+    console.log('ALL BROWSER HARNESS TESTS PASSED');
 }
 
 export default main();

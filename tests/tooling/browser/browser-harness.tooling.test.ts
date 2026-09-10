@@ -348,6 +348,18 @@ async function caseExpectedShaMismatchRejected(): Promise<void> {
         }
         assert.ok(seen.includes(fullSha.slice(0, 7)), '失配信息须含 actual 短 SHA');
         assert.ok(seen.includes(wrong.slice(0, 7)), '失配信息须含 expected 短 SHA');
+        // 中文注释：FAILED-01 回归——超长畸值（full + deadbeef）必须阻断，不得 fail-open 放行。
+        assert.throws(
+            () => mod.assertArchivePreconditions({ cwd: dir, expectedSha: `${fullSha}deadbeef` }),
+            /BLOCKED/,
+            '超长 EXPECTED_TARGET_SHA 必须抛 BLOCKED（fail-closed）',
+        );
+        try {
+            mod.assertArchivePreconditions({ cwd: dir, expectedSha: `${fullSha}deadbeef` });
+            assert.fail('超长 EXPECTED_TARGET_SHA 必须抛 BLOCKED');
+        } catch (err) {
+            assert.strictEqual((err as Error & { code?: string })?.code, 'BLOCKED', '超长失配错误 code 须为 BLOCKED');
+        }
         // 中文注释：短 SHA 前缀等价 → 放行；full 相等 → 放行；空串（未设置）→ 不阻断。
         mod.assertArchivePreconditions({ cwd: dir, expectedSha: fullSha.slice(0, 7) });
         mod.assertArchivePreconditions({ cwd: dir, expectedSha: fullSha });

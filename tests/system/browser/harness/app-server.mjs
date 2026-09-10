@@ -163,7 +163,7 @@ export function assertArchivePreconditions({ expectedSha, cwd } = {}) {
         throw blockedError(`拒绝快照：tracked 工作树脏（commit=${safeShortSha(full)}，${lines.length} 项）：\n${shown}${more}`);
     }
     if (exp !== '') {
-        const ok = full === exp || full.startsWith(exp) || exp.startsWith(full);
+        const ok = full === exp || (exp.length < full.length && full.startsWith(exp));
         if (!ok) {
             throw blockedError(`拒绝快照：EXPECTED_TARGET_SHA 失配（expected=${safeShortSha(exp)} actual=${safeShortSha(full)}）`);
         }

@@ -558,6 +558,28 @@ function main() {
     process.exit(1);
   }
 
+  // 中文注释：②b executable evidence_surfaces 必须覆盖其绑定 case 的 required_assertions[].surface 并集（state 面护栏，与 evidence-schema 同口径）。
+  const surfaceErrors = [];
+  for (const e of catalog.executables) {
+    if (!Array.isArray(e.evidence_surfaces)) continue;
+    const declared = new Set(e.evidence_surfaces);
+    for (const cid of (e.case_ids || [])) {
+      const c = caseById.get(cid);
+      if (!c || !Array.isArray(c.required_assertions)) continue;
+      for (const a of c.required_assertions) {
+        const surf = a !== null && typeof a === 'object' ? a.surface : undefined;
+        if (typeof surf !== 'string' || surf.length === 0) continue;
+        if (!declared.has(surf)) {
+          surfaceErrors.push(`executable ${e.executable_id} 的 evidence_surfaces 缺 ${surf}（case ${cid} 的 required_assertions 要求 assertion ${a.assertion_id}）`);
+        }
+      }
+    }
+  }
+  if (surfaceErrors.length > 0) {
+    for (const e of surfaceErrors) console.error(`surface 非法：${e}`);
+    process.exit(1);
+  }
+
   // 中文注释：②c LEGACY-NON-COVERAGE 清零门（Fix 4：过渡状态收口后不得再出现，出现即 exit 1）。
   const legacyLeftovers = (catalog.cases || []).filter((c) => c.lifecycle_status === 'LEGACY-NON-COVERAGE');
   if (legacyLeftovers.length > 0) {

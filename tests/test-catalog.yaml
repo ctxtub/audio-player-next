@@ -1510,13 +1510,13 @@ executables:
     layer: L3
     path: ./tests/system/browser/scenarios/stop-audio-when-budget-exhausted.spec.ts
     case_ids: [budget-exhausted-tap-play-audio-state]
-    evidence_surfaces: [audio, ui, network]
+    evidence_surfaces: [audio, ui, network, state]
   - executable_id: exec-l3-pause-audio-before-logout-unload
     display_name_zh: L3登出卸载前停声
     layer: L3
     path: ./tests/system/browser/scenarios/pause-audio-before-logout-unload.spec.ts
     case_ids: [logout-during-play-instant-silence]
-    evidence_surfaces: [audio, timeline, ui]
+    evidence_surfaces: [audio, timeline, ui, state]
   - executable_id: exec-l3-persist-tail-before-page-exit
     display_name_zh: L3页面退出前尾部持久化
     layer: L3

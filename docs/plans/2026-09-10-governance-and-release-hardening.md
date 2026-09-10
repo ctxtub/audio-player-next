@@ -5,7 +5,7 @@
 > **对应规范**：`docs/specs/2026-09-10-governance-and-release-hardening.md`
 > **change-id**：`governance-hardening-20260910`
 > **角色/运行时**：`Planner/local`
-> **工作目录**：`<repo-root>`
+> **工作目录**：`<repo-root>`（仓库根）
 > **分支/基线**：`chore/test-architecture-rebuild @ d7b5c5c18b796c535787f06cc7f185c098c89c5b`
 > **授权路径**：仅本文件 + 对应 spec；实现阶段授权由后续任务书签发，本计划不预授实现写权限
 > **证据位置**：`.agent-runs/governance-hardening-20260910/planner`（本地私有，不入库）

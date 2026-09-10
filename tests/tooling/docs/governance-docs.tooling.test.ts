@@ -257,7 +257,7 @@ function validateCloseout(obj: unknown): CheckResult {
 const goodManifest: TaskManifest = {
     change_id: 'governance-hardening-20260910',
     role: 'Implementer',
-    workspace: '<repo-root>',
+    workspace: '/workspace/audio-player-next',
     branch: 'chore/test-architecture-rebuild',
     base_sha: '2f4910fe8f178bcf164406b6d16a9afa48820557',
     target_sha: '2f4910fe8f178bcf164406b6d16a9afa48820557',

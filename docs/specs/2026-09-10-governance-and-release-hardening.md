@@ -4,7 +4,7 @@
 > **创建日期**：`2026-09-10`
 > **change-id**：`governance-hardening-20260910`
 > **角色/运行时**：`Planner/local`
-> **工作目录**：`<repo-root>`
+> **工作目录**：`<repo-root>`（仓库根）
 > **分支/基线**：`chore/test-architecture-rebuild @ d7b5c5c18b796c535787f06cc7f185c098c89c5b`
 > **授权路径**：`docs/specs/2026-09-10-governance-and-release-hardening.md`；`docs/plans/2026-09-10-governance-and-release-hardening.md`
 > **证据位置**：`.agent-runs/governance-hardening-20260910/planner`（本地私有，不入库）

@@ -16,6 +16,7 @@ on:
       - main
       - 'candidate/**'
       - 'release/**'
+  pull_request:
   workflow_dispatch:
 
 permissions: {}

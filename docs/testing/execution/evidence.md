@@ -6,9 +6,11 @@
 ## 1. 目录结构
 
 - runner 隔离库：`.e2e-runtime/test-db/<run-id>/<suite-id>.db`（父 runner 生成，子进程复用验证，执行后关闭并清理）。
-- 运行证据根：`.e2e-results/<run-id>/`，按 suite/case 分目录存放。
-- L3 证据路径：`.e2e-results/<run-id>/<case-id>/`（`case_id` 为语义名，如 `stop-audio-when-budget-exhausted`）。
-- 失败时可把当次隔离库复制为 `.e2e-results/<run-id>/<suite-id>/db.sqlite` 后再清理 runtime，保留期由评审决定。
+- 运行证据根：`.e2e-results/<run-id>/`，按 suite/case 分目录存放；多 Agent 协调任务推荐由编排层放入 `.e2e-results/<change-id>/<run-id>/` 并记录真实结果根。
+- L3 结构化证据路径：`.e2e-results/browser/<run-id>/<case-id>/`；Playwright 自身 attachment/output 放 `.e2e-results/playwright/test-results/`。
+- 失败时可把当次隔离库复制到对应 run 的 `db/` 或 `<suite-id>/db.sqlite` 后再清理 runtime，保留期由评审决定。
+
+完整的仓库资产分类、Agent 过程目录和留存规则见 [临时产物、证据与留存](../../engineering/artifacts-and-retention.md)。
 
 历史 E2E 证据（浏览器人工执行时代）沿用 `.e2e-results/<run-id>/E2E-xx-yy/` 结构，每用例至少包含截图、控制台、音频探针、网络清单与按需 DB 导出，详见 [隔离执行](./isolation.md) 第 7 节。
 

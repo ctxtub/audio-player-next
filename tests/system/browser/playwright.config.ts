@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+/** Playwright 自身的临时 attachment/output；结构化证据仍由 harness reporter 按 run-id 写入。 */
+const playwrightOutputDir: string = process.env.PLAYWRIGHT_OUTPUT_DIR ?? ".e2e-results/playwright/test-results";
+
 /**
  * 浏览器测试配置（任务13 harness 接管服务管理）。
  *
@@ -17,6 +20,7 @@ export default defineConfig({
     workers: 1,
     retries: 0,
     reporter: [["line"], ["./harness/jsonl-reporter.ts"]],
+    outputDir: playwrightOutputDir,
     globalSetup: "./harness/global-setup.mjs",
     globalTeardown: "./harness/global-teardown.mjs",
     projects: [

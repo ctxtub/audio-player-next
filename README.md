@@ -127,14 +127,22 @@ yarn dev
 
 ## 提交前检查
 
+测试分层、影响判断和完整完成门见 [AGENTS.md](AGENTS.md) 与 [测试体系入口](docs/testing/README.md)。至少运行：
+
 ```bash
+yarn test:static
 yarn lint
-yarn tsc --noEmit
+yarn tsc --noEmit --incremental false
+yarn test:unit
+yarn test:integration
 yarn build
+git diff --check
 ```
+
+浏览器可观察行为另须运行 `yarn test:browser:smoke`；修改测试工具或 workflow 时另须运行 `yarn test:tooling`。
 
 ## 贡献指南
 
 - 提交遵循 Conventional Commits：`feat:` / `fix:` / `refactor:` 等
-- PR 描述需说明：变更动机、核心修改、潜在影响与验证命令
-- 详细规范见 [CLAUDE.md](CLAUDE.md)
+- PR 描述需说明：变更动机、核心修改、测试影响、潜在影响与真实验证命令/退出码
+- 所有 Agent 与协作者统一遵循 [AGENTS.md](AGENTS.md)，测试规范见 [docs/testing/README.md](docs/testing/README.md)

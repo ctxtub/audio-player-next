@@ -79,6 +79,7 @@ yarn test:static    # = node scripts/check-test-catalog.mjs --require-full-spec-
   - [维护与变更](./execution/maintenance.md)（由 `docs/e2e/MAINTENANCE.md` 迁移）
 - 产品场景规范（语义权威，保留在原目录）：`../e2e/` 下 6 大套件目录，入口见兼容跳转页 `../e2e/README.md`。
 - 机器资产：`../../tests/test-catalog.yaml`、`../../tests/test-catalog.schema.json`、`../../scripts/check-test-catalog.mjs`。
+- 工程治理：[变更工作流](../engineering/change-workflow.md)、[多 Agent 协作](../engineering/agent-collaboration.md)、[产物留存](../engineering/artifacts-and-retention.md)。
 
 ## 5. 常用命令
 

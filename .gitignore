@@ -49,8 +49,12 @@ artifacts
 
 .claude
 
-# E2E 运行时证据与临时执行环境（永不提交；见 docs/e2e/README.md 及 docs/e2e/execution-isolation.md）
+# E2E 运行时证据与临时执行环境（永不提交；见 docs/engineering/artifacts-and-retention.md）
 .e2e-results/
 .e2e-results*/
 .e2e-runtime/
 .e2e-runtime*/
+.agent-runs/
+/test-results/
+/playwright-report/
+/blob-report/

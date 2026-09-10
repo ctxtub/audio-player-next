@@ -10,6 +10,7 @@ on:
       - 'chore/**'
       - 'feat/**'
       - 'fix/**'
+  pull_request:
   workflow_dispatch:
 
 permissions: {}
@@ -23,6 +24,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -37,7 +40,11 @@ jobs:
         run: |
           echo "检测 tooling 敏感路径（path-filter 步骤级阻断语义，GitHub paths 仅触发过滤故此处步骤级阻断）…"
           echo "敏感路径：scripts/** .github/workflows/** tests/tooling/** prisma/schema.prisma"
-          CHANGED="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || true)"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED="$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD)"
+          else
+            CHANGED="$(git diff --name-only HEAD~1 HEAD 2>/dev/null || true)"
+          fi
           if [ -z "${CHANGED}" ]; then
             CHANGED="$(git status --porcelain 2>/dev/null || true)"
           fi
@@ -85,6 +92,7 @@ jobs:
   image:
     name: Candidate Image (sha tag)
     needs: quality
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read

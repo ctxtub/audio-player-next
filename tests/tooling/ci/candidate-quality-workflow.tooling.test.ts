@@ -19,6 +19,10 @@ import path from 'node:path';
 const repoRoot: string = process.cwd();
 // 中文注释：候选质量门 workflow 相对路径（任务10新建）。
 const candidateRel: string = path.join('.github', 'workflows', 'candidate-quality.yml');
+// 中文注释：普通 PR 必须执行的 P0 双浏览器门。
+const browserRel: string = path.join('.github', 'workflows', 'browser.yml');
+// 中文注释：PR 测试影响申报模板。
+const pullRequestTemplateRel: string = path.join('.github', 'pull_request_template.md');
 // 中文注释：现存推送 workflow 相对路径（任务10按同 workflow needs 语义改造）。
 const dockerPushRel: string = path.join('.github', 'workflows', 'docker-push.yml');
 // 中文注释：GHCR 推送脚本相对路径（任务10依赖，基线已含 sha- 逻辑）。
@@ -74,13 +78,44 @@ function caseImageNeedsQuality(content: string): void {
 }
 
 /**
- * 用例③：触发器含候选分支 push 与 manual dispatch。
+ * 用例③：触发器含候选分支 push、普通 PR 与 manual dispatch；PR 不得进入镜像发布 job。
  * @param content candidate-quality.yml 全文
  */
 function caseTriggers(content: string): void {
   assert.ok(content.includes('push:'), '缺 push 触发=RED');
+  assert.ok(/^\s{2}pull_request:/m.test(content), '缺普通 pull_request 质量门=RED');
   assert.ok(content.includes('workflow_dispatch'), '缺 manual dispatch 触发=RED');
-  console.log('PASS: 用例③ push/manual dispatch 触发');
+  const imageStart: number = content.indexOf('\n  image:');
+  assert.ok(imageStart >= 0, '缺 image job=RED');
+  const imageSection: string = content.slice(imageStart);
+  assert.ok(
+    imageSection.includes("if: github.event_name != 'pull_request'"),
+    'PR 必须显式禁止 image 发布 job=RED',
+  );
+  console.log('PASS: 用例③ push/pull_request/manual 触发且 PR 不发布镜像');
+}
+
+/**
+ * 用例③b：普通 PR 必须进入独立 P0 Chromium + WebKit 浏览器硬门。
+ * @param content browser.yml 全文
+ */
+function caseBrowserPullRequestGate(content: string): void {
+  assert.ok(/^\s{2}pull_request:/m.test(content), 'browser workflow 缺普通 pull_request 触发=RED');
+  assert.ok(content.includes('needs: quality'), 'browser smoke 必须依赖同 SHA quality=RED');
+  assert.ok(content.includes('chromium') && content.includes('webkit'), 'browser smoke 必须含 Chromium + WebKit=RED');
+  assert.ok(content.includes('yarn test:browser:smoke'), 'browser smoke 缺真实执行命令=RED');
+  console.log('PASS: 用例③b 普通 PR 进入 P0 Chromium + WebKit 硬门');
+}
+
+/**
+ * 用例③c：PR 模板必须要求测试影响与真实验证记录。
+ * @param content PR 模板全文
+ */
+function casePullRequestTemplate(content: string): void {
+  for (const marker of ['变更类型', '影响的产品旅程', '影响的 catalog case', '已执行的验证命令', '浏览器验证', '已知缺口']) {
+    assert.ok(content.includes(marker), `PR 模板缺字段「${marker}」=RED`);
+  }
+  console.log('PASS: 用例③c PR 模板含测试影响申报字段');
 }
 
 /**
@@ -125,7 +160,9 @@ function casePathFilterStep(content: string): void {
     assert.ok(content.includes(p), `检测步骤缺敏感路径 ${p}=RED`);
   }
   assert.ok(content.includes('yarn test:tooling'), '检测步骤缺 yarn test:tooling 强制门=RED');
-  console.log('PASS: 用例⑥ tooling-changes 检测步骤存在');
+  assert.ok(content.includes('github.event.pull_request.base.sha'), 'PR path-filter 未绑定 pull request base SHA=RED');
+  assert.ok(content.includes('fetch-depth: 0'), 'PR 完整 diff 需要 checkout fetch-depth: 0=RED');
+  console.log('PASS: 用例⑥ tooling-changes 检测步骤存在且覆盖完整 PR diff');
 }
 
 /**
@@ -151,11 +188,15 @@ function caseDockerPushNeeds(content: string): void {
 async function main(): Promise<void> {
   console.log('--- Testing Candidate Quality Gate Workflow ---');
   const candidate: string = readText(candidateRel);
+  const browser: string = readText(browserRel);
+  const pullRequestTemplate: string = readText(pullRequestTemplateRel);
   const script: string = readText(pushScriptRel);
   const dockerPush: string = readText(dockerPushRel);
   caseQualitySevenSteps(candidate);
   caseImageNeedsQuality(candidate);
   caseTriggers(candidate);
+  caseBrowserPullRequestGate(browser);
+  casePullRequestTemplate(pullRequestTemplate);
   caseUsesPinned(candidate);
   caseShaTag(script);
   casePathFilterStep(candidate);

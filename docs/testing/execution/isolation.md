@@ -135,7 +135,7 @@ node -e "const{createClient}=require('@libsql/client');(async()=>{
    - 自动调度集合以 `tests/test-catalog.yaml` 的 `lifecycle_status`、`executable_ids` 与 `ci_tier` 为准；`MANUAL` case 不进入自动执行队列。
    - **人工排除项**：`E2E-06-08`（bfcache/pageshow 探针，MANUAL，P3）保持 `manual_excluded`，移出自动化执行队列。
 2. **DSH 调度治理铁律与执行契约**：
-   - **全局单一活跃 Worker**：任何时刻全局仅允许启动 1 个 DSH Worker，严禁并发派发。
+   - **共享环境单一执行 Worker**：同一 Git 工作区及共享 `.e2e-runtime` / `.e2e-results` 结果根任何时刻仅允许 1 个 E2E 执行 Worker；固定同一 SHA 的只读 review 可并行，但不得启动服务、写证据或清理进程。独立 worktree 只有分配独立 runtime/results 根与所有权后才能并行执行。
    - **显式 3 小时时限**：各任务启动显式配置 `--timeout 10800`，彻底杜绝默认时限杀进程导致未决。
    - **Worker 自主托管 Mock 生命周期**：严格执行 §3.2 规范契约（前置 9301 探测、本地真实启动器、PID 记录、有界健康检查、失败判定 `UNVERIFIED`、执行后仅清理自身启动进程、保留 31111 与数据库）。所有未来 DSH 提示词必须强制包含并遵从本契约。
    - **终态报告与证据门禁**：每个任务必须以合规 `report.md`、关键证据文件与终端 VERDICT 闭环为准，方可启动下一任务。

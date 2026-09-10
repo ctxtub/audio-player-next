@@ -1,12 +1,9 @@
 # 浏览器冒烟门（P0 Chromium + WebKit 双项目，retries=0 硬门）。
 #
-# 与质量/镜像发布的关系（必须清楚）：
-# - 本 workflow 内：browser-smoke 同 workflow needs quality（同 SHA 质量门，与 candidate-quality.yml
-#   的 quality→image 同构；跨 workflow needs 不生效，故各发布链路自带 quality job）。
-# - 与镜像发布：候选/正式镜像只由 candidate-quality.yml（image job）与 docker-push.yml
-#   （docker-push job）发布，两者各自 needs 同文件 quality（同 SHA 不可绕过）；
-#   release 允许打 tag/推镜像的前提是“同 SHA 下 candidate-quality.yml quality 成功
-#   且本 workflow browser-smoke 成功”（分支保护/人工核对，见 nightly-browser.yml 头注）。
+# 与质量/镜像发布的关系（WS2 单一发布者）：
+# - 本 workflow 内：browser-smoke 同 workflow needs quality（同 SHA 质量门）。
+# - 与镜像发布：唯一发布者为 docker-push.yml（docker-push job，需同文件 quality+tier-gate+browser-smoke 全绿）；
+#   普通分支 checks-only（见 candidate-quality.yml），本 workflow 不发布任何镜像。
 # - 本 workflow 不发布任何镜像（无 packages:write，无 docker 步骤），只做门禁。
 name: Browser Smoke (P0)
 
@@ -33,10 +30,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-10 supply-chain-pin
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673cc596f81d78cb0c76 # v4.2.0 2026-09-10 supply-chain-pin
         with:
           node-version: 20
           cache: yarn
@@ -75,10 +72,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-10 supply-chain-pin
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673cc596f81d78cb0c76 # v4.2.0 2026-09-10 supply-chain-pin
         with:
           node-version: 20
           cache: yarn

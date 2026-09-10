@@ -5,7 +5,7 @@
 # - observe job（timing-observe）：显式重复时序观察（--repeat-each=3，仅 webkit），
 #   纯信息输出（timings 工件），continue-on-error 仅限本 job 且不参与门禁；
 #   任何重复轮次失败都会在日志与工件中留痕，供 flaky-policy quarantime 判定引用。
-# - 与镜像发布关系同 browser.yml 头注：本 workflow 不发布镜像。
+# - 与镜像发布关系（WS2 单一发布者，见 docker-push.yml）：本 workflow 不发布镜像。
 name: Nightly Browser Full
 
 on:
@@ -27,10 +27,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-10 supply-chain-pin
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673cc596f81d78cb0c76 # v4.2.0 2026-09-10 supply-chain-pin
         with:
           node-version: 20
           cache: yarn
@@ -69,10 +69,10 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-10 supply-chain-pin
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673cc596f81d78cb0c76 # v4.2.0 2026-09-10 supply-chain-pin
         with:
           node-version: 20
           cache: yarn
@@ -97,10 +97,10 @@ jobs:
     continue-on-error: true
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-10 supply-chain-pin
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673cc596f81d78cb0c76 # v4.2.0 2026-09-10 supply-chain-pin
         with:
           node-version: 20
           cache: yarn

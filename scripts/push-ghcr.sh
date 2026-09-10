@@ -2,8 +2,9 @@
 set -euo pipefail
 
 # Usage: ./scripts/push-ghcr.sh [tag] [github-username] [image-name] [platforms]
-# Builds the Dockerfile with Buildx, tags immutable sha-<shortSHA> and latest, and pushes to GHCR.
-#   tag:             tag name (defaults to "latest", or github ref tag if in GHA)
+# Builds the Dockerfile with Buildx, tags ref tag + immutable sha-<shortSHA>, never floating tag, and pushes to GHCR.
+# Floating tag is only produced via explicit retag promotion (imagetools create with source digest + promote flag), never in this build.
+#   tag:             tag name (explicit ref tag like v1.2.3, or GHA ref tag; empty means sha-only; floating input is ignored)
 #   github-username: defaults to $GITHUB_REPOSITORY_OWNER or "ctxtub"
 #   image-name:      defaults to "audio-player-next"
 #   platforms:       defaults to "linux/amd64"
@@ -32,13 +33,14 @@ elif [ -n "${GITHUB_TOKEN:-}" ]; then
   printf '%s' "${GITHUB_TOKEN}" | docker login ghcr.io -u "${USERNAME}" --password-stdin >/dev/null 2>&1
 fi
 
-# Resolve primary tag: explicit argument > GHA tag ref > "latest"
-if [ -n "${TAG_INPUT}" ]; then
+# Resolve primary tag: explicit argument (floating input ignored) > GHA tag ref > empty (sha-only).
+# Floating tag is never produced here; promotion uses registry-side retag only.
+if [ -n "${TAG_INPUT}" ] && [ "${TAG_INPUT}" != "latest" ]; then
   PRIMARY_TAG="${TAG_INPUT}"
-elif [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ -n "${GITHUB_REF_NAME:-}" ]; then
+elif [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ -n "${GITHUB_REF_NAME:-}" ] && [ "${GITHUB_REF_NAME}" != "latest" ]; then
   PRIMARY_TAG="${GITHUB_REF_NAME}"
 else
-  PRIMARY_TAG="latest"
+  PRIMARY_TAG=""
 fi
 
 # Resolve git commit SHA for immutable sha-<shortSHA> tag
@@ -48,7 +50,7 @@ if [ -n "${GIT_SHA}" ]; then
   SHORT_SHA="${GIT_SHA:0:7}"
 fi
 
-# Build array of unique tags to publish: always include latest and sha-<shortSHA>
+# Build array of unique tags to publish: ref tag + sha-<shortSHA>; never floating tag.
 # Portable dedup via linear scan (macOS default bash 3.2 lacks `declare -A`).
 TAG_NAMES=()
 
@@ -67,18 +69,17 @@ tag_seen() {
 
 add_tag() {
   local t="$1"
-  if [ -n "$t" ] && ! tag_seen "$t"; then
+  if [ -n "$t" ] && [ "$t" != "latest" ] && ! tag_seen "$t"; then
     TAG_NAMES+=("$t")
   fi
 }
 
-# 1. Primary requested tag (e.g. latest, v1.0.0)
-add_tag "${PRIMARY_TAG}"
+# 1. Primary requested tag (e.g. v1.0.0; floating input ignored by add_tag guard)
+if [ -n "${PRIMARY_TAG}" ]; then
+  add_tag "${PRIMARY_TAG}"
+fi
 
-# 2. Always publish latest
-add_tag "latest"
-
-# 3. Always publish immutable sha-<shortSHA> if git SHA is available
+# 2. Immutable sha-<shortSHA> if git SHA is available
 if [ -n "${SHORT_SHA}" ]; then
   add_tag "sha-${SHORT_SHA}"
 fi
@@ -121,8 +122,8 @@ docker buildx build \
   "${BUILD_TAG_ARGS[@]}" \
   "${BUILD_LABEL_ARGS[@]}" \
   -f "${PROJECT_ROOT}/Dockerfile" \
-  --provenance=false \
-  --sbom=false \
+  --provenance=true \
+  --sbom=true \
   ${BUILD_EXTRA_PUSH_FLAG} \
   "${PROJECT_ROOT}"
 

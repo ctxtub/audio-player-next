@@ -11,7 +11,7 @@
 5. **实现**：单工作区单写者；行为变更先得到可信 RED，再做最小 GREEN。
 6. **独立验收**：不同会话复核 diff、测试、进程、端口、数据库与秘密边界；不采信实现者自报。
 7. **安全门**：检查 tracked 范围、历史、依赖、Actions、Docker context、日志和前端产物。
-8. **发布**：仅在明确授权后 push/merge/deploy；技术 APPROVE 不等于发布授权。
+8. **发布**：仅在明确授权后 push/merge/deploy；技术 APPROVE 不等于发布授权。仅 tag（v*）与显式 workflow_dispatch 才可发布；release 构建只发 version tag + sha-<short>、永不自动 latest；latest 仅经源 digest/ref + promote_latest 双输入无重构建 retag；全仓唯一串行发布者。
 9. **运行验收与收尾**：回读远端状态、记录回滚点、遗留问题和精炼 closeout。
 
 ## 变更影响与测试选择

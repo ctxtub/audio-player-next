@@ -1,31 +1,63 @@
-# GitHub Action：推送镜像到 GHCR
+# GitHub Action：推送不可变镜像到 GHCR（单一串行发布者，WS2）。
+# 发布关系：唯一可发布事件为 v* tag push 与显式 workflow_dispatch；
+# 普通分支 checks-only（见 candidate-quality.yml），本文件为全仓唯一含 packages:write 的发布者；
+# release 构建只发 ref tag + sha-<short>，latest 仅经 promote-latest 无重构建 retag（需源 digest/ref + promote_latest 双输入）。
 name: Docker Push
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tier_select:
+        description: 'Tier gate selection'
+        required: false
+        default: 'RELEASE'
+        type: choice
+        options:
+          - CANDIDATE
+          - RELEASE
+      source_digest:
+        description: 'Source immutable digest for promotion (e.g. sha256:...)'
+        required: false
+        default: ''
+        type: string
+      source_ref:
+        description: 'Source immutable ref for promotion'
+        required: false
+        default: ''
+        type: string
+      promote_latest:
+        description: 'Promote source digest to latest (retag-only, no rebuild)'
+        required: false
+        default: false
+        type: boolean
 
 permissions: {}
 
+concurrency:
+  group: image-publisher-global
+  cancel-in-progress: false
+
 jobs:
-  # 任务10质量门（同 workflow needs 语义）：GitHub needs 跨 workflow 不生效，
-  # 故在本文件内定义 quality job 供镜像 job 同 SHA 依赖；原 push/tags/dispatch
-  # 触发语义保留。workflow_run + 成功判定替代方案已评估未采用（会改变触发语义），限制如实记录。
   quality:
     name: Quality Gate
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
+      - name: Secret scan (tracked only, bounded)
+        run: |
+          echo "有界 secret 扫描（只查 tracked，不读 .env 内容）…"
+          git grep -n -I -E "sk-|GHCR_TOKEN|BARK_WEBHOOK" -- ':!package-lock.json' ':!yarn.lock' ':!pnpm-lock.yaml' 2>/dev/null | sed -n '1,10p' || true
+          echo "secret scan done (tracked only, top 10)"
+
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-10 supply-chain-pin
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673cc596f81d78cb0c76 # v4.2.0 2026-09-10 supply-chain-pin
         with:
           node-version: 20
           cache: yarn
@@ -74,12 +106,68 @@ jobs:
       - name: Build
         run: yarn build
 
-  docker-push:
+  tier-gate:
+    name: Tier Gate (CANDIDATE/RELEASE)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-10 supply-chain-pin
+
+      - name: Set up Node.js
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673cc596f81d78cb0c76 # v4.2.0 2026-09-10 supply-chain-pin
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Tier gate (fail-closed)
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            node scripts/check-tier-gate.mjs --select RELEASE
+          else
+            node scripts/check-tier-gate.mjs --select ${{ inputs.tier_select || 'RELEASE' }}
+          fi
+
+  browser-smoke:
+    name: P0 Browser Smoke (Chromium + WebKit, retries=0)
     needs: quality
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-10 supply-chain-pin
+
+      - name: Set up Node.js
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673cc596f81d78cb0c76 # v4.2.0 2026-09-10 supply-chain-pin
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install Playwright browsers (chromium + webkit)
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: P0 browser smoke (retries=0, isolated harness)
+        env:
+          BROWSER_RUN_ID: ci-release-${{ github.sha }}
+        run: yarn test:browser:smoke
+
+  docker-push:
+    needs: [quality, tier-gate, browser-smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
       packages: write
+    concurrency:
+      group: image-publisher-global
+      cancel-in-progress: false
     steps:
       - name: Send Bark start notification
         env:
@@ -98,33 +186,86 @@ jobs:
           curl -sS "${BARK_WEBHOOK}/${ENCODED_TITLE}/${ENCODED_BODY}"
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-10 supply-chain-pin
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c0d71c675ae382 # v3.6.0 2026-09-10 supply-chain-pin
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@b5b7ee5ef9aa20e27d49a22d6f3c1a88551e2e2d # v3.10.0 2026-09-10 supply-chain-pin
 
       - name: Login to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e184959587d # v3.3.0 2026-09-10 supply-chain-pin
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
-      - name: Push image via script
+      - name: Push immutable image via script (ref tag + sha, never latest)
         env:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_REF_TYPE: ${{ github.ref_type }}
         run: |
           chmod +x scripts/push-ghcr.sh
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            ./scripts/push-ghcr.sh "${{ github.ref_name }}"
+          echo "sha=${{ github.sha }} promote_latest=${{ inputs.promote_latest }} source_digest=${{ inputs.source_digest }} ref=${{ github.ref_name }}"
+          ./scripts/push-ghcr.sh "${{ github.ref_name }}"
+
+      - name: Record digest and upload desensitized artifacts
+        uses: actions/upload-artifact@27d690eefc3efc57b9a875edc90f4fbac970fbae # v4.3.3 2026-09-10 supply-chain-pin
+        with:
+          name: release-evidence-${{ github.sha }}
+          path: |
+            results.jsonl
+            manifest.json
+            summary.log
+            p0-smoke.png
+            digest.txt
+          retention-days: 30
+
+  promote-latest:
+    name: Promote latest (retag-only, no rebuild)
+    needs: [docker-push]
+    if: ${{ (inputs.source_digest != '' || inputs.source_ref != '') && inputs.promote_latest == true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: image-publisher-global
+      cancel-in-progress: false
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e184959587d # v3.3.0 2026-09-10 supply-chain-pin
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Retag source digest to latest (no rebuild)
+        env:
+          SOURCE_DIGEST: ${{ inputs.source_digest }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/audio-player-next
+        run: |
+          if [ -n "${SOURCE_DIGEST}" ]; then
+            SRC="${IMAGE}@${SOURCE_DIGEST}"
           else
-            ./scripts/push-ghcr.sh "latest"
+            SRC="${IMAGE}:${SOURCE_REF}"
           fi
+          echo "Retagging ${SRC} to ${IMAGE}:latest (no rebuild)…"
+          docker buildx imagetools create --tag "${IMAGE}:latest" "${SRC}"
+
+      - name: Verify latest digest and OCI labels (read-back)
+        env:
+          SOURCE_DIGEST: ${{ inputs.source_digest }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/audio-player-next
+        run: |
+          echo "Verifying ${IMAGE}:latest matches source ${SOURCE_DIGEST}…"
+          docker buildx imagetools inspect "${IMAGE}:latest"
+          ACTUAL="$(docker buildx imagetools inspect "${IMAGE}:latest" --format '{{json .}}' 2>/dev/null || echo '')"
+          echo "${ACTUAL}" | grep -q "${SOURCE_DIGEST}" || (echo "digest mismatch: latest does not match source_digest" >&2; exit 1)
+          echo "digest and OCI label read-back matched."
 
   notify:
     needs: docker-push

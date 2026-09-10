@@ -25,6 +25,8 @@ const browserRel: string = path.join('.github', 'workflows', 'browser.yml');
 const pullRequestTemplateRel: string = path.join('.github', 'pull_request_template.md');
 // 中文注释：现存推送 workflow 相对路径（任务10按同 workflow needs 语义改造）。
 const dockerPushRel: string = path.join('.github', 'workflows', 'docker-push.yml');
+// 中文注释：夜间浏览器 workflow 相对路径（WS2 全 pin 检查用）。
+const nightlyRel: string = path.join('.github', 'workflows', 'nightly-browser.yml');
 // 中文注释：GHCR 推送脚本相对路径（任务10依赖，基线已含 sha- 逻辑）。
 const pushScriptRel: string = path.join('scripts', 'push-ghcr.sh');
 // 中文注释：tooling 敏感路径表（命中任一即须跑 yarn test:tooling 强制门）。
@@ -116,17 +118,18 @@ function casePullRequestTemplate(content: string): void {
 }
 
 /**
- * 用例④：uses 锁定版本（无浮动引用）。
+ * 用例④：uses 全 pin 到 full-SHA（WS2 供应链硬化，无浮动引用）。
+ * 口径：`uses: <owner>/<repo>@<40位sha> # <tag> <date> <reason>`；禁 tag-only。
  * @param content candidate-quality.yml 全文
  */
 function caseUsesPinned(content: string): void {
-  assert.ok(content.includes('actions/checkout@v4'), 'uses 未锁定 actions/checkout@v4=RED');
   const usesLines: string[] = content.split('\n').filter((l) => l.includes('uses:'));
   assert.ok(usesLines.length >= 2, 'uses 行过少=RED');
   for (const line of usesLines) {
-    assert.ok(/uses:\s*\S+@v\d+/.test(line), `uses 未锁定版本=RED：${line.trim()}`);
+    assert.ok(!/uses:\s*\S+@v\d+(\s|$)/.test(line), `uses 仍为 tag-only=RED：${line.trim()}`);
+    assert.ok(/uses:\s*\S+@[0-9a-f]{40}\s+#/.test(line), `uses 未 full-SHA pin=RED：${line.trim()}`);
   }
-  console.log('PASS: 用例④ uses 锁定版本');
+  console.log('PASS: 用例④ uses 全 pin 到 full-SHA');
 }
 
 /**
@@ -212,12 +215,105 @@ function caseOrdinaryBranchesNoPublisher(content: string): void {
 }
 
 /**
- * 测试入口：顺序执行①-⑧，任一缺失即抛（RED），全过即 GREEN。
+ * 用例⑨：发布链路收敛 WS2——全仓恰一个 packages:write 发布 job + 全局串行 + 同 SHA 三门。
+ * - 全仓恰一个 packages:write（docker-push.yml:docker-push）；candidate/browser/nightly 均无。
+ * - docker-push 含全局串行 concurrency: image-publisher-global / cancel-in-progress: false。
+ * - docker-push job needs 含 quality + tier-gate + browser-smoke（同文件）。
+ * @param candidate candidate-quality.yml 全文
+ * @param dockerPush docker-push.yml 全文
+ * @param browser browser.yml 全文
+ * @param nightly nightly-browser.yml 全文
+ */
+function caseSingleSerializedPublisher(
+  candidate: string,
+  dockerPush: string,
+  browser: string,
+  nightly: string,
+): void {
+  assert.ok(!candidate.includes('packages: write'), 'WS2: candidate 不得含 packages:write=RED');
+  assert.ok(!browser.includes('packages: write'), 'WS2: browser 不得含 packages:write=RED');
+  assert.ok(!nightly.includes('packages: write'), 'WS2: nightly 不得含 packages:write=RED');
+  const publisherCount: number = (dockerPush.match(/packages:\s*write/g) || []).length;
+  assert.ok(publisherCount >= 1, 'WS2: docker-push 必须含 packages:write 发布者=RED');
+  assert.ok(dockerPush.includes('image-publisher-global'), 'WS2: 发布 workflow 缺全局串行 image-publisher-global=RED');
+  assert.ok(dockerPush.includes('cancel-in-progress: false'), 'WS2: 串行发布必须 cancel-in-progress: false=RED');
+  assert.ok(dockerPush.includes('tier-gate'), 'WS2: 发布 job needs 缺 tier-gate=RED');
+  assert.ok(dockerPush.includes('browser-smoke'), 'WS2: 发布 job needs 缺 browser-smoke=RED');
+  assert.ok(/needs:\s*\[[^\]]*quality[^\]]*tier-gate[^\]]*browser-smoke[^\]]*\]/.test(dockerPush) || /needs:\s*\[[^\]]*quality/.test(dockerPush), 'WS2: docker-push job needs 必须含 quality+tier+browser 同 SHA 链=RED');
+  console.log('PASS: 用例⑨ 全仓单一串行发布者 + 同 SHA 三门');
+}
+
+/**
+ * 用例⑩：latest 仅显式晋升——retag-only + 双输入缺一即拒 + 回读。
+ * - 晋升 step 含 imagetools create（无重构建）且条件同时要求源 digest/ref 非空与 promote_latest==true。
+ * - 缺 source_digest 即使 promote_latest=true 也拒绝；缺 promote_latest 即使有源 digest 也不晋升。
+ * - 晋升后含 imagetools inspect 回读比对（digest 与 OCI label）。
+ * @param dockerPush docker-push.yml 全文
+ */
+function casePromoteRetagOnly(dockerPush: string): void {
+  assert.ok(dockerPush.includes('imagetools create'), 'WS2: 晋升 step 缺 imagetools create（无重构建 retag）=RED');
+  assert.ok(dockerPush.includes('imagetools inspect'), 'WS2: 晋升后缺 imagetools inspect 回读=RED');
+  // 双显式输入缺一不可：文件必须同时出现 source_digest/source_ref 与 promote_latest，且晋升 if 同时约束两者。
+  assert.ok(dockerPush.includes('source_digest') || dockerPush.includes('source_ref'), 'WS2: 晋升缺 source_digest/source_ref 输入=RED');
+  assert.ok(dockerPush.includes('promote_latest'), 'WS2: 晋升缺 promote_latest 输入=RED');
+  const hasPromoteGate: boolean =
+    dockerPush.includes('promote_latest') &&
+    (dockerPush.includes('source_digest') || dockerPush.includes('source_ref')) &&
+    /if:.*promote_latest/.test(dockerPush);
+  assert.ok(hasPromoteGate, 'WS2: promote-latest job 条件必须同时要求源 digest/ref 非空且 promote_latest==true=RED（缺一即拒）');
+  // 负例语义：条件文本必须同时引用源输入与 promote_latest，任一缺失即跳过/拒绝（静态保证）。
+  assert.ok(
+    /source_(digest|ref)[\s\S]{0,400}promote_latest|promote_latest[\s\S]{0,400}source_(digest|ref)/.test(dockerPush),
+    'WS2: 晋升条件必须双输入耦合（缺 source_digest 即使 promote_latest=true 也拒绝；缺 promote_latest 即使有源 digest 也不晋升）=RED',
+  );
+  console.log('PASS: 用例⑩ latest 仅显式双输入无重构建 retag + 回读');
+}
+
+/**
+ * 用例⑪：供应链硬化——全 pin + SBOM/provenance + secret 门 + 脱敏工件。
+ * - 全部 4 个 workflow 的 uses: 为 full-SHA pin（无 @vN 残留）。
+ * - 发布 workflow 有 secret 扫描门、脱敏 upload-artifact + retention-days: 30。
+ * - 构建启用 SBOM/provenance（脚本含 --sbom=true --provenance=true）。
+ * @param candidate candidate-quality.yml 全文
+ * @param dockerPush docker-push.yml 全文
+ * @param browser browser.yml 全文
+ * @param nightly nightly-browser.yml 全文
+ * @param script push-ghcr.sh 全文
+ */
+function caseSupplyChainPins(
+  candidate: string,
+  dockerPush: string,
+  browser: string,
+  nightly: string,
+  script: string,
+): void {
+  for (const [name, content] of [
+    ['candidate-quality.yml', candidate],
+    ['docker-push.yml', dockerPush],
+    ['browser.yml', browser],
+    ['nightly-browser.yml', nightly],
+  ] as Array<[string, string]>) {
+    assert.ok(!/uses:\s*\S+@v\d+(\s|$)/m.test(content), `WS2: ${name} 仍有 tag-only uses 残留=RED（须 full-SHA pin）`);
+    const usesLines: string[] = content.split('\n').filter((l) => l.includes('uses:'));
+    for (const line of usesLines) {
+      assert.ok(/uses:\s*\S+@[0-9a-f]{40}\s+#/.test(line), `WS2: ${name} uses 未 full-SHA pin=RED：${line.trim()}`);
+    }
+  }
+  assert.ok(script.includes('--sbom=true'), 'WS2: 构建缺 --sbom=true=RED');
+  assert.ok(script.includes('--provenance=true'), 'WS2: 构建缺 --provenance=true=RED');
+  assert.ok(dockerPush.includes('upload-artifact'), 'WS2: 发布 workflow 缺脱敏 upload-artifact=RED');
+  assert.ok(dockerPush.includes('retention-days: 30'), 'WS2: 工件缺 retention-days: 30=RED');
+  console.log('PASS: 用例⑪ 全 pin + SBOM/provenance + 脱敏工件');
+}
+
+/**
+ * 测试入口：顺序执行①-⑪，任一缺失即抛（RED），全过即 GREEN。
  */
 async function main(): Promise<void> {
   console.log('--- Testing Candidate Quality Gate Workflow ---');
   const candidate: string = readText(candidateRel);
   const browser: string = readText(browserRel);
+  const nightly: string = readText(nightlyRel);
   const pullRequestTemplate: string = readText(pullRequestTemplateRel);
   const script: string = readText(pushScriptRel);
   const dockerPush: string = readText(dockerPushRel);
@@ -231,6 +327,9 @@ async function main(): Promise<void> {
   casePathFilterStep(candidate);
   caseDockerPushNeeds(dockerPush);
   caseOrdinaryBranchesNoPublisher(candidate);
+  caseSingleSerializedPublisher(candidate, dockerPush, browser, nightly);
+  casePromoteRetagOnly(dockerPush);
+  caseSupplyChainPins(candidate, dockerPush, browser, nightly, script);
   console.log('ALL CANDIDATE QUALITY WORKFLOW TESTS PASSED');
 }
 

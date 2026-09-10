@@ -28,6 +28,7 @@
 - 缺口 29 项 = `PLANNED 27（无 executable）+ BLOCKED 2（P0 高声缺口，候选门阻断）`；
   另有 2 项 PLANNED（`config-init-gate-retry`、`stream-interrupt-failed-retry`）仅有部分静态/单元证据，
   仍计缺口。候选必测清单中的缺口必须阻断，不得降为通过。
+  候选/发布 P0/P1 完整性门：`node scripts/check-tier-gate.mjs --select CANDIDATE|RELEASE`（缺口默认阻断；显式可过期豁免见 `tests/tier-waivers.yaml`）。
 
 复现命令（仓库根执行，预期 exit 0）：
 

@@ -1,0 +1,5 @@
+# tier 门豁免清单（WS3，D2 已决：固定此文件）。
+# 空数组 = 无豁免：基线 CANDIDATE/RELEASE P0/P1 缺口保持阻断（诚实 RED）。
+# 条目 schema（全必填）：{case_id, reason, owner, issue, expires_at}
+# expires_at 为 YYYY-MM-DD（UTC），当天有效、过后阻断；非法/过期/缺字段条目永不放行。
+[]

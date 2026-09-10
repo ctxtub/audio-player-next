@@ -80,6 +80,7 @@ const SUITES = [
     { id: 'runner-group-split', path: './tests/tooling/runner/runner-group-split.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'catalog-checker', path: './tests/tooling/catalog/catalog-checker.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'candidate-quality-workflow', path: './tests/tooling/ci/candidate-quality-workflow.tooling.test.ts', group: 'tooling', needs_db: false },
+    { id: 'tier-gate', path: './tests/tooling/tier/tier-gate.tooling.test.ts', group: 'tooling', needs_db: false },
 ];
 
 /** 当前拥有的子进程（信号处理用）。 */

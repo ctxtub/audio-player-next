@@ -678,4 +678,11 @@ function main() {
   console.log('CHECK PASS：测试资产目录校验通过');
 }
 
-main();
+// 中文注释：C3 导出共用解析函数供 scripts/check-tier-gate.mjs 复用（catalog 解析只允许这一份）。
+// 被 import 时不执行 main；直接运行本文件时行为与输出不变。
+export { parseYamlSubset, normalizeSuitePath };
+const __runAsMain = typeof process.argv[1] === 'string'
+  && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname;
+if (__runAsMain) {
+  main();
+}

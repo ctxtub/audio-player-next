@@ -40,7 +40,7 @@ cases:
       - assertion_id: guest-row-persisted
         display_name_zh: 访客行落库
         surface: db
-    executable_ids: [exec-guest-cookie-authorization, exec-release-pipeline, exec-candidate-quality-workflow]
+    executable_ids: [exec-guest-cookie-authorization, exec-release-pipeline, exec-candidate-quality-workflow, exec-tier-gate]
     fixtures: []
     ci_tier: CANDIDATE
     owner: smoke-baseline
@@ -1481,6 +1481,11 @@ executables:
     display_name_zh: 候选质量门结构断言
     layer: TOOLING
     path: ./tests/tooling/ci/candidate-quality-workflow.tooling.test.ts
+    case_ids: [guest-identity-cookie-upgrade]
+  - executable_id: exec-tier-gate
+    display_name_zh: tier完整性门自测
+    layer: TOOLING
+    path: ./tests/tooling/tier/tier-gate.tooling.test.ts
     case_ids: [guest-identity-cookie-upgrade]
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥

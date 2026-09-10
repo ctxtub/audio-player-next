@@ -73,6 +73,10 @@ yarn dev -p 31111
      - 若 9301 在用例执行前已存在（`STARTED_MOCK=0`）：必须保持其继续运行，**绝对不可**终止该预存监听。
      - 任何情况下，绝对不可改动或停止 31111 应用服务与 `.e2e-runtime/e2e.db`。
 
+### 3.3 生产快照前置守卫（WS4 最小补丁；完整重写见 WS7）
+
+生产快照（`git archive HEAD`）前必须先过守卫：`git status --porcelain=v1 --untracked-files=no` 非空（脏 tracked 树）或 `EXPECTED_TARGET_SHA` 非空且与 `HEAD` 失配（短 SHA 前缀等价放行）即抛 `BLOCKED`，缓存命中（`.snapshot-ready`）路径同样先验守卫且锁内复验，`unknown` 快照键禁止构建；快照键与 manifest/日志记 full SHA，错误信息仅含短 SHA 与脏文件状态行、不含 secrets。应用端口仍为 `31120-31150` 范围空闲端口、停止后确认端口释放；untracked 文件（`??`）不阻断。
+
 ## 4. 数据准备与夹具
 
 - 注册类账号经 `/auth` UI 注册生成（同时验证注册链路），或用 `{{E2E_DB_URL}}` + Prisma 直插 seed 脚本（存 `.e2e-runtime/seed.mjs`）。

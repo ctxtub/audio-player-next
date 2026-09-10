@@ -6,7 +6,7 @@
  * health 探测就绪；停止时 kill 子进程树并确认端口释放。
  *
  * 全程函数化：export startAppServer()/stopAppServer()。
- * 快照按 commit 短 SHA 缓存（.e2e-runtime/browser-harness/snapshots/<sha>/），
+ * 快照按 commit 完整 SHA 缓存（.e2e-runtime/browser-harness/snapshots/<sha>/），
  * 每次启动仍使用全新隔离 DB 文件；mock 未显式传入时自动拉起自有 mock
  * （OPENAI_BASE_URL 指向它），stop 时一并回收。
  */
@@ -68,15 +68,107 @@ export async function pickAppPort() {
 }
 
 /**
- * 取当前 commit 短 SHA（快照缓存键）。
+ * 取当前 commit 短 SHA（日志/错误信息展示用）。
+ * @param cwd 仓库根（缺省模块级 repoRoot；测试可传入临时 git 仓）
  * @returns 短 SHA（取不到时回退 'unknown'）
  */
-function currentShortSha() {
+export function currentShortSha(cwd = repoRoot) {
     try {
-        return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+        return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd, encoding: 'utf8', timeout: 30000 }).trim();
     } catch {
         return 'unknown';
     }
+}
+
+/**
+ * 取当前 commit 完整 SHA（快照缓存键；manifest 与日志均记 full SHA）。
+ * @param cwd 仓库根（缺省模块级 repoRoot；测试可传入临时 git 仓）
+ * @returns full SHA（取不到时回退 'unknown'；调用方须视 'unknown' 为禁止构建）
+ */
+export function currentFullSha(cwd = repoRoot) {
+    try {
+        return execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8', timeout: 30000 }).trim() || 'unknown';
+    } catch {
+        return 'unknown';
+    }
+}
+
+/**
+ * 构造守卫失败错误（语义固定为 BLOCKED：环境/供给不可证，不得记 FAIL/FLAKY）。
+ * @param reason 原因（仅含短 SHA 与 git 状态行，不含任何 secret/环境值）
+ * @returns code 为 'BLOCKED' 的 Error（globalSetup 透出后整轮不跑业务断言）
+ */
+function blockedError(reason) {
+    const err = new Error(`[app-server][BLOCKED] ${reason}`);
+    err.code = 'BLOCKED';
+    return err;
+}
+
+/**
+ * 短 SHA 脱敏展示（仅 hex 形值取前 7 位；非 hex 形只记长度，不回显原值防 secret 泄露）。
+ * @param value 待展示值
+ * @returns 短 SHA 或占位
+ */
+function safeShortSha(value) {
+    const s = String(value ?? '').trim();
+    return /^[0-9a-fA-F]{4,40}$/.test(s) ? s.slice(0, 7) : `<non-hex:${s.length}>`;
+}
+
+/**
+ * 错误首行截断（git 子进程 stderr 仅截首行 200 字符，不透传环境/secret）。
+ * @param err 原始错误
+ * @returns 截断后首行
+ */
+function shortErr(err) {
+    return String(err?.message ?? err).split('\n')[0].slice(0, 200);
+}
+
+/**
+ * 快照前置守卫（WS4）：脏 tracked 树与 EXPECTED_TARGET_SHA 失配直接抛 BLOCKED。
+ *
+ * - 脏 tracked 树：`git status --porcelain=v1 --untracked-files=no` 非空即抛；
+ *   信息含前 20 行脏文件状态行（仅路径状态，不打印 secrets）；untracked（`??`）不阻断
+ *  （archive 天然排除 `.env` 系/`.db/.next/node_modules`）。
+ * - EXPECTED_TARGET_SHA 绑定：显式 expectedSha 或环境变量非空时，`git rev-parse HEAD`
+ *   （full）必须与其相等（允许短 SHA 前缀等价匹配，规范要求 full；失配信息仅含
+ *   expected/actual 短 SHA，不泄露 secrets）。
+ *
+ * @param options 选项 { expectedSha?, cwd? }（expectedSha 缺省读 EXPECTED_TARGET_SHA；cwd 缺省仓库根）
+ * @returns { fullSha, shortSha, expectedSha } 通过证据（full SHA 供快照键/manifest/日志）
+ */
+export function assertArchivePreconditions({ expectedSha, cwd } = {}) {
+    const root = cwd ?? repoRoot;
+    const exp = String(expectedSha ?? process.env.EXPECTED_TARGET_SHA ?? '').trim();
+    const full = currentFullSha(root);
+    if (!full || full === 'unknown') {
+        throw blockedError(`拒绝快照：无法解析 HEAD full SHA（cwd=${root}），unknown 禁止构建`);
+    }
+    let status = '';
+    try {
+        status = execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], {
+            cwd: root,
+            encoding: 'utf8',
+            timeout: 30000,
+        });
+    } catch (err) {
+        throw blockedError(`拒绝快照：git status 探针失败（commit=${safeShortSha(full)}）：${shortErr(err)}`);
+    }
+    const lines = status
+        .split('\n')
+        .map((l) => l.trimEnd())
+        .filter((l) => l.length > 0);
+    if (lines.length > 0) {
+        const shown = lines.slice(0, 20).join('\n');
+        const more = lines.length > 20 ? `\n... (+${lines.length - 20} more)` : '';
+        throw blockedError(`拒绝快照：tracked 工作树脏（commit=${safeShortSha(full)}，${lines.length} 项）：\n${shown}${more}`);
+    }
+    if (exp !== '') {
+        const ok = full === exp || full.startsWith(exp) || exp.startsWith(full);
+        if (!ok) {
+            throw blockedError(`拒绝快照：EXPECTED_TARGET_SHA 失配（expected=${safeShortSha(exp)} actual=${safeShortSha(full)}）`);
+        }
+    }
+    return { fullSha: full, shortSha: full.slice(0, 7), expectedSha: exp };
 }
 
 /**
@@ -118,23 +210,36 @@ function runInSnapshot(snapshotDir, bin, args, env) {
 
 /**
  * 确保 commit 级隔离快照就绪（含 production build；命中缓存则跳过）。
- * @param sha commit 短 SHA
+ * WS4：取锁之前 fast-path 先验守卫、取锁之后锁内复验守卫 + ready marker（防 TOCTOU）；
+ * 脏树即使快照已就绪也拒绝复用。快照键为 full SHA（目录名透传 short/full 均兼容，
+ * marker 与日志记 full）；sha 缺失/'unknown' 直接抛 BLOCKED，不得回退缓存。
+ * @param sha commit SHA（full；short 透传仅作目录兼容）
  * @param env 合成环境（含 SESSION_SECRET/OPENAI_*，DATABASE_URL 另行按库覆写）
+ * @param opts 选项 { cwd?, snapshotBase? }（测试注入用；缺省仓库根与运行时 snapshots）
  * @returns 快照目录
  */
-async function ensureSnapshot(sha, env) {
-    const snapshotDir = join(runtimeRoot, 'snapshots', sha);
+export async function ensureSnapshot(sha, env, opts = {}) {
+    const root = opts.cwd ?? repoRoot;
+    const snapshotsBase = opts.snapshotBase ?? join(runtimeRoot, 'snapshots');
+    if (!sha || sha === 'unknown') {
+        throw blockedError('拒绝快照：快照键 unknown 禁止构建（不得回退缓存）');
+    }
+    // 中文注释：fast-path 先验守卫——脏树即使快照已就绪也拒绝复用。
+    assertArchivePreconditions({ cwd: root });
+    const snapshotDir = join(snapshotsBase, sha);
     const readyMarker = join(snapshotDir, '.snapshot-ready');
     if (existsSync(readyMarker)) return snapshotDir;
-    const lockDir = join(runtimeRoot, 'snapshots', `${sha}.lock`);
-    mkdirSync(join(runtimeRoot, 'snapshots'), { recursive: true });
+    const lockDir = join(snapshotsBase, `${sha}.lock`);
+    mkdirSync(snapshotsBase, { recursive: true });
     await acquireDirLock(lockDir);
     try {
+        // 中文注释：锁内复验守卫 + ready marker（防 TOCTOU）。
+        assertArchivePreconditions({ cwd: root });
         if (existsSync(readyMarker)) return snapshotDir;
             rmSync(snapshotDir, { recursive: true, force: true });
             mkdirSync(snapshotDir, { recursive: true });
             // 中文注释：仅 tracked 文件进快照（.env*/.db/.next/node_modules 天然排除）。
-            const archive = execFileSync('git', ['archive', 'HEAD'], { cwd: repoRoot, encoding: 'buffer', timeout: 60000, maxBuffer: 512 * 1024 * 1024 });
+            const archive = execFileSync('git', ['archive', 'HEAD'], { cwd: root, encoding: 'buffer', timeout: 60000, maxBuffer: 512 * 1024 * 1024 });
             await new Promise((resolve, reject) => {
                 const proc = spawn('tar', ['-x', '-C', snapshotDir], { stdio: ['pipe', 'pipe', 'pipe'] });
                 proc.on('error', reject);
@@ -154,7 +259,9 @@ async function ensureSnapshot(sha, env) {
             rmSync(buildDb, { force: true });
             runInSnapshot(snapshotDir, nodeBin, [prismaBin, 'migrate', 'deploy'], { ...env, DATABASE_URL: `file:${buildDb}` });
             runInSnapshot(snapshotDir, nodeBin, [nextBin, 'build'], { ...env, DATABASE_URL: `file:${buildDb}` });
-            writeFileSync(readyMarker, `${sha}\n`);
+            // 中文注释：marker 与日志记 full SHA（目录名透传 short/full 均兼容）。
+            const builtFull = currentFullSha(root);
+            writeFileSync(readyMarker, `${builtFull === 'unknown' ? sha : builtFull}\n`);
             return snapshotDir;
         } finally {
             releaseDirLock(lockDir);
@@ -303,7 +410,12 @@ async function killPgroup(pgid, label) {
  * @returns 句柄 { port, url, snapshotDir, dbFile, commit, childPid, mockHandle?, ownedMock }
  */
 export async function startAppServer(options = {}) {
-    const sha = currentShortSha();
+    // 中文注释：快照键为 HEAD full SHA；unknown 禁止构建，直接抛 BLOCKED（不得回退缓存）。
+    const fullSha = currentFullSha();
+    if (!fullSha || fullSha === 'unknown') {
+        throw blockedError('拒绝启动：无法解析 HEAD full SHA，unknown 禁止构建快照');
+    }
+    const sha = fullSha;
     let mockHandle = null;
     let ownedMock = false;
     let mockBaseUrl = options.mockBaseUrl;

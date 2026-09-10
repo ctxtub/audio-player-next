@@ -112,7 +112,7 @@ function goodCatalogYaml(): string {
     '  - executable_id: double-submit-exec',
     '    display_name_zh: 双发抑制执行体',
     '    layer: L2',
-    '    path: ./tests/legacy/double-submit.legacy.test.ts',
+    '    path: ./tests/integration/creation-chat/reject-second-submit-while-streaming.integration.test.ts',
     '    case_ids: [double-submit-guard]',
     '',
   ].join('\n');
@@ -228,7 +228,32 @@ function caseGood(dir: string): void {
 }
 
 /**
- * 测试入口：顺序执行 6 坏 + 1 好。
+ * 真实 catalog 门：tests/test-catalog.yaml（含 registry 三方一致）必须 exit 0。
+ * 正例 fixture 只证明 checker 逻辑；本用例证明生产 catalog 本体健康（Fix 3.4）。
+ * @returns checker stdout（供调用方复核统计口径）
+ */
+function caseRealCatalog(): string {
+  let stdout: string = '';
+  try {
+    stdout = execFileSync(process.execPath, [checkerAbs], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      timeout: 15000,
+    }) as unknown as string;
+  } catch (err) {
+    const e = err as { status?: unknown; stdout?: unknown; stderr?: unknown };
+    assert.fail(
+      `真实 catalog 应 exit 0，实际 status=${String(e.status)} stderr头=${String(e.stderr ?? '').slice(0, 500)}`,
+    );
+  }
+  const out: string = String(stdout);
+  assert.ok(out.includes('CHECK PASS'), `真实 catalog stdout 应含 CHECK PASS，实际头=${out.slice(0, 300)}`);
+  console.log('PASS: 真实 catalog exit 0');
+  return out;
+}
+
+/**
+ * 测试入口：顺序执行 6 坏 + 1 好 + 真实 catalog 门。
  */
 async function main(): Promise<void> {
   const dir: string = mkdtempSync(path.join(tmpdir(), 'catalog-checker-'));
@@ -240,6 +265,7 @@ async function main(): Promise<void> {
     casePathNotExist(dir);
     caseReverseBroken(dir);
     caseGood(dir);
+    caseRealCatalog();
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

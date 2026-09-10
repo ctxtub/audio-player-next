@@ -111,11 +111,67 @@ function readJsonBody(req) {
 
 /**
  * Agent 固定响应（chat/completions）：非流回固定 JSON，流式回 SSE 含 [DONE]。
+ * 兼容 LangChain functionCalling 结构化输出：带 tools 时回 tool_calls（supervisor 路由），
+ * 故事类提示词定向 StoryAgent，其余定向 ChatAgent；不访问真实上游。
  * @param req 请求对象
  * @param res 响应对象
  */
 async function serveAgent(req, res) {
     const body = await readJsonBody(req);
+    const tools = Array.isArray(body.tools) ? body.tools : [];
+    if (tools.length > 0) {
+        const toolName =
+            tools[0] && tools[0].function && typeof tools[0].function.name === 'string'
+                ? tools[0].function.name
+                : 'supervisor';
+        const messages = Array.isArray(body.messages) ? body.messages : [];
+        let lastUserText = '';
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const m = messages[i];
+            if (m && m.role === 'user' && typeof m.content === 'string') {
+                lastUserText = m.content;
+                break;
+            }
+        }
+        const wantsStory = /故事|继续|创作|续写|睡前|冒险|深海|星际|森林|动物/.test(lastUserText);
+        const decision = wantsStory
+            ? { next: 'StoryAgent', intent: 'Story' }
+            : { next: 'ChatAgent', intent: 'Chat' };
+        const argsText = JSON.stringify(decision);
+        if (body.stream === true) {
+            res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
+            res.write(`data: {"choices":[{"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call_mock1","type":"function","function":{"name":"${toolName}","arguments":""}}]}}]}\n\n`);
+            const mid = Math.ceil(argsText.length / 2);
+            const part1 = argsText.slice(0, mid).replace(/"/g, '\\"');
+            const part2 = argsText.slice(mid).replace(/"/g, '\\"');
+            res.write(`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"${part1}"}}]}}]}\n\n`);
+            res.write(`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"${part2}"}}]}}]}\n\n`);
+            res.end(`data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\ndata: [DONE]\n\n`);
+            return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(
+            JSON.stringify({
+                choices: [
+                    {
+                        message: {
+                            role: 'assistant',
+                            content: null,
+                            tool_calls: [
+                                {
+                                    id: 'call_mock1',
+                                    type: 'function',
+                                    function: { name: toolName, arguments: argsText },
+                                },
+                            ],
+                        },
+                        finish_reason: 'tool_calls',
+                    },
+                ],
+            }),
+        );
+        return;
+    }
     if (body.stream === true) {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
         res.end(`data: {"choices":[{"delta":{"content":"${AGENT_FIXED_REPLY}"}}]}\n\ndata: [DONE]\n\n`);

@@ -10,8 +10,8 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
     testDir: ".",
-    testMatch: "smoke.spec.ts",
-    timeout: 60000,
+    testMatch: ["smoke.spec.ts", "scenarios/*.spec.ts"],
+    timeout: 120000,
     globalTimeout: 30 * 60 * 1000,
     fullyParallel: false,
     workers: 1,

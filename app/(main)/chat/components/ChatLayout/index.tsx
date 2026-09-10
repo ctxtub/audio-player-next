@@ -119,6 +119,8 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     if (sending) {
       return;
     }
+    // 中文注释：H-21方案A——从提示词历史开始新创作为干净会话，发送前先重置故事链路（清空旧会话/播放/预载/生成态），再消费 pending 自动发送；此时 messages 已空，新请求不含旧上下文。发送中到达的 pending 仍由上文守卫保留待发，语义不变。
+    resetStoryFlow();
     useChatStore.getState().setPendingAutoSend(null);
     setInputValue(pending);
     handleSubmit(pending);

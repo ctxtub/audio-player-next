@@ -316,10 +316,12 @@ async function runPendingIntentUiTests(): Promise<void> {
     }
     console.log('PASS: PENDING-01 真实组件空闲预填');
 
-    console.log('=== PENDING-02: 发送中保留待发 → 生成结束重触发补发（同一挂载会话）===');
+    console.log('=== PENDING-02: 发送中保留待发 → 生成结束消费（跨页干净会话语义）===');
     {
         resetBaseline();
-        // 中文注释：制造发送中现场并到达 pending（跨页/推荐 race 同语义），同一挂载内验证保留→重触发全链路。
+        // 中文注释：制造发送中现场并到达 pending（跨页/推荐 race 同语义）。方案 A' 裁决：「发送中补发」UI 不可达
+        // （推荐区仅 messages.length===0 时渲染，发送中不可见；历史面板为跨页入口无 sending 现场），故删除
+        // 「同一挂载会话续聊计数」假设，保留状态机断言（发送中保留→生成结束消费恰一次）+ 跨页干净会话语义断言。
         useChatStore.getState().dispatch({ type: 'user.submit', content: '进行中的提问-重触发' });
         useChatStore.getState().setPendingAutoSend('排队待发-重触发');
         const renderResult = rtl.render(ReactMod.createElement(ChatLayout, {}));
@@ -332,33 +334,49 @@ async function runPendingIntentUiTests(): Promise<void> {
             '排队待发-重触发',
             '发送中时不得消费 pending',
         );
-        const beforeCount = useChatStore.getState().messages.length;
         // 中文注释：结束生成（真实 stream.finish），复刻 isSending 翻转后副作用重跑。
         await rtl.act(async () => {
             useChatStore.getState().dispatch({
                 type: 'stream.finish',
                 payload: { type: 'done', finishReason: 'stop' },
             });
-            // 中文注释：等待真实 effect（含 ensureUnlocked+桩网络 beginChatStream 全链路）。
+            // 中文注释：等待真实 effect（含 resetStoryFlow+ensureUnlocked+桩网络 beginChatStream 全链路）。
             await new Promise((r) => setTimeout(r, 1500));
         });
+        // 中文注释：PENDING-02 实况探针（方案 A' 收口实测 2026-09-10：消费后 messages 为干净新链
+        // [{"role":"user","content":"排队待发-重触发","status":"delivered"},
+        //  {"role":"assistant","content":"桩外真实链路问答正文","status":"delivered"}]，pending=null；
+        // 旧上下文「进行中的提问-重触发」已被消费 effect 内 resetStoryFlow() 先清空，不再以计数断言续聊）。
+        console.log(
+            '[PENDING-02-实况]',
+            JSON.stringify(
+                useChatStore.getState().messages.map((m) => ({ role: m.role, content: m.content, status: m.status })),
+            ),
+        );
         assert.strictEqual(
             useChatStore.getState().pendingAutoSend,
             null,
             '生成结束后重触发必须消费 pending（仅一次）',
         );
+        // 中文注释：跨页干净会话语义——resetStoryFlow 生效，消费后 messages 为干净链路，不含发起前旧上下文。
         assert.ok(
-            useChatStore.getState().messages.length > beforeCount,
-            '重触发必须经真实 handleSubmit 产生新的提交消息',
+            !useChatStore
+                .getState()
+                .messages.some((m) => m.content === '进行中的提问-重触发'),
+            '消费后 messages 不得含有发起前旧上下文（resetStoryFlow 已清空）',
         );
-        assert.ok(
-            useChatStore.getState().messages.some((m) => m.role === 'user'),
-            '补发后应存在用户消息',
+        // 中文注释：resetChat 清 messages，但 user.submit 新消息在 reset 之后 dispatch，故新 user 消息恰为本次 pending 原文 1 条。
+        assert.strictEqual(
+            useChatStore
+                .getState()
+                .messages.filter((m) => m.role === 'user' && m.content === '排队待发-重触发').length,
+            1,
+            '补发后应含本次提交 user 消息 1 条（reset 之后的新链）',
         );
         renderResult.unmount();
         resetBaseline();
     }
-    console.log('PASS: PENDING-02 真实 effect 保留与重触发补发');
+    console.log('PASS: PENDING-02 发送中保留待发→生成结束消费（跨页干净会话语义）');
 
     console.log('=== PENDING-03: 非发送中 pending 立即自动发送（无回归）===');
     {

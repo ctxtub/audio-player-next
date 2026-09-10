@@ -96,6 +96,8 @@ export const test = base.extend<HarnessFixtures>({
     // 中文注释：自动证据 fixture（挂 page 取浏览器版本；teardown 按 testInfo 写 manifest）。
     // 中文注释：case 口径——Playwright TestCase.titlePath()[0] 为 project 名（reporter 侧），
     // testInfo.titlePath 不含 project，故此处显式前缀 project 名，保证 manifest 目录与 jsonl 行一致且双 project 不互覆。
+    // 中文注释：spec_path 按用例实际文件动态推导（相对仓库根），避免 scenarios 新 spec 仍记 smoke；
+    // 隔离库路径按当次 run 的 app-handle 直读并记 step，供断言直查（外部时间线/DB 证据不靠页面内日志自证）。
     evidence: [
         async (
             { page, harnessEnv }: { page: Page; harnessEnv: HarnessEnv },
@@ -103,12 +105,32 @@ export const test = base.extend<HarnessFixtures>({
             testInfo: TestInfo,
         ) => {
             const caseId: string = `${testInfo.project.name}-::-${buildCaseId(testInfo.titlePath)}`;
+            const specAbs: string = (testInfo as unknown as { file?: string }).file ?? "";
+            const specRel: string = specAbs.startsWith(`${process.cwd()}/`)
+                ? specAbs.slice(process.cwd().length + 1)
+                : "tests/system/browser/smoke.spec.ts";
             const recorder = createCaseRecorder({
                 runId: harnessEnv.runId,
                 caseId,
-                specPath: "tests/system/browser/smoke.spec.ts",
+                specPath: specRel,
             });
             recorder.step("用例开始", { project: testInfo.project.name, title: testInfo.title });
+            try {
+                const handlePath: string = join(
+                    process.cwd(),
+                    ".e2e-runtime",
+                    "browser-harness",
+                    `app-handle-${harnessEnv.runId}.json`,
+                );
+                const handleRaw: string = readFileSync(handlePath, "utf8");
+                const handleParsed: unknown = JSON.parse(handleRaw);
+                const dbFile: unknown = (handleParsed as Record<string, unknown>)["dbFile"];
+                if (typeof dbFile === "string" && dbFile.length > 0) {
+                    recorder.step("隔离库路径", { dbFile });
+                }
+            } catch {
+                // 中文注释：handle 缺失不阻断用例（用例内按需再读并断言）。
+            }
             await use(recorder);
             const browserVersion: string = page.context().browser()?.version() ?? "unknown";
             recorder.step("用例结束", { status: testInfo.status });

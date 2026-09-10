@@ -176,6 +176,13 @@ function buildSnapshotEnv(dbFile, mockBaseUrl) {
         OPENAI_MODEL_STORY: 'harness-story-model',
         OPENAI_MODEL_AGENT: 'harness-agent-model',
         OPENAI_BASE_URL: mockBaseUrl,
+        OPENAI_TTS_MODEL: 'tts-1',
+        OPENAI_TTS_DEFAULT_VOICE: 'alloy',
+        OPENAI_TTS_VOICE_LIST: JSON.stringify([
+            { value: 'alloy', label: 'Alloy', description: '中性、平衡' },
+            { value: 'nova', label: 'Nova', description: '女性、活泼' },
+            { value: 'shimmer', label: 'Shimmer', description: '女性、温暖' },
+        ]),
     };
 }
 

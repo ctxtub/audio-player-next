@@ -215,10 +215,84 @@ function caseOrdinaryBranchesNoPublisher(content: string): void {
 }
 
 /**
- * 用例⑨：发布链路收敛 WS2——全仓恰一个 packages:write 发布 job + 全局串行 + 同 SHA 三门。
- * - 全仓恰一个 packages:write（docker-push.yml:docker-push）；candidate/browser/nightly 均无。
- * - docker-push 含全局串行 concurrency: image-publisher-global / cancel-in-progress: false。
- * - docker-push job needs 含 quality + tier-gate + browser-smoke（同文件）。
+ * WS2 共享解析辅助（F2–F7 锁定用，不引入 YAML 依赖）。
+ * - 注释行（# 开头）不计入权限/并发计数，避免头注 packages:write 干扰。
+ * - job 切分按顶层 `  <job>:` 头切分（同文件 fan-in 断言用）。
+ */
+function stripCommentLines(workflow: string): string {
+  return workflow
+    .split('\n')
+    .filter((l) => !l.trimStart().startsWith('#'))
+    .join('\n');
+}
+
+/**
+ * 统计非注释行中 `packages: write` 出现次数（写入能力 job 计数）。
+ */
+function countJobWritePermissions(workflow: string): number {
+  return (stripCommentLines(workflow).match(/packages:\s*write/g) || []).length;
+}
+
+/**
+ * 按顶层 job 名切分 section（同文件断言用）。
+ * @param workflow docker-push.yml 全文
+ * @param jobName 顶层 job 名
+ */
+function extractJobSection(workflow: string, jobName: string): string {
+  const lines: string[] = workflow.split('\n');
+  const startIdx: number = lines.findIndex((l) => new RegExp(`^  ${jobName}:\\s*$`).test(l));
+  assert.ok(startIdx >= 0, `缺 job ${jobName}=RED`);
+  let endIdx: number = lines.length;
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    if (/^  [A-Za-z0-9_-]+:\s*$/.test(lines[i])) {
+      endIdx = i;
+      break;
+    }
+  }
+  return lines.slice(startIdx, endIdx).join('\n');
+}
+
+/**
+ * 取 promote-latest job 的 `if:` 行（F4 双输入耦合唯一真相源）。
+ */
+function getPromoteIfLine(workflow: string): string {
+  const section: string = extractJobSection(workflow, 'promote-latest');
+  const line: string | undefined = section.split('\n').find((l) => /^\s*if:/.test(l));
+  assert.ok(line !== undefined, 'WS2: promote-latest 缺 if 运行条件=RED');
+  return line as string;
+}
+
+/**
+ * 判定晋升门是否同时含源非空判断与 promote_latest == true（F4 谓词）。
+ * 真负例：仅一侧必须返回 false。
+ */
+function isPromoteGateValid(ifLine: string): boolean {
+  const hasSourceNonEmpty: boolean =
+    (ifLine.includes('source_digest') || ifLine.includes('source_ref')) &&
+    (ifLine.includes("!= ''") || ifLine.includes('!= ""'));
+  const hasPromoteTrue: boolean = ifLine.includes('promote_latest') && ifLine.includes('== true');
+  const hasAnd: boolean = ifLine.includes('&&');
+  return hasSourceNonEmpty && hasPromoteTrue && hasAnd;
+}
+
+/**
+ * 判定 Verify 段是否含 digest + revision/source label 回读（F3 谓词）。
+ */
+function hasOciLabelReadBack(section: string): boolean {
+  return (
+    section.includes('imagetools inspect') &&
+    section.includes('--format') &&
+    section.includes('org.opencontainers.image.revision') &&
+    section.includes('org.opencontainers.image.source')
+  );
+}
+
+/**
+ * 用例⑨：发布链路收敛 WS2——单串行写入路径锁定（F2 + F5）。
+ * - 全仓恰两个写入能力 job（docker-push.yml:docker-push 构建推送 + promote-latest retag 晋升），共享同一串行组；candidate/browser/nightly 均无。
+ * - 三处 concurrency 均为 image-publisher-global 且 cancel-in-progress: false（顶层 + 两发布 job）。
+ * - promote-latest needs docker-push（串行）；docker-push needs 恰含 [quality, tier-gate, browser-smoke]（fan-in，无回退）。
+ * - 三门与发布者同文件；docker-push 为唯一构建发布者（promote 仅 imagetools create，无 buildx build）。
  * @param candidate candidate-quality.yml 全文
  * @param dockerPush docker-push.yml 全文
  * @param browser browser.yml 全文
@@ -233,21 +307,63 @@ function caseSingleSerializedPublisher(
   assert.ok(!candidate.includes('packages: write'), 'WS2: candidate 不得含 packages:write=RED');
   assert.ok(!browser.includes('packages: write'), 'WS2: browser 不得含 packages:write=RED');
   assert.ok(!nightly.includes('packages: write'), 'WS2: nightly 不得含 packages:write=RED');
-  const publisherCount: number = (dockerPush.match(/packages:\s*write/g) || []).length;
-  assert.ok(publisherCount >= 1, 'WS2: docker-push 必须含 packages:write 发布者=RED');
-  assert.ok(dockerPush.includes('image-publisher-global'), 'WS2: 发布 workflow 缺全局串行 image-publisher-global=RED');
-  assert.ok(dockerPush.includes('cancel-in-progress: false'), 'WS2: 串行发布必须 cancel-in-progress: false=RED');
-  assert.ok(dockerPush.includes('tier-gate'), 'WS2: 发布 job needs 缺 tier-gate=RED');
-  assert.ok(dockerPush.includes('browser-smoke'), 'WS2: 发布 job needs 缺 browser-smoke=RED');
-  assert.ok(/needs:\s*\[[^\]]*quality[^\]]*tier-gate[^\]]*browser-smoke[^\]]*\]/.test(dockerPush) || /needs:\s*\[[^\]]*quality/.test(dockerPush), 'WS2: docker-push job needs 必须含 quality+tier+browser 同 SHA 链=RED');
-  console.log('PASS: 用例⑨ 全仓单一串行发布者 + 同 SHA 三门');
+  // F2 集合锁定：恰两个（禁止回退为 >=1）。
+  const publisherCount: number = countJobWritePermissions(dockerPush);
+  assert.strictEqual(publisherCount, 2, `WS2: docker-push 写入能力 job 必须恰两个（docker-push + promote-latest）=RED，实测 ${publisherCount}`);
+  const dockerPushSection: string = extractJobSection(dockerPush, 'docker-push');
+  const promoteSection: string = extractJobSection(dockerPush, 'promote-latest');
+  assert.ok(/packages:\s*write/.test(dockerPushSection), 'WS2: docker-push job 必须含 packages:write=RED');
+  assert.ok(/packages:\s*write/.test(promoteSection), 'WS2: promote-latest job 必须含 packages:write（retag 需 registry 写）=RED');
+  // F2 真负例 fixture：第三个写权限必须被拒（集合锁定谓词在错误实现下会红）。
+  const threePublisherFixture: string = `${stripCommentLines(dockerPush)}\n  evil-publisher:\n    permissions:\n      packages: write\n`;
+  assert.strictEqual(
+    countJobWritePermissions(threePublisherFixture),
+    3,
+    'WS2 真负例前置：三写 fixture 计数必须为 3（否则负例无效）=RED',
+  );
+  assert.ok(
+    countJobWritePermissions(threePublisherFixture) !== 2,
+    'WS2 真负例：第三个 packages:write 必须使 ===2 变红=RED（集合锁定有效）',
+  );
+  // 三处串行组一致（顶层 + 两发布 job）。
+  const codeOnly: string = stripCommentLines(dockerPush);
+  assert.strictEqual(
+    (codeOnly.match(/image-publisher-global/g) || []).length,
+    3,
+    'WS2: image-publisher-global 必须恰三处（顶层 + docker-push + promote-latest）=RED',
+  );
+  assert.strictEqual(
+    (codeOnly.match(/cancel-in-progress:\s*false/g) || []).length,
+    3,
+    'WS2: cancel-in-progress: false 必须恰三处（顶层 + docker-push + promote-latest）=RED',
+  );
+  assert.ok(dockerPushSection.includes('image-publisher-global'), 'WS2: docker-push job 缺串行组=RED');
+  assert.ok(promoteSection.includes('image-publisher-global'), 'WS2: promote-latest job 缺串行组=RED');
+  // 串行：promote-latest needs docker-push。
+  assert.ok(/needs:\s*\[docker-push\]/.test(promoteSection), 'WS2: promote-latest 必须 needs: [docker-push]（串行）=RED');
+  // F5 fan-in：docker-push needs 恰含三者（去掉仅含 quality 回退）；三门与发布者同文件。
+  assert.ok(
+    /needs:\s*\[quality,\s*tier-gate,\s*browser-smoke\]/.test(dockerPushSection),
+    'WS2: docker-push 的 needs 必须恰含 [quality, tier-gate, browser-smoke]（fan-in，无回退）=RED',
+  );
+  for (const job of ['quality', 'tier-gate', 'browser-smoke', 'docker-push']) {
+    assert.ok(new RegExp(`^  ${job}:\\s*$`, 'm').test(dockerPush), `WS2: ${job} 必须与发布者同文件（docker-push.yml）=RED`);
+  }
+  // docker-push 为唯一构建发布者：promote 仅 retag，无 build。
+  assert.ok(
+    dockerPushSection.includes('push-ghcr.sh') || dockerPushSection.includes('buildx build'),
+    'WS2: docker-push 必须为构建发布者（含 push-ghcr.sh/buildx build）=RED',
+  );
+  assert.ok(promoteSection.includes('imagetools create'), 'WS2: promote-latest 必须含 imagetools create=RED');
+  assert.ok(!promoteSection.includes('buildx build'), 'WS2: promote-latest 不得含 buildx build（retag-only）=RED');
+  console.log('PASS: 用例⑨ 单串行写入路径（恰两写 + 三处串行 + fan-in）');
 }
 
 /**
- * 用例⑩：latest 仅显式晋升——retag-only + 双输入缺一即拒 + 回读。
- * - 晋升 step 含 imagetools create（无重构建）且条件同时要求源 digest/ref 非空与 promote_latest==true。
- * - 缺 source_digest 即使 promote_latest=true 也拒绝；缺 promote_latest 即使有源 digest 也不晋升。
- * - 晋升后含 imagetools inspect 回读比对（digest 与 OCI label）。
+ * 用例⑩：latest 仅显式晋升——retag-only + 双输入缺一即拒（解析 if 行）+ OCI 回读（F3 + F4）。
+ * - 晋升 step 含 imagetools create（无重构建）且 promote-latest job 的 if 行同时含源非空判断与 promote_latest == true。
+ * - 两条真负例：if 仅 promote_latest==true 必拒；if 仅源非空必拒。
+ * - Verify 含 imagetools inspect --format 取 revision/source label 并失配 exit 1；缺 label 比对即红。
  * @param dockerPush docker-push.yml 全文
  */
 function casePromoteRetagOnly(dockerPush: string): void {
@@ -256,17 +372,35 @@ function casePromoteRetagOnly(dockerPush: string): void {
   // 双显式输入缺一不可：文件必须同时出现 source_digest/source_ref 与 promote_latest，且晋升 if 同时约束两者。
   assert.ok(dockerPush.includes('source_digest') || dockerPush.includes('source_ref'), 'WS2: 晋升缺 source_digest/source_ref 输入=RED');
   assert.ok(dockerPush.includes('promote_latest'), 'WS2: 晋升缺 promote_latest 输入=RED');
-  const hasPromoteGate: boolean =
-    dockerPush.includes('promote_latest') &&
-    (dockerPush.includes('source_digest') || dockerPush.includes('source_ref')) &&
-    /if:.*promote_latest/.test(dockerPush);
-  assert.ok(hasPromoteGate, 'WS2: promote-latest job 条件必须同时要求源 digest/ref 非空且 promote_latest==true=RED（缺一即拒）');
-  // 负例语义：条件文本必须同时引用源输入与 promote_latest，任一缺失即跳过/拒绝（静态保证）。
+  // F4：解析 promote-latest job 的 if 行（非邻近字符串），同时含源非空与 promote_latest == true。
+  const ifLine: string = getPromoteIfLine(dockerPush);
   assert.ok(
-    /source_(digest|ref)[\s\S]{0,400}promote_latest|promote_latest[\s\S]{0,400}source_(digest|ref)/.test(dockerPush),
-    'WS2: 晋升条件必须双输入耦合（缺 source_digest 即使 promote_latest=true 也拒绝；缺 promote_latest 即使有源 digest 也不晋升）=RED',
+    ifLine.includes('source_digest') || ifLine.includes('source_ref'),
+    `WS2: promote-latest 的 if 行必须含源输入非空判断=RED，实测 ${ifLine.trim()}`,
   );
-  console.log('PASS: 用例⑩ latest 仅显式双输入无重构建 retag + 回读');
+  assert.ok(
+    ifLine.includes("!= ''") || ifLine.includes('!= ""'),
+    `WS2: promote-latest 的 if 行必须含源非空判断（!= ''）=RED，实测 ${ifLine.trim()}`,
+  );
+  assert.ok(ifLine.includes('promote_latest'), `WS2: promote-latest 的 if 行必须含 promote_latest=RED，实测 ${ifLine.trim()}`);
+  assert.ok(ifLine.includes('== true'), `WS2: promote-latest 的 if 行必须含 promote_latest == true=RED，实测 ${ifLine.trim()}`);
+  assert.ok(ifLine.includes('&&'), `WS2: promote-latest 的 if 行必须以 && 耦合双输入=RED，实测 ${ifLine.trim()}`);
+  assert.ok(isPromoteGateValid(ifLine), 'WS2: promote-latest job 条件必须同时要求源 digest/ref 非空且 promote_latest==true=RED（缺一即拒）');
+  // F4 两条真负例（谓词在错误实现下必须红）。
+  const onlyPromoteIf: string = 'if: ${{ inputs.promote_latest == true }}';
+  assert.ok(!isPromoteGateValid(onlyPromoteIf), 'WS2 真负例：if 仅 promote_latest==true 必须被拒=RED（缺源非空）');
+  const onlySourceIf: string = "if: ${{ (inputs.source_digest != '' || inputs.source_ref != '') }}";
+  assert.ok(!isPromoteGateValid(onlySourceIf), 'WS2 真负例：if 仅源非空必须被拒=RED（缺 promote_latest==true）');
+  // F3：Verify 必须含 revision/source label 比对（--format 取 label），失配 exit 1。
+  const promoteSection: string = extractJobSection(dockerPush, 'promote-latest');
+  assert.ok(hasOciLabelReadBack(promoteSection), 'WS2: Verify 缺 revision/source label 比对（须 imagetools inspect --format 取 label）=RED');
+  assert.ok(promoteSection.includes('org.opencontainers.image.revision'), 'WS2: Verify 缺 revision label 比对=RED');
+  assert.ok(promoteSection.includes('org.opencontainers.image.source'), 'WS2: Verify 缺 source label 比对=RED');
+  assert.ok(promoteSection.includes('exit 1'), 'WS2: 回读失配必须 exit 1=RED');
+  // F3 真负例：仅 digest grep、无 label 比对的 Verify 必须被拒。
+  const noLabelFixture: string = 'docker buildx imagetools inspect "${IMAGE}:latest"\nACTUAL="$(docker buildx imagetools inspect x --format \'{{json .}}\')"\necho "${ACTUAL}" | grep -q "${SOURCE_DIGEST}"';
+  assert.ok(!hasOciLabelReadBack(noLabelFixture), 'WS2 真负例：缺 label 比对的 Verify 必须被拒=RED');
+  console.log('PASS: 用例⑩ latest 仅显式双输入无重构建 retag + OCI 回读');
 }
 
 /**
@@ -307,7 +441,63 @@ function caseSupplyChainPins(
 }
 
 /**
- * 测试入口：顺序执行①-⑪，任一缺失即抛（RED），全过即 GREEN。
+ * 用例⑫（F6）：tier_select 语义锁定。
+ * - dispatch 输入 tier_select 缺省 RELEASE，options 含 CANDIDATE 与 RELEASE。
+ * - tag 分支硬编码 --select RELEASE；dispatch 分支以 inputs.tier_select || 'RELEASE' 回退。
+ * @param dockerPush docker-push.yml 全文
+ */
+function caseTierSelectSemantics(dockerPush: string): void {
+  assert.ok(dockerPush.includes('tier_select'), 'WS2: 缺 tier_select 输入=RED');
+  assert.ok(dockerPush.includes("default: 'RELEASE'"), "WS2: tier_select 必须 default: 'RELEASE'=RED");
+  assert.ok(dockerPush.includes('- CANDIDATE'), 'WS2: tier_select options 必须含 CANDIDATE=RED');
+  assert.ok(dockerPush.includes('- RELEASE'), 'WS2: tier_select options 必须含 RELEASE=RED');
+  assert.ok(
+    dockerPush.includes('node scripts/check-tier-gate.mjs --select RELEASE'),
+    'WS2: tag 分支必须硬编码 --select RELEASE=RED',
+  );
+  assert.ok(
+    dockerPush.includes("inputs.tier_select || 'RELEASE'"),
+    "WS2: dispatch 分支必须以 inputs.tier_select || 'RELEASE' 回退=RED",
+  );
+  console.log('PASS: 用例⑫ tier_select 缺省 RELEASE + tag 硬编码 RELEASE');
+}
+
+/**
+ * 用例⑬（F7）：secret 扫描首步 + 工件白名单/黑名单 + 留存锁定。
+ * - quality 首个 step 为有界 secret 扫描（tracked-only）。
+ * - upload-artifact 白名单路径精确（5 件），黑名单（.env 星号/DB/secret）永不上传，retention-days: 30 精确。
+ * @param dockerPush docker-push.yml 全文
+ */
+function caseSecretScanFirstAndArtifacts(dockerPush: string): void {
+  const qualitySection: string = extractJobSection(dockerPush, 'quality');
+  const stepNames: string[] = qualitySection
+    .split('\n')
+    .filter((l) => /^\s*- name:/.test(l));
+  assert.ok(stepNames.length >= 1, 'WS2: quality 缺 steps=RED');
+  assert.ok(
+    stepNames[0].includes('Secret scan'),
+    `WS2: quality 首个 step 必须为 secret 扫描=RED，实测 ${stepNames[0].trim()}`,
+  );
+  assert.ok(qualitySection.includes('git grep'), 'WS2: secret 扫描必须用 git grep（tracked-only 有界）=RED');
+  assert.ok(qualitySection.includes('tracked only'), 'WS2: secret 扫描必须声明 tracked only 有界=RED');
+  // 工件块：以 upload-artifact 起至 retention-days 止为真相源。
+  const uploadIdx: number = dockerPush.indexOf('upload-artifact');
+  assert.ok(uploadIdx >= 0, 'WS2: 缺 upload-artifact=RED');
+  const retentionIdx: number = dockerPush.indexOf('retention-days: 30', uploadIdx);
+  assert.ok(retentionIdx >= 0, 'WS2: 工件缺 retention-days: 30 精确=RED');
+  const uploadBlock: string = dockerPush.slice(uploadIdx, retentionIdx);
+  for (const artifact of ['results.jsonl', 'manifest.json', 'summary.log', 'p0-smoke.png', 'digest.txt']) {
+    assert.ok(uploadBlock.includes(artifact), `WS2: 工件白名单缺 ${artifact}=RED`);
+  }
+  assert.ok(!uploadBlock.includes('.env'), 'WS2: 工件黑名单：.env* 永不上传=RED');
+  assert.ok(!uploadBlock.includes('.db'), 'WS2: 工件黑名单：DB 永不上传=RED');
+  assert.ok(!uploadBlock.toLowerCase().includes('secret'), 'WS2: 工件黑名单：secret 永不上传=RED');
+  assert.ok(/retention-days:\s*30\b/.test(dockerPush), 'WS2: retention-days 必须精确为 30=RED');
+  console.log('PASS: 用例⑬ secret 首步 + 工件白/黑名单 + 留存 30');
+}
+
+/**
+ * 测试入口：顺序执行①-⑬，任一缺失即抛（RED），全过即 GREEN。
  */
 async function main(): Promise<void> {
   console.log('--- Testing Candidate Quality Gate Workflow ---');
@@ -330,6 +520,8 @@ async function main(): Promise<void> {
   caseSingleSerializedPublisher(candidate, dockerPush, browser, nightly);
   casePromoteRetagOnly(dockerPush);
   caseSupplyChainPins(candidate, dockerPush, browser, nightly, script);
+  caseTierSelectSemantics(dockerPush);
+  caseSecretScanFirstAndArtifacts(dockerPush);
   console.log('ALL CANDIDATE QUALITY WORKFLOW TESTS PASSED');
 }
 

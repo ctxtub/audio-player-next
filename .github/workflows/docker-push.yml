@@ -1,6 +1,6 @@
 # GitHub Action：推送不可变镜像到 GHCR（单一串行发布者，WS2）。
 # 发布关系：唯一可发布事件为 v* tag push 与显式 workflow_dispatch；
-# 普通分支 checks-only（见 candidate-quality.yml），本文件为全仓唯一含 packages:write 的发布者；
+# 本文件含全仓仅有的两个 packages:write job（构建推送 + retag 晋升），共享全局串行组 image-publisher-global；其他 workflow 均无写权限；
 # release 构建只发 ref tag + sha-<short>，latest 仅经 promote-latest 无重构建 retag（需源 digest/ref + promote_latest 双输入）。
 name: Docker Push
 
@@ -265,7 +265,10 @@ jobs:
           docker buildx imagetools inspect "${IMAGE}:latest"
           ACTUAL="$(docker buildx imagetools inspect "${IMAGE}:latest" --format '{{json .}}' 2>/dev/null || echo '')"
           echo "${ACTUAL}" | grep -q "${SOURCE_DIGEST}" || (echo "digest mismatch: latest does not match source_digest" >&2; exit 1)
-          echo "digest and OCI label read-back matched."
+          LABELS="$(docker buildx imagetools inspect "${IMAGE}:latest" --format '{{json .Config.Labels}}' 2>/dev/null || echo '')"
+          echo "${LABELS}" | grep -q "org.opencontainers.image.revision" || (echo "revision label missing in promoted latest" >&2; exit 1)
+          echo "${LABELS}" | grep -q "org.opencontainers.image.source" || (echo "source label missing in promoted latest" >&2; exit 1)
+          echo "digest and OCI labels read-back matched."
 
   notify:
     needs: docker-push

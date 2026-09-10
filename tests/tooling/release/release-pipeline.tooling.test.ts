@@ -7,6 +7,59 @@ const projectRoot = path.resolve(__dirname, '../../..');
 const workflowPath = path.join(projectRoot, '.github/workflows/docker-push.yml');
 const scriptPath = path.join(projectRoot, 'scripts/push-ghcr.sh');
 
+/**
+ * WS2 fixup-ws2-01 共享解析辅助（F2–F7 锁定用，不引入 YAML 依赖）。
+ * 注释行（# 开头）不计入权限/并发计数，避免头注干扰。
+ */
+function stripCommentLinesForCount(workflow: string): string {
+  return workflow
+    .split('\n')
+    .filter((l) => !l.trimStart().startsWith('#'))
+    .join('\n');
+}
+
+function countJobWritePermissionsForCount(workflow: string): number {
+  return (stripCommentLinesForCount(workflow).match(/packages:\s*write/g) || []).length;
+}
+
+function extractJobSectionForCount(workflow: string, jobName: string): string {
+  const lines: string[] = workflow.split('\n');
+  const startIdx: number = lines.findIndex((l) => new RegExp(`^  ${jobName}:\\s*$`).test(l));
+  assert.ok(startIdx >= 0, `缺 job ${jobName}=RED`);
+  let endIdx: number = lines.length;
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    if (/^  [A-Za-z0-9_-]+:\s*$/.test(lines[i])) {
+      endIdx = i;
+      break;
+    }
+  }
+  return lines.slice(startIdx, endIdx).join('\n');
+}
+
+function getPromoteIfLineForCount(workflow: string): string {
+  const section: string = extractJobSectionForCount(workflow, 'promote-latest');
+  const line: string | undefined = section.split('\n').find((l) => /^\s*if:/.test(l));
+  assert.ok(line !== undefined, 'WS2: promote-latest 缺 if 运行条件=RED');
+  return line as string;
+}
+
+function isPromoteGateValidForCount(ifLine: string): boolean {
+  const hasSourceNonEmpty: boolean =
+    (ifLine.includes('source_digest') || ifLine.includes('source_ref')) &&
+    (ifLine.includes("!= ''") || ifLine.includes('!= ""'));
+  const hasPromoteTrue: boolean = ifLine.includes('promote_latest') && ifLine.includes('== true');
+  return hasSourceNonEmpty && hasPromoteTrue && ifLine.includes('&&');
+}
+
+function hasOciLabelReadBackForCount(section: string): boolean {
+  return (
+    section.includes('imagetools inspect') &&
+    section.includes('--format') &&
+    section.includes('org.opencontainers.image.revision') &&
+    section.includes('org.opencontainers.image.source')
+  );
+}
+
 console.log('--- Testing Release Pipeline & Security Controls ---');
 
 // 1. Validate GitHub Actions workflow contract
@@ -55,6 +108,82 @@ console.log('PASS: .github/workflows/docker-push.yml structure, triggers, permis
   // 全 pin：无 tag-only 残留。
   assert(!/uses:\s*\S+@v\d+(\s|$)/m.test(workflowContent), 'WS2: all uses must be full-SHA pinned, no tag-only=RED');
   console.log('PASS: WS2 release publisher static gates (immutable, retag-only, serialized).');
+}
+
+// WS2 fixup-ws2-01（F2–F7 锁定）：单串行写入路径 + 双输入耦合（解析 if 行）+ OCI 回读 + fan-in + tier_select + secret/工件。
+// 不删除既有断言，只追加强断言；每条新断言均有真负例（错误实现下会红）。
+{
+  const codeOnly: string = stripCommentLinesForCount(workflowContent);
+  // F2：恰两个写入能力 job（禁止回退 >=1），两 job 显式锁定。
+  assert.strictEqual(
+    countJobWritePermissionsForCount(workflowContent),
+    2,
+    'WS2: publisher set must be exactly 2 (docker-push + promote-latest)=RED',
+  );
+  const dockerPushSection: string = extractJobSectionForCount(workflowContent, 'docker-push');
+  const promoteSection: string = extractJobSectionForCount(workflowContent, 'promote-latest');
+  assert.ok(/packages:\s*write/.test(dockerPushSection), 'WS2: docker-push job must contain packages:write=RED');
+  assert.ok(/packages:\s*write/.test(promoteSection), 'WS2: promote-latest job must contain packages:write=RED');
+  // F2 真负例：第三个写权限必须使 ===2 变红。
+  const threeWriteFixture: string = `${codeOnly}\n  evil:\n    permissions:\n      packages: write\n`;
+  assert.strictEqual(countJobWritePermissionsForCount(threeWriteFixture), 3, 'WS2 negative fixture must count 3=RED');
+  assert.ok(countJobWritePermissionsForCount(threeWriteFixture) !== 2, 'WS2: third packages:write must break ===2=RED');
+  // 三处串行组一致 + promote 串行。
+  assert.strictEqual((codeOnly.match(/image-publisher-global/g) || []).length, 3, 'WS2: image-publisher-global must appear exactly 3 times=RED');
+  assert.strictEqual((codeOnly.match(/cancel-in-progress:\s*false/g) || []).length, 3, 'WS2: cancel-in-progress: false must appear exactly 3 times=RED');
+  assert.ok(/needs:\s*\[docker-push\]/.test(promoteSection), 'WS2: promote-latest must needs: [docker-push]=RED');
+  // F5 fan-in：docker-push needs 恰含三者（无仅 quality 回退）；同文件；唯一构建发布者。
+  assert.ok(
+    /needs:\s*\[quality,\s*tier-gate,\s*browser-smoke\]/.test(dockerPushSection),
+    'WS2: docker-push needs must be exactly [quality, tier-gate, browser-smoke]=RED',
+  );
+  for (const job of ['quality', 'tier-gate', 'browser-smoke', 'docker-push']) {
+    assert.ok(new RegExp(`^  ${job}:\\s*$`, 'm').test(workflowContent), `WS2: ${job} must be in the same workflow file=RED`);
+  }
+  assert.ok(!promoteSection.includes('buildx build'), 'WS2: promote-latest must not contain buildx build (retag-only)=RED');
+  // F4：解析 if 行，双输入耦合 + 两条真负例。
+  const ifLine: string = getPromoteIfLineForCount(workflowContent);
+  assert.ok(ifLine.includes('source_digest') || ifLine.includes('source_ref'), `WS2: promote if must reference source input=RED: ${ifLine.trim()}`);
+  assert.ok(ifLine.includes("!= ''") || ifLine.includes('!= ""'), `WS2: promote if must contain source non-empty check=RED: ${ifLine.trim()}`);
+  assert.ok(ifLine.includes('promote_latest') && ifLine.includes('== true'), `WS2: promote if must contain promote_latest == true=RED: ${ifLine.trim()}`);
+  assert.ok(ifLine.includes('&&'), `WS2: promote if must couple both inputs with &&=RED: ${ifLine.trim()}`);
+  assert.ok(isPromoteGateValidForCount(ifLine), 'WS2: promote if must require both source non-empty and promote_latest==true=RED');
+  assert.ok(!isPromoteGateValidForCount('if: ${{ inputs.promote_latest == true }}'), 'WS2 negative: only-promote if must be rejected=RED');
+  assert.ok(
+    !isPromoteGateValidForCount("if: ${{ (inputs.source_digest != '' || inputs.source_ref != '') }}"),
+    'WS2 negative: only-source if must be rejected=RED',
+  );
+  // F3：Verify 含 revision/source label 比对 + 真负例。
+  assert.ok(hasOciLabelReadBackForCount(promoteSection), 'WS2: Verify must compare revision/source labels via --format=RED');
+  assert.ok(promoteSection.includes('org.opencontainers.image.revision'), 'WS2: Verify must check revision label=RED');
+  assert.ok(promoteSection.includes('org.opencontainers.image.source'), 'WS2: Verify must check source label=RED');
+  assert.ok(promoteSection.includes('exit 1'), 'WS2: read-back mismatch must exit 1=RED');
+  assert.ok(
+    !hasOciLabelReadBackForCount('docker buildx imagetools inspect x\necho ok | grep -q digest'),
+    'WS2 negative: Verify without label comparison must be rejected=RED',
+  );
+  // F6：tier_select 缺省 RELEASE + 选项 + tag 硬编码。
+  assert.ok(workflowContent.includes("default: 'RELEASE'"), "WS2: tier_select must default to 'RELEASE'=RED");
+  assert.ok(workflowContent.includes('- CANDIDATE') && workflowContent.includes('- RELEASE'), 'WS2: tier_select options must include CANDIDATE and RELEASE=RED');
+  assert.ok(workflowContent.includes('node scripts/check-tier-gate.mjs --select RELEASE'), 'WS2: tag branch must hard-code --select RELEASE=RED');
+  assert.ok(workflowContent.includes("inputs.tier_select || 'RELEASE'"), "WS2: dispatch must fall back to inputs.tier_select || 'RELEASE'=RED");
+  // F7：quality 首步 secret 扫描 + 工件白/黑名单 + 留存精确。
+  const qualitySection: string = extractJobSectionForCount(workflowContent, 'quality');
+  const stepNames: string[] = qualitySection.split('\n').filter((l) => /^\s*- name:/.test(l));
+  assert.ok(stepNames.length >= 1 && stepNames[0].includes('Secret scan'), 'WS2: quality first step must be secret scan=RED');
+  assert.ok(qualitySection.includes('git grep') && qualitySection.includes('tracked only'), 'WS2: secret scan must be tracked-only bounded=RED');
+  const uploadIdx: number = workflowContent.indexOf('upload-artifact');
+  assert.ok(uploadIdx >= 0, 'WS2: missing upload-artifact=RED');
+  const retentionIdx: number = workflowContent.indexOf('retention-days: 30', uploadIdx);
+  assert.ok(retentionIdx >= 0, 'WS2: retention-days must be exactly 30=RED');
+  const uploadBlock: string = workflowContent.slice(uploadIdx, retentionIdx);
+  for (const artifact of ['results.jsonl', 'manifest.json', 'summary.log', 'p0-smoke.png', 'digest.txt']) {
+    assert.ok(uploadBlock.includes(artifact), `WS2: artifact allowlist missing ${artifact}=RED`);
+  }
+  assert.ok(!uploadBlock.includes('.env'), 'WS2: artifacts must never upload .env*=RED');
+  assert.ok(!uploadBlock.includes('.db'), 'WS2: artifacts must never upload DB=RED');
+  assert.ok(!uploadBlock.toLowerCase().includes('secret'), 'WS2: artifacts must never upload secret=RED');
+  console.log('PASS: WS2 fixup-ws2-01 locked gates (publisher set, dual-input if, OCI labels, fan-in, tier_select, secret/artifacts).');
 }
 
 // 2. Validate push-ghcr.sh script execution and tag generation

@@ -192,8 +192,20 @@
           "minItems": 1,
           "description": "反向引用的 case_id 列表，必须与 case.executable_ids 双向一致。",
           "items": { "type": "string", "minLength": 1 }
+        },
+        "evidence_surfaces": {
+          "type": "array",
+          "description": "L3 执行体必填：绑定的真实证据面（如 ui/audio/network/db/timeline/state），须与 spec 实际断言一致。",
+          "items": { "type": "string", "minLength": 1 }
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "executables": { "contains": { "properties": { "layer": { "const": "L3" } } } } } },
+      "then": { "description": "含 L3 执行体的 catalog，其每个 L3 执行体须声明非空 evidence_surfaces（由 checker 逐项强制）。"
+      }
+    }
+  ]
 }

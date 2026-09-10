@@ -106,7 +106,7 @@ cases:
       - assertion_id: retry-recovers
         display_name_zh: 重试可恢复
         surface: ui
-    executable_ids: []
+    executable_ids: [exec-batch-source-locks-legacy]
     fixtures: []
     ci_tier: NONE
     owner: smoke-baseline
@@ -200,14 +200,14 @@ cases:
     priority: P0
     primary_defense: L2
     secondary_defenses: [L3]
-    lifecycle_status: LEGACY-NON-COVERAGE
+    lifecycle_status: ACTIVE
     risk_tags: [race, double-submit]
     spec_path: docs/e2e/02-交互并发与竞态防御/01-快速双发防重.md
     required_assertions:
       - assertion_id: single-submit-on-burst
         display_name_zh: 连击只提交一次
         surface: network
-    executable_ids: [exec-double-submit-legacy]
+    executable_ids: [exec-double-submit-legacy, exec-l3-reject-second-submit-while-streaming]
     fixtures: []
     ci_tier: CANDIDATE
     owner: interactive-race
@@ -219,14 +219,14 @@ cases:
     priority: P0
     primary_defense: L2
     secondary_defenses: [L3]
-    lifecycle_status: LEGACY-NON-COVERAGE
+    lifecycle_status: ACTIVE
     risk_tags: [race, streaming]
     spec_path: docs/e2e/02-交互并发与竞态防御/02-流式生成中再次提交互斥.md
     required_assertions:
       - assertion_id: second-submit-rejected-while-streaming
         display_name_zh: 流式中再次提交被拒
         surface: ui
-    executable_ids: [exec-pending-intent-ui-legacy]
+    executable_ids: [exec-double-submit-legacy, exec-pending-intent-ui-legacy, exec-l3-reject-second-submit-while-streaming]
     fixtures: []
     ci_tier: CANDIDATE
     owner: interactive-race
@@ -260,14 +260,15 @@ cases:
     priority: P0
     primary_defense: L2
     secondary_defenses: [L3]
-    lifecycle_status: LEGACY-NON-COVERAGE
+    lifecycle_status: BLOCKED
     risk_tags: [race, orphan]
     spec_path: docs/e2e/02-交互并发与竞态防御/04-生成中清空防止孤儿播放.md
     required_assertions:
       - assertion_id: no-orphan-after-clear
         display_name_zh: 清空后无孤儿声
         surface: audio
-    executable_ids: [exec-keepalive-dedup-legacy]
+    executable_ids: []
+    blocked_reason: 无真实孤儿播放行为覆盖：现存 keepalive-dedup 仅覆盖退出时 pending flush 去重，未覆盖“生成中清空后完成回调到达”的竞态分支；需新增 L2 用例“清空后完成回调到达不断言播放未启动”方可解 BLOCKED。P0 缺口，保持 CANDIDATE 高声。
     fixtures: []
     ci_tier: CANDIDATE
     owner: interactive-race
@@ -374,28 +375,28 @@ cases:
     priority: P2
     primary_defense: L2
     secondary_defenses: [L3]
-    lifecycle_status: LEGACY-NON-COVERAGE
+    lifecycle_status: PLANNED
     risk_tags: [retry, context]
     spec_path: docs/e2e/02-交互并发与竞态防御/10-失败消息重试上下文正确性.md
     required_assertions:
       - assertion_id: retry-carries-right-context
         display_name_zh: 重试上下文正确
         surface: network
-    executable_ids: [exec-toast-terminal-priority-legacy]
+    executable_ids: []
     fixtures: []
     ci_tier: NONE
     owner: interactive-race
-  - case_id: player-history-select-switch-creation
-    display_name_zh: 播放器选历史切换当前创作
-    legacy_aliases: [E2E-02-11, H-21]
+  - case_id: history-prompt-start-new-creation
+    display_name_zh: 从提示词历史开始新创作
+    legacy_aliases: [E2E-02-11-01, H-21]
     journey_id: history-reuse-create
-    user_goal: 从播放器选历史后切到干净新创作
+    user_goal: 从播放器提示词历史选条目后在干净新会话自动重创作且旧作可返
     priority: P0
     primary_defense: L3
     secondary_defenses: [L2]
-    lifecycle_status: PLANNED
+    lifecycle_status: ACTIVE
     risk_tags: [history, isolation]
-    spec_path: docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md
+    spec_path: docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md#e2e-02-11-01
     required_assertions:
       - assertion_id: new-session-excludes-old
         display_name_zh: 新会话不含旧文
@@ -403,10 +404,38 @@ cases:
       - assertion_id: old-kept-returnable
         display_name_zh: 旧创作可返回
         surface: ui
-    executable_ids: []
+      - assertion_id: new-story-autoplays
+        display_name_zh: 新故事自动起播
+        surface: audio
+    executable_ids: [exec-l3-history-prompt-start-new-creation]
     fixtures: []
     ci_tier: CANDIDATE
     owner: history-reuse-create
+  - case_id: generation-history-play-once
+    display_name_zh: 生成历史本页单次回放
+    legacy_aliases: [E2E-02-11-02, H-21]
+    journey_id: history-reuse-playback
+    user_goal: 从生成历史选条目本页单次回放且不续写新历史
+    priority: P0
+    primary_defense: L3
+    secondary_defenses: [L2]
+    lifecycle_status: ACTIVE
+    risk_tags: [history, replay]
+    spec_path: docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md#e2e-02-11-02
+    required_assertions:
+      - assertion_id: generation-matches-source
+        display_name_zh: 回放匹配来源
+        surface: ui
+      - assertion_id: single-replay-no-continue
+        display_name_zh: 单次回放不续写
+        surface: network
+      - assertion_id: replay-actually-plays
+        display_name_zh: 回放真实起播
+        surface: audio
+    executable_ids: [exec-l3-generation-history-play-once]
+    fixtures: []
+    ci_tier: CANDIDATE
+    owner: history-reuse-playback
   - case_id: tts-voice-fallback-browser-behavior
     display_name_zh: 语音回退浏览器行为占位
     legacy_aliases: [E2E-02-12]
@@ -463,7 +492,7 @@ cases:
       - assertion_id: zero-budget-rejects-start
         display_name_zh: 零预算拒绝启动
         surface: state
-    executable_ids: [exec-budget-exhaustion]
+    executable_ids: [exec-budget-exhaustion, exec-l3-stop-audio-when-budget-exhausted]
     fixtures: []
     ci_tier: CANDIDATE
     owner: playback-kernel
@@ -485,7 +514,7 @@ cases:
       - assertion_id: state-reset-after-logout
         display_name_zh: 登出后状态重置
         surface: state
-    executable_ids: [exec-logout-playback-reset, exec-browser-harness]
+    executable_ids: [exec-logout-playback-reset, exec-logout-probe-hardening-legacy, exec-browser-harness, exec-l3-pause-audio-before-logout-unload]
     fixtures: []
     ci_tier: CANDIDATE
     owner: playback-kernel
@@ -542,7 +571,7 @@ cases:
       - assertion_id: ended-single-advance
         display_name_zh: 结束只推进一次
         surface: state
-    executable_ids: [exec-audio-ended-guard]
+    executable_ids: [exec-audio-ended-guard, exec-audio-ended-guard-wiring-legacy]
     fixtures: []
     ci_tier: NIGHTLY
     owner: playback-kernel
@@ -554,14 +583,14 @@ cases:
     priority: P1
     primary_defense: L2
     secondary_defenses: [L3]
-    lifecycle_status: LEGACY-NON-COVERAGE
+    lifecycle_status: PLANNED
     risk_tags: [playback, prefetch]
     spec_path: docs/e2e/03-播放状态与内核一致性/07-多段落前瞻预取推进与进度落库.md
     required_assertions:
       - assertion_id: prefetch-equals-one
         display_name_zh: 前瞻恰为一
         surface: network
-    executable_ids: [exec-paragraph-resume-mixed-legacy, exec-paragraph-segmentation]
+    executable_ids: []
     fixtures: []
     ci_tier: NONE
     owner: playback-kernel
@@ -592,14 +621,14 @@ cases:
     priority: P1
     primary_defense: L2
     secondary_defenses: [L3]
-    lifecycle_status: LEGACY-NON-COVERAGE
+    lifecycle_status: PLANNED
     risk_tags: [playback, router]
     spec_path: docs/e2e/03-播放状态与内核一致性/09-客户端路由导航播放连续性.md
     required_assertions:
       - assertion_id: same-audio-across-routes
         display_name_zh: 同音频跨路由
         surface: audio
-    executable_ids: [exec-audio-ended-guard-wiring-legacy]
+    executable_ids: []
     fixtures: []
     ci_tier: NONE
     owner: playback-kernel
@@ -621,7 +650,7 @@ cases:
       - assertion_id: no-new-history-on-replay
         display_name_zh: 回放不增历史
         surface: db
-    executable_ids: [exec-storycard-resume]
+    executable_ids: [exec-storycard-resume, exec-paragraph-segmentation]
     fixtures: []
     ci_tier: CANDIDATE
     owner: playback-kernel
@@ -678,7 +707,7 @@ cases:
       - assertion_id: last-writer-wins-snapshot
         display_name_zh: 快照整体覆盖
         surface: db
-    executable_ids: [exec-stale-conversation-write]
+    executable_ids: [exec-stale-conversation-write, exec-conversation-write-wiring-legacy, exec-conversation-conflict-refresh]
     fixtures: []
     ci_tier: CANDIDATE
     owner: cloud-storage
@@ -700,7 +729,7 @@ cases:
       - assertion_id: no-hanging-progress
         display_name_zh: 无悬空进度
         surface: db
-    executable_ids: [exec-pending-save-flush]
+    executable_ids: [exec-pending-save-flush, exec-keepalive-dedup-legacy, exec-l3-persist-tail-before-page-exit]
     fixtures: []
     ci_tier: CANDIDATE
     owner: cloud-storage
@@ -738,7 +767,7 @@ cases:
       - assertion_id: progress-monotonic
         display_name_zh: 进度单调
         surface: db
-    executable_ids: [exec-save-sequence, exec-e2e-db-guard-regression]
+    executable_ids: [exec-save-sequence, exec-paragraph-resume-mixed-legacy, exec-e2e-db-guard-regression]
     fixtures: []
     ci_tier: CANDIDATE
     owner: persistence-recovery
@@ -769,14 +798,14 @@ cases:
     priority: P2
     primary_defense: L2
     secondary_defenses: [L3]
-    lifecycle_status: LEGACY-NON-COVERAGE
+    lifecycle_status: PLANNED
     risk_tags: [persistence, prune]
     spec_path: docs/e2e/04-云端存储与多端数据调和/06-历史记录epoch守卫与30天裁剪.md
     required_assertions:
       - assertion_id: stale-epoch-rejected
         display_name_zh: 旧纪元被拒
         surface: db
-    executable_ids: [exec-conversation-write-wiring-legacy, exec-conversation-conflict-refresh]
+    executable_ids: []
     fixtures: []
     ci_tier: NONE
     owner: persistence-recovery
@@ -833,7 +862,7 @@ cases:
       - assertion_id: over-limit-truncated
         display_name_zh: 超限截断
         surface: db
-    executable_ids: [exec-guest-creative-sync]
+    executable_ids: [exec-guest-creative-sync, exec-agent-schema-bounds]
     fixtures: []
     ci_tier: NIGHTLY
     owner: persistence-recovery
@@ -924,14 +953,15 @@ cases:
     priority: P0
     primary_defense: L2
     secondary_defenses: [L3]
-    lifecycle_status: LEGACY-NON-COVERAGE
+    lifecycle_status: BLOCKED
     risk_tags: [auth, logout]
     spec_path: docs/e2e/05-认证授权与会话生命周期/04-登出双cookie清理与状态重置.md
     required_assertions:
       - assertion_id: dual-cookie-cleared
         display_name_zh: 双凭证清除
         surface: network
-    executable_ids: [exec-logout-probe-hardening-legacy]
+    executable_ids: []
+    blocked_reason: 无登出双凭证清除行为覆盖：现存 logout-playback-reset 仅覆盖登出链 reset→pause 采样与播态清空，logout-probe-hardening 仅覆盖故障注入隔离与深拷贝隔离，均不断言 auth/session 双 cookie 被清除；需新增 L2 用例“登出后双 cookie 为空且状态重置”方可解 BLOCKED。P0 缺口，保持 CANDIDATE 高声。
     fixtures: []
     ci_tier: CANDIDATE
     owner: auth-session
@@ -1019,14 +1049,14 @@ cases:
     priority: P1
     primary_defense: L2
     secondary_defenses: [L3]
-    lifecycle_status: LEGACY-NON-COVERAGE
+    lifecycle_status: PLANNED
     risk_tags: [auth, epoch]
     spec_path: docs/e2e/05-认证授权与会话生命周期/09-快速账号切换epoch失效不串读.md
     required_assertions:
       - assertion_id: stale-epoch-no-read
         display_name_zh: 旧纪元不串读
         surface: db
-    executable_ids: [exec-batch-source-locks-legacy, exec-agent-schema-bounds]
+    executable_ids: []
     fixtures: []
     ci_tier: NONE
     owner: auth-session
@@ -1130,7 +1160,7 @@ cases:
       - assertion_id: interrupted-marks-failed
         display_name_zh: 中断标失败
         surface: ui
-    executable_ids: []
+    executable_ids: [exec-toast-terminal-priority-legacy]
     fixtures: []
     ci_tier: NONE
     owner: error-rate-limit
@@ -1160,15 +1190,15 @@ cases:
     user_goal: 直连受保护接口一律401
     priority: P1
     primary_defense: L2
-    secondary_defenses: [L3]
-    lifecycle_status: LEGACY-NON-COVERAGE
+    secondary_defenses: []
+    lifecycle_status: ACTIVE
     risk_tags: [auth, guard]
     spec_path: docs/e2e/06-异常处理与接口限流/06-直连受保护API之401守卫矩阵.md
     required_assertions:
       - assertion_id: direct-hits-401
         display_name_zh: 直连均401
         surface: network
-    executable_ids: [exec-procedure-source-locks-legacy]
+    executable_ids: [exec-procedure-source-locks-legacy, exec-identity-procedure-matrix]
     fixtures: []
     ci_tier: NONE
     owner: error-rate-limit
@@ -1261,7 +1291,7 @@ executables:
     display_name_zh: 身份过程矩阵
     layer: L2
     path: ./tests/integration/identity-session/identity-procedure-matrix.integration.test.ts
-    case_ids: [register-login-validate-sessionguard-exempt]
+    case_ids: [register-login-validate-sessionguard-exempt, protected-api-401-guard-matrix]
   - executable_id: exec-guest-cookie-authorization
     display_name_zh: 访客Cookie鉴权
     layer: L2
@@ -1346,37 +1376,37 @@ executables:
     display_name_zh: 批量源码锁遗留
     layer: STATIC
     path: ./tests/static/batch-source-locks.static.test.ts
-    case_ids: [fast-account-switch-epoch-no-crossread]
+    case_ids: [config-init-gate-retry]
   - executable_id: exec-paragraph-resume-mixed-legacy
     display_name_zh: 段落恢复混合遗留
     layer: L2
     path: ./tests/integration/playback/paragraph-resume-mixed.integration.test.ts
-    case_ids: [multi-paragraph-prefetch-progress-persist]
+    case_ids: [progress-monotonic-guard-force-reset]
   - executable_id: exec-toast-terminal-priority-legacy
     display_name_zh: 提示终态优先级遗留
     layer: L1
     path: ./tests/unit/creation-chat/toast-terminal-priority.unit.test.ts
-    case_ids: [failed-message-retry-context]
+    case_ids: [stream-interrupt-failed-retry]
   - executable_id: exec-audio-ended-guard-wiring-legacy
     display_name_zh: 结束守卫接线遗留
     layer: STATIC
     path: ./tests/static/audio-ended-guard-wiring.static.test.ts
-    case_ids: [client-route-nav-play-continuity]
+    case_ids: [segment-end-double-jump-guard]
   - executable_id: exec-double-submit-legacy
     display_name_zh: 双发抑制遗留
     layer: L2
     path: ./tests/integration/creation-chat/reject-second-submit-while-streaming.integration.test.ts
-    case_ids: [rapid-double-submit-guard]
+    case_ids: [rapid-double-submit-guard, streaming-resubmit-mutex]
   - executable_id: exec-conversation-write-wiring-legacy
     display_name_zh: 会话写入接线遗留
     layer: STATIC
     path: ./tests/static/conversation-write-wiring.static.test.ts
-    case_ids: [history-epoch-guard-30day-prune]
+    case_ids: [dual-tab-same-account-write-cover]
   - executable_id: exec-keepalive-dedup-legacy
     display_name_zh: 保活去重遗留
     layer: L2
     path: ./tests/integration/persistence-config/keepalive-dedup.integration.test.ts
-    case_ids: [clear-during-generate-no-orphan-audio]
+    case_ids: [quick-exit-loses-tail-hanging-progress]
   - executable_id: exec-pending-intent-ui-legacy
     display_name_zh: 待定意图界面遗留
     layer: L1
@@ -1386,22 +1416,22 @@ executables:
     display_name_zh: 登出探针加固遗留
     layer: L2
     path: ./tests/integration/identity-session/logout-probe-hardening.integration.test.ts
-    case_ids: [logout-dual-cookie-clean-reset]
+    case_ids: [logout-during-play-instant-silence]
   - executable_id: exec-agent-schema-bounds
     display_name_zh: 智能体模式边界
     layer: L1
     path: ./tests/unit/persistence-config/agent-schema-bounds.unit.test.ts
-    case_ids: [fast-account-switch-epoch-no-crossread]
+    case_ids: [guest-chat-100-limit-truncate]
   - executable_id: exec-conversation-conflict-refresh
     display_name_zh: 会话冲突刷新
     layer: L2
     path: ./tests/integration/persistence-config/conversation-conflict-refresh.integration.test.ts
-    case_ids: [history-epoch-guard-30day-prune]
+    case_ids: [dual-tab-same-account-write-cover]
   - executable_id: exec-paragraph-segmentation
     display_name_zh: 段落切分
     layer: L1
     path: ./tests/unit/playback/paragraph-segmentation.unit.test.ts
-    case_ids: [multi-paragraph-prefetch-progress-persist]
+    case_ids: [history-restore-card-resynth]
   - executable_id: exec-release-pipeline
     display_name_zh: 发布流水线
     layer: TOOLING
@@ -1452,3 +1482,39 @@ executables:
     layer: TOOLING
     path: ./tests/tooling/ci/candidate-quality-workflow.tooling.test.ts
     case_ids: [guest-identity-cookie-upgrade]
+  - executable_id: exec-l3-reject-second-submit-while-streaming
+    display_name_zh: L3流式中再次提交互斥
+    layer: L3
+    path: ./tests/system/browser/scenarios/reject-second-submit-while-streaming.spec.ts
+    case_ids: [rapid-double-submit-guard, streaming-resubmit-mutex]
+    evidence_surfaces: [ui, network]
+  - executable_id: exec-l3-history-prompt-start-new-creation
+    display_name_zh: L3从提示词历史开始新创作
+    layer: L3
+    path: ./tests/system/browser/scenarios/history-prompt-start-new-creation.spec.ts
+    case_ids: [history-prompt-start-new-creation]
+    evidence_surfaces: [ui, state, network, audio, db]
+  - executable_id: exec-l3-generation-history-play-once
+    display_name_zh: L3生成历史本页单次回放
+    layer: L3
+    path: ./tests/system/browser/scenarios/generation-history-play-once.spec.ts
+    case_ids: [generation-history-play-once]
+    evidence_surfaces: [ui, audio, network, db]
+  - executable_id: exec-l3-stop-audio-when-budget-exhausted
+    display_name_zh: L3预算耗尽停声
+    layer: L3
+    path: ./tests/system/browser/scenarios/stop-audio-when-budget-exhausted.spec.ts
+    case_ids: [budget-exhausted-tap-play-audio-state]
+    evidence_surfaces: [audio, ui, network]
+  - executable_id: exec-l3-pause-audio-before-logout-unload
+    display_name_zh: L3登出卸载前停声
+    layer: L3
+    path: ./tests/system/browser/scenarios/pause-audio-before-logout-unload.spec.ts
+    case_ids: [logout-during-play-instant-silence]
+    evidence_surfaces: [audio, timeline, ui]
+  - executable_id: exec-l3-persist-tail-before-page-exit
+    display_name_zh: L3页面退出前尾部持久化
+    layer: L3
+    path: ./tests/system/browser/scenarios/persist-tail-before-page-exit.spec.ts
+    case_ids: [quick-exit-loses-tail-hanging-progress]
+    evidence_surfaces: [db, network, timeline]

@@ -14,7 +14,7 @@
     "test:contract": "node -e \"console.log('NOT_APPLICABLE');process.exit(0)\"",
     "test:tooling": "node scripts/run-tests.mjs --group tooling",
     "test:list": "node scripts/run-tests.mjs --list",
-    "test:static": "node scripts/check-test-catalog.mjs",
+    "test:static": "node scripts/check-test-catalog.mjs --require-full-spec-coverage",
     "test:catalog": "node scripts/suite-worker.mjs ./tests/tooling/catalog/catalog-checker.tooling.test.ts",
     "test:runner-database-safety": "node scripts/suite-worker.mjs ./tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts",
     "test:browser:smoke": "playwright test --config tests/system/browser/playwright.config.ts tests/system/browser --project=chromium --project=webkit",

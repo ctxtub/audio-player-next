@@ -12,6 +12,8 @@ let catalogPath = path.join(repoRoot, 'tests', 'test-catalog.yaml');
 let schemaPath = path.join(repoRoot, 'tests', 'test-catalog.schema.json');
 // 中文注释：是否跳过 registry 三方一致（沙箱最小 catalog 用，真实 CI 不跳过）。
 let skipRegistryCheck = false;
+// 中文注释：是否强制 docs/e2e 场景文件全被 case 引用（真实 static 门用；沙箱最小 catalog 不开）。
+let requireFullSpecCoverage = false;
 
 /**
  * 解析命令行参数（未知参数即 exit 2）。
@@ -40,8 +42,10 @@ function parseArgs(argv) {
       i += 1;
     } else if (a === '--skip-registry-check') {
       skipRegistryCheck = true;
+    } else if (a === '--require-full-spec-coverage') {
+      requireFullSpecCoverage = true;
     } else if (a === '--help' || a === '-h') {
-      console.log('用法：node scripts/check-test-catalog.mjs [--catalog <path>] [--schema <path>] [--repo-root <dir>] [--skip-registry-check]');
+      console.log('用法：node scripts/check-test-catalog.mjs [--catalog <path>] [--schema <path>] [--repo-root <dir>] [--skip-registry-check] [--require-full-spec-coverage]');
       process.exit(0);
     } else {
       console.error(`参数错误：未知参数 ${a}`);
@@ -284,8 +288,8 @@ const LIFECYCLE_SET = new Set(['PLANNED', 'ACTIVE', 'BLOCKED', 'MANUAL', 'LEGACY
 const CI_TIER_SET = new Set(['CANDIDATE', 'NIGHTLY', 'RELEASE', 'PATH_FILTERED', 'NONE']);
 // 中文注释：case 允许键集合（含条件键，run_verdict 明确不在其中）。
 const CASE_ALLOWED_KEYS = new Set(['case_id', 'display_name_zh', 'legacy_aliases', 'journey_id', 'user_goal', 'priority', 'primary_defense', 'secondary_defenses', 'lifecycle_status', 'risk_tags', 'spec_path', 'required_assertions', 'executable_ids', 'fixtures', 'ci_tier', 'owner', 'blocked_reason', 'manual_reason']);
-// 中文注释：executable 允许键集合。
-const EXEC_ALLOWED_KEYS = new Set(['executable_id', 'display_name_zh', 'layer', 'path', 'case_ids']);
+// 中文注释：executable 允许键集合（含 L3 必填 evidence_surfaces）。
+const EXEC_ALLOWED_KEYS = new Set(['executable_id', 'display_name_zh', 'layer', 'path', 'case_ids', 'evidence_surfaces']);
 // 中文注释：语义名 kebab-case 正则。
 const KEBAB_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // 中文注释：spec 路径正则。
@@ -380,6 +384,15 @@ function validateSchemaHandwritten(catalog) {
     if (!isNonEmptyString(e.path)) errors.push(`${label} 缺 path`);
     if (!Array.isArray(e.case_ids) || e.case_ids.length === 0) errors.push(`${label} 缺 case_ids（须为非空数组）`);
     else if (!e.case_ids.every(isNonEmptyString)) errors.push(`${label} 非法 case_ids（须为非空字符串数组）`);
+    if (e.layer === 'L3') {
+      if (!Array.isArray(e.evidence_surfaces) || e.evidence_surfaces.length === 0 || !e.evidence_surfaces.every(isNonEmptyString)) {
+        errors.push(`${label} 缺 evidence_surfaces（layer=L3 必填非空字符串数组，绑定真实证据面）`);
+      }
+    } else if (e.evidence_surfaces !== undefined) {
+      if (!Array.isArray(e.evidence_surfaces) || !e.evidence_surfaces.every(isNonEmptyString)) {
+        errors.push(`${label} 非法 evidence_surfaces（须为字符串数组）`);
+      }
+    }
   });
   return errors;
 }
@@ -543,6 +556,58 @@ function main() {
   if (pathErrors.length > 0) {
     for (const e of pathErrors) console.error(`path 非法：${e}`);
     process.exit(1);
+  }
+
+  // 中文注释：②c LEGACY-NON-COVERAGE 清零门（Fix 4：过渡状态收口后不得再出现，出现即 exit 1）。
+  const legacyLeftovers = (catalog.cases || []).filter((c) => c.lifecycle_status === 'LEGACY-NON-COVERAGE');
+  if (legacyLeftovers.length > 0) {
+    for (const c of legacyLeftovers) console.error(`LEGACY 非法：LEGACY-NON-COVERAGE 未清零：${c.case_id}`);
+    process.exit(1);
+  }
+
+  // 中文注释：②d case spec_path 落盘检查（去 # 锚点后 docs/e2e 下文件须存在）。
+  const specErrors = [];
+  const referencedSpecs = new Set();
+  for (const c of catalog.cases || []) {
+    if (!SPEC_PATH_RE.test(String(c.spec_path || ''))) {
+      specErrors.push(`case ${c.case_id} 的 spec_path 格式非法：${c.spec_path}`);
+      continue;
+    }
+    const specFile = String(c.spec_path).split('#')[0];
+    referencedSpecs.add(specFile);
+    if (!fs.existsSync(path.join(repoRoot, specFile))) {
+      specErrors.push(`case ${c.case_id} 的 spec_path 不存在：${specFile}`);
+    }
+  }
+  if (specErrors.length > 0) {
+    for (const e of specErrors) console.error(`spec 非法：${e}`);
+    process.exit(1);
+  }
+
+  // 中文注释：②e docs/e2e 场景文件全被认领检查（仅 --require-full-spec-coverage 真实 static 门开启；
+  // 沙箱最小 catalog 不开，避免把全仓文件义务强加给 fixture）。
+  if (requireFullSpecCoverage) {
+    const allSpecs = [];
+    (function walkDocs(dir) {
+      let ents = [];
+      try {
+        ents = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const ent of ents) {
+        const abs = path.join(dir, ent.name);
+        if (ent.isDirectory()) { walkDocs(abs); continue; }
+        if (!ent.name.endsWith('.md')) continue;
+        if (ent.name.toLowerCase() === 'readme.md') continue;
+        allSpecs.push(path.relative(repoRoot, abs).replace(/\\/g, '/'));
+      }
+    })(path.join(repoRoot, 'docs', 'e2e'));
+    const orphans = allSpecs.filter((s) => !referencedSpecs.has(s)).sort();
+    if (orphans.length > 0) {
+      for (const o of orphans) console.error(`spec 认领缺失：${o} 未被任何 case.spec_path 引用`);
+      process.exit(1);
+    }
   }
 
   // 中文注释：⑤suite path 集合与 runner registry 与磁盘三方一致（排除 support/** 与 Playwright tests/system/**）。

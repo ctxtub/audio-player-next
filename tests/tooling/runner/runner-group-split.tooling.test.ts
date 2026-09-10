@@ -1,33 +1,45 @@
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
 /**
- * 按测试类型拆分执行器契约测试（任务2，Tooling，RED 先行）。
- * 覆盖：①--list JSON（41 套件 id/path/group/needs_db）②--group/--suite 选择
+ * 按测试类型拆分执行器契约测试（任务2，Tooling；Fix 1 闭环重写）。
+ *
+ * meta-suite 执行策略（显式设计，非排除掩盖）：
+ * runner 自身三元测试（本文件 + catalog-checker + candidate-quality-workflow）
+ * 以 needs_db=false 的叶子套件登记进 tooling 组。它们只做 `--list` 只读查询、
+ * 沙箱 catalog 校验、文件结构断言，从不触发套件执行与建库，故无自指递归；
+ * 用例⑧以静态规则 + 自宿主运行双重证明该性质。
+ *
+ * 覆盖：①--list JSON（数量由磁盘推导，非固定 41）②--group/--suite 选择
  * ③未知参数与非法值 exit 2④unit 子进程 env 无 DATABASE_URL
- * ⑤unit 文件 import lib/db 扫描命中 exit 3⑥注册表 path 与磁盘一致
- * ⑦.e2e-results/<run-id>/results.jsonl 行结构。
- * exit 2 类直接 execFile 真 runner（参数校验阶段不建库，安全）；
- * 现状 runner 无 --list/--group，①②③⑥⑦断言必然失败=可信 RED；
- * ④⑤对现有 runner 行为断言（现状 unit 也建库/注入 → 失败=RED）。
+ * ⑤unit 文件 import lib/db 扫描命中 exit 3⑥注册表 path 与磁盘双向一致
+ * ⑦.e2e-results/<run-id>/results.jsonl 行结构⑧meta 非递归证明
+ * ⑨纯校验器受控 fixture 正负例（遗漏/重复/非法 group/needs_db 照常检出）。
+ * exit 2 类直接 execFile 真 runner（参数校验阶段不建库，安全）。
  */
 
 // 中文注释：仓库根目录（解析 runner 与注册表路径用）。
 const repoRoot: string = process.cwd();
 // 中文注释：真 runner 相对路径（execFileSync 跑 node scripts/run-tests.mjs）。
 const runnerRel: string = path.join('scripts', 'run-tests.mjs');
-// 中文注释：RED 阶段防 hanging 上限毫秒（未来 --list/exit2 瞬时退出，超时即 RED）。
+// 中文注释：--list/exit2 类上限毫秒（瞬时退出，超时即失败）。
 const execTimeoutMs: number = 6000;
-// 中文注释：预期套件总数（现状 testFiles 41 项，拆分后注册表保持 41）。
-const expectedSuiteCount: number = 41;
+// 中文注释：自宿主运行上限毫秒（runner 跑自身元测试，需留出子进程 exec 余量）。
+const selfHostTimeoutMs: number = 120000;
 // 中文注释：允许的 group 枚举（含任务流全部层级，防未来分组被误判）。
 const allowedGroups: string[] = ['unit', 'integration', 'contract', 'tooling', 'static', 'legacy', 'e2e', 'browser'];
 // 中文注释：已知 tooling 套件 ID（现有 db-guard 套件，拆分后归 tooling 组）。
 const knownToolingSuiteId: string = 'runner-database-path-safety';
 // 中文注释：已知 tooling 套件路径后缀（注册表 path 断言用）。
 const knownToolingPathSuffix: string = 'tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts';
+// 中文注释：三个元测试 suite ID（meta-suite 策略主体，needs_db 必须为 false）。
+const metaSuiteIds: string[] = ['runner-group-split', 'catalog-checker', 'candidate-quality-workflow'];
+// 中文注释：磁盘扫描排除前缀（与 scripts/check-test-catalog.mjs 同口径：支撑实现与 Playwright 浏览器域非 runner 可执行）。
+const diskExcludePrefixes: string[] = ['tests/support/', 'tests/system/'];
+// 中文注释：层级后缀剥离正则（与 scripts/test-database-path-safety.mjs 同口径）。
+const layerSuffixRe: RegExp = /\.(unit|integration|contract|tooling|legacy|static)\.test\.ts$/;
 
 /**
  * 注册表条目形状（任务2 runner 注册表 {id, path, group, needs_db}）。
@@ -114,7 +126,7 @@ function expectRunnerExit2(args: string[], label: string): void {
 }
 
 /**
- * 解析 --list 输出为注册表数组（非 JSON/非数组即 RED）。
+ * 解析 --list 输出为注册表数组（非 JSON/非数组即失败）。
  * @param extra --list 之外的过滤参数
  * @returns 注册表条目数组
  */
@@ -146,12 +158,112 @@ function assertRegistryEntryShape(entry: RegistryEntry, index: number): void {
 }
 
 /**
- * 用例①：--list 输出 JSON，41 套件且含 id/path/group/needs_db。
+ * 由测试文件路径推导 suite ID（与 safety.suiteIdFromTestPath 同口径，不抛，非法返回空串供校验器检出）。
+ * @param testPath 注册表 path（如 ./tests/tooling/runner/x.tooling.test.ts）
+ * @returns 推导 ID（非法为空串）
  */
-function caseListJson41(): void {
+function deriveSuiteId(testPath: string): string {
+    const base: string = path.basename(String(testPath));
+    let id: string = base;
+    if (layerSuffixRe.test(base)) {
+        id = base.replace(layerSuffixRe, '');
+    } else if (base.endsWith('.ts')) {
+        id = base.slice(0, -'.ts'.length);
+    }
+    if (!/^[a-z0-9][a-z0-9-]{0,95}$/.test(id)) return '';
+    return id;
+}
+
+/**
+ * 规范化套件路径（去 ./ 前缀，统一斜杠）。
+ * @param p 原始路径
+ * @returns 规范路径
+ */
+function normalizeSuitePath(p: string): string {
+    let s: string = String(p).replace(/\\/g, '/');
+    if (s.startsWith('./')) s = s.slice(2);
+    return s;
+}
+
+/**
+ * 递归收集磁盘可执行 suite（与 checker 同口径：tests/**.test.ts，排除 support/ 与 system/）。
+ * @param dir 起始目录绝对路径
+ * @param out 输出相对路径数组
+ */
+function collectDiskSuites(dir: string, out: string[]): void {
+    const raws = readdirSync(dir, { withFileTypes: true });
+    for (const ent of raws) {
+        const abs: string = path.join(dir, ent.name);
+        if (ent.isDirectory()) {
+            const relDir: string = path.relative(repoRoot, abs).replace(/\\/g, '/');
+            if (diskExcludePrefixes.some((p) => relDir === p.slice(0, -1) || relDir.startsWith(p))) continue;
+            collectDiskSuites(abs, out);
+        } else if (ent.isFile() && ent.name.endsWith('.ts')) {
+            const rel: string = path.relative(repoRoot, abs).replace(/\\/g, '/');
+            if (!rel.startsWith('tests/')) continue;
+            if (diskExcludePrefixes.some((p) => rel.startsWith(p))) continue;
+            out.push(rel);
+        }
+    }
+}
+
+/**
+ * 注册表问题纯校验器（遗漏/重复/非法 group/needs_db/id 推导不一致/磁盘双向缺失）。
+ * 受控 fixture 与真实数据共用同一实现：数量由输入推导，不硬编码总数。
+ * @param entries 注册表条目
+ * @param diskPaths 磁盘 suite 规范路径
+ * @returns 问题描述数组（空即一致）
+ */
+function findRegistryProblems(entries: RegistryEntry[], diskPaths: string[]): string[] {
+    const problems: string[] = [];
+    const diskSet: Set<string> = new Set(diskPaths);
+    const seenIds: Map<string, number> = new Map();
+    const seenPaths: Map<string, number> = new Map();
+    entries.forEach((e, i) => {
+        if (typeof e.id !== 'string' || e.id.length === 0) problems.push(`条目${i} 缺 id`);
+        if (typeof e.path !== 'string' || !e.path.endsWith('.ts')) problems.push(`条目${i} path 非法：${String(e.path)}`);
+        if (!allowedGroups.includes(e.group)) problems.push(`条目${i} group 非法：${String(e.group)}`);
+        if (typeof e.needs_db !== 'boolean') problems.push(`条目${i} needs_db 非布尔：${String(e.needs_db)}`);
+        if (seenIds.has(e.id)) problems.push(`重复 id：${e.id}`);
+        else seenIds.set(e.id, i);
+        const norm: string = normalizeSuitePath(e.path);
+        if (seenPaths.has(norm)) problems.push(`重复 path：${norm}`);
+        else seenPaths.set(norm, i);
+        const derived: string = deriveSuiteId(e.path);
+        if (derived === '' || derived !== e.id) problems.push(`id 与 path 推导不一致 id=${e.id} path=${e.path}`);
+        if (!diskSet.has(norm)) problems.push(`注册表 path 磁盘缺失：${norm}`);
+    });
+    const regSet: Set<string> = new Set(entries.map((e) => normalizeSuitePath(e.path)));
+    for (const d of diskSet) {
+        if (!regSet.has(d)) problems.push(`磁盘 suite 注册表缺失：${d}`);
+    }
+    return problems;
+}
+
+/**
+ * 取磁盘可执行 suite 集合（规范路径排序数组）。
+ * @returns 磁盘 suite 路径数组
+ */
+function diskSuiteSet(): string[] {
+    const out: string[] = [];
+    collectDiskSuites(path.join(repoRoot, 'tests'), out);
+    return [...new Set(out)].sort();
+}
+
+/**
+ * 用例①：--list 输出 JSON，数量与磁盘集合相等且双向一致（无固定总数假设）。
+ */
+function caseListJsonMatchesDisk(): void {
     const entries: RegistryEntry[] = listRegistry();
-    assert.strictEqual(entries.length, expectedSuiteCount, `--list 应含 ${expectedSuiteCount} 套件，实际 ${entries.length}`);
     entries.forEach((e, i) => assertRegistryEntryShape(e, i));
+    const disk: string[] = diskSuiteSet();
+    assert.strictEqual(
+        entries.length,
+        disk.length,
+        `--list 数量应与磁盘可执行 suite 相等，注册表 ${entries.length} vs 磁盘 ${disk.length}`,
+    );
+    const problems: string[] = findRegistryProblems(entries, disk);
+    assert.deepStrictEqual(problems, [], `注册表与磁盘应双向一致，问题：${problems.slice(0, 8).join('；')}`);
     const ids: string[] = entries.map((e) => e.id);
     assert.ok(ids.includes(knownToolingSuiteId), `--list 应含已知 tooling 套件 ${knownToolingSuiteId}`);
     const toolingEntry: RegistryEntry | undefined = entries.find((e) => e.id === knownToolingSuiteId);
@@ -160,45 +272,49 @@ function caseListJson41(): void {
         `tooling 套件 path 应以后缀结尾：${knownToolingPathSuffix}`,
     );
     assert.strictEqual(toolingEntry?.group, 'tooling', '已知套件应归 tooling 组');
-    console.log('PASS: 用例① --list JSON 41 套件字段完备');
+    console.log(`PASS: 用例① --list JSON 与磁盘双向一致（${entries.length} 套件，零硬编码总数）`);
 }
 
 /**
  * 用例②：--group tooling / --suite <id> 选择正确（经 --list 过滤子集，不执行）。
  */
 function caseGroupSuiteFilter(): void {
+    const all: RegistryEntry[] = listRegistry();
     const toolingOnly: RegistryEntry[] = listRegistry(['--group', 'tooling']);
     assert.ok(toolingOnly.length >= 1, '--group tooling 应至少选中 1 套件');
-    assert.ok(toolingOnly.length < expectedSuiteCount, '--group tooling 应为真子集（过滤生效）');
+    assert.ok(toolingOnly.length < all.length, '--group tooling 应为真子集（过滤生效）');
     for (const e of toolingOnly) {
         assertRegistryEntryShape(e, 0);
         assert.strictEqual(e.group, 'tooling', `--group tooling 混入非 tooling：${e.id}/${e.group}`);
     }
-    assert.ok(
-        toolingOnly.some((e) => e.id === knownToolingSuiteId),
-        '--group tooling 应含已知 tooling 套件',
-    );
+    for (const mid of metaSuiteIds) {
+        assert.ok(
+            toolingOnly.some((e) => e.id === mid),
+            `--group tooling 应含元测试 ${mid}（禁止静默排除）`,
+        );
+    }
     const single: RegistryEntry[] = listRegistry(['--suite', knownToolingSuiteId]);
     assert.strictEqual(single.length, 1, `--suite 应精确选中 1 条，实际 ${single.length}`);
     assert.strictEqual(single[0].id, knownToolingSuiteId, '--suite 选中 ID 不符');
     assertRegistryEntryShape(single[0], 0);
-    console.log('PASS: 用例② --group/--suite 选择正确');
+    console.log('PASS: 用例② --group/--suite 选择正确（含全部元测试）');
 }
 
 /**
  * 用例③：未知参数与非法值 exit 2（直接 exec 真 runner）。
  */
 function caseUnknownAndIllegalExit2(): void {
+    const toolingEntries: RegistryEntry[] = listRegistry(['--group', 'tooling']);
+    const foreignId: string = toolingEntries[0]?.id ?? knownToolingSuiteId;
     expectRunnerExit2(['--no-such-flag'], '未知参数');
     expectRunnerExit2(['--group', 'no-such-group'], '非法 group');
     expectRunnerExit2(['--suite', 'no-such-suite-id'], '非法 suite');
-    expectRunnerExit2(['--group', 'tooling', '--suite', 'test-sec-01'], '空交集');
+    expectRunnerExit2(['--group', 'unit', '--suite', foreignId], '空交集');
     console.log('PASS: 用例③ 未知参数与非法值 exit 2');
 }
 
 /**
  * 用例④：unit 组子进程 env 无 DATABASE_URL（对现有 runner 行为断言）。
- * 现状 buildControlledEnv 对全组统一注入 → 断言失败=RED。
  */
 function caseUnitEnvNoDatabaseUrl(): void {
     const src: string = readRunnerSource();
@@ -209,36 +325,33 @@ function caseUnitEnvNoDatabaseUrl(): void {
         /needs_db\s*===?\s*false/.test(src) && /delete\s+.*DATABASE_URL/.test(src);
     assert.ok(
         hasUnitStrip || hasNeedsDbGuard,
-        'unit 组应剥离 DATABASE_URL（按 group==unit 或 needs_db==false 删除），现状全组注入=RED',
+        'unit 组应剥离 DATABASE_URL（按 group==unit 或 needs_db==false 删除）',
     );
     console.log('PASS: 用例④ unit env 无 DATABASE_URL');
 }
 
 /**
  * 用例⑤：unit 文件 import lib/db 扫描命中 exit 3（静态扫描契约）。
- * 现状 runner 无 lib/db 扫描 → 断言失败=RED。
  */
 function caseUnitImportLibDbScanExit3(): void {
     const src: string = readRunnerSource();
     assert.ok(src.includes('lib/db'), 'runner 应含 lib/db 静态扫描（禁 unit 导入）');
     const hasScanExit3: boolean =
         /lib\/db/.test(src) && /(BOOTSTRAP_EXIT_CODE|exit\s*\(\s*3\s*\))/.test(src);
-    assert.ok(hasScanExit3, 'unit 命中 lib/db 导入应 exit 3，现状无扫描=RED');
+    assert.ok(hasScanExit3, 'unit 命中 lib/db 导入应 exit 3');
     console.log('PASS: 用例⑤ unit import lib/db 命中 exit 3');
 }
 
 /**
- * 用例⑥：注册表 path 与磁盘一致（现状纯字符串数组无 group/needs_db → 失败=RED）。
+ * 用例⑥：注册表 path 与磁盘一致（经纯校验器，数量推导）。
  */
 function caseRegistryPathDiskConsistent(): void {
     const src: string = readRunnerSource();
     assert.ok(src.includes('needs_db') && src.includes('group'), '注册表应含 group/needs_db 字段');
-    const quoted: string[] = [...src.matchAll(/['"]((?:\.\/)?tests\/[^'"]+\.ts)['"]/g)].map((m) => m[1]);
-    const uniq: string[] = [...new Set(quoted)];
-    assert.ok(uniq.length >= expectedSuiteCount, `注册表应至少 ${expectedSuiteCount} 路径，实际 ${uniq.length}`);
-    const missing: string[] = uniq.filter((p) => !existsSync(path.join(repoRoot, p.replace(/^\.\//, ''))));
-    assert.deepStrictEqual(missing, [], `注册表 path 应全部落盘，缺失：${missing.slice(0, 5).join(',')}`);
-    console.log('PASS: 用例⑥ 注册表 path 与磁盘一致');
+    const entries: RegistryEntry[] = listRegistry();
+    const problems: string[] = findRegistryProblems(entries, diskSuiteSet());
+    assert.deepStrictEqual(problems, [], `注册表 path 应全部落盘且无遗漏：${problems.slice(0, 8).join('；')}`);
+    console.log('PASS: 用例⑥ 注册表 path 与磁盘双向一致');
 }
 
 /**
@@ -262,13 +375,12 @@ function assertResultsJsonlLine(obj: Record<string, unknown>): void {
 
 /**
  * 用例⑦：.e2e-results/<run-id>/results.jsonl 行结构（源码契约 + 行校验器）。
- * 现状 runner 不写 results.jsonl → 断言失败=RED。
  */
 function caseResultsJsonlStructure(): void {
     const src: string = readRunnerSource();
     assert.ok(src.includes('results.jsonl'), 'runner 应写 results.jsonl');
     assert.ok(src.includes('.e2e-results'), '结果应落 .e2e-results/<run-id>/results.jsonl');
-    // 中文注释：行校验器自举（合成样例须过，证明校验器本身可用；RED 来自源码缺失）。
+    // 中文注释：行校验器自举（合成样例须过，证明校验器本身可用）。
     assertResultsJsonlLine({ suite_id: knownToolingSuiteId, group: 'tooling', status: 'PASS', exit_code: 0 });
     assert.throws(() => assertResultsJsonlLine({ suite_id: '', status: 'PASS' }), /标识为空/);
     assert.throws(() => assertResultsJsonlLine({ suite_id: 'x' }), /缺 status/);
@@ -276,16 +388,130 @@ function caseResultsJsonlStructure(): void {
 }
 
 /**
- * 测试入口：顺序执行①-⑦，任一 RED 即抛（jiti/await default 透出非零）。
+ * 元测试源码绝对路径表（非递归静态规则审计对象）。
+ * @returns 相对路径数组
+ */
+function metaSuiteRelPaths(): string[] {
+    return [
+        path.join('tests', 'tooling', 'runner', 'runner-group-split.tooling.test.ts'),
+        path.join('tests', 'tooling', 'catalog', 'catalog-checker.tooling.test.ts'),
+        path.join('tests', 'tooling', 'ci', 'candidate-quality-workflow.tooling.test.ts'),
+    ];
+}
+
+/**
+ * 用例⑧：meta 非递归证明（静态规则 + 自宿主运行）。
+ * 静态规则：元测试源码中 `run-tests.mjs` 字面仅出现在路径定义（path.join）行；
+ * 其余 runner 调用一律经只读/error-path  helper（变量引用），绝无裸执行整组。
+ * 自宿主：真 runner 执行自身元测试必须可终止且 exit 0（递归即超时失败）。
+ */
+function caseMetaNonRecursive(): void {
+    const entries: RegistryEntry[] = listRegistry();
+    for (const mid of metaSuiteIds) {
+        const found: RegistryEntry | undefined = entries.find((e) => e.id === mid);
+        assert.ok(found, `元测试须登记进 runner 注册表：${mid}`);
+        assert.strictEqual(found?.group, 'tooling', `元测试须归 tooling 组：${mid}`);
+        assert.strictEqual(found?.needs_db, false, `元测试须 needs_db=false（叶子无库）：${mid}`);
+    }
+    for (const rel of metaSuiteRelPaths()) {
+        const abs: string = path.join(repoRoot, rel);
+        assert.ok(existsSync(abs), `元测试文件须存在：${rel}`);
+        const src: string = readFileSync(abs, 'utf8');
+        for (const line of src.split('\n')) {
+            if (!line.includes('run-tests.mjs') && !line.includes('check-test-catalog.mjs')) continue;
+            const allowed: boolean =
+                line.includes('path.join') ||
+                line.includes('line.includes') ||
+                line.includes('--list') ||
+                line.includes('expectRunnerExit2') ||
+                line.includes('execRunnerStdout') ||
+                line.includes('listRegistry') ||
+                line.includes('checkerAbs') ||
+                line.includes('//');
+            assert.ok(allowed, `元测试仅允许只读/error-path 调用 runner/checker，违规行：${rel} :: ${line.trim().slice(0, 120)}`);
+        }
+    }
+    console.log('PASS: 用例⑧a 元测试静态非递归规则');
+    // 中文注释：自宿主深度上限 1（环境变量守卫即递归上界构造；内层跳过⑧b，其余用例照常执行）。
+    if (process.env.RUNNER_SELFHOST_DEPTH) {
+        console.log('PASS: 用例⑧b 内层跳过（自宿主深度守卫生效，无无限递归）');
+        return;
+    }
+    let status: number | null = null;
+    let outHead: string = '';
+    try {
+        const out = execFileSync(process.execPath, [runnerRel, '--suite', 'runner-group-split'], {
+            cwd: repoRoot,
+            encoding: 'utf8',
+            timeout: selfHostTimeoutMs,
+            killSignal: 'SIGTERM',
+            stdio: 'pipe',
+            env: { ...process.env, RUNNER_SELFHOST_DEPTH: '1' },
+        });
+        status = 0;
+        outHead = String(out).slice(-300);
+    } catch (err) {
+        status = (err as { status?: number | null }).status ?? 1;
+        const e = err as { stdout?: unknown; stderr?: unknown };
+        outHead = `stdout尾=${String(e.stdout ?? '').slice(-300)} stderr尾=${String(e.stderr ?? '').slice(-300)}`;
+    }
+    assert.strictEqual(status, 0, `自宿主运行应 exit 0（递归/挂起即失败），实际=${String(status)} ${outHead}`);
+    console.log('PASS: 用例⑧b 自宿主运行可终止 exit 0（无递归）');
+}
+
+/**
+ * 用例⑨：纯校验器受控 fixture 正负例（遗漏/重复/非法 group/needs_db 照常检出）。
+ */
+function caseValidatorFixtures(): void {
+    const goodEntries: RegistryEntry[] = [
+        { id: 'alpha-case', path: './tests/unit/demo/alpha-case.unit.test.ts', group: 'unit', needs_db: false },
+        { id: 'beta-flow', path: './tests/integration/demo/beta-flow.integration.test.ts', group: 'integration', needs_db: true },
+    ];
+    const goodDisk: string[] = [
+        'tests/unit/demo/alpha-case.unit.test.ts',
+        'tests/integration/demo/beta-flow.integration.test.ts',
+    ];
+    assert.deepStrictEqual(findRegistryProblems(goodEntries, goodDisk), [], '正例 fixture 应零问题');
+    console.log('PASS: 用例⑨a 校验器正例零问题');
+    const missing: string[] = findRegistryProblems(goodEntries, [goodDisk[0]]);
+    assert.ok(missing.some((p) => p.includes('注册表缺失') || p.includes('磁盘缺失')), `遗漏须检出，实际=${missing.join('|')}`);
+    console.log('PASS: 用例⑨b 遗漏检出');
+    const dup: string[] = findRegistryProblems([...goodEntries, { ...goodEntries[0] }], goodDisk);
+    assert.ok(dup.some((p) => p.includes('重复')), `重复须检出，实际=${dup.join('|')}`);
+    console.log('PASS: 用例⑨c 重复检出');
+    const badGroup: string[] = findRegistryProblems(
+        [{ id: 'weird-thing', path: './tests/unit/demo/weird-thing.unit.test.ts', group: 'nope', needs_db: false }],
+        ['tests/unit/demo/weird-thing.unit.test.ts'],
+    );
+    assert.ok(badGroup.some((p) => p.includes('group 非法')), `非法 group 须检出，实际=${badGroup.join('|')}`);
+    console.log('PASS: 用例⑨d 非法 group 检出');
+    const badNeedsDb: string[] = findRegistryProblems(
+        [{ id: 'odd-flags', path: './tests/unit/demo/odd-flags.unit.test.ts', group: 'unit', needs_db: 'yes' as unknown as boolean }],
+        ['tests/unit/demo/odd-flags.unit.test.ts'],
+    );
+    assert.ok(badNeedsDb.some((p) => p.includes('needs_db')), `非法 needs_db 须检出，实际=${badNeedsDb.join('|')}`);
+    console.log('PASS: 用例⑨e 非法 needs_db 检出');
+    const badId: string[] = findRegistryProblems(
+        [{ id: 'other-name', path: './tests/unit/demo/alpha-case.unit.test.ts', group: 'unit', needs_db: false }],
+        ['tests/unit/demo/alpha-case.unit.test.ts'],
+    );
+    assert.ok(badId.some((p) => p.includes('推导不一致')), `id 推导不一致须检出，实际=${badId.join('|')}`);
+    console.log('PASS: 用例⑨f id 推导不一致检出');
+}
+
+/**
+ * 测试入口：顺序执行①-⑨，任一失败即抛（jiti/await default 透出非零）。
  */
 async function main(): Promise<void> {
-    caseListJson41();
+    caseListJsonMatchesDisk();
     caseGroupSuiteFilter();
     caseUnknownAndIllegalExit2();
     caseUnitEnvNoDatabaseUrl();
     caseUnitImportLibDbScanExit3();
     caseRegistryPathDiskConsistent();
     caseResultsJsonlStructure();
+    caseMetaNonRecursive();
+    caseValidatorFixtures();
     console.log('ALL RUNNER GROUP SPLIT TESTS PASSED');
 }
 

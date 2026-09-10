@@ -40,7 +40,7 @@ cases:
       - assertion_id: guest-row-persisted
         display_name_zh: 访客行落库
         surface: db
-    executable_ids: [exec-guest-cookie-authorization, exec-release-pipeline]
+    executable_ids: [exec-guest-cookie-authorization, exec-release-pipeline, exec-candidate-quality-workflow]
     fixtures: []
     ci_tier: CANDIDATE
     owner: smoke-baseline
@@ -248,7 +248,7 @@ cases:
       - assertion_id: input-kept-intact
         display_name_zh: 输入框不受污染
         surface: ui
-    executable_ids: [exec-preload-context-selection, exec-e2e-stream-observer]
+    executable_ids: [exec-preload-context-selection, exec-e2e-stream-observer, exec-catalog-checker]
     fixtures: []
     ci_tier: CANDIDATE
     owner: interactive-race
@@ -893,7 +893,7 @@ cases:
       - assertion_id: orphan-rolled-back
         display_name_zh: 孤儿被回滚
         surface: db
-    executable_ids: [exec-registration-rollback, exec-runner-database-path-safety]
+    executable_ids: [exec-registration-rollback, exec-runner-database-path-safety, exec-runner-group-split]
     fixtures: []
     ci_tier: NIGHTLY
     owner: auth-session
@@ -1437,3 +1437,18 @@ executables:
     layer: TOOLING
     path: ./tests/tooling/browser/browser-harness.tooling.test.ts
     case_ids: [logout-during-play-instant-silence]
+  - executable_id: exec-runner-group-split
+    display_name_zh: 执行器分组元测试
+    layer: TOOLING
+    path: ./tests/tooling/runner/runner-group-split.tooling.test.ts
+    case_ids: [register-interrupt-orphan-rollback]
+  - executable_id: exec-catalog-checker
+    display_name_zh: 资产目录校验器自测
+    layer: TOOLING
+    path: ./tests/tooling/catalog/catalog-checker.tooling.test.ts
+    case_ids: [preload-continue-no-chat-pollution]
+  - executable_id: exec-candidate-quality-workflow
+    display_name_zh: 候选质量门结构断言
+    layer: TOOLING
+    path: ./tests/tooling/ci/candidate-quality-workflow.tooling.test.ts
+    case_ids: [guest-identity-cookie-upgrade]

@@ -396,7 +396,15 @@ function normalizeSuitePath(p) {
 }
 
 /**
- * 递归收集磁盘 suite 路径（排除 support/** 与自测元套件）。
+ * 递归收集磁盘 suite 路径。
+ *
+ * 可执行集合口径（Fix 1 meta-suite 闭环后）：
+ * - 纳入：tests/** 下全部 `*.test.ts`（含 tests/tooling/runner、tests/tooling/catalog、
+ *   tests/tooling/ci 三个元测试目录——它们是 needs_db=false 的叶子套件，无自指递归，禁止排除掩盖）；
+ * - 排除 tests/support/**（支撑实现非可执行套件）；
+ * - 排除 tests/system/**（Playwright 浏览器域：由 playwright 直接执行的多浏览器 L3 spec，
+ *   runner suite-worker 无法执行；其 L3 executable 另按“存在 + spec 绑定 + evidence surfaces”校验，
+ *   不进入 Node 三方集合比较——执行器不同是 principled 划分，有测试与 manifest 证据，非掩盖）。
  * @param dir 起始目录
  * @param out 输出数组
  */
@@ -409,24 +417,15 @@ function collectDiskSuites(dir, out) {
   }
   for (const ent of entries) {
     const abs = path.join(dir, ent.name);
-    // 中文注释：排除测试支撑与自测元套件（catalog/runner/ci 自验经 suite-worker 直跑，不进 runner 注册表，避免自指循环）。
-    // 中文注释：tests/system/** 系 Playwright 浏览器域（harness/spec/reporter/fixtures），由 playwright 直接执行，
-    // 无 default 导出、runner suite-worker 无法执行，故同步排除（任务13：任务12 遗留三方不一致的修复）。
     if (ent.isDirectory()) {
       if (abs.replace(/\\/g, '/').includes('tests/support')) continue;
       if (abs.replace(/\\/g, '/').includes('tests/system')) continue;
-      if (abs.replace(/\\/g, '/').includes('tests/tooling/catalog')) continue;
-      if (abs.replace(/\\/g, '/').includes('tests/tooling/runner')) continue;
-      if (abs.replace(/\\/g, '/').includes('tests/tooling/ci')) continue;
       collectDiskSuites(abs, out);
     } else if (ent.isFile() && ent.name.endsWith('.ts')) {
       const rel = path.relative(repoRoot, abs).replace(/\\/g, '/');
       if (!rel.startsWith('tests/')) continue;
       if (rel.startsWith('tests/support/')) continue;
       if (rel.startsWith('tests/system/')) continue;
-      if (rel.startsWith('tests/tooling/catalog/')) continue;
-      if (rel.startsWith('tests/tooling/runner/')) continue;
-      if (rel.startsWith('tests/tooling/ci/')) continue;
       out.push(rel);
     }
   }
@@ -546,7 +545,9 @@ function main() {
     process.exit(1);
   }
 
-  // 中文注释：⑤suite path 集合与 runner registry 与磁盘三方一致（排除 support/**）。
+  // 中文注释：⑤suite path 集合与 runner registry 与磁盘三方一致（排除 support/** 与 Playwright tests/system/**）。
+  // 中文注释：L3 executable 由 playwright 执行、不进 runner 注册表，故三方集合比较只覆盖 Node 层
+  // （L1|L2|CONTRACT|TOOLING|STATIC）；L3 executable 仍受“path 落盘”检查（上文）约束，缺失即 exit 1。
   if (!skipRegistryCheck) {
     let registryPaths = [];
     try {
@@ -557,7 +558,19 @@ function main() {
     }
     const diskPaths = [];
     collectDiskSuites(path.join(repoRoot, 'tests'), diskPaths);
-    const catalogPaths = catalog.executables.map((e) => normalizeSuitePath(e.path)).sort();
+    const nodeExecPaths = catalog.executables
+      .filter((e) => e.layer !== 'L3')
+      .map((e) => normalizeSuitePath(e.path))
+      .sort();
+    const l3ExecPaths = catalog.executables
+      .filter((e) => e.layer === 'L3')
+      .map((e) => normalizeSuitePath(e.path));
+    for (const p of l3ExecPaths) {
+      if (p.startsWith('tests/system/')) continue;
+      console.error(`L3 executable 路径非法（须位于 tests/system/ 由 playwright 执行）：${p}`);
+      process.exit(1);
+    }
+    const catalogPaths = nodeExecPaths;
     const regSorted = [...registryPaths].sort();
     const diskSorted = [...diskPaths].sort();
     const catalogSet = new Set(catalogPaths);

@@ -11,25 +11,28 @@
 ## 1. 基线快照（checker 输出引用）
 
 ```text
-原子case数=61
+原子case数=62
 父组数=59
-声明自动化数=50
-已实现数=25
-缺口数=25
+声明自动化数=61
+已实现数=30
+缺口数=29
 ```
 
-- 原子 case 共 **61**：`ACTIVE 25 / PLANNED 25 / MANUAL 1 / LEGACY-NON-COVERAGE 10`。
-- 可执行注册表 `executables` 共 **41**，按落盘分组：
-  `unit 9 / integration 16（含 tests/ 根下 2 个待归位）/ tooling 6 / legacy 10`。
-- 优先级分布：`P0 16 / P1 26 / P2 18 / P3 1`。
-- 主防线分布：`L1 9 / L2 26 / L3 26`（`L1/L2/L3` 含义见第 3 节分层定义）。
-- 旅程分布（8 个 `journey_id`）：`smoke-baseline 9 / interactive-race 10 / playback-kernel 12 / cloud-storage 5 / persistence-recovery 6 / auth-session 10 / error-rate-limit 8 / history-reuse-create 1`。
-- 缺口 25 项均为 `PLANNED 缺 executable，属预期缺口`（产品语义已确定、代码尚不存在），候选必测清单中的缺口必须阻断，不得降为通过。
+- 原子 case 共 **62**：`ACTIVE 30 / PLANNED 29 / BLOCKED 2 / MANUAL 1`（`LEGACY-NON-COVERAGE` 已清零；
+  H-21 由 1 个 PLANNED 单 case 拆分为 2 个 ACTIVE 子 case，见 catalog 与覆盖矩阵）。
+- 可执行注册表 `executables` 共 **54**，按 catalog 层分组：
+  `L1 13 / L2 21 / STATIC 4 / TOOLING 10 / L3 6`（L3 由 playwright 执行，不进 runner 注册表，见第 3 节）。
+- 优先级分布：`P0 17 / P1 26 / P2 18 / P3 1`。
+- 主防线分布：`L1 9 / L2 26 / L3 27`（`L1/L2/L3` 含义见第 3 节分层定义）。
+- 旅程分布（9 个 `journey_id`）：`smoke-baseline 9 / interactive-race 10 / playback-kernel 12 / cloud-storage 5 / persistence-recovery 6 / auth-session 10 / error-rate-limit 8 / history-reuse-create 1 / history-reuse-playback 1`。
+- 缺口 29 项 = `PLANNED 27（无 executable）+ BLOCKED 2（P0 高声缺口，候选门阻断）`；
+  另有 2 项 PLANNED（`config-init-gate-retry`、`stream-interrupt-failed-retry`）仅有部分静态/单元证据，
+  仍计缺口。候选必测清单中的缺口必须阻断，不得降为通过。
 
 复现命令（仓库根执行，预期 exit 0）：
 
 ```bash
-node scripts/check-test-catalog.mjs
+yarn test:static    # = node scripts/check-test-catalog.mjs --require-full-spec-coverage（含 docs/e2e 全认领）
 ```
 
 ## 2. 权威边界（消除双重 SSOT）
@@ -53,8 +56,8 @@ node scripts/check-test-catalog.mjs
   ↕ spec_path（catalog 每 case 必填，形如 docs/e2e/….md[#锚点]）
 机器目录 catalog（tests/test-catalog.yaml：case ↔ executable 双向引用）
   ↕ executable_ids / case_ids（双向一致 + executable.path 落盘）
-可执行套件 suite（tests/unit/**、tests/integration/**、tests/tooling/**、tests/legacy/**）
-  ↕ runner 注册表（scripts/run-tests.mjs --list）与磁盘 glob 三方一致
+可执行套件 suite（tests/unit/**、tests/integration/**、tests/tooling/** 为 Node 层，tests/system/browser/** 为 Playwright L3 层）
+  ↕ Node 层经 runner 注册表（scripts/run-tests.mjs --list）与磁盘 glob 三方一致；L3 层经 catalog evidence_surfaces + manifest 证据绑定
 ```
 
 - 正向：从任一场景 spec 出发，经 `spec_path` 找到 catalog case，再经 `executable_ids` 找到可执行文件与 runner 注册项。
@@ -80,12 +83,11 @@ node scripts/check-test-catalog.mjs
 ## 5. 常用命令
 
 ```bash
-node scripts/check-test-catalog.mjs        # 目录校验（static 门）
+yarn test:static                             # catalog 校验（含 docs/e2e 全认领，同第一条）
 node scripts/run-tests.mjs --list          # 查看 runner 注册表（三方一致的一方）
 yarn test:unit                              # L1
 yarn test:integration                       # L2
 yarn test:tooling                           # Tooling
-yarn test:static                             # catalog 校验（同第一条）
 ```
 
 分层速查：L1 单进程单单元确定性；L2 多真实生产模块穿越明确 seam；L3 运行中 production build + 真实浏览器；Contract 为边界兼容；Tooling 为测试工具自身；Static 为架构与资产禁令。Contract/Tooling/Static 不计产品覆盖。

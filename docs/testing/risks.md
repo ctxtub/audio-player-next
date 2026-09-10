@@ -36,7 +36,7 @@
 | `expired-session-guest-cookie-silent-revive` | H-18 | 过期会话加残留访客凭证并存，中间件静默放行为访客态 | `expired-session-guest-cookie-revive` |
 | `logout-relogin-orphan-guest-isolation` | H-19 | 登出后再入每次新访客身份，旧访客行成孤儿且新身份完全隔离 | `relogin-new-guest-isolation` |
 | `concurrent-start-story-reset-hang` | H-20 | 两次并发起播互相复位，首次会话状态悬挂 | `story-card-double-tap-suppress` |
-| `history-prompt-context-isolation` | H-21 | 从提示词历史开始新创作时旧上下文串台（组别名，覆盖双行为） | `player-history-select-switch-creation` |
+| `history-prompt-context-isolation` | H-21 | 从提示词历史开始新创作时旧上下文串台（组别名，覆盖双行为） | `history-prompt-start-new-creation`、`generation-history-play-once` |
 
 ## 别名回查示例
 

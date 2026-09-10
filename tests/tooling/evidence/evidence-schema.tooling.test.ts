@@ -16,7 +16,10 @@ import path from 'node:path';
  * 3. 真实 reporter 接线：bound 的 L3 scenario 产出可 join 行；
  *    无绑定的 smoke spec 产出 BLOCKED(reason=no-catalog-binding) 且不编造 case_id；
  * 4. CLI --check 正负例（exit 0 / 非零）；
- * 5. 真实 catalog 抽查：至少一条 case 可 join 到 executable 与 assertion。
+ * 5. 真实 catalog 抽查：至少一条 case 可 join 到 executable 与 assertion；
+ * 6. CJS 转换链可加载：共享校验器及其 catalog 解析器依赖经 ESM→CJS
+ *    转换后须能被纯 CJS 编译加载且功能正常（回归 test:browser:smoke 在
+ *    reporter 加载阶段因 ESM-only 语法崩；旧代码在此步抛同款 SyntaxError）。
  *
  * 口径：只跑 node 子进程 + tmp 写 + 只读真实 catalog，不触 DB/网络/浏览器；
  * needs_db=false 叶子套件。
@@ -400,6 +403,157 @@ async function caseRealCatalogSpot(): Promise<void> {
 }
 
 /**
+ * 用例 9：共享校验器须经得起 Playwright reporter 链的 CJS 转换加载。
+ *
+ * 回归 test:browser:smoke 在 reporter 加载阶段崩
+ * （SyntaxError: Cannot use 'import.meta' outside a module）：
+ * Playwright 经 babel 把链上脚本转 CJS 后按 CJS 编译执行——`export/import`
+ * 可被改写，但表达式里的 ESM-only 语法会原样残留致语法错误。
+ * 本用例覆盖 validator 本体及其被 validator 导入的 catalog 解析器（后者经
+ * evidence-schema.mjs 相对引用进入同一链条，smoke 已实证其 ESM-only 守卫
+ * 同样致命）：用仓库内 @babel/core 做同样的 ESM→CJS 转换，落盘为真实 .cjs
+ * 文件，再起一个干净 node 子进程（无 jiti、无 Playwright，与 reporter 链同为
+ * 纯 CJS 编译）require 它并实际跑一次功能校验；旧代码（含 ESM-only 主入口
+ * 守卫）在此步抛与 RED 日志同款 SyntaxError。
+ * 注：不得在本进程内用 Module._compile 模拟——suite-worker 经 jiti 运行，
+ * jiti 会改写模块编译行为，无法复现该失败（已实证）。
+ */
+async function caseCjsReporterChainLoadable(): Promise<void> {
+    const nodeModule = await import('node:module');
+    const nodeRequire = nodeModule.createRequire(path.join(repoRoot, 'package.json'));
+    let babelCore: {
+        transformSync: (src: string, opts: Record<string, unknown>) => { code?: unknown } | null;
+    };
+    try {
+        babelCore = nodeRequire('@babel/core') as {
+            transformSync: (src: string, opts: Record<string, unknown>) => { code?: unknown } | null;
+        };
+    } catch {
+        assert.fail('回归用例需要仓库内 @babel/core（与 Playwright 同类的 ESM→CJS 转换），缺失即环境损坏');
+    }
+    let cjsPlugin: string;
+    try {
+        cjsPlugin = nodeRequire.resolve('@babel/plugin-transform-modules-commonjs');
+    } catch {
+        assert.fail('回归用例需要 @babel/plugin-transform-modules-commonjs，缺失即环境损坏');
+    }
+    // 中文注释：CJS 链必须覆盖的共享脚本（validator 及其 catalog 解析器依赖）。
+    const targets: Array<{ file: string; name: string }> = [
+        { file: validatorAbs, name: 'evidence-schema.mjs' },
+        { file: path.join(repoRoot, 'scripts', 'check-test-catalog.mjs'), name: 'check-test-catalog.mjs' },
+    ];
+    for (const target of targets) {
+        checkOneCjsChainTarget(babelCore, cjsPlugin, target.file, target.name);
+    }
+    console.log('PASS: 共享校验器及 catalog 解析器经 CJS 转换链可加载且功能正常');
+}
+
+/**
+ * 对单个共享脚本做 CJS 转换链断言（转换→落盘 .cjs→干净子进程 require→功能抽查）。
+ * @param babelCore 仓库内 @babel/core 实例
+ * @param cjsPlugin ESM→CJS 插件路径
+ * @param targetFile 被测脚本绝对路径
+ * @param targetName 被测脚本文件名（决定功能抽查口径）
+ */
+function checkOneCjsChainTarget(
+    babelCore: {
+        transformSync: (src: string, opts: Record<string, unknown>) => { code?: unknown } | null;
+    },
+    cjsPlugin: string,
+    targetFile: string,
+    targetName: string,
+): void {
+    const src: string = readFileSync(targetFile, 'utf8');
+    let code: string;
+    try {
+        const out = babelCore.transformSync(src, {
+            filename: targetFile,
+            babelrc: false,
+            configFile: false,
+            plugins: [cjsPlugin],
+        });
+        assert.ok(out && typeof out.code === 'string' && out.code.length > 0, `${targetName} 的 ESM→CJS 转换产物为空`);
+        code = out.code as string;
+    } catch (err) {
+        assert.fail(`${targetName} 经 ESM→CJS 转换失败（疑含转换器无法改写的 ESM-only 语法）：${err instanceof Error ? err.message : String(err)}`);
+    }
+    // 中文注释：转换产物经 require 相对路径 './check-test-catalog.mjs' 引用同目录依赖；
+    // 落盘到隔离 tmp 后改写为绝对路径，保证子进程可解析且不污染仓库（无相对引用时不改写）。
+    const catalogAbs: string = path.join(repoRoot, 'scripts', 'check-test-catalog.mjs');
+    code = code.split(`'./check-test-catalog.mjs'`).join(JSON.stringify(catalogAbs));
+    code = code.split(`"./check-test-catalog.mjs"`).join(JSON.stringify(catalogAbs));
+    const dir: string = mkdtempSync(path.join(tmpdir(), 'evidence-cjs-chain-'));
+    try {
+        const cjsFile: string = path.join(dir, 'probe.cjs');
+        writeFileSync(cjsFile, code);
+        // 中文注释：子进程脚本用纯 CJS require 加载转换产物，并做一次真实功能抽查：
+        // validator 须能读真实 catalog 并放行 Node 正例行；catalog 解析器须能解析
+        // 最小 YAML 并归一化 suite 路径。
+        const probeLines: string[] =
+            targetName === 'evidence-schema.mjs'
+                ? [
+                      `const v = require(${JSON.stringify(cjsFile)});`,
+                      `if (typeof v.validateRow !== 'function' || typeof v.loadEvidenceCatalog !== 'function') {`,
+                      `  console.error('CJS 产物缺导出');`,
+                      `  process.exit(3);`,
+                      `}`,
+                      `const catalog = v.loadEvidenceCatalog(${JSON.stringify(repoRoot)});`,
+                      `const row = ${JSON.stringify(nodeGood)};`,
+                      `const res = v.validateRow(row, catalog);`,
+                      `if (!res || res.ok !== true) {`,
+                      `  console.error('CJS 链校验器行校验失败：' + JSON.stringify(res && res.errors));`,
+                      `  process.exit(4);`,
+                      `}`,
+                      `console.log('CJS-CHAIN-LOAD-OK');`,
+                  ]
+                : [
+                      `const v = require(${JSON.stringify(cjsFile)});`,
+                      `if (typeof v.parseYamlSubset !== 'function' || typeof v.normalizeSuitePath !== 'function') {`,
+                      `  console.error('CJS 产物缺导出');`,
+                      `  process.exit(3);`,
+                      `}`,
+                      `const norm = v.normalizeSuitePath('./tests/tooling/evidence/evidence-schema.tooling.test.ts');`,
+                      `if (norm !== 'tests/tooling/evidence/evidence-schema.tooling.test.ts') {`,
+                      `  console.error('归一化失败：' + norm);`,
+                      `  process.exit(5);`,
+                      `}`,
+                      `const doc = v.parseYamlSubset('cases:\\n  - case_id: probe-case\\n');`,
+                      `if (!doc || !Array.isArray(doc.cases) || doc.cases.length !== 1) {`,
+                      `  console.error('YAML 子集解析失败');`,
+                      `  process.exit(6);`,
+                      `}`,
+                      `console.log('CJS-CHAIN-LOAD-OK');`,
+                  ];
+        const probe: string = probeLines.join('\n');
+        let status = -1;
+        let stderr = '';
+        let stdout = '';
+        try {
+            stdout = execFileSync(process.execPath, ['-e', probe], {
+                cwd: repoRoot,
+                encoding: 'utf8',
+                timeout: execTimeoutMs,
+            }) as unknown as string;
+            status = 0;
+        } catch (err) {
+            const e = err as { status?: unknown; stdout?: unknown; stderr?: unknown };
+            status = typeof e.status === 'number' ? e.status : 1;
+            stdout = String(e.stdout ?? '');
+            stderr = String(e.stderr ?? '');
+        }
+        assert.strictEqual(
+            status,
+            0,
+            `${targetName} 须能被 CJS 转换链加载（test:browser:smoke reporter 同款路径），子进程 exit=${status} stdout=${stdout.slice(0, 300)} stderr=${stderr.slice(0, 800)}`,
+        );
+        assert.ok(stdout.includes('CJS-CHAIN-LOAD-OK'), `${targetName} 子进程须输出 CJS-CHAIN-LOAD-OK`);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+    console.log(`PASS: ${targetName} 经 CJS 转换链可加载且功能正常`);
+}
+
+/**
  * 测试入口：顺序执行全部用例。
  */
 async function main(): Promise<void> {
@@ -411,6 +565,7 @@ async function main(): Promise<void> {
     await caseReporterUnboundBlocked();
     await caseCliCheck();
     await caseRealCatalogSpot();
+    await caseCjsReporterChainLoadable();
 }
 
 export default main();

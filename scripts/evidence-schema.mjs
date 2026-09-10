@@ -320,8 +320,14 @@ function main() {
 
 export { normalizeSuitePath };
 
+// 中文注释：main 判定（与加载器无关：ESM 直接执行 / ESM import / jiti / Playwright CJS
+// 转换加载下均安全）。Playwright 经 babel 把本文件转 CJS 后编译，`import.meta` 会原样残留
+// 导致 SyntaxError（test:browser:smoke reporter 加载阶段崩），故此处禁用一切 ESM-only 语法
+// （import.meta）与 CJS-only 标识（__filename/require）：仅以被执行脚本的文件名判定。
+// 直接 `node scripts/evidence-schema.mjs --check …` 时 argv[1] basename 命中；被 import/require
+// 时 argv[1] 指向导入者（suite-worker/playwright runner 等），basename 不同 → 不误触发 CLI。
 const __runAsMain = typeof process.argv[1] === 'string'
-  && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname;
+  && path.basename(process.argv[1]) === 'evidence-schema.mjs';
 if (__runAsMain) {
   main();
 }

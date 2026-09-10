@@ -680,9 +680,12 @@ function main() {
 
 // 中文注释：C3 导出共用解析函数供 scripts/check-tier-gate.mjs 复用（catalog 解析只允许这一份）。
 // 被 import 时不执行 main；直接运行本文件时行为与输出不变。
+// main 判定与加载器无关（与 scripts/evidence-schema.mjs 同一改法）：本文件经
+// evidence-schema 被 Playwright reporter 链 CJS 转换加载（已由 smoke 实证），
+// 故禁用 ESM-only 的 import.meta（亦不用 __filename/require），仅以被执行脚本的文件名判定。
 export { parseYamlSubset, normalizeSuitePath };
 const __runAsMain = typeof process.argv[1] === 'string'
-  && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname;
+  && path.basename(process.argv[1]) === 'check-test-catalog.mjs';
 if (__runAsMain) {
   main();
 }

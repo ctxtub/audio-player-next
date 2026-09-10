@@ -31,6 +31,25 @@ test("页面退出前尾部持久化送达", async ({ page, harnessEnv, evidence
 
     // 中文注释：另开退出页（保留 fixture 页供 teardown），在退出页完成一次真实创作。
     const exitPage = await page.context().newPage();
+    // 中文注释：Fix 8 网络探针（只记录不判定）：捕获退出页在关闭前后发出的保存请求，
+    // 区分“pagehide/exit-flush 未触发（请求未发出）”与“keepalive 送达被丢弃（请求发出无响应）”。
+    const saveRequests: Array<{ url: string; method: string; stage: string }> = [];
+    const saveOutcomes: Array<{ url: string; outcome: string }> = [];
+    exitPage.on("request", (req) => {
+        if (req.url().includes("saveConversation")) {
+            saveRequests.push({ url: req.url().slice(-80), method: req.method(), stage: "request" });
+        }
+    });
+    exitPage.on("requestfailed", (req) => {
+        if (req.url().includes("saveConversation")) {
+            saveOutcomes.push({ url: req.url().slice(-80), outcome: `failed:${req.failure()?.errorText ?? "unknown"}` });
+        }
+    });
+    exitPage.on("response", (res) => {
+        if (res.url().includes("saveConversation")) {
+            saveOutcomes.push({ url: res.url().slice(-80), outcome: `status:${res.status()}` });
+        }
+    });
     await exitPage.goto(`${harnessEnv.appUrl}/chat`, { waitUntil: "domcontentloaded", timeout: 30000 });
     await dismissOnboarding(exitPage);
     const composer = exitPage.getByPlaceholder("请输入内容...");
@@ -47,15 +66,16 @@ test("页面退出前尾部持久化送达", async ({ page, harnessEnv, evidence
     recorder.step("关闭前直查", { chatBefore, tailPresentBefore: guestChatContains(dbFile, tailFragment), rowsBefore: guestChatRowSnapshot(dbFile) });
 
     // 中文注释：真实页面关闭触发 pagehide/keepalive 送达（产品 beforeunload/pagehide 接线）。
+    // Fix 8：runBeforeUnload 要求驱动执行卸载处理器（真实关标签页会执行；默认 close() 在 WebKit 下跳过）。
     /** 关闭前测试进程时间戳（外部时间线）。 */
     const beforeCloseMs: number = Date.now();
     recorder.step("关闭退出页", { beforeCloseMs });
-    await exitPage.close();
+    await exitPage.close({ runBeforeUnload: true });
     /** 关闭后静置，待 keepalive 落库完成（测试进程外部等待）。 */
     await page.waitForTimeout(5000);
     /** 关闭后测试进程时间戳。 */
     const afterCloseMs: number = Date.now();
-    recorder.step("关闭后直查", { afterCloseMs });
+    recorder.step("关闭后直查", { afterCloseMs, saveRequests, saveOutcomes });
 
     // 中文注释：关闭后由测试进程直查隔离 DB（禁页面内日志自证）。
     /** 关闭后访客聊天行数（尾部不得丢失）。 */

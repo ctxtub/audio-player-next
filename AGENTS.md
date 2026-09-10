@@ -56,7 +56,7 @@ git diff --check
 
 ## 多 Agent 与 Git
 
-- 同一工作区同一时刻仅允许一个写 Agent；只读调研和 review 可并行。
+- 评估影响面后允许多写者并行：优先各自独立 worktree 与分支并声明不相交路径所有权；只用显式路径提交；重套件串行；需干净 tracked 树的门只在相关写者静默时运行；只读调研和 review 可并行。
 - Planner、Implementer、Reviewer/Acceptor、Publisher 分权；实现者不得自批，验收者不得顺手修实现。
 - 每个会话必须记录 change-id、角色、工作目录、目标 SHA、授权路径和证据位置。
 - 未获明确授权不得 push、merge、deploy、触发 Actions、reset、rebase、force 或修改生产状态。

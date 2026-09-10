@@ -69,30 +69,27 @@ function caseQualitySevenSteps(content: string): void {
 }
 
 /**
- * 用例②：镜像 job needs 质量 job（同 workflow 同 SHA 依赖）。
+ * 用例②：普通检查无镜像发布者（WS1，D1 已决：发布权收归 docker-push.yml）。
+ * 原“镜像 job needs 质量 job”语义已 superseded：普通检查 workflow 不得含 image job；
+ * 同 SHA 发布门禁由 docker-push.yml 同文件 needs 覆盖（见用例⑦）。
  * @param content candidate-quality.yml 全文
  */
 function caseImageNeedsQuality(content: string): void {
-  assert.ok(/needs:\s*\[?[^\n]*quality/.test(content), '镜像 job 缺 needs: 质量 job=RED（须同 workflow 同 SHA 依赖）');
-  console.log('PASS: 用例② 镜像 job needs 质量 job');
+  assert.ok(!/^\s{2}image:/m.test(content), '普通检查 workflow 不得含 image job=RED（已收归 docker-push 单一发布者，checks-only）');
+  console.log('PASS: 用例② 普通检查无 image 发布者（已收归单一发布者）');
 }
 
 /**
- * 用例③：触发器含候选分支 push、普通 PR 与 manual dispatch；PR 不得进入镜像发布 job。
+ * 用例③：触发器含普通分支 push、普通 PR 与 manual dispatch；普通检查无镜像发布 job。
+ * WS1 checks-only：保留 push（普通分支）+ pull_request + workflow_dispatch 检查入口，但无 image job。
  * @param content candidate-quality.yml 全文
  */
 function caseTriggers(content: string): void {
   assert.ok(content.includes('push:'), '缺 push 触发=RED');
   assert.ok(/^\s{2}pull_request:/m.test(content), '缺普通 pull_request 质量门=RED');
   assert.ok(content.includes('workflow_dispatch'), '缺 manual dispatch 触发=RED');
-  const imageStart: number = content.indexOf('\n  image:');
-  assert.ok(imageStart >= 0, '缺 image job=RED');
-  const imageSection: string = content.slice(imageStart);
-  assert.ok(
-    imageSection.includes("if: github.event_name != 'pull_request'"),
-    'PR 必须显式禁止 image 发布 job=RED',
-  );
-  console.log('PASS: 用例③ push/pull_request/manual 触发且 PR 不发布镜像');
+  assert.ok(!/^\s{2}image:/m.test(content), '普通检查 workflow 不得含 image job=RED（checks-only）');
+  console.log('PASS: 用例③ push/pull_request/manual 触发且无镜像发布');
 }
 
 /**
@@ -183,7 +180,39 @@ function caseDockerPushNeeds(content: string): void {
 }
 
 /**
- * 测试入口：顺序执行①-⑦，任一缺失即抛（RED），全过即 GREEN。
+ * 用例⑧：普通分支 checks-only，无镜像发布者（WS1）。
+ * 断言普通检查 workflow 内无 packages: write、无 push-ghcr.sh、无 buildx 发布语义；
+ * image job 不存在或含 if: false。
+ * @param content candidate-quality.yml 全文
+ */
+function caseOrdinaryBranchesNoPublisher(content: string): void {
+  assert.ok(
+    !content.includes('packages: write'),
+    '普通检查 workflow 不得含 packages: write=RED（普通分支 checks-only，无镜像）',
+  );
+  assert.ok(
+    !content.includes('push-ghcr.sh'),
+    '普通检查 workflow 不得引用 push-ghcr.sh=RED（普通分支 checks-only，无镜像）',
+  );
+  assert.ok(
+    !content.includes('buildx build') && !content.includes('docker buildx build --push'),
+    '普通检查 workflow 不得含 buildx 发布语义=RED',
+  );
+  const hasImageJob: boolean = /^\s{2}image:/m.test(content);
+  if (hasImageJob) {
+    const imageStart: number = content.indexOf('\n  image:');
+    const imageSection: string = content.slice(imageStart);
+    assert.ok(
+      imageSection.includes('if: false'),
+      'image job 存在时必须 if: false（普通分支 checks-only）=RED',
+    );
+  }
+  assert.ok(!hasImageJob, '普通检查 workflow 不得含 image job=RED（普通分支 checks-only，无镜像）');
+  console.log('PASS: 用例⑧ 普通分支 checks-only，无镜像发布者');
+}
+
+/**
+ * 测试入口：顺序执行①-⑧，任一缺失即抛（RED），全过即 GREEN。
  */
 async function main(): Promise<void> {
   console.log('--- Testing Candidate Quality Gate Workflow ---');
@@ -201,6 +230,7 @@ async function main(): Promise<void> {
   caseShaTag(script);
   casePathFilterStep(candidate);
   caseDockerPushNeeds(dockerPush);
+  caseOrdinaryBranchesNoPublisher(candidate);
   console.log('ALL CANDIDATE QUALITY WORKFLOW TESTS PASSED');
 }
 

@@ -27,6 +27,7 @@
 - 一个提交只承担一个工程目标，遵循 Conventional Commits。
 - PR 必须填写 `.github/pull_request_template.md` 的测试影响与验证记录。
 - 普通 PR 进入质量门和 P0 Chromium + WebKit 门；Nightly 负责扩大矩阵与显式时序观察。
+- 普通分支 checks-only，无镜像。
 - GitHub required checks 由仓库管理员在分支保护中配置；workflow 文件存在本身不构成 required check 证明。
 
 ## 文档状态

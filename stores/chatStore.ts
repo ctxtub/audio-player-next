@@ -919,6 +919,8 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
       // 中文注释：失败已由 saveError 标记位记录，此处仅防未处理拒绝。
     });
   };
-  window.addEventListener('beforeunload', handleChatExitFlush);
-  window.addEventListener('pagehide', handleChatExitFlush);
+  // CANARY-TEMP-Fix10: 临时断开退出落盘接线（验证 persist-tail oracle 非空证，用后还原删除）
+  // window.addEventListener('beforeunload', handleChatExitFlush);
+  // window.addEventListener('pagehide', handleChatExitFlush);
+  void handleChatExitFlush;
 }

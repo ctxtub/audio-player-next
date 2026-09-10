@@ -1,0 +1,117 @@
+# 夜间浏览器全量（L3 P0/P1 + 显式重复时序观察）。
+#
+# - gate job（browser-smoke-nightly）：与 browser.yml 同构的硬门（同 workflow needs quality，
+#   retries=0，无 continue-on-error；WebKit P0 失败即红）。
+# - observe job（timing-observe）：显式重复时序观察（--repeat-each=3，仅 webkit），
+#   纯信息输出（timings 工件），continue-on-error 仅限本 job 且不参与门禁；
+#   任何重复轮次失败都会在日志与工件中留痕，供 flaky-policy quarantime 判定引用。
+# - 与镜像发布关系同 browser.yml 头注：本 workflow 不发布镜像。
+name: Nightly Browser Full
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: nightly-browser-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Static check
+        run: yarn test:static
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Typecheck
+        run: yarn tsc --noEmit --incremental false
+
+      - name: L1 unit tests
+        run: yarn test:unit
+
+      - name: L2 integration tests
+        run: yarn test:integration
+
+      - name: Contract (transitional NOT_APPLICABLE)
+        run: |
+          echo "NOT_APPLICABLE"
+          exit 0
+
+      - name: Build
+        run: yarn build
+
+  browser-smoke-nightly:
+    name: L3 P0/P1 Full (Chromium + WebKit, retries=0)
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install Playwright browsers (chromium + webkit)
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: L3 full (retries=0, isolated harness)
+        env:
+          BROWSER_RUN_ID: ci-nightly-${{ github.sha }}
+        run: yarn test:browser:smoke
+
+  timing-observe:
+    name: Timing Observe webkit x3 (informational)
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install Playwright browsers (chromium + webkit)
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Explicit repeat timing observation (webkit x3)
+        env:
+          BROWSER_RUN_ID: ci-nightly-observe-${{ github.sha }}
+        run: npx playwright test --config tests/system/browser/playwright.config.ts tests/system/browser --project=webkit --repeat-each=3 --reporter=list

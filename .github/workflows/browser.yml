@@ -1,0 +1,94 @@
+# 浏览器冒烟门（P0 Chromium + WebKit 双项目，retries=0 硬门）。
+#
+# 与质量/镜像发布的关系（必须清楚）：
+# - 本 workflow 内：browser-smoke 同 workflow needs quality（同 SHA 质量门，与 candidate-quality.yml
+#   的 quality→image 同构；跨 workflow needs 不生效，故各发布链路自带 quality job）。
+# - 与镜像发布：候选/正式镜像只由 candidate-quality.yml（image job）与 docker-push.yml
+#   （docker-push job）发布，两者各自 needs 同文件 quality（同 SHA 不可绕过）；
+#   release 允许打 tag/推镜像的前提是“同 SHA 下 candidate-quality.yml quality 成功
+#   且本 workflow browser-smoke 成功”（分支保护/人工核对，见 nightly-browser.yml 头注）。
+# - 本 workflow 不发布任何镜像（无 packages:write，无 docker 步骤），只做门禁。
+name: Browser Smoke (P0)
+
+on:
+  push:
+    branches:
+      - main
+      - 'candidate/**'
+      - 'release/**'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: browser-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Static check
+        run: yarn test:static
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Typecheck
+        run: yarn tsc --noEmit --incremental false
+
+      - name: L1 unit tests
+        run: yarn test:unit
+
+      - name: L2 integration tests
+        run: yarn test:integration
+
+      - name: Contract (transitional NOT_APPLICABLE)
+        run: |
+          echo "NOT_APPLICABLE"
+          exit 0
+
+      - name: Build
+        run: yarn build
+
+  browser-smoke:
+    name: P0 Browser Smoke (Chromium + WebKit, retries=0)
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install Playwright browsers (chromium + webkit)
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: P0 browser smoke (retries=0, isolated harness)
+        env:
+          BROWSER_RUN_ID: ci-browser-smoke-${{ github.sha }}
+        run: yarn test:browser:smoke

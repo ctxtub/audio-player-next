@@ -97,6 +97,23 @@ export function guestChatContains(dbFile: string, fragment: string): boolean {
 }
 
 /**
+ * 访客聊天行角色与内容头快照（Fix 8 诊断：定位尾部缺失发生在“行缺失”还是“内容变形”）。
+ * 仅返回 role 与 content 前 24 字，不扩散完整正文。
+ * @param dbFile 隔离库文件路径
+ * @returns 行快照数组
+ */
+export function guestChatRowSnapshot(dbFile: string): Array<{ role: string; head: string }> {
+    const out: string = queryReadOnly(dbFile, 'SELECT role || char(31) || substr(content, 1, 24) FROM GuestChatMessage ORDER BY id ASC;');
+    if (out.length === 0) {
+        return [];
+    }
+    return out.split('\n').map((line) => {
+        const parts: string[] = line.split('');
+        return { role: parts[0] ?? '', head: parts[1] ?? '' };
+    });
+}
+
+/**
  * 按提示词精确查询访客生成历史（含故事正文，供回放 source/text 匹配断言）。
  * @param dbFile 隔离库文件路径
  * @param prompt 提示词原文

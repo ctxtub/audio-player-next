@@ -88,39 +88,66 @@ test("从提示词历史开始新创作", async ({ page, harnessEnv, evidence })
 
     // 中文注释：K1校准——/chat 内新故事已生成并起播证据（重载前）：audio 存在且已播放。
     // 断点水合设计 isPlaying=false，重载后不自动恢复为预期，故起播证据只在 /chat 重载前采集。
+    // Fix 8 根因加固：旧实现以 playing/ended/!paused 任一先到即判 played=true，
+    // 在 WebKit 下元数据尚未加载（readyState=0）时即可退出，造成 readyState 快照断言 flaky。
+    // 新实现要求“元数据已加载（loadedmetadata/readyState>=1 真实观测）与已起播”双事件同时成立才退出，
+    // readyState>=1 断言保留（只增不减，严格更强）。
     const chatAutoplay = await page.evaluate(async () => {
         const audio = document.querySelector("audio") as HTMLAudioElement | null;
         if (!audio || !audio.src) {
-            return { hasSrc: false, played: false, readyState: 0 };
+            return { hasSrc: false, played: false, metadataReady: false, readyState: 0 };
         }
-        const played = await new Promise<boolean>((resolve) => {
+        const state = await new Promise<{ played: boolean; metadataReady: boolean }>((resolve) => {
+            let played = false;
+            let metadataReady = audio.readyState >= 1;
             let done = false;
-            const finish = (value: boolean): void => {
-                if (!done) {
+            const finish = (): void => {
+                if (!done && played && metadataReady) {
                     done = true;
-                    resolve(value);
+                    window.clearTimeout(timer);
+                    cleanup();
+                    resolve({ played, metadataReady });
                 }
             };
-            const timer = window.setTimeout(() => finish(!audio.paused || audio.currentTime > 0), 15000);
+            const timer = window.setTimeout(() => {
+                if (!done) {
+                    done = true;
+                    cleanup();
+                    resolve({ played, metadataReady });
+                }
+            }, 15000);
             const onPlaying = (): void => {
-                window.clearTimeout(timer);
-                finish(true);
+                played = true;
+                finish();
             };
             const onEnded = (): void => {
-                window.clearTimeout(timer);
-                finish(true);
+                played = true;
+                finish();
             };
-            audio.addEventListener("playing", onPlaying, { once: true });
-            audio.addEventListener("ended", onEnded, { once: true });
+            const onMetadata = (): void => {
+                metadataReady = audio.readyState >= 1;
+                finish();
+            };
+            const cleanup = (): void => {
+                audio.removeEventListener("playing", onPlaying);
+                audio.removeEventListener("ended", onEnded);
+                audio.removeEventListener("loadedmetadata", onMetadata);
+                audio.removeEventListener("canplay", onMetadata);
+            };
+            audio.addEventListener("playing", onPlaying);
+            audio.addEventListener("ended", onEnded);
+            audio.addEventListener("loadedmetadata", onMetadata);
+            audio.addEventListener("canplay", onMetadata);
             if (!audio.paused || audio.ended || audio.currentTime > 0) {
-                window.clearTimeout(timer);
-                finish(true);
+                played = true;
             }
+            finish();
         });
-        return { hasSrc: true, played, readyState: audio.readyState };
+        return { hasSrc: true, played: state.played, metadataReady: state.metadataReady, readyState: audio.readyState };
     });
     expect(chatAutoplay.hasSrc).toBe(true);
     expect(chatAutoplay.played).toBe(true);
+    expect(chatAutoplay.metadataReady).toBe(true);
     expect(chatAutoplay.readyState).toBeGreaterThanOrEqual(1);
     recorder.step("新故事已生成并起播", chatAutoplay);
 

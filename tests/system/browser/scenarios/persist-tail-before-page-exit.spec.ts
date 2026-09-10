@@ -5,7 +5,7 @@
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";
 import { dismissOnboarding } from "./helpers/guest";
-import { countTableRows, guestChatContains, resolveIsolationDbPath } from "./helpers/db";
+import { countTableRows, guestChatContains, guestChatRowSnapshot, resolveIsolationDbPath } from "./helpers/db";
 
 /**
  * 页面退出前尾部持久化送达（旧 H-16）。
@@ -40,6 +40,11 @@ test("页面退出前尾部持久化送达", async ({ page, harnessEnv, evidence
     recorder.step("尾部投递完成", { tailPrompt });
     /** 投递后访客聊天行数基线（关闭前）。 */
     const chatBefore: number = countTableRows(dbFile, "GuestChatMessage");
+    /** 尾部提示词片段（唯一键前 12 字，LIKE 直查落库内容）。 */
+    const tailFragment: string = tailPrompt.slice(0, 12);
+    // 中文注释：Fix 8 诊断探针（只记录不判定）：区分“尾部关闭前已落库但关闭后丢失”
+    // 与“尾部关闭前即未落库（pagehide/keepalive 送达链问题）”，不断言、不削弱 oracle。
+    recorder.step("关闭前直查", { chatBefore, tailPresentBefore: guestChatContains(dbFile, tailFragment), rowsBefore: guestChatRowSnapshot(dbFile) });
 
     // 中文注释：真实页面关闭触发 pagehide/keepalive 送达（产品 beforeunload/pagehide 接线）。
     /** 关闭前测试进程时间戳（外部时间线）。 */
@@ -57,8 +62,6 @@ test("页面退出前尾部持久化送达", async ({ page, harnessEnv, evidence
     const chatAfter: number = countTableRows(dbFile, "GuestChatMessage");
     expect(chatAfter).toBeGreaterThanOrEqual(chatBefore);
     expect(chatAfter).toBeGreaterThanOrEqual(1);
-    /** 尾部提示词片段（唯一键前 12 字，LIKE 直查落库内容）。 */
-    const tailFragment: string = tailPrompt.slice(0, 12);
     expect(guestChatContains(dbFile, tailFragment)).toBe(true);
     recorder.step("尾部落库", { chatBefore, chatAfter, beforeCloseMs, afterCloseMs });
 });

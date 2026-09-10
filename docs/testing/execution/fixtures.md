@@ -30,14 +30,6 @@
   （库文件 `prisma/test-paragraph-resume.db`，gitignored），再动态导入全部
   DB 依赖； ambient `DATABASE_URL` 不再决定写库去向。
 
-## 测试运行器口径（canonical loader）
-
-- 唯一入口 `node scripts/run-tests.mjs`，canonical loader 是 **jiti**；
-  禁止裸 `npx tsx` 跑含 `next/headers` mock 的套件（ESM namespace 冻结
-  TypeError，TC-P2-05 即挂）。
-- `TRPCError` 断言一律从 `lib/trpc/init` 取（跨实例 instanceof 失效教训，
-  参考 676fb9b）；`next/headers` mock 范式见 `tests/test-guest-config.ts`。
-
 ## 新增 fixture 规则
 
 1. 只收跨用例复用价值的构造（单一用例内联种子不必上浮）。

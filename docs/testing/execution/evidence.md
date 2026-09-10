@@ -106,3 +106,61 @@ run_id, case_id, executable_id, assertion_id, surface, verdict, evidence_path
 - 网络证据只记 pathname，不记 query（批输入在 query 中，防载荷泄露）；非流响应保留安全 body 摘要（截断上限 + truncated 标记）。
 - `evidence_path` 只记相对路径，不记绝对路径（含用户目录名）、`file:` URL 与 `DATABASE_URL` 值；日志经 runner `sanitizeError` 口径脱敏后方可落盘。
 - 运行产物在执行前后运行 `git status --porcelain` 自检，除预先授权的规范文件外必须保持工作区干净；证据目录本身已被 `.gitignore` 忽略，严禁 `git add`。
+
+## 6. CI 工件（发布 workflow：白名单/黑名单/脱敏与留存）
+
+发布 workflow 仅上传白名单工件，并设显式 `retention-days: 30`（接线见发布 workflow，本文为规范指针，不复述 workflow 全文）。
+
+- 白名单（仅允许上传）：`results.jsonl`、`manifest.json`、汇总日志、P0 烟雾截图、digest 回读记录。
+- 记录口径：pathname-only，无 query，无 body 载荷。
+- 黑名单（永不上传）：`.env*`、一切数据库文件（含隔离库、共享开发库 `prisma/dev.db`、生产库）、一切 secret/token/cookie/连接串、`.e2e-runtime/` 全量。
+- 脱敏规则：日志上传前复核 `file:` URL 与 `DATABASE_URL=` 值已脱敏（runner `sanitizeError` 口径，CI 侧复核）；
+  网络证据只记 pathname；`evidence_path` 只记相对仓库根路径。
+- 留存：`retention-days: 30`。
+
+## 7. 任务 manifest schema（D5：本节为规范正文，索引见工程留存文档）
+
+任务 manifest 记录一次授权任务的身份、边界与交接，落 `.agent-runs/<change-id>/manifest.yaml`（本地私有，不入库）。
+字段（全部必填）：
+
+| 字段 | 说明 |
+|---|---|
+| `change_id` | 变更标识（如 `governance-hardening-20260910`） |
+| `role` | 本任务角色（如 `Implementer`） |
+| `workspace` | 授权工作目录绝对路径 |
+| `branch` | 授权分支 |
+| `base_sha` | 基线完整 SHA |
+| `target_sha` | 验收目标 SHA（固定后只读复核） |
+| `authorized_paths` | 授权路径清单（非空数组；只显式暂存其中文件） |
+| `forbidden_actions` | 禁止动作清单（如 push/merge/deploy/触发 Actions） |
+| `required_reads` | 必读文档清单（spec/plan 相关节） |
+| `evidence_dir` | 证据目录（run-id 真实路径，不得伪造统一位置） |
+| `handover` | 交接段（见下表） |
+
+`handover` 子字段（全部必填）：
+
+| 子字段 | 说明 |
+|---|---|
+| `commit_sha` | 落盘 commit SHA |
+| `changed_files` | 变更文件清单 |
+| `commands` | `{command, exit_code}` 数组（每条门命令与真实退出码） |
+| `not_run` | 未执行项（`NOT_RUN` 诚实标记） |
+| `ownership` | `PID/端口/DB 所有权`：`{pids, ports, db}`（自有已释放/未触碰如实记录） |
+| `recovery` | 恢复锚点（回到干净态的命令与基线） |
+
+校验器形态固定为专用 Tooling 校验测试（`tests/tooling/docs/`），不并入 `check-test-catalog.mjs`。
+
+## 8. 结项 schema（D5：本节为规范正文，索引见工程留存文档）
+
+精炼结项落 `docs/changes/YYYY-MM-DD-<topic>.md`。必填：
+
+| 字段 | 说明 |
+|---|---|
+| `status` | 结论状态（`DONE/PARTIAL/BLOCKED`，不写 ETA） |
+| `base_sha` | 基准 SHA |
+| `result` | 结果（各 WS 验收逐项结论） |
+| `entrypoints` | 入口（规范/计划/测试入口链接） |
+| `known_non_blocking` | 已知非阻断项 |
+| `conclusion_boundary` | 结论边界：技术 APPROVE ≠ 发布授权 |
+
+校验器形态与 manifest 同口径（专用 Tooling 校验测试，缺字段负例须被拒）。

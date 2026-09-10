@@ -62,6 +62,15 @@ docs/testing/**                        # 当前测试体系权威
 
 Playwright attachment/output 统一放 `.e2e-results/playwright/`。历史默认目录 `/test-results/` 与 `/playwright-report/` 继续列入 `.gitignore`，防旧命令或第三方 reporter 污染工作区。
 
+## 规范落点索引（治理硬化 WS7）
+
+- 任务 manifest schema（规范正文）：[`docs/testing/execution/evidence.md`](../testing/execution/evidence.md) §7
+ （含 `handover` 所有权与恢复锚点字段）；校验器为 `tests/tooling/docs/` 下专用 Tooling 校验测试（D5，不并入 checker）。
+- 结项 closeout schema（规范正文）：[`docs/testing/execution/evidence.md`](../testing/execution/evidence.md) §8
+ （`docs/changes/YYYY-MM-DD-<topic>.md` 必填：状态/基准 SHA/结果/入口/已知非阻断项/结论边界）。
+- CI 工件清单（白名单/黑名单/脱敏规则与 `retention-days: 30` 指针）：[`docs/testing/execution/evidence.md`](../testing/execution/evidence.md) §6。
+- 前代调度政策历史（非现行规范，仅追溯）：[`docs/archive/governance-hardening-20260910/`](../archive/governance-hardening-20260910/README.md)。
+
 ## 保留与清理
 
 - `.e2e-runtime/`：正常运行完成立即清理；BLOCKED 时仅保留无法安全清理的自有资源并报告。

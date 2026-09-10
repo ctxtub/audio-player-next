@@ -1,154 +1,115 @@
-# E2E 隔离执行设计（通用规范）
+# 隔离执行设计（harness 真相）
 
-本文档是全部功能套件（01..06）的共用前置。目标：**让任何 E2E 执行都碰不到生产/共享数据，也碰不到 git 工作区**。
+本文档是浏览器 L3 harness 与全部隔离执行的共用前置。目标：**任何执行都碰不到生产/共享数据，也碰不到 git 工作区**。
+实现口径以 `tests/system/browser/harness/` 代码为准；本文件只做规范转述，不另设政策。
+前代调度政策原文已移入 [`docs/archive/governance-hardening-20260910/`](../../archive/governance-hardening-20260910/README.md)（历史追溯专用，非现行规范）。
 
 ## 1. 硬边界（违反任何一条即中止执行）
 
-1. **严禁生产数据**：不连接、不读写生产数据库（Docker 生产路径 `/app/data/app.db`、生产 38080 端口）；不触碰共享开发库 `prisma/dev.db`；任何 DB 断言只对 `{{E2E_DB_URL}}` 执行。
-2. **严禁真实凭证**：测试账号口令、`SESSION_SECRET`、`OPENAI_API_KEY` 只存在于本地未入库文件 `.e2e-runtime/.env.e2e`（已被 `.gitignore` 覆盖）；文档/仓库内一律使用符号标识符（第 5 节）。
-3. **严禁外联**：LLM/TTS 上游一律指向本地 mock `{{E2E_MOCK_OPENAI}}`（经 `OPENAI_BASE_URL` 注入）；不访问任何真实域名、不发真实网络请求。
-4. **严禁污染 git**：执行前后 `git status --porcelain` 必须为空（仅允许 docs/e2e 下的新增资产）；所有运行时产物只写 `.e2e-results/`、`.e2e-runtime/`。
+1. **严禁生产数据**：不连接、不读写生产数据库（Docker 生产路径 `/app/data/app.db`、生产端口 `38080`）；不触碰共享开发库 `prisma/dev.db`；任何 DB 断言只对当次隔离库执行。
+2. **严禁真实凭证**：合成密钥只存在于进程内合成环境或本地未入库文件（已被 `.gitignore` 覆盖）；文档/仓库内一律使用符号标识符（第 5 节）。
+3. **严禁外联**：LLM/TTS 上游一律指向当次常驻 mock（经 `OPENAI_BASE_URL` 注入，地址见指针文件）；不访问任何真实域名、不发真实网络请求。
+4. **严禁污染 git**：快照前 tracked 树必须干净（第 3 节守卫）；所有运行时产物只写 `.e2e-runtime/`、`.e2e-results/`（git 忽略）。
 5. **不修改应用源码**：测试执行阶段若需探针（如音频状态），通过浏览器 eval 读取既有 DOM/`<audio>` 元素，不改源码。
 
-## 2. 环境设计
+## 2. 环境设计（harness 真相）
 
 | 项 | 值 | 说明 |
 | --- | --- | --- |
-| 服务端口 | `{{E2E_PORT}}` = 31111 | 与 dev(3000)/docker(38080) 隔离 |
-| 数据库 | `{{E2E_DB_URL}}` = `file:{{E2E_RUNTIME_DIR}}/e2e.db` | 独立 SQLite；每轮执行前重建 |
-| 会话密钥 | `{{E2E_SESSION_SECRET}}` | 仅存 `.e2e-runtime/.env.e2e` |
-| LLM/TTS 上游 | `{{E2E_MOCK_OPENAI}}` = `http://127.0.0.1:9301/v1` | 经 `OPENAI_BASE_URL` 注入 |
-| 模型名 | `{{E2E_MODEL_STORY}}` / `{{E2E_MODEL_AGENT}}` / `{{E2E_TTS_MODEL}}` | mock 端识别用假名 |
-| 浏览器 | agent-browser MCP，每用例独立会话 | 用例开始前清 cookie/storage |
+| 应用端口 | `31120-31150` 范围内当次空闲端口 | `pickAppPort` 顺序取首个空闲；停止后确认释放 |
+| 隔离库 | 快照内 `prisma/harness-<port>-<runTag>.db` | per-run 独占；启动时 `migrate deploy`；停止时删除 |
+| 构建期库 | 快照内 `prisma/harness-build.db` | 仅 `next build` 收集页用，与运行时库分离 |
+| 会话密钥 | 进程内合成随机值 | `buildSnapshotEnv` 每次启动合成，不落盘 |
+| LLM/TTS 上游 | 当次常驻 mock 地址（`mockUrl + /v1`） | `OPENAI_BASE_URL` 注入；端口由 `mock-port-<run>.json` 记录 |
+| 模型名 | 合成假名 | mock 端识别用，不对应真实模型 |
+| 浏览器 | Playwright 独立上下文 | 每用例独立会话，用例开始前清状态 |
 
-标准启动命令（执行阶段使用，本阶段不运行）：
+## 3. production 快照（`git archive HEAD` + 前置守卫）
 
-```bash
-# 1) 临时环境目录（git 忽略）
-mkdir -p .e2e-runtime .e2e-results
-# 2) 隔离库结构部署（仓外路径）
-DATABASE_URL=file:.e2e-runtime/e2e.db npx prisma migrate deploy
-# 3) mock 上游（脚本存于 .e2e-runtime/，不入库）
-node .e2e-runtime/mock-openai.mjs   # /v1/chat/completions(SSE) + /v1/audio/speech(固定 MP3)
-# 4) 应用（读取 .e2e-runtime/.env.e2e 中的敏感值后导出）
-yarn dev -p 31111
-```
+快照构建（`ensureSnapshot`）只打包 tracked 文件（`.env` 系、`.db`、`.next`、`node_modules` 天然排除），
+`node_modules` 以只读 symlink 回真仓库，快照内补 `prisma generate`，随后在构建期隔离库上 `migrate deploy` + `next build`。
+快照键为 commit 完整 SHA（目录名兼容 short/full，manifest 与日志记 full；`unknown` 禁止构建，直接抛 `BLOCKED`）。
 
-## 3. mock 上游设计与 Worker 生命周期托管契约（`.e2e-runtime/mock-openai.mjs`）
+前置守卫（取锁前 fast-path 先验、取锁后锁内复验；缓存命中路径同样先验，脏树即使快照已就绪也拒绝复用）：
 
-### 3.1 服务端能力与路由规范
-- `POST /v1/chat/completions`：按请求序返回可配置的 SSE 故事流（固定 4 段文本，每段约 200 字，段落边界稳定），支持注入故障：`500`、慢速（延时发 token）、中途断流。
-- `POST /v1/audio/speech`：返回固定短 MP3 字节（约 2s），响应头含时长，保证 `<audio>` 断言（duration≈2s）稳定。
-- 故障注入开关由环境变量 `MOCK_FAIL_TTS=1`、`MOCK_FAIL_LLM=1`、`MOCK_SLOW_LLM_MS=…` 控制，另支持 `MOCK_ABORT_LLM=1`（流中途断开）、`MOCK_SLOW_TTS_MS=…`（TTS 慢速，放大段落切换窗口），供 02/04/05/06 各功能套件复用。
-- 保留位声明（R4 实证固化）：`MOCK_FAIL_CONFIG`（`config.get` 失败）、`MOCK_FAIL_CONFIG_UPDATE`（`config.updateMine` 失败）、`MOCK_FAIL_MIGRATE_STEP`（注册迁移中途失败）在上游 Mock 与应用代码中**均无读取实现**（mock 仅头部注释透传记录）。`config.*`/注册迁移均为应用层 tRPC，不经过上游 Mock，故障须走应用层/调用侧等价注入（04-03 页内 fetch hook 范式、05-02 caller 写点包装范式）；01-05 初始化失败面运行时不可达，见各用例规范。
+- 脏 tracked 树拒绝：`git status --porcelain=v1 --untracked-files=no` 非空即抛 `BLOCKED`（信息仅含前 20 行脏文件状态行，不含 secrets）；untracked（`??`）不阻断。
+- `EXPECTED_TARGET_SHA` 绑定：环境变量非空时，`git rev-parse HEAD`（full）必须与其相等（允许短 SHA 前缀等价，规范要求 full；失配信息仅含 `expected/actual` 短 SHA）。
+- 守卫失败归 `BLOCKED`（环境/供给不可证），不得记 FAIL/FLAKY；`globalSetup` 透出后整轮不跑业务断言。
 
-### 3.2 原子 DSH Worker 托管 Mock 生命周期契约（Canonical Execution Contract）
-每个原子 DSH Worker 独立拥有对其测试执行期间 Mock 服务的生命周期治理权，所有执行提示词必须强制遵守本契约：
+## 4. 服务拉起与指针文件
 
-1. **测试前置探测与启动（Pre-test Detection & Startup）**：
-   - 探测 9301 端口：执行 `ss -ltn | grep -q ":9301 "`。
-   - 若 9301 端口已存在监听：记录 `STARTED_MOCK=0`，复用既有 Mock 服务，**绝对不可**重复启动或覆盖 `.e2e-runtime/mock.pid`。
-   - 若 9301 端口未监听：记录 `STARTED_MOCK=1`，使用项目真实本地启动器启动：
-     ```bash
-     (set -a; [ -f .e2e-runtime/env.e2e.sh ] && source .e2e-runtime/env.e2e.sh; set +a; nohup node .e2e-runtime/mock-openai.mjs > .e2e-runtime/mock.log 2>&1 & echo $! > .e2e-runtime/mock.pid)
-     ```
-2. **PID 追踪（PID Tracking）**：
-   - 将启动的 Mock 进程 PID 保存至 `.e2e-runtime/mock.pid` 与 Worker 局部变量 `MOCK_PID`，明确生命周期所有权。
-3. **健康检查端点与有界等待（Bounded Health Check）**：
-   - 健康检查端点：`POST http://127.0.0.1:9301/v1/chat/completions`
-   - 健康检查命令：
-     ```bash
-     curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:9301/v1/chat/completions \
-       -H 'content-type: application/json' \
-       -d '{"messages":[{"role":"user","content":"ping"}],"stream":false}'
-     ```
-   - 有界等待窗口：最长等待 10 秒（每 0.5 秒轮询一次，上限 20 次）。当返回 HTTP `200` 时判定服务就绪。
-   - **启动失败熔断**：若超时未能返回 200 或进程崩溃，本次用例立即中止，判定结果直接标记为 `UNVERIFIED`，严禁继续推进业务断言。
-4. **请求定向与环境保留（Traffic Redirection & Environment Preservation）**：
-   - 应用与上游请求全部且仅定向至 `http://127.0.0.1:9301/v1`（`OPENAI_BASE_URL` 注入）。
-   - 应用服务（31111 端口 next-server）与测试数据库（`.e2e-runtime/e2e.db`）持续保留，严禁跨用例重启应用，严禁清空或删除数据库。
-5. **用例后置清理（Post-case Cleanup）**：
-   - 测试用例执行完毕（无论成功、失败或未决）：
-     - 若且仅若当前 Worker 启动了 Mock 进程（`STARTED_MOCK=1`）：读取 `.e2e-runtime/mock.pid`，执行 `kill $(cat .e2e-runtime/mock.pid)` 停止自身启动的 Mock 进程，并清理 pid 文件。
-     - 若 9301 在用例执行前已存在（`STARTED_MOCK=0`）：必须保持其继续运行，**绝对不可**终止该预存监听。
-     - 任何情况下，绝对不可改动或停止 31111 应用服务与 `.e2e-runtime/e2e.db`。
+`globalSetup` 拉起 detached 常驻 mock（setup 进程退出后继续存活）与隔离 production server（unref 常驻），
+将当次 run 地址写入运行时指针文件；回收由 `globalTeardown` 按持久化 handle 跨进程完成。
 
-### 3.3 生产快照前置守卫（WS4 最小补丁；完整重写见 WS7）
+| 文件（`.e2e-runtime/browser-harness/` 下） | 内容 |
+| --- | --- |
+| `active.json` | 当次指针：`runId/appUrl/appPort/mockUrl/mockPort/mockPid/commit` |
+| `app-handle-<run>.json` | app 持久化 handle：`port/pgid/dbFile`（teardown 跨进程回收用） |
+| `mock-port-<run>.json` | mock 端口文件：`port/pid`（setup 等待其出现后继续） |
 
-生产快照（`git archive HEAD`）前必须先过守卫：`git status --porcelain=v1 --untracked-files=no` 非空（脏 tracked 树）或 `EXPECTED_TARGET_SHA` 非空且与 `HEAD` 失配（短 SHA 前缀等价放行）即抛 `BLOCKED`，缓存命中（`.snapshot-ready`）路径同样先验守卫且锁内复验，`unknown` 快照键禁止构建；快照键与 manifest/日志记 full SHA，错误信息仅含短 SHA 与脏文件状态行、不含 secrets。应用端口仍为 `31120-31150` 范围空闲端口、停止后确认端口释放；untracked 文件（`??`）不阻断。
+`active.json` 缺失时 teardown 直接通过（setup 未成功，无服务可收）；回收后删除指针与过程文件。
 
-## 4. 数据准备与夹具
+## 5. mock/app 所有权（谁拉起谁回收）
 
-- 注册类账号经 `/auth` UI 注册生成（同时验证注册链路），或用 `{{E2E_DB_URL}}` + Prisma 直插 seed 脚本（存 `.e2e-runtime/seed.mjs`）。
-- 访客身份：浏览器清 cookie 后经「访客进入」按钮创建，服务端签发 `guest=<opaque 签名 token>`（验签还原出 `g_` 开头 gid，不以明文 `g_` 存放；响应体不返 `guestId`）；需要固定访客时用 seed 指定 `g_e2e_seed1` 这类**仓库内可见的假 ID**（仅 seed 名义 ID，不含真实凭证）。
+- `startAppServer({ mockBaseUrl })`：调用方显式传入上游时不拉 mock；缺省时自动拉起自有 mock 并置 `ownedMock=true`，`stopAppServer` 按句柄 kill 子进程树 → 确认端口释放 → 清理本次隔离库 → 回收自有 mock（`ownedMock` 为真且有 handle 时）。
+- `globalSetup` 的常驻 mock 由 `globalTeardown` 按 `active.json` 指针回收（`stopMockServerByPid` + 删 `mock-port-<run>.json`）；启动失败时 setup 内联回收已拉 mock，不留孤儿。
+- 启动失败（health 超时）时：kill 服务树 → 删本次隔离库 → 回收自有 mock 后再抛。
+- 禁止 broad kill/rm：只回收指针与句柄名下的自有进程、端口与库文件；生产端口与共享库永不触碰。
+
+## 6. 数据准备与夹具
+
+- 注册类账号经 `/auth` UI 注册生成（同时验证注册链路），或用当次隔离库 + Prisma 直插 seed 脚本（存 `.e2e-runtime/seed.mjs`，不入库）。
+- 访客身份：浏览器清状态后经「访客进入」按钮创建，服务端签发签名 token；需要固定访客时用 seed 指定仓库内可见的假 ID（仅 seed 名义 ID，不含真实凭证）。
 - 故事夹具：mock 上游固定 4 段文本 ⇒ `{{E2E_STORY_4P}}`；其段落哈希记为 `{{E2E_STORY_HASH}}`，供断点恢复断言。
-- 进度夹具：seed 一行 `UserPlaybackProgress`/`GuestPlaybackProgress`（指向 `{{E2E_STORY_4P}}` 源，`nextParagraphIndex=2`、`remainingAllowedMs=null|数值` 两变体）。
+- 进度夹具：seed 一行播放进度（指向 `{{E2E_STORY_4P}}` 源，`nextParagraphIndex=2`、`remainingAllowedMs=null|数值` 两变体）。
 
-## 5. 符号标识符表（仓库内唯一允许的引用方式）
+## 7. 符号标识符表（仓库内唯一允许的引用方式）
 
 | 符号 | 含义 | 真值存放 |
 | --- | --- | --- |
-| `{{E2E_USER_A}}` / `{{E2E_PASS_A}}` | 注册账号 A 及其口令 | `.e2e-runtime/.env.e2e` |
+| `{{E2E_USER_A}}` / `{{E2E_PASS_A}}` | 注册账号 A 及其口令 | 本地未入库环境 |
 | `{{E2E_USER_B}}` / `{{E2E_PASS_B}}` | 注册账号 B（隔离/切号用例） | 同上 |
-| `{{E2E_SESSION_SECRET}}` | 测试会话密钥 | 同上 |
-| `{{E2E_PORT}}` | 隔离端口 31111 | 本文件（非敏感） |
-| `{{E2E_DB_URL}}` | 隔离库地址 | 本文件（非敏感） |
-| `{{E2E_MOCK_OPENAI}}` | mock 上游基址 | 本文件（非敏感） |
-| `{{GUEST_FRESH}}` | 每用例新建访客（清 cookie 后进入） | 运行时产生 |
+| `{{E2E_SESSION_SECRET}}` | 测试会话密钥 | 进程内合成（harness）或本地未入库环境 |
+| `{{E2E_PORT}}` | 当次隔离端口（`31120-31150` 内） | 指针文件（非敏感） |
+| `{{E2E_DB_URL}}` | 当次隔离库地址 | 持久化 handle（非敏感） |
+| `{{E2E_MOCK_OPENAI}}` | 当次 mock 上游基址 | 指针文件（非敏感） |
+| `{{GUEST_FRESH}}` | 每用例新建访客（清状态后进入） | 运行时产生 |
 | `{{GUEST_JAR_1}}` / `{{GUEST_JAR_2}}` | 并行双访客上下文 | 运行时产生 |
 | `{{E2E_STORY_4P}}` / `{{E2E_STORY_HASH}}` | 4 段固定故事夹具/其哈希 | seed 生成 |
-| `{{E2E_PROMPT_SMOKE}}` / `{{E2E_PROMPT_1..3}}` / `{{E2E_PROMPT_DRAFT}}` | 固定输入短语（冒烟/连击/预载草稿用，mock 端按序识别） | `.e2e-runtime/.env.e2e` |
-| `{{E2E_MOCK_SWITCHES}}` | mock 故障注入开关集（§3 全部 `MOCK_*` 变量） | `.e2e-runtime/.env.e2e` |
+| `{{E2E_PROMPT_SMOKE}}` / `{{E2E_PROMPT_1..3}}` / `{{E2E_PROMPT_DRAFT}}` | 固定输入短语（冒烟/连击/预载草稿用，mock 端按序识别） | 本地未入库环境 |
+| `{{E2E_MOCK_SWITCHES}}` | mock 故障注入开关集 | 本地未入库环境 |
 
-## 6. DB 只读观测（AUT-API 断言方式）
+## 8. DB 只读观测（允许语句）
 
 ```bash
 node -e "const{createClient}=require('@libsql/client');(async()=>{
-  const db=createClient({url:'file:.e2e-runtime/e2e.db'});
+  const db=createClient({url:'file:.e2e-runtime/browser-harness/snapshots/<sha>/prisma/harness-<port>-<runTag>.db'});
   const r=await db.execute('select \"userId\",count(*) c from ChatMessage group by 1');
   console.log(r.rows);
 })()"
 ```
 
-约束：只读 SELECT；测试库表见 `prisma/schema.prisma`（`User`、`ChatMessage`、`GuestChatMessage`、`UserConfig`、`GuestConfig`、`GenerationHistory`、`GuestGenerationHistory`、`PromptHistory`、`GuestPromptHistory`、`UserPlaybackProgress`、`GuestPlaybackProgress`）。
+约束：只读 `SELECT` 与 `PRAGMA integrity_check`；对象仅为当次隔离库；测试库表见 `prisma/schema.prisma`。
+`prisma/dev.db` 与生产库只做存在/mtime/size/SHA 只读指纹比对，绝不打开读写、绝不为验证而创建。
 
-## 7. 证据规范（`.e2e-results/`，git 忽略）
+## 9. 证据规范（`.e2e-results/`，git 忽略）
 
-目录：`.e2e-results/<run-id>/E2E-xx-yy/`，每用例至少包含：
+目录：`.e2e-results/browser/<run-id>/<case-id>/`，结构化行协议与 manifest 口径见 [证据与留档](./evidence.md)（v1：每 assertion 一行）。
+历史人工执行证据沿用 `.e2e-results/<run-id>/E2E-xx-yy/` 结构，每用例至少包含截图、控制台、音频探针、网络清单与按需 DB 导出。
 
-1. `ui-*.png` — 关键步骤截图（含失败态）。
-2. `console.json` — 每步后的控制台记录（判定：除「预期报错」用例外零未捕获异常）。
-3. `audio.json` — `<audio>` 探针快照（`src` 前缀、`paused`、`currentTime`、`duration`、`playbackRate`）。
-4. `network.json` — tRPC 调用清单（`performance.getEntriesByType('resource')` 过滤 `/api/trpc/`）。
-5. `db.txt` — 相关只读查询输出（如适用）。
+## 10. 清理规范
 
-## 8. 清理规范
+- 用例级：浏览器状态清理（清空 cookie + `localStorage` + `sessionStorage`）；必要时对该用例造的数据做 `DELETE`（仅限当次隔离库）。
+- 服务级：按第 5 节所有权回收（自有 mock 随 handle 回收；常驻 mock/app 随 teardown 按指针回收并确认端口释放；本次隔离库文件删除）。
+- 批次级：重建浏览器上下文；核对快照守卫口径的 tracked 树状态。
+- 全局：全量套件执行完毕并完成独立留档后，方可停止常驻 mock 与 production server，保留 `.e2e-results/` 供评审（本地）。
 
-- 用例级：
-  - 浏览器状态清理：清空 cookie + `localStorage` + `sessionStorage`；必要时对该用例造的数据做 `DELETE`（仅限 `{{E2E_DB_URL}}`）。
-  - Mock 生命周期收口：若本原子 Worker 在前置准备时启动了 Mock 进程（`STARTED_MOCK=1`），测试结束后必须且仅清理自身启动的该 Mock 进程（读取 `.e2e-runtime/mock.pid` 并 kill，随后删除 pid 文件）；若 9301 在用例执行前已处于监听状态（`STARTED_MOCK=0`），绝对不可终止该预存监听。
-  - 应用与数据库保全铁律：绝对严禁终止、重启或干扰应用服务（31111 端口 next-server）；绝对严禁删除、重置或清空测试数据库 `.e2e-runtime/e2e.db`。
-- 批次级：重建浏览器上下文；核对 `git status --porcelain` 为空（仅允许 docs/e2e 下授权规范资产）。
-- 全局：全量测试套件执行完毕并完成独立留档后，方可全局停止 mock 与 next dev 进程，保留 `.e2e-results/` 供评审（本地）。
+## 11. 调度说明
 
-## 9. 执行顺序与调度治理（套件顺序 01 → 02 → 03 → 04 → 05 → 06）
+执行调度以 catalog 为准（`lifecycle_status`/`executable_ids`/`ci_tier`），`MANUAL` 不进自动队列；数量口径以 `yarn test:static` 为准。
+详见 [维护规范](./maintenance.md)。
 
-1. **执行序列与调度拓扑**：
-   - 六大功能套件按 `01 → 02 → 03 → 04 → 05 → 06` 串行调度。
-   - 场景、原子 case、声明自动化、已实现与缺口数量唯一以 `yarn test:static` 输出为准；本文不维护第二份手工总数或连续序号。
-   - 自动调度集合以 `tests/test-catalog.yaml` 的 `lifecycle_status`、`executable_ids` 与 `ci_tier` 为准；`MANUAL` case 不进入自动执行队列。
-   - **人工排除项**：`E2E-06-08`（bfcache/pageshow 探针，MANUAL，P3）保持 `manual_excluded`，移出自动化执行队列。
-2. **DSH 调度治理铁律与执行契约**：
-   - **共享环境单一执行 Worker**：同一 Git 工作区及共享 `.e2e-runtime` / `.e2e-results` 结果根任何时刻仅允许 1 个 E2E 执行 Worker；固定同一 SHA 的只读 review 可并行，但不得启动服务、写证据或清理进程。独立 worktree 只有分配独立 runtime/results 根与所有权后才能并行执行。
-   - **显式 3 小时时限**：各任务启动显式配置 `--timeout 10800`，彻底杜绝默认时限杀进程导致未决。
-   - **Worker 自主托管 Mock 生命周期**：严格执行 §3.2 规范契约（前置 9301 探测、本地真实启动器、PID 记录、有界健康检查、失败判定 `UNVERIFIED`、执行后仅清理自身启动进程、保留 31111 与数据库）。所有未来 DSH 提示词必须强制包含并遵从本契约。
-   - **终态报告与证据门禁**：每个任务必须以合规 `report.md`、关键证据文件与终端 VERDICT 闭环为准，方可启动下一任务。
-   - **上游 503/429 弹性退避**：捕获 503/429 时强制静默等待 60 秒，单任务重试上限 ≤ 3 次。
-   - **运行时与数据库资产持续复用**：应用服务（31111）与测试数据库（`.e2e-runtime/e2e.db`）跨用例保持存活，严禁跨用例重启应用或删除数据库。
-   - **准入通过项保护**：已通过终态验证与完整证据核验的用例予以保护，队列仅调度待执行或未决项。
-3. **提交门禁**：全部执行 + 独立评审完成之前，测试资产不得 commit/push（本轮约定）。
-
-## 10. 写库单元防损坏标准流程（缺陷 #6，06-07 实证固化）
+## 12. 写库单元防损坏标准流程（缺陷 #6，06-07 实证固化）
 
 - 背景：app dev server 常驻持有隔离库连接时，seed 并发写曾致 SQLite 页损坏；
   后续轮以本流程规避成功，现固化为一切直接写库单元（seed/回滚/GC 准备）的强制流程。
@@ -170,7 +131,7 @@ node -e "const{createClient}=require('@libsql/client');(async()=>{
 - 禁止事项：手写 SQL 以外低阶修复（如 `.recover`）；未经快照的直接写库；
   对 `prisma/dev.db` 与生产库执行本流程（隔离库专用）。
 
-## 11. 流观察 hook 不消费流标准（缺陷 #7 实证固化）
+## 13. 流观察 hook 不消费流标准（缺陷 #7 实证固化）
 
 - 背景：旧观察 hook 用 `clone().text()` 读取 tRPC 流响应做 `network.json` 证据；
   当应用已持有流 reader（流式端点常态）时 clone 必抛 body 消费类异常，旧实现
@@ -184,3 +145,10 @@ node -e "const{createClient}=require('@libsql/client');(async()=>{
   4. 非流响应保留安全 body 摘要（截断上限 + truncated 标记）；记录只含 pathname，
      不记 query（批输入在 query 中，防载荷泄露）。
 - 禁止事项：对流式响应调用 clone/text；把取消类异常记为失败；用 hook body 断言流成功。
+
+## 14. `git status` 自检边界
+
+- 快照守卫（第 3 节）：`git status --porcelain=v1 --untracked-files=no`，只看 tracked；`??` 不阻断。
+- 运行前后自检：执行前后各跑一次 `git status --porcelain`，除预先授权的规范文件外必须干净；
+  证据与运行时目录本身已被 `.gitignore` 忽略，严禁 `git add`。
+- 自检只读状态、不读内容：绝不为自检而打开 `.env` 系文件或数据库。

@@ -74,6 +74,14 @@ jobs:
       - name: Build
         run: yarn build
 
+      - name: P0 browser smoke (Chromium + WebKit, retries=0)
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/candidate/') || startsWith(github.ref, 'refs/heads/release/') || github.event_name == 'workflow_dispatch'
+        run: |
+          npx playwright install --with-deps chromium webkit
+          yarn test:browser:smoke
+        env:
+          BROWSER_RUN_ID: ci-candidate-${{ github.sha }}
+
   image:
     name: Candidate Image (sha tag)
     needs: quality

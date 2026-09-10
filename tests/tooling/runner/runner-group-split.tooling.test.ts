@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -500,7 +500,120 @@ function caseValidatorFixtures(): void {
 }
 
 /**
- * 测试入口：顺序执行①-⑨，任一失败即抛（jiti/await default 透出非零）。
+ * 用例⑩：普通 FAIL 聚合（受控双 suite：A 恒 FAIL + B 恒 PASS）。
+ * 跑真 runner 聚合路径：读真 runner 源码并替换临时注册表后落盘为临时副本执行；
+ * 临时磁盘 fixture 落于仓库内忽略目录（.e2e-results 下随机子目录），临时 catalog 提供
+ * 最小绑定（每 suite 仅 summary 一行，无 assertion 行，故终态恰两行）；
+ * 绝不碰真注册表常量或真数据库（两 fixture 均为 needs_db=false，不建库）。
+ * 断言：B 仍被执行、两行（A FAIL + B PASS）齐全、终态 exit 1。
+ * 基线 fail-fast 下 B 不被执行、仅一行 A FAIL（真红）。
+ */
+function caseOrdinaryFailuresAggregated(): void {
+    if (process.env.RUNNER_SELFHOST_DEPTH) {
+        console.log('PASS: 用例⑩ 内层跳过（自宿主深度守卫生效，避免嵌套聚合跑）');
+        return;
+    }
+    const tmpBase: string = mkdtempSync(path.join(repoRoot, '.e2e-results', 'runner-agg-'));
+    let copyAbs: string = '';
+    let observedRunId: string = '';
+    try {
+        const fixtureA: string = path.join(tmpBase, 'agg-a-fail.tooling.test.ts');
+        const fixtureB: string = path.join(tmpBase, 'agg-b-pass.tooling.test.ts');
+        writeFileSync(fixtureA, "import assert from 'node:assert';\nassert.strictEqual(1, 2, 'controlled A must FAIL');\n");
+        writeFileSync(fixtureB, "console.log('controlled B PASS marker');\n");
+        const relA: string = `./${path.relative(repoRoot, fixtureA).replace(/\\/g, '/')}`;
+        const relB: string = `./${path.relative(repoRoot, fixtureB).replace(/\\/g, '/')}`;
+        const tempRegistry = [
+            { id: 'agg-a-fail', path: relA, group: 'tooling', needs_db: false },
+            { id: 'agg-b-pass', path: relB, group: 'tooling', needs_db: false },
+        ];
+        const catalogYaml: string =
+            'schema_version: 1\n' +
+            'cases:\n' +
+            '  - case_id: agg-case-a\n' +
+            '    executable_ids: [exec-agg-a]\n' +
+            '  - case_id: agg-case-b\n' +
+            '    executable_ids: [exec-agg-b]\n' +
+            'executables:\n' +
+            '  - executable_id: exec-agg-a\n' +
+            `    path: ${relA}\n` +
+            '    case_ids: [agg-case-a]\n' +
+            '  - executable_id: exec-agg-b\n' +
+            `    path: ${relB}\n` +
+            '    case_ids: [agg-case-b]\n';
+        const catalogAbs: string = path.join(tmpBase, 'catalog.yaml');
+        writeFileSync(catalogAbs, catalogYaml);
+        const runnerAbs: string = path.join(repoRoot, runnerRel);
+        const src: string = readFileSync(runnerAbs, 'utf8');
+        const patchedRegistry: string = `const SUITES = ${JSON.stringify(tempRegistry)};`;
+        assert.ok(/const SUITES = \[[\s\S]*?\n\];/.test(src), '真 runner 源码须含可替换注册表字面');
+        let patched: string = src.replace(/const SUITES = \[[\s\S]*?\n\];/, patchedRegistry);
+        assert.ok(patched.includes('agg-a-fail'), '补丁后副本须含临时注册表');
+        const catalogCallFrom: string = 'loadEvidenceCatalog(cwd)';
+        assert.ok(patched.includes(catalogCallFrom), '真 runner 源码须含 catalog 预载调用');
+        patched = patched.replace(catalogCallFrom, `loadEvidenceCatalog(cwd, ${JSON.stringify(catalogAbs)})`);
+        copyAbs = path.join(repoRoot, 'scripts', `tmp-agg-copy-${Date.now()}-${Math.random().toString(16).slice(2)}.mjs`);
+        writeFileSync(copyAbs, patched);
+        const copyRel: string = path.relative(repoRoot, copyAbs).replace(/\\/g, '/');
+        let status: number | null = null;
+        let stdout: string = '';
+        let stderr: string = '';
+        try {
+            stdout = String(
+                execFileSync(process.execPath, [copyRel], {
+                    cwd: repoRoot,
+                    encoding: 'utf8',
+                    timeout: 60000,
+                    killSignal: 'SIGTERM',
+                }),
+            );
+            status = 0;
+        } catch (err) {
+            const e = err as { status?: number | null; stdout?: unknown; stderr?: unknown };
+            status = typeof e.status === 'number' ? e.status : 1;
+            stdout = String(e.stdout ?? '');
+            stderr = String(e.stderr ?? '');
+        }
+        const runMatch: RegExpMatchArray | null = stdout.match(/run-id=([0-9]{8}T[0-9]{6}Z-[0-9a-f]{8})/);
+        assert.ok(runMatch !== null, `聚合跑须打印 run-id，实际 stdout头=${stdout.slice(0, 400)} stderr头=${stderr.slice(0, 400)}`);
+        observedRunId = runMatch[1];
+        assert.strictEqual(status, 1, `聚合终态应 exit 1，实际=${String(status)} stdout尾=${stdout.slice(-500)} stderr尾=${stderr.slice(-500)}`);
+        assert.ok(stdout.includes('controlled B PASS marker'), `B 仍须被执行（stdout 须含 B 标记），实际 stdout尾=${stdout.slice(-800)}`);
+        const resultsAbs: string = path.join(repoRoot, '.e2e-results', observedRunId, 'results.jsonl');
+        assert.ok(existsSync(resultsAbs), `聚合跑须产出 results.jsonl：${resultsAbs}`);
+        const lines: string[] = readFileSync(resultsAbs, 'utf8').split('\n').filter((l) => l.trim().length > 0);
+        assert.strictEqual(lines.length, 2, `普通聚合路径下行数 == 已调度 suite 数（2），实际=${lines.length} 行=${lines.slice(0, 2).join(' || ').slice(0, 800)}`);
+        const rows = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+        const rowA: Record<string, unknown> | undefined = rows.find((r) => (r['suite_id'] ?? r['suite'] ?? r['id']) === 'agg-a-fail');
+        const rowB: Record<string, unknown> | undefined = rows.find((r) => (r['suite_id'] ?? r['suite'] ?? r['id']) === 'agg-b-pass');
+        assert.ok(rowA !== undefined, '结果须含 A 行');
+        assert.ok(rowB !== undefined, '结果须含 B 行（B 未被跳过）');
+        const verdictA: unknown = rowA['verdict'] ?? rowA['status'];
+        const verdictB: unknown = rowB['verdict'] ?? rowB['status'];
+        assert.strictEqual(verdictA, 'FAIL', `A 应为 FAIL，实际=${JSON.stringify(rowA).slice(0, 300)}`);
+        assert.strictEqual(verdictB, 'PASS', `B 应为 PASS，实际=${JSON.stringify(rowB).slice(0, 300)}`);
+        console.log('PASS: 用例⑩ 普通 FAIL 聚合（B 仍执行、两行齐全、终态 exit 1）');
+    } finally {
+        try {
+            if (copyAbs !== '' && existsSync(copyAbs)) rmSync(copyAbs, { force: true });
+        } catch {
+            // 忽略清理错误
+        }
+        try {
+            if (observedRunId !== '') rmSync(path.join(repoRoot, '.e2e-results', observedRunId), { recursive: true, force: true });
+        } catch {
+            // 忽略清理错误
+        }
+        try {
+            rmSync(tmpBase, { recursive: true, force: true });
+        } catch {
+            // 忽略清理错误
+        }
+    }
+}
+
+/**
+ * 测试入口：顺序执行①-⑩，任一失败即抛（jiti/await default 透出非零）。
  */
 async function main(): Promise<void> {
     caseListJsonMatchesDisk();
@@ -512,6 +625,7 @@ async function main(): Promise<void> {
     caseResultsJsonlStructure();
     caseMetaNonRecursive();
     caseValidatorFixtures();
+    caseOrdinaryFailuresAggregated();
     console.log('ALL RUNNER GROUP SPLIT TESTS PASSED');
 }
 

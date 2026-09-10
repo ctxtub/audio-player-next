@@ -17,10 +17,10 @@
 ## 2. 退出码
 
 - `0`：所选 ACTIVE 套件均 PASS。
-- `1`：普通断言 FAIL/FLAKY（继续运行互相隔离的套件并汇总）。
-- `2`：配置、参数、空集合、catalog 不合法（含未知参数/suite/group、空选集、checker 不通过）。
-- `3`：安全/隔离/bootstrap 失败，立即停止整个 group（路径越界、迁移失败、schema 损坏、外联风险同属此类）。
-- `4`：timeout/crash；清理该 suite 资源后汇总或按安全影响停止。
+- `1`：普通断言 FAIL/FLAKY（继续运行互相隔离的套件并汇总）——继续跑下一个互相隔离的 suite 并逐行写 `results.jsonl`，终态汇总 `total/passed/failed/blocked/skipped/flaky`，任一 `FAIL`/`FLAKY` 即 `exit 1`，全 PASS 才 `exit 0`；普通聚合路径下 summary 行数 == 已调度 suite 数。
+- `2`：配置、参数、空集合、catalog 不合法（含未知参数/suite/group、空选集、checker 不通过；执行前，不建库不写行）。
+- `3`：安全/隔离/bootstrap 失败，立即停止整个 group（路径越界、symlink 祖先、`lib/db` 扫描命中、migrate/schema-probe 失败、run 目录复用/权限异常、证据 schema 写行非法）；已产生行保留，未跑 suite 记 `SKIPPED` 行并注明 `blocked_by`。
+- `4`：单 suite 超时/crash——先清该 suite DB（含 wal/shm）+ 写该 suite `BLOCKED` 行，再立即停止整组（超时可能意味宿主/隔离损坏，继续跑会误证）。
 
 普通断言失败继续运行互相隔离的套件并汇总；安全、路径越界、迁移、schema 损坏、外联风险立即全组停止。
 

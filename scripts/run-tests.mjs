@@ -200,7 +200,10 @@ function runMigrate(suiteId, controlledUrl) {
         execFileSync(prismaBin, ['migrate', 'deploy'], { env, stdio: 'pipe' });
     } catch (err) {
         console.error(`BOOTSTRAP migrate 失败 suite=${suiteId} err=${sanitizeError(err)}`);
-        process.exit(safety.BOOTSTRAP_EXIT_CODE);
+        const e = new Error(`BOOTSTRAP migrate 失败 suite=${suiteId}`);
+        e.code = safety.BOOTSTRAP_EXIT_CODE;
+        e.suiteId = suiteId;
+        throw e;
     }
 }
 
@@ -218,11 +221,18 @@ async function runSchemaProbe(suiteId, controlledUrl) {
         const missing = EXPECTED_TABLES.filter((t) => !names.has(t));
         if (missing.length > 0) {
             console.error(`BOOTSTRAP schema probe 缺表 suite=${suiteId} missing=${missing.join(',')}`);
-            process.exit(safety.BOOTSTRAP_EXIT_CODE);
+            const e = new Error(`BOOTSTRAP schema probe 缺表 suite=${suiteId}`);
+            e.code = safety.BOOTSTRAP_EXIT_CODE;
+            e.suiteId = suiteId;
+            throw e;
         }
     } catch (err) {
+        if (err && typeof err.code !== 'undefined' && err.code === safety.BOOTSTRAP_EXIT_CODE) throw err;
         console.error(`BOOTSTRAP schema probe 失败 suite=${suiteId} err=${sanitizeError(err)}`);
-        process.exit(safety.BOOTSTRAP_EXIT_CODE);
+        const e = new Error(`BOOTSTRAP schema probe 失败 suite=${suiteId}`);
+        e.code = safety.BOOTSTRAP_EXIT_CODE;
+        e.suiteId = suiteId;
+        throw e;
     } finally {
         if (client !== null) {
             try {
@@ -434,15 +444,15 @@ async function main() {
         process.exit(safety.BOOTSTRAP_EXIT_CODE);
     }
     /**
-     * 写单行 JSONL（verdict=PASS/FAIL，exit 4 为 BLOCKED）。
+     * 写单行 JSONL（verdict=PASS/FAIL/BLOCKED/SKIPPED，exit 4 为 BLOCKED）。
      * v1 行协议（WS5/C5，D3 已决：每 assertion 一行）：
      * 每 suite 先写 kind=summary 汇总行（含 schema_version/case_ids 由 executable 反查
      * catalog/旧字段可选透传），再按该 suite 命中的 executable 展开写 kind=assertion
      * 行（case × executable × assertion × surface 全 join catalog）。
-     * 写行前用同一校验器校验；非法即记 BLOCKED 并 exit 3（供给/契约损坏，
-     * 非产品断言失败）。控制流（首个 FAIL 即停）本轮不动，归 WS6/C6。
+     * 写行前用同一校验器校验；非法即记 BLOCKED 并抛 code=3 由调用方补 SKIPPED 后 exit 3
+     * （供给/契约损坏，非产品断言失败；C5 写行语义不动，本轮只改控制流与汇总）。
      * @param entry 注册表条目
-     * @param verdict PASS/FAIL/BLOCKED
+     * @param verdict PASS/FAIL/BLOCKED/SKIPPED
      * @param exitCode 退出码
      * @param durationMs 耗时毫秒
      */
@@ -557,12 +567,93 @@ async function main() {
             } catch {
                 // 忽略写失败，不掩盖 exit 3
             }
-            cleanupCurrentRun();
-            process.exit(3);
+            const e = new Error(`证据行校验失败 suite=${entry.id}`);
+            e.code = 3;
+            e.suiteId = entry.id;
+            throw e;
         }
         for (const row of rows) {
             fs.appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
         }
+    }
+    // 中文注释：WS6/C6 聚合计数（与 verdicts.md 五态一致；FLAKY 仅显式 repeat 口径，runner 默认仍记 FAIL，此处恒 0）。
+    let passedCount = 0;
+    let failedCount = 0;
+    let blockedCount = 0;
+    let skippedCount = 0;
+    /**
+     * 为未跑 suite 补 SKIPPED 行（D4 已决，保证行数可审计；写行仍经同一校验器，失败则降级为最小行）。
+     * 每未跑 suite 恰一行 kind=summary + blocked_by，普通聚合路径下 summary 行数 == 已调度 suite 数。
+     * @param fromIndex 起始下标（含）
+     * @param blockedBy 阻断来源（suiteId 或 bootstrap 原因）
+     */
+    function writeSkippedForRemaining(fromIndex, blockedBy) {
+        for (let j = fromIndex; j < selected.length; j += 1) {
+            const e = selected[j];
+            let caseIds = [];
+            try {
+                const execs = suiteExecutables(e);
+                const seen = new Set();
+                for (const ex of execs) {
+                    for (const cid of ex.case_ids || []) {
+                        if (!seen.has(cid)) {
+                            seen.add(cid);
+                            caseIds.push(cid);
+                        }
+                    }
+                }
+                caseIds.sort();
+            } catch {
+                caseIds = [];
+            }
+            const row = {
+                schema_version: SCHEMA_VERSION,
+                kind: 'summary',
+                run_id: runId,
+                suite_id: e.id,
+                suite: e.id,
+                id: e.id,
+                group: e.group,
+                needs_db: e.needs_db,
+                verdict: 'SKIPPED',
+                status: 'SKIPPED',
+                exit_code: 3,
+                exitCode: 3,
+                duration_ms: 0,
+                durationMs: 0,
+                evidence_path: suiteEvidencePath(e),
+                case_ids: caseIds,
+                reason: `blocked_by:${blockedBy}`,
+                blocked_by: blockedBy,
+                commit: commitSha,
+            };
+            try {
+                const res = validateRow(row, evidenceCatalog);
+                if (!res.ok) {
+                    const fallback = { ...row };
+                    delete fallback.case_ids;
+                    fs.appendFileSync(resultsPath, `${JSON.stringify(fallback)}\n`);
+                } else {
+                    fs.appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
+                }
+            } catch {
+                try {
+                    fs.appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
+                } catch {
+                    // 忽略写失败，不掩盖 exit 3
+                }
+            }
+            skippedCount += 1;
+        }
+    }
+    /**
+     * 打印终态汇总表（stdout，供 CI 日志与 review 摘录；字段与 verdicts.md 五态一致）。
+     */
+    function printSummary() {
+        const total = selected.length;
+        const flaky = 0;
+        console.log('========== TEST SUMMARY ==========');
+        console.log(`total=${total} passed=${passedCount} failed=${failedCount} blocked=${blockedCount} skipped=${skippedCount} flaky=${flaky}`);
     }
     console.log(`run-id=${runId}`);
     console.log(`suites=${selected.length}`);
@@ -573,13 +664,21 @@ async function main() {
         const suiteId = entry.id;
         const isUnit = entry.group === 'unit';
         const needsDbFalse = entry.needs_db === false;
-        // 中文注释：unit 组套件执行前扫描 lib/db 导入，命中即 exit 3 停组。
+        // 中文注释：unit 组套件执行前扫描 lib/db 导入，命中即 exit 3 立即全组停止（D4：已产生行保留，未跑记 SKIPPED+blocked_by）。
         if (isUnit || needsDbFalse) {
             let content = '';
             try {
                 content = fs.readFileSync(path.join(cwd, file), 'utf8');
             } catch (err) {
                 console.error(`BOOTSTRAP 读取失败 suite=${suiteId} err=${sanitizeError(err)}`);
+                try {
+                    writeResultsLine(entry, 'BLOCKED', 3, 0);
+                } catch {
+                    // 证据非法已写 fallback BLOCKED，仍计 BLOCKED
+                }
+                blockedCount += 1;
+                writeSkippedForRemaining(i + 1, suiteId);
+                printSummary();
                 cleanupCurrentRun();
                 process.exit(safety.BOOTSTRAP_EXIT_CODE);
             }
@@ -588,8 +687,11 @@ async function main() {
                 try {
                     writeResultsLine(entry, 'BLOCKED', 3, 0);
                 } catch {
-                    // 忽略写失败，不掩盖 exit 3
+                    // 已写 fallback，仍计 BLOCKED
                 }
+                blockedCount += 1;
+                writeSkippedForRemaining(i + 1, suiteId);
+                printSummary();
                 cleanupCurrentRun();
                 process.exit(3);
             }
@@ -615,23 +717,43 @@ async function main() {
             let verdict = 'PASS';
             if (code === 0 && !timedOut) verdict = 'PASS';
             else if (code === safety.SUITE_TIMEOUT_EXIT_CODE || timedOut) verdict = 'BLOCKED';
+            else if (code === safety.BOOTSTRAP_EXIT_CODE) verdict = 'BLOCKED';
             else verdict = 'FAIL';
             try {
                 writeResultsLine(entry, verdict, code, durationMs);
-            } catch {
-                // 忽略写失败，不掩盖 verdict
+            } catch (e) {
+                if (e && (e.code === 3 || e.code === safety.BOOTSTRAP_EXIT_CODE)) {
+                    blockedCount += 1;
+                    writeSkippedForRemaining(i + 1, suiteId);
+                    printSummary();
+                    cleanupCurrentRun();
+                    process.exit(3);
+                }
+                // 其他写失败忽略，不掩盖 verdict
             }
             if (timedOut || code === safety.SUITE_TIMEOUT_EXIT_CODE) {
                 console.error(`TIMEOUT: ${file} 超时`);
+                blockedCount += 1;
+                printSummary();
                 cleanupCurrentRun();
                 process.exit(safety.SUITE_TIMEOUT_EXIT_CODE);
             }
-            if (code !== 0) {
-                console.error(`FAIL: ${file} (exit ${code})`);
+            if (code === safety.BOOTSTRAP_EXIT_CODE) {
+                console.error(`BOOTSTRAP: ${file} 安全退出 (exit 3)，立即停止`);
+                blockedCount += 1;
+                writeSkippedForRemaining(i + 1, suiteId);
+                printSummary();
                 cleanupCurrentRun();
-                process.exit(1);
+                process.exit(3);
+            }
+            if (code !== 0) {
+                // 中文注释：WS6 普通 FAIL 聚合——写行后继续下一个互相隔离的 suite，终态汇总 exit 1。
+                console.error(`FAIL: ${file} (exit ${code})`);
+                failedCount += 1;
+                continue;
             }
             console.log(`PASS: ${file}\n`);
+            passedCount += 1;
             continue;
         }
         let built = null;
@@ -639,12 +761,28 @@ async function main() {
             built = safety.buildSuiteDatabaseUrl(cwd, runId, suiteId);
         } catch (err) {
             console.error(`BOOTSTRAP 路径构造失败 suite=${suiteId} err=${sanitizeError(err)}`);
+            try {
+                writeResultsLine(entry, 'BLOCKED', 3, 0);
+            } catch {
+                // 已写 fallback，仍计 BLOCKED
+            }
+            blockedCount += 1;
+            writeSkippedForRemaining(i + 1, suiteId);
+            printSummary();
             cleanupCurrentRun();
             process.exit(safety.BOOTSTRAP_EXIT_CODE);
         }
         const checked = safety.validateDatabaseUrl(built.url, { repoRoot: cwd, runId });
         if (!checked.ok) {
             console.error(`BOOTSTRAP 路径校验失败 suite=${suiteId} reason=${checked.reason}`);
+            try {
+                writeResultsLine(entry, 'BLOCKED', 3, 0);
+            } catch {
+                // 已写 fallback，仍计 BLOCKED
+            }
+            blockedCount += 1;
+            writeSkippedForRemaining(i + 1, suiteId);
+            printSummary();
             cleanupCurrentRun();
             process.exit(safety.BOOTSTRAP_EXIT_CODE);
         }
@@ -652,11 +790,32 @@ async function main() {
             safety.ensureSuiteDbParent(built.dbPath, { repoRoot: cwd, allowedRoot: runDir });
         } catch (err) {
             console.error(`BOOTSTRAP 父目录初始化失败 suite=${suiteId} err=${sanitizeError(err)}`);
+            try {
+                writeResultsLine(entry, 'BLOCKED', 3, 0);
+            } catch {
+                // 已写 fallback，仍计 BLOCKED
+            }
+            blockedCount += 1;
+            writeSkippedForRemaining(i + 1, suiteId);
+            printSummary();
             cleanupCurrentRun();
             process.exit(safety.BOOTSTRAP_EXIT_CODE);
         }
-        runMigrate(suiteId, built.url);
-        await runSchemaProbe(suiteId, built.url);
+        try {
+            runMigrate(suiteId, built.url);
+            await runSchemaProbe(suiteId, built.url);
+        } catch (err) {
+            try {
+                writeResultsLine(entry, 'BLOCKED', 3, 0);
+            } catch {
+                // 已写 fallback，仍计 BLOCKED
+            }
+            blockedCount += 1;
+            writeSkippedForRemaining(i + 1, suiteId);
+            printSummary();
+            cleanupCurrentRun();
+            process.exit(safety.BOOTSTRAP_EXIT_CODE);
+        }
         console.log(`=== Executing ${file} ===`);
         const controlledEnv = buildControlledEnv(built.url, {
             TEST_RUNNER_RUN_ID: runId,
@@ -674,26 +833,50 @@ async function main() {
         let verdict = 'PASS';
         if (code === 0 && !timedOut) verdict = 'PASS';
         else if (code === safety.SUITE_TIMEOUT_EXIT_CODE || timedOut) verdict = 'BLOCKED';
+        else if (code === safety.BOOTSTRAP_EXIT_CODE) verdict = 'BLOCKED';
         else verdict = 'FAIL';
         try {
             writeResultsLine(entry, verdict, code, durationMs);
-        } catch {
-            // 忽略写失败，不掩盖 verdict
+        } catch (e) {
+            if (e && (e.code === 3 || e.code === safety.BOOTSTRAP_EXIT_CODE)) {
+                blockedCount += 1;
+                writeSkippedForRemaining(i + 1, suiteId);
+                printSummary();
+                cleanupCurrentRun();
+                process.exit(3);
+            }
+            // 其他写失败忽略，不掩盖 verdict
         }
         if (timedOut || code === safety.SUITE_TIMEOUT_EXIT_CODE) {
             console.error(`TIMEOUT: ${file} 超时，已清理其 DB`);
+            blockedCount += 1;
+            printSummary();
             cleanupCurrentRun();
             process.exit(safety.SUITE_TIMEOUT_EXIT_CODE);
         }
-        if (code !== 0) {
-            // 中文注释：普通失败保持 exit 1，不包装为安全失败。
-            console.error(`FAIL: ${file} (exit ${code})`);
+        if (code === safety.BOOTSTRAP_EXIT_CODE) {
+            console.error(`BOOTSTRAP: ${file} 安全退出 (exit 3)，立即停止`);
+            blockedCount += 1;
+            writeSkippedForRemaining(i + 1, suiteId);
+            printSummary();
             cleanupCurrentRun();
-            process.exit(1);
+            process.exit(3);
+        }
+        if (code !== 0) {
+            // 中文注释：WS6 普通 FAIL 聚合——写行后继续下一个互相隔离的 suite，终态汇总 exit 1。
+            console.error(`FAIL: ${file} (exit ${code})`);
+            failedCount += 1;
+            continue;
         }
         console.log(`PASS: ${file}\n`);
+        passedCount += 1;
     }
+    printSummary();
     cleanupCurrentRun();
+    if (failedCount > 0) {
+        console.error(`FAILURES: ${failedCount} suite(s) failed (aggregated, exit 1)`);
+        process.exit(1);
+    }
     console.log('ALL TEST SUITES PASSED SUCCESSFULLY (exit code 0)');
 }
 

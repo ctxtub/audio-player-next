@@ -106,7 +106,9 @@ function utcNow() {
 
 /**
  * 创建用例记录器。
- * @param params 参数 { runId, caseId, specPath, resultsRoot?, commit? }
+ * @param params 参数 { runId, caseId, specPath, resultsRoot?, commit?, catalogCaseId?, executableId?, candidateCaseIds?, reason? }
+ *   caseId 为文件系统目录标识；catalogCaseId 为 catalog case_id（缺省沿用 caseId 保持兼容；
+ *   显式 null 表示 catalog 暂无绑定，manifest 如实记 null + reason，不编造）。
  * @returns 记录器 { dir, manifestPath, step(name, detail?), finish(opts) }
  */
 export function createCaseRecorder(params) {
@@ -115,6 +117,11 @@ export function createCaseRecorder(params) {
     const specPath = params.specPath;
     const resultsRoot = params.resultsRoot ?? defaultResultsRoot;
     const commit = params.commit ?? currentCommit();
+    const hasCatalogBinding = params.catalogCaseId !== undefined;
+    const catalogCaseId = hasCatalogBinding ? params.catalogCaseId : caseId;
+    const executableId = params.executableId ?? null;
+    const candidateCaseIds = params.candidateCaseIds ?? (hasCatalogBinding && typeof catalogCaseId === 'string' ? [catalogCaseId] : []);
+    const bindReason = params.reason ?? null;
     if (!runId || !caseId || !specPath) {
         throw new Error('[evidence-recorder] runId/caseId/specPath 均为必填');
     }
@@ -147,7 +154,10 @@ export function createCaseRecorder(params) {
             // 中文注释：Fix 9——harness 执行文件组合哈希 + 参与清单（独立复算口径；缺失如实记 missing）。
             const harnessInfo = harnessDigest();
             const manifest = {
-                case_id: caseId,
+                case_id: catalogCaseId,
+                executable_id: executableId,
+                candidate_case_ids: candidateCaseIds,
+                reason: bindReason,
                 spec_path: specPath,
                 run_id: runId,
                 commit,

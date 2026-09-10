@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "evidence-result-row",
+  "description": "Node/浏览器统一证据行 v1：每 assertion 一行（D3 已决），suite/case 级汇总行标 kind=summary。校验以 scripts/evidence-schema.mjs 为准，本文件为机读字段声明。",
+  "version": 1,
+  "type": "object",
+  "properties": {
+    "schema_version": { "description": "schema 版本，恒为 1", "const": 1 },
+    "kind": { "description": "行种类：assertion（每 assertion 一行）或 summary（汇总）", "enum": ["assertion", "summary"] },
+    "run_id": { "description": "运行标识", "type": "string" },
+    "case_id": { "description": "catalog case_id（kebab-case；assertion 行必填；无绑定汇总行不得编造）", "type": "string" },
+    "case_ids": { "description": "Node suite 汇总行附带的 case 集合（由 executable 反查 catalog）", "type": "array", "items": { "type": "string" } },
+    "executable_id": { "description": "catalog executable_id（须出现在该 case 的 executable_ids）", "type": "string" },
+    "assertion_id": { "description": "该 case required_assertions 中的 assertion_id", "type": "string" },
+    "surface": { "description": "须与 catalog 中该 assertion 的 surface 一致；L3 executable 的 evidence_surfaces 须覆盖它", "type": "string" },
+    "verdict": { "description": "结论枚举", "enum": ["PASS", "FAIL", "BLOCKED", "SKIPPED", "FLAKY"] },
+    "evidence_path": { "description": "相对仓库根的证据路径（相对路径，禁绝对路径与 .. 段）", "type": "string" },
+    "reason": { "description": "无绑定 BLOCKED/SKIPPED 的原因（如 no-catalog-binding）", "type": "string" },
+    "blocked_by": { "description": "D4 预留：exit 3 路径未跑 suite 的阻断来源（本版本 runner 仅写行协议，不改聚合语义）", "type": "string" },
+    "browser": { "description": "L3 行的 Playwright project（chromium/webkit）", "type": "string" },
+    "spec_path": { "description": "L3 行的用例相对路径", "type": "string" },
+    "commit": { "description": "执行时 HEAD 完整 SHA（取不到记 unknown，如实记录不伪造）", "type": "string" },
+    "duration_ms": { "description": "耗时毫秒", "type": "number" },
+    "suite_id": { "description": "旧字段：可选透传（v1 保留，不得删除）", "type": "string" },
+    "group": { "description": "旧字段：可选透传（v1 保留，不得删除）", "type": "string" },
+    "exit_code": { "description": "旧字段：可选透传（v1 保留，不得删除）", "type": "number" }
+  },
+  "required": ["schema_version", "kind", "run_id", "verdict", "evidence_path"],
+  "required_for_assertion": ["case_id", "executable_id", "assertion_id", "surface"],
+  "legacy_passthrough": ["suite_id", "suite", "id", "group", "needs_db", "status", "exit_code", "exitCode", "duration_ms", "durationMs"],
+  "join_rules": [
+    "case_id 须存在于 catalog cases",
+    "executable_id 须存在于 catalog executables，且出现在该 case 的 executable_ids（同时 executable 的 case_ids 须含该 case，双向一致）",
+    "assertion_id 须属于该 case 的 required_assertions",
+    "surface 须与 catalog 中该 assertion 的 surface 一致；layer=L3 的 executable 其 evidence_surfaces 须覆盖该 surface"
+  ],
+  "summary_rules": [
+    "verdict 为 PASS/FAIL/FLAKY 的汇总行须带有效 case 绑定（防伪造 PASS）",
+    "无绑定的 BLOCKED/SKIPPED 汇总行须带非空 reason（如 no-catalog-binding），且不得编造 case_id",
+    "run_verdict 永不写回 catalog"
+  ]
+}

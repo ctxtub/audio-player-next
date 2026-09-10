@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createClient } from '@libsql/client';
 import * as safety from './test-database-path-safety.mjs';
+import { loadEvidenceCatalog, validateRow, expandAssertionClaims, SCHEMA_VERSION } from './evidence-schema.mjs';
 
 const cwd = process.cwd();
 
@@ -27,7 +28,7 @@ const ALLOWED_GROUPS = ['unit', 'integration', 'contract', 'tooling', 'static', 
 // 中文注释：unit 禁止导入 lib/db 的静态扫描正则。
 const LIB_DB_IMPORT_RE = /from\s+['"].*lib\/db['"]|require\(['"].*lib\/db['"]\)/;
 
-// 中文注释：套件注册表（48 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit/static 与无库 tooling 元测试为 false）。
+// 中文注释：套件注册表（49 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit/static 与无库 tooling 元测试为 false）。
 // 中文注释：meta-suite 策略——runner 自身测试（runner/catalog/ci 三个 tooling 元测试）以 needs_db=false 的叶子套件登记进 tooling 组，
 // 它们只做 --list 只读查询 / 沙箱 catalog 校验 / 文件结构断言，从不触发套件执行与建库，故无自指递归（由 runner-group-split 用例⑧测试证明）；
 // 禁止用 checker 硬编码目录排除来掩盖测试。
@@ -81,6 +82,7 @@ const SUITES = [
     { id: 'catalog-checker', path: './tests/tooling/catalog/catalog-checker.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'candidate-quality-workflow', path: './tests/tooling/ci/candidate-quality-workflow.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'tier-gate', path: './tests/tooling/tier/tier-gate.tooling.test.ts', group: 'tooling', needs_db: false },
+    { id: 'evidence-schema', path: './tests/tooling/evidence/evidence-schema.tooling.test.ts', group: 'tooling', needs_db: false },
 ];
 
 /** 当前拥有的子进程（信号处理用）。 */
@@ -409,6 +411,21 @@ async function main() {
     // 中文注释：结果目录 .e2e-results/<run-id>/results.jsonl（逐行 JSONL）。
     const resultsDir = path.join(cwd, '.e2e-results', runId);
     const resultsPath = path.join(resultsDir, 'results.jsonl');
+    // 中文注释：证据 v1 反查基座——catalog 只读解析一次；commit 记完整 SHA（取不到记
+    // unknown，如实记录）。catalog 不可读时不伪造绑定：写行校验必败 → BLOCKED + exit 3。
+    let evidenceCatalog = null;
+    try {
+        evidenceCatalog = loadEvidenceCatalog(cwd);
+    } catch (err) {
+        console.error(`证据 catalog 预载失败（写行时将 BLOCKED+exit 3） err=${sanitizeError(err)}`);
+    }
+    let commitSha = 'unknown';
+    try {
+        const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+        if (/^[0-9a-f]{40}$/.test(sha)) commitSha = sha;
+    } catch {
+        // 忽略，记 unknown
+    }
     try {
         fs.mkdirSync(resultsDir, { recursive: true });
     } catch (err) {
@@ -418,13 +435,62 @@ async function main() {
     }
     /**
      * 写单行 JSONL（verdict=PASS/FAIL，exit 4 为 BLOCKED）。
+     * v1 行协议（WS5/C5，D3 已决：每 assertion 一行）：
+     * 每 suite 先写 kind=summary 汇总行（含 schema_version/case_ids 由 executable 反查
+     * catalog/旧字段可选透传），再按该 suite 命中的 executable 展开写 kind=assertion
+     * 行（case × executable × assertion × surface 全 join catalog）。
+     * 写行前用同一校验器校验；非法即记 BLOCKED 并 exit 3（供给/契约损坏，
+     * 非产品断言失败）。控制流（首个 FAIL 即停）本轮不动，归 WS6/C6。
      * @param entry 注册表条目
      * @param verdict PASS/FAIL/BLOCKED
      * @param exitCode 退出码
      * @param durationMs 耗时毫秒
      */
-    function writeResultsLine(entry, verdict, exitCode, durationMs) {
-        const line = {
+    function suiteEvidencePath(entry) {
+        return path.join('.e2e-results', runId, entry.id);
+    }
+    /**
+     * 由 suite 路径反查 catalog 非 L3 executable（归一化口径与 checker 一致）。
+     * @param entry 注册表条目
+     * @returns 匹配 executable 数组（缺 catalog 即空数组，调用方走 BLOCKED+exit 3）
+     */
+    function suiteExecutables(entry) {
+        if (evidenceCatalog === null) return [];
+        const norm = entry.path.replace(/\\/g, '/').replace(/^\.\//, '');
+        const out = [];
+        for (const e of evidenceCatalog.executables.values()) {
+            if (e.layer === 'L3') continue;
+            if (typeof e.path !== 'string') continue;
+            const ep = e.path.replace(/\\/g, '/').replace(/^\.\//, '');
+            if (ep === norm) out.push(e);
+        }
+        return out;
+    }
+    /**
+     * 组装本 suite 的全部待写 v1 行（首 summary + N assertion）。
+     * @param entry 注册表条目
+     * @param verdict PASS/FAIL/BLOCKED
+     * @param exitCode 退出码
+     * @param durationMs 耗时毫秒
+     * @returns 行数组
+     */
+    function buildResultRows(entry, verdict, exitCode, durationMs) {
+        const evidencePath = suiteEvidencePath(entry);
+        const execs = suiteExecutables(entry);
+        const caseIds = [];
+        const seenCases = new Set();
+        for (const e of execs) {
+            for (const cid of e.case_ids || []) {
+                if (!seenCases.has(cid)) {
+                    seenCases.add(cid);
+                    caseIds.push(cid);
+                }
+            }
+        }
+        caseIds.sort();
+        const summary = {
+            schema_version: SCHEMA_VERSION,
+            kind: 'summary',
             run_id: runId,
             suite_id: entry.id,
             suite: entry.id,
@@ -437,9 +503,66 @@ async function main() {
             exitCode,
             duration_ms: durationMs,
             durationMs: durationMs,
-            evidence_path: path.join('.e2e-results', runId, entry.id),
+            evidence_path: evidencePath,
+            case_ids: caseIds,
+            commit: commitSha,
         };
-        fs.appendFileSync(resultsPath, `${JSON.stringify(line)}\n`);
+        const rows = [summary];
+        for (const e of execs) {
+            for (const claim of expandAssertionClaims(evidenceCatalog, e.executable_id)) {
+                rows.push({
+                    schema_version: SCHEMA_VERSION,
+                    kind: 'assertion',
+                    run_id: runId,
+                    case_id: claim.case_id,
+                    executable_id: e.executable_id,
+                    assertion_id: claim.assertion_id,
+                    surface: claim.surface,
+                    verdict,
+                    evidence_path: evidencePath,
+                    duration_ms: durationMs,
+                    commit: commitSha,
+                    suite_id: entry.id,
+                });
+            }
+        }
+        return rows;
+    }
+    function writeResultsLine(entry, verdict, exitCode, durationMs) {
+        const rows = buildResultRows(entry, verdict, exitCode, durationMs);
+        const bad = [];
+        for (const row of rows) {
+            try {
+                const res = validateRow(row, evidenceCatalog);
+                if (!res.ok) bad.push(res.errors.join('; '));
+            } catch (err) {
+                bad.push(`validator-threw:${sanitizeError(err)}`);
+            }
+        }
+        if (bad.length > 0) {
+            console.error(`证据行校验失败 suite=${entry.id} reasons=${bad.join(' | ').slice(0, 500)}`);
+            try {
+                fs.appendFileSync(
+                    resultsPath,
+                    `${JSON.stringify({
+                        schema_version: SCHEMA_VERSION,
+                        kind: 'summary',
+                        run_id: runId,
+                        suite_id: entry.id,
+                        verdict: 'BLOCKED',
+                        evidence_path: suiteEvidencePath(entry),
+                        reason: 'evidence-contract-broken',
+                    })}\n`,
+                );
+            } catch {
+                // 忽略写失败，不掩盖 exit 3
+            }
+            cleanupCurrentRun();
+            process.exit(3);
+        }
+        for (const row of rows) {
+            fs.appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
+        }
     }
     console.log(`run-id=${runId}`);
     console.log(`suites=${selected.length}`);

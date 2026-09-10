@@ -1,9 +1,10 @@
 import { test as base, expect } from "@playwright/test";
 import type { BrowserContextOptions, Page, TestInfo } from "@playwright/test";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { createCaseRecorder } from "./evidence-recorder.mjs";
 import { buildCaseId } from "./jsonl-reporter";
+import { expandAssertionClaims, findExecutablesForPath, loadEvidenceCatalog } from "../../../../scripts/evidence-schema.mjs";
 
 /**
  * 浏览器用例 fixtures（任务13 harness）。
@@ -75,6 +76,65 @@ function statusToVerdict(status: TestInfo["status"]): "PASS" | "FAIL" | "SKIPPED
 }
 
 /**
+ * catalog 绑定解析结果。
+ */
+interface SpecBinding {
+    /** 主 catalog case_id（首个绑定；无绑定为 null）。 */
+    catalogCaseId: string | null;
+    /** 命中的 L3 executable（首个；无绑定为 null）。 */
+    executableId: string | null;
+    /** 全部候选 case_id。 */
+    candidateCaseIds: string[];
+    /** 主 case 的 required assertion 展开。 */
+    claims: Array<{ assertion_id: string; surface: string }>;
+}
+
+/**
+ * 由 spec 相对路径反查 catalog L3 绑定（与 reporter 同一口径）。
+ * catalog 不可读/无绑定即返回空绑定（调用方记 BLOCKED，绝不编造）。
+ * @param specRelPosix 相对仓库根的 posix 路径
+ * @returns 绑定解析结果
+ */
+function resolveSpecBinding(specRelPosix: string): SpecBinding {
+    const empty: SpecBinding = { catalogCaseId: null, executableId: null, candidateCaseIds: [], claims: [] };
+    let catalog: {
+        cases: Map<string, unknown>;
+        executables: Map<string, { executable_id: string; case_ids: string[]; layer: string }>;
+    };
+    try {
+        catalog = loadEvidenceCatalog(process.cwd()) as unknown as typeof catalog;
+    } catch {
+        return empty;
+    }
+    const execs = findExecutablesForPath(catalog, specRelPosix, "L3") as Array<{
+        executable_id: string;
+        case_ids: string[];
+        layer: string;
+    }>;
+    if (execs.length === 0) return empty;
+    const seen: Set<string> = new Set();
+    const candidateCaseIds: string[] = [];
+    for (const e of execs) {
+        for (const cid of e.case_ids ?? []) {
+            if (!seen.has(cid)) {
+                seen.add(cid);
+                candidateCaseIds.push(cid);
+            }
+        }
+    }
+    if (candidateCaseIds.length === 0) return empty;
+    const catalogCaseId: string = candidateCaseIds[0] as string;
+    const claims = (
+        expandAssertionClaims(catalog, execs[0]?.executable_id as string) as Array<{
+            case_id: string;
+            assertion_id: string;
+            surface: string;
+        }>
+    ).filter((c) => c.case_id === catalogCaseId);
+    return { catalogCaseId, executableId: execs[0]?.executable_id as string, candidateCaseIds, claims };
+}
+
+/**
  * harness test：context 隔离 + evidence 自动记录。
  *
  * - contextOptions：每用例全新空 storageState（不复用登录态/缓存）；
@@ -109,10 +169,19 @@ export const test = base.extend<HarnessFixtures>({
             const specRel: string = specAbs.startsWith(`${process.cwd()}/`)
                 ? specAbs.slice(process.cwd().length + 1)
                 : "tests/system/browser/smoke.spec.ts";
+            const specRelPosix: string = specRel.split(sep).join("/");
+            // 中文注释：C5——case_id 改用 catalog case_id（与 reporter 同一反查口径）；
+            // catalog 暂无绑定（如烟雾 spec 尚未登记 L3 executable）即诚实缺口：
+            // manifest 记 BLOCKED(reason=no-catalog-binding)，严禁伪造 PASS 或编造 case_id。
+            const binding: SpecBinding = resolveSpecBinding(specRelPosix);
             const recorder = createCaseRecorder({
                 runId: harnessEnv.runId,
                 caseId,
                 specPath: specRel,
+                catalogCaseId: binding.catalogCaseId,
+                executableId: binding.executableId,
+                candidateCaseIds: binding.candidateCaseIds,
+                reason: binding.catalogCaseId === null ? "no-catalog-binding" : undefined,
             });
             recorder.step("用例开始", { project: testInfo.project.name, title: testInfo.title });
             try {
@@ -134,17 +203,24 @@ export const test = base.extend<HarnessFixtures>({
             await use(recorder);
             const browserVersion: string = page.context().browser()?.version() ?? "unknown";
             recorder.step("用例结束", { status: testInfo.status });
+            // 中文注释：C5——bound 用例按主 case 的 required_assertions 逐条记录
+            //（含 surface；passed 由终态 verdict 派生）；无绑定用例 verdict 强制
+            // BLOCKED 且 assertions 置空（manifest.case_id 已为 null，不伪证）。
+            const mappedVerdict = statusToVerdict(testInfo.status);
+            const finalVerdict = binding.catalogCaseId === null ? "BLOCKED" : mappedVerdict;
             recorder.finish({
-                verdict: statusToVerdict(testInfo.status),
+                verdict: finalVerdict,
                 browser: testInfo.project.name,
                 browserVersion,
-                assertions: [
-                    {
-                        assertion_id: "playwright-expectations",
-                        passed: testInfo.status === "passed",
-                        detail: `status=${testInfo.status}`,
-                    },
-                ],
+                assertions:
+                    binding.catalogCaseId === null
+                        ? []
+                        : binding.claims.map((c) => ({
+                              assertion_id: c.assertion_id,
+                              surface: c.surface,
+                              passed: finalVerdict === "PASS",
+                              detail: `status=${testInfo.status}`,
+                          })),
             });
         },
         { auto: true },

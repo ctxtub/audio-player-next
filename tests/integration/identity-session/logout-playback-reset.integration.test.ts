@@ -13,10 +13,10 @@ nodeRequire.cache[glassToastPath] = {
     exports: { default: { show: () => {}, clear: () => {} } },
 } as unknown as NodeModule;
 
-const { usePlaybackStore } = nodeRequire('../stores/playbackStore') as {
-    usePlaybackStore: typeof import('../stores/playbackStore').usePlaybackStore;
+const { usePlaybackStore } = nodeRequire('../../../stores/playbackStore') as {
+    usePlaybackStore: typeof import('../../../stores/playbackStore').usePlaybackStore;
 };
-const accountSync = nodeRequire('../stores/accountSync') as typeof import('../stores/accountSync');
+const accountSync = nodeRequire('../../../stores/accountSync') as typeof import('../../../stores/accountSync');
 
 // 中文注释：H-06 观测探针——登出链 reset→controller.pause 序列必须可采样。
 async function runH06Tests(): Promise<void> {

@@ -1325,12 +1325,12 @@ executables:
   - executable_id: exec-stale-conversation-write
     display_name_zh: 陈旧会话写入
     layer: L2
-    path: ./tests/test-h15-concurrent-write.ts
+    path: ./tests/integration/persistence-config/stale-conversation-write.integration.test.ts
     case_ids: [dual-tab-same-account-write-cover]
   - executable_id: exec-logout-playback-reset
     display_name_zh: 登出播放重置
     layer: L2
-    path: ./tests/test-h06-logout-probe.ts
+    path: ./tests/integration/identity-session/logout-playback-reset.integration.test.ts
     case_ids: [logout-during-play-instant-silence]
   - executable_id: exec-explicit-play-budget
     display_name_zh: 显式播放预算

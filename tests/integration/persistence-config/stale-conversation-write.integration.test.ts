@@ -1,12 +1,12 @@
 import assert from 'node:assert';
-import { prisma } from '../lib/db';
+import { prisma } from '../../../lib/db';
 import {
     getConversation,
     saveConversation,
     getConversationForSubject,
     saveConversationForSubject,
-} from '../lib/server/chatConversation';
-import { TRPCError } from '../lib/trpc/init';
+} from '../../../lib/server/chatConversation';
+import { TRPCError } from '../../../lib/trpc/init';
 
 /**
  * 构造待保存的单条会话消息。

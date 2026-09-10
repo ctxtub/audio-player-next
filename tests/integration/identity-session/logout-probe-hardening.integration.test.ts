@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 
 // 中文注释：H-06 follow-up 加固集成测试（任务11 STEP-3，L2）。
 // 来源：tests/legacy/logout-probe-hardening.legacy.test.ts 全量承接（W2-01/W2-02/W2-03），无一丢弃。
-// 对照：tests/test-h06-logout-probe.ts（H-06 主探针）仅覆盖正常登出 reset→pause 采样 + 参与序列 + 前后快照；
+// 对照：tests/integration/identity-session/logout-playback-reset.integration.test.ts（H-06 主探针）仅覆盖正常登出 reset→pause 采样 + 参与序列 + 前后快照；
 // 本文件覆盖其未覆盖的故障注入隔离（单块 reset 抛错不阻断 + finally 仍采样）与深拷贝/深冻隔离 + 接线静态锁定。
 // 全程内存，不碰 prisma/dev.db。
 

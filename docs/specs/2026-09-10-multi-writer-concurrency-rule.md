@@ -168,3 +168,64 @@
 - 门：`yarn test:static`、`yarn lint`、`yarn tsc --noEmit --incremental false`、`git diff --check`、
   只读跑 `node scripts/suite-worker.mjs tests/tooling/docs/governance-docs.tooling.test.ts`（不改它）、
   `git status --porcelain`；逐条记录真实退出码。
+
+---
+
+## 6. 落地契约（硬要求）
+
+每个 worktree/并行分支在开工时就必须登记本节要素（缺一不可，落在该分支的 spec 或变更说明里）。
+没有落地契约的并行分支不得开工；落地契约缺项等同路径所有权未声明。
+
+### 6.1 为什么需要落地契约（仓库事实复核，2026-09-10）
+
+- 已合回的：`fix/h15-wiring`（w2a）、`fix/chat-wave2-followups`（w2b）、
+  `test/e2e-wave2-p0-live`（w2c）、`test/e2e-wave2-rest`（w2d）
+  → `git merge-base --is-ancestor <b> main` 均成立。
+- detached worktree 指向的提交 `8bd87b3`（testplan-p1..p4）、`b4d1552`（testrev-t1..t4）
+  → `git branch --contains` 显示 `main` 已包含，内容早已合回。
+- 留了尾巴的：w2a–w2d、testplan-p1..p4、testrev-t1..t4 共 12 个 worktree
+  内容已进 `main`、工作区目录仍挂着；未合入 `main` 的分支：
+  `e2e/test-matrix-20260905-recovery`（领先 3）、
+  `chore/test-architecture-rebuild`（领先 48）、
+  `docs/multi-writer-rule-20260910`（领先 48，含本分支待落地的提交）。
+- 结论：worktree 只隔离工作区，本身不产生合并；合不合取决于开工时有没有落地计划。
+- 「不相交路径所有权」不只是为了并行不打架，更是为了让落地保持廉价：
+  碰不同文件，合并机械无冲突；碰同一文件，冲突要人解，
+  或更糟的「不冲突但两条分支语义互相抵消」。
+
+### 6.2 落地契约六要素（开工时登记，缺一不可）
+
+1. **落地目标**：写明合到哪条分支（例如 `chore/test-architecture-rebuild` → `main`）。
+2. **落地顺序**：多个分支并存时写明谁先谁后；先合底座、再合其上的分支，禁止乱序。
+3. **落地后验证**：写明合完必须跑的验证门（不能只看 merge 成功）；
+   门必须与该分支改动面匹配（见 §6.3），并写明落地后由谁复跑、证据写在哪。
+4. **清理条件**：写明 worktree 与分支的删除时机与前置：
+   内容已并入目标分支、无未推送独有提交、证据已归档，三者齐备才删，
+   用以避免再次堆积孤儿 worktree。
+5. **授权**：落地（merge/land）必须显式授权；未获授权前各写者只在各自分支提交。
+6. **冲突/语义抵消处置**：落地时出现冲突，或出现「不冲突但两条分支语义互相抵消」，
+   必须停下来回到调度者/授权人处置，不得自行择一。
+
+### 6.3 落地后验证门对照（至少包含）
+
+| 改动面 | 落地后至少跑 |
+|---|---|
+| 改 `scripts/**` / `tests/tooling/**` | 加跑 `test:tooling`，另按改动面跑对应门 |
+| 改 `tests/test-catalog.yaml` | `test:static` + 对应 tier 门 |
+| 文档类 | `test:static` + `lint` + `tsc` + docs suite |
+
+门只可按改动面加宽，不可减配；每次落地只认当次复跑的真实退出码。
+
+### 6.4 可执行检查清单（开分支 → 清理）
+
+按序执行，一步未完成不进下一步：
+
+1. 开分支时写下落地契约（§6.2 六要素），落在该分支的 spec 或变更说明里。
+2. 写明落地目标与落地顺序；有底座依赖时先排底座。
+3. 未获落地授权前，各写者只在各自分支提交。
+4. 按落地顺序逐个落地，每次只合一个分支。
+5. 每次合完跑该分支改动面对应的验证门（§6.3），不只看 merge 成功。
+6. 写明复跑人与证据位置，证据归档后才可清理。
+7. 出现冲突或语义互相抵消时停下，交调度者/授权人处置。
+8. 三者齐备（内容已并入目标分支、无未推送独有提交、证据已归档）后删除 worktree 与分支。
+9. 用 `git worktree list` 与 `git branch --contains` 回读，确认无孤儿残留。

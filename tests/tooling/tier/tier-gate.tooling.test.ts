@@ -28,11 +28,11 @@ const checkerAbs: string = path.join(repoRoot, 'scripts', 'check-test-catalog.mj
 const execTimeoutMs: number = 15000;
 // 中文注释：fixture 好 executable 落盘路径（复用真实存在的仓库文件）。
 const goodExecPath: string = './tests/unit/identity-session/session-roundtrip.unit.test.ts';
-// 中文注释：基线 CANDIDATE/RELEASE P0/P1 门阻断集（5 项，基线销定；catalog 变更新增/修复缺口须同步更新本表）。
+// 中文注释：基线 CANDIDATE/RELEASE P0/P1 门阻断集（销定当前真实缺口；catalog 补测试解阻须同步更新本表）。
+// 2026-09-11 tier-gate-test-supplement ①：guest-register-3step-migrate-fidelity 已补 L2 保真断言并升 ACTIVE，移出阻断集。
 const baselineBlockedIds: string[] = [
   'clear-during-generate-no-orphan-audio',
   'guest-cold-start-first-screen',
-  'guest-register-3step-migrate-fidelity',
   'login-existing-no-leak',
   'logout-dual-cookie-clean-reset',
 ];
@@ -415,8 +415,8 @@ function caseRealBaseline(): void {
   assert.strictEqual(rel.status, 1, `基线RELEASE应 exit 1，实际=${rel.status}`);
   const candIds: string[] = extractBlockedIds(cand.stdout);
   const relIds: string[] = extractBlockedIds(rel.stdout);
-  assert.deepStrictEqual(candIds, [...baselineBlockedIds].sort(), `CANDIDATE阻断集应 pin 基线5项，实际=${JSON.stringify(candIds)}`);
-  assert.deepStrictEqual(relIds, [...baselineBlockedIds].sort(), `RELEASE阻断集应 pin 基线5项，实际=${JSON.stringify(relIds)}`);
+  assert.deepStrictEqual(candIds, [...baselineBlockedIds].sort(), `CANDIDATE阻断集应 pin 当前基线4项，实际=${JSON.stringify(candIds)}`);
+  assert.deepStrictEqual(relIds, [...baselineBlockedIds].sort(), `RELEASE阻断集应 pin 当前基线4项，实际=${JSON.stringify(relIds)}`);
   let checkerOut: string = '';
   try {
     checkerOut = execFileSync(process.execPath, [checkerAbs], { cwd: repoRoot, encoding: 'utf8', timeout: 30000 }) as unknown as string;
@@ -424,7 +424,7 @@ function caseRealBaseline(): void {
     assert.fail(`交叉一致要求 checker 本体 exit 0，实际 status=${String((err as { status?: unknown }).status)}`);
   }
   const gapIds: string[] = extractCheckerGapIds(String(checkerOut));
-  assert.ok(gapIds.length === 29, `checker缺口数基线应为29，实际=${gapIds.length}`);
+  assert.ok(gapIds.length === 28, `checker缺口数基线应为28（①解阻 guest-register 后），实际=${gapIds.length}`);
   for (const id of candIds) {
     assert.ok(gapIds.includes(id), `门阻断 ${id} 应出现在 checker 缺口清单中（交叉一致）`);
   }

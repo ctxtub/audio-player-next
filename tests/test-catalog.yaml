@@ -893,7 +893,7 @@ cases:
     priority: P0
     primary_defense: L3
     secondary_defenses: [L2]
-    lifecycle_status: PLANNED
+    lifecycle_status: ACTIVE
     risk_tags: [auth, migrate]
     spec_path: docs/e2e/05-认证授权与会话生命周期/01-访客注册三步迁移与数据保真.md
     required_assertions:
@@ -903,7 +903,7 @@ cases:
       - assertion_id: no-duplicate-rows
         display_name_zh: 无重复行
         surface: db
-    executable_ids: []
+    executable_ids: [exec-guest-creative-sync]
     fixtures: []
     ci_tier: CANDIDATE
     owner: auth-session
@@ -1316,7 +1316,7 @@ executables:
     display_name_zh: 访客创作同步
     layer: L2
     path: ./tests/integration/persistence-config/guest-creative-sync.integration.test.ts
-    case_ids: [guest-chat-100-limit-truncate]
+    case_ids: [guest-chat-100-limit-truncate, guest-register-3step-migrate-fidelity]
   - executable_id: exec-guest-multisubject-lifecycle
     display_name_zh: 访客多主体生命周期
     layer: L2

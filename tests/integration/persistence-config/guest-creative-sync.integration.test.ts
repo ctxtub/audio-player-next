@@ -309,25 +309,71 @@ async function runGuestCreativeSyncTests() {
     console.log('=== 6. Testing Registration Migration & Rollback Contract ===');
     const guestMigrate = `g_mig_${Date.now()}`;
 
-    // Setup complete guest data
+    // Setup complete guest data (E2E-05-01 oracle: 6 条聊天含 1 故事卡 + 进度行 + 双历史)
     await prisma.guestConfig.create({
         data: {
             guestId: guestMigrate,
             playDurationMinutes: 45,
             speed: 1.5,
             themeMode: 'dark',
+            voiceId: 'onyx',
         },
     });
+    const gmT0 = new Date('2026-08-01T10:00:00.000Z');
+    const gmT1 = new Date('2026-08-01T10:01:00.000Z');
     await saveConversationForSubject({ type: 'guest', id: guestMigrate }, [
-        { messageId: 'gm_1', role: 'user', content: 'Guest message 1' },
-        { messageId: 'gm_2', role: 'assistant', content: 'Guest response 1' },
+        { messageId: 'gm_1', role: 'user', content: 'Guest message 1', createdAt: gmT0.toISOString() },
+        {
+            messageId: 'gm_2',
+            role: 'assistant',
+            content: 'Guest response 1',
+            parts: [
+                {
+                    type: 'storyCard',
+                    storyText: 'Guest response 1',
+                    audioUrl: 'blob:http://localhost:3000/should-be-excluded-blob-uuid',
+                },
+            ],
+            createdAt: gmT1.toISOString(),
+        },
+        { messageId: 'gm_3', role: 'user', content: 'Guest message 2', createdAt: gmT1.toISOString() },
+        { messageId: 'gm_4', role: 'assistant', content: 'Guest response 2', createdAt: gmT1.toISOString() },
+        { messageId: 'gm_5', role: 'user', content: 'Guest message 3', createdAt: gmT1.toISOString() },
+        { messageId: 'gm_6', role: 'assistant', content: 'Guest response 3', createdAt: gmT1.toISOString() },
     ]);
+    await prisma.guestPlaybackProgress.create({
+        data: {
+            guestId: guestMigrate,
+            sourceType: 'chat',
+            sourceId: 'gm_2',
+            sessionId: 'gm_2',
+            title: '音频故事',
+            contentHash: 'migratehash12345',
+            segmentationVersion: 'v1',
+            lastCompletedParagraphIndex: 1,
+            nextParagraphIndex: 2,
+            totalParagraphs: 4,
+            voiceId: 'onyx',
+            speed: 1.5,
+            remainingAllowedMs: 120000,
+            totalAllowedMs: 300000,
+            isOneShot: false,
+        },
+    });
     await recordGenerationHistoryForSubject({ type: 'guest', id: guestMigrate }, {
         prompt: 'Guest story 1',
         storyText: 'Guest text 1',
         voiceId: 'alloy',
     });
     await recordPromptHistoryForSubject({ type: 'guest', id: guestMigrate }, 'Guest prompt 1');
+    // 迁移前快照（逐字段保真比对基线）
+    const guestChatBefore = await prisma.guestChatMessage.findMany({
+        where: { guestId: guestMigrate },
+        orderBy: { position: 'asc' },
+    });
+    assert.strictEqual(guestChatBefore.length, 6, '前置：访客聊天应为 6 条');
+    const guestGensBefore = await prisma.guestGenerationHistory.findMany({ where: { guestId: guestMigrate } });
+    assert.strictEqual(guestGensBefore.length, 1, '前置：访客生成历史应为 1 条');
 
     // 6.1 Successful Registration Migration
     const cookieJar = new Map<string, string>();
@@ -364,21 +410,64 @@ async function runGuestCreativeSyncTests() {
             chatMessages: { orderBy: { position: 'asc' } },
             generationHistory: true,
             promptHistory: true,
+            playbackProgress: true,
         },
     });
     assert(newUser !== null, 'New user must exist');
     assert(newUser.config !== null, 'UserConfig must be migrated');
     assert.strictEqual(newUser.config.playDurationMinutes, 45);
-    assert.strictEqual(newUser.chatMessages.length, 2, '2 ChatMessages must be migrated');
+    assert.strictEqual(newUser.config.speed, 1.5, 'speed must be migrated from guest');
+    assert.strictEqual(newUser.config.themeMode, 'dark', 'themeMode must be migrated from guest');
+    assert.strictEqual(newUser.config.voiceId, 'onyx', 'voiceId must be migrated from guest');
+    // migrate-keeps-data: 6 条聊天逐条保真（顺序/内容/parts JSON/createdAt）
+    assert.strictEqual(newUser.chatMessages.length, 6, 'migrate-keeps-data: 6 ChatMessages must be migrated');
     assert.strictEqual(newUser.chatMessages[0].content, 'Guest message 1');
+    for (let i = 0; i < 6; i++) {
+        assert.strictEqual(newUser.chatMessages[i].messageId, guestChatBefore[i].messageId, `第${i}条 messageId 保真`);
+        assert.strictEqual(newUser.chatMessages[i].content, guestChatBefore[i].content, `第${i}条 content 保真`);
+        assert.strictEqual(newUser.chatMessages[i].parts, guestChatBefore[i].parts, `第${i}条 parts JSON 保真`);
+        assert.strictEqual(
+            String(newUser.chatMessages[i].createdAt ?? ''),
+            String(guestChatBefore[i].createdAt ?? ''),
+            `第${i}条 createdAt 保真`,
+        );
+    }
+    const migratedCardParts = JSON.parse(newUser.chatMessages[1].parts as string);
+    assert.strictEqual(migratedCardParts[0].type, 'storyCard');
+    assert.strictEqual(migratedCardParts[0].storyText, 'Guest response 1', 'parts.storyText 保真');
+    assert.strictEqual(migratedCardParts[0].audioUrl, '', 'parts.audioUrl 保持 sanitize 语义（空串）');
+    // 进度行保真（nextParagraphIndex / remainingAllowedMs）
+    assert(newUser.playbackProgress !== null, 'UserPlaybackProgress must be migrated');
+    assert.strictEqual(newUser.playbackProgress.nextParagraphIndex, 2, 'nextParagraphIndex=2 保真');
+    assert.strictEqual(newUser.playbackProgress.remainingAllowedMs, 120000, 'remainingAllowedMs 保真');
+    assert.strictEqual(newUser.playbackProgress.lastCompletedParagraphIndex, 1, 'lastCompletedParagraphIndex 保真');
+    assert.strictEqual(newUser.playbackProgress.totalParagraphs, 4, 'totalParagraphs 保真');
+    assert.strictEqual(newUser.playbackProgress.sourceId, 'gm_2', 'sourceId 保真');
+    assert.strictEqual(newUser.playbackProgress.contentHash, 'migratehash12345', 'contentHash 保真');
     assert.strictEqual(newUser.generationHistory.length, 1, '1 GenerationHistory must be migrated');
     assert.strictEqual(newUser.generationHistory[0].prompt, 'Guest story 1');
+    assert.strictEqual(newUser.generationHistory[0].storyText, 'Guest text 1');
+    assert.strictEqual(
+        String(newUser.generationHistory[0].createdAt ?? ''),
+        String(guestGensBefore[0].createdAt ?? ''),
+        'generation createdAt 保真',
+    );
     assert.strictEqual(newUser.promptHistory.length, 1, '1 PromptHistory must be migrated');
     assert.strictEqual(newUser.promptHistory[0].prompt, 'Guest prompt 1');
+    // no-duplicate-rows: 用户侧计数与访客侧计数精确 parity
+    assert.strictEqual(newUser.chatMessages.length, guestChatBefore.length, 'no-duplicate-rows: 聊天计数 parity');
+    const guestGenCount = await prisma.guestGenerationHistory.count({ where: { guestId: guestMigrate } });
+    const guestPromptCount = await prisma.guestPromptHistory.count({ where: { guestId: guestMigrate } });
+    assert.strictEqual(newUser.generationHistory.length, guestGenCount, 'no-duplicate-rows: 生成计数 parity');
+    assert.strictEqual(newUser.promptHistory.length, guestPromptCount, 'no-duplicate-rows: 提示词计数 parity');
+    // 注册即登录（SESSION cookie 签发）
+    assert(cookieJar.has('auth'), '注册成功应签发 SESSION(auth) cookie');
 
     // Verify original guest data is preserved for audit / GC
     const preservedGuestChat = await prisma.guestChatMessage.count({ where: { guestId: guestMigrate } });
-    assert.strictEqual(preservedGuestChat, 2, 'Guest records must be preserved for audit then GC-expired');
+    assert.strictEqual(preservedGuestChat, 6, 'Guest records must be preserved for audit then GC-expired');
+    assert(await prisma.guestConfig.findUnique({ where: { guestId: guestMigrate } }), 'Guest 配置行保留');
+    assert(await prisma.guestPlaybackProgress.findUnique({ where: { guestId: guestMigrate } }), 'Guest 进度行保留');
 
     // 6.2 Registration Rollback Safety
     const guestRollback = `g_rb_${Date.now()}`;

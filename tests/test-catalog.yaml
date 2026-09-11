@@ -854,7 +854,7 @@ executables:
     display_name_zh: 显式播放预算
     layer: L2
     path: ./tests/integration/playback/explicit-play-budget.integration.test.ts
-  # P2-02 复核：保留。涵盖具名访客断点恢复、跨设备同步、GC、漂移检测与单调推进等 17 项完整 L2 行为断言。
+  # P2-02 复核：保留。涵盖具名访客断点恢复、跨设备同步、GC、漂移检测与单调推进等完整 L2 行为断言。
   - executable_id: exec-paragraph-resume-mixed-legacy
     display_name_zh: 段落恢复混合遗留
     layer: L2

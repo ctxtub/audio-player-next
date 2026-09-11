@@ -1,6 +1,5 @@
 // case_id: guest-cold-start-first-screen
 // journey: smoke-baseline
-// primary_defense: L3
 // legacy_aliases: [E2E-01-01]
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

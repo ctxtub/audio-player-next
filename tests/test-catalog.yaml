@@ -6,8 +6,6 @@ cases:
     journey_id: smoke-baseline
     user_goal: 以访客身份打开首页看到首屏且无错
     priority: P0
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [smoke, cold-start]
     spec_path: docs/e2e/01-基础冒烟与页面基线/01-访客冷启动首屏渲染.md
@@ -27,8 +25,6 @@ cases:
     journey_id: smoke-baseline
     user_goal: 点击访客进入后凭证签发续签且可通行
     priority: P1
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [auth, cookie]
     spec_path: docs/e2e/01-基础冒烟与页面基线/02-访客身份创建与cookie升级续签.md
@@ -48,8 +44,6 @@ cases:
     journey_id: smoke-baseline
     user_goal: 发送首个故事后流式可见并自动播放
     priority: P1
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [creation, streaming]
     spec_path: docs/e2e/01-基础冒烟与页面基线/03-首个故事生成流式渲染与自动播放.md
@@ -69,8 +63,6 @@ cases:
     journey_id: smoke-baseline
     user_goal: 聊天浮窗播放器页三处状态同源
     priority: P1
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [playback, mirror]
     spec_path: docs/e2e/01-基础冒烟与页面基线/04-三处播放镜像状态一致性.md
@@ -90,8 +82,6 @@ cases:
     journey_id: smoke-baseline
     user_goal: 配置未就绪时门控并可重试恢复
     priority: P1
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [config, gate]
     spec_path: docs/e2e/01-基础冒烟与页面基线/05-配置初始化门控与错误屏重试.md
@@ -111,8 +101,6 @@ cases:
     journey_id: smoke-baseline
     user_goal: 匿名被拦访客放行且站外跳转被截断
     priority: P1
-    primary_defense: L1
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [auth, guard]
     spec_path: docs/e2e/01-基础冒烟与页面基线/06-路由守卫与重定向安全.md#e2e-01-06-01
@@ -132,8 +120,6 @@ cases:
     journey_id: smoke-baseline
     user_goal: 已登录访问登录页被弹回且来源回跳站内
     priority: P1
-    primary_defense: L1
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [auth, guard]
     spec_path: docs/e2e/01-基础冒烟与页面基线/06-路由守卫与重定向安全.md#e2e-01-06-02
@@ -153,8 +139,6 @@ cases:
     journey_id: smoke-baseline
     user_goal: 硬刷新后播放丢失符合已知例外语义
     priority: P2
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [playback, refresh]
     spec_path: docs/e2e/01-基础冒烟与页面基线/07-硬刷新丢失播放.md
@@ -171,8 +155,6 @@ cases:
     journey_id: smoke-baseline
     user_goal: 小视口下浮窗不遮挡且开关有效
     priority: P2
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [ui, viewport]
     spec_path: docs/e2e/01-基础冒烟与页面基线/08-移动端视口浮窗遮挡.md
@@ -189,8 +171,6 @@ cases:
     journey_id: interactive-race
     user_goal: 同帧连击只提交一次不重复落库
     priority: P0
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [race, double-submit]
     spec_path: docs/e2e/02-交互并发与竞态防御/01-快速双发防重.md
@@ -207,8 +187,6 @@ cases:
     journey_id: interactive-race
     user_goal: 流式中再次提交被互斥不污染旧流
     priority: P0
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [race, streaming]
     spec_path: docs/e2e/02-交互并发与竞态防御/02-流式生成中再次提交互斥.md
@@ -225,8 +203,6 @@ cases:
     journey_id: interactive-race
     user_goal: 预载续写不以用户消息污染聊天
     priority: P0
-    primary_defense: L1
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [preload, isolation]
     spec_path: docs/e2e/02-交互并发与竞态防御/03-预载续写不污染聊天流.md
@@ -246,8 +222,6 @@ cases:
     journey_id: interactive-race
     user_goal: 生成中清空后完成回调不孤儿播放
     priority: P0
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [race, orphan]
     spec_path: docs/e2e/02-交互并发与竞态防御/04-生成中清空防止孤儿播放.md
@@ -264,8 +238,6 @@ cases:
     journey_id: interactive-race
     user_goal: 故事卡连击只起一次播放不抖动
     priority: P1
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [race, playback]
     spec_path: docs/e2e/02-交互并发与竞态防御/05-故事卡连击双发抑制.md
@@ -282,8 +254,6 @@ cases:
     journey_id: interactive-race
     user_goal: 发送中点建议项被拦截不跳会话
     priority: P1
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [race, suggest]
     spec_path: docs/e2e/02-交互并发与竞态防御/06-发送中建议项点击拦截.md
@@ -300,8 +270,6 @@ cases:
     journey_id: interactive-race
     user_goal: 自动续写时手打草稿不被清空
     priority: P2
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [preload, draft]
     spec_path: docs/e2e/02-交互并发与竞态防御/07-自动续写期间输入框草稿保留.md
@@ -318,8 +286,6 @@ cases:
     journey_id: interactive-race
     user_goal: 切标签后未读徽标与生成终态一致
     priority: P1
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [ui, badge]
     spec_path: docs/e2e/02-交互并发与竞态防御/08-生成中切标签页未读徽标一致性.md
@@ -336,8 +302,6 @@ cases:
     journey_id: interactive-race
     user_goal: 暂停恢复连击后界面与声音终态一致
     priority: P1
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [race, playback]
     spec_path: docs/e2e/02-交互并发与竞态防御/09-暂停恢复快速连击状态终态一致.md
@@ -354,8 +318,6 @@ cases:
     journey_id: interactive-race
     user_goal: 失败消息重试带正确上下文不串台
     priority: P2
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: PLANNED
     risk_tags: [retry, context]
     spec_path: docs/e2e/02-交互并发与竞态防御/10-失败消息重试上下文正确性.md
@@ -372,8 +334,6 @@ cases:
     journey_id: history-reuse-create
     user_goal: 从播放器提示词历史选条目后在干净新会话自动重创作且旧作可返
     priority: P0
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [history, isolation]
     spec_path: docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md#e2e-02-11-01
@@ -396,8 +356,6 @@ cases:
     journey_id: history-reuse-playback
     user_goal: 从生成历史选条目本页单次回放且不续写新历史
     priority: P0
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [history, replay]
     spec_path: docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md#e2e-02-11-02
@@ -420,8 +378,6 @@ cases:
     journey_id: persistence-recovery
     user_goal: 白名单外语音在浏览器侧回退默认且可播
     priority: P2
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [tts, fallback]
     spec_path: docs/e2e/06-异常处理与接口限流/02-TTS限流分层与语音白名单回退.md
@@ -438,8 +394,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 倒计时耗尽时界面暂停且真实停声
     priority: P0
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [playback, budget]
     spec_path: docs/e2e/03-播放状态与内核一致性/01-倒计时耗尽UI与音频一致性.md
@@ -459,8 +413,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 零预算点播放被拒且不偷播
     priority: P0
-    primary_defense: L1
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [playback, budget]
     spec_path: docs/e2e/03-播放状态与内核一致性/02-预算耗尽后点击播放音频状态.md
@@ -477,8 +429,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 播放中登出先停声再清状态
     priority: P0
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [playback, logout]
     spec_path: docs/e2e/03-播放状态与内核一致性/03-播放中登出立即停声与状态重置.md
@@ -498,8 +448,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 切换窗口内暂停不被慢请求覆盖续播
     priority: P0
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [playback, race]
     spec_path: docs/e2e/03-播放状态与内核一致性/04-段落切换窗口内暂停不续播.md
@@ -516,8 +464,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 空预算断点恢复不 camouflage 成播放态
     priority: P0
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [playback, resume]
     spec_path: docs/e2e/03-播放状态与内核一致性/05-断点恢复null预算播放状态.md
@@ -534,8 +480,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 收尾结束事件不双跳不错段
     priority: P2
-    primary_defense: L1
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [playback, race]
     spec_path: docs/e2e/03-播放状态与内核一致性/06-段落收尾ended双跳竞态防线.md
@@ -552,8 +496,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 多段推进时单前瞻且进度单调落库
     priority: P1
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: PLANNED
     risk_tags: [playback, prefetch]
     spec_path: docs/e2e/03-播放状态与内核一致性/07-多段落前瞻预取推进与进度落库.md
@@ -570,8 +512,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 播完后进度清理且不残留可播态
     priority: P1
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [playback, complete]
     spec_path: docs/e2e/03-播放状态与内核一致性/08-故事播完clearProgress收尾.md
@@ -588,8 +528,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 客户端切路由时同一音频连续不重置
     priority: P1
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: PLANNED
     risk_tags: [playback, router]
     spec_path: docs/e2e/03-播放状态与内核一致性/09-客户端路由导航播放连续性.md
@@ -606,8 +544,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 历史恢复卡回放只播所选不续写
     priority: P1
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [history, replay]
     spec_path: docs/e2e/03-播放状态与内核一致性/10-历史恢复卡回放重合成.md
@@ -627,8 +563,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 旧卡回放不吃掉新卡预载
     priority: P2
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [history, preload]
     spec_path: docs/e2e/03-播放状态与内核一致性/11-旧卡回放不消费新预载.md
@@ -645,8 +579,6 @@ cases:
     journey_id: playback-kernel
     user_goal: 试音与主播并发时双声源可感知
     priority: P2
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [playback, preview]
     spec_path: docs/e2e/03-播放状态与内核一致性/12-设置页试音与主播放并发双声源.md
@@ -663,8 +595,6 @@ cases:
     journey_id: cloud-storage
     user_goal: 双标签同账号写按快照覆盖不串读
     priority: P1
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [cloud, concurrent]
     spec_path: docs/e2e/04-云端存储与多端数据调和/01-双标签同账号并发写入覆盖.md
@@ -681,8 +611,6 @@ cases:
     journey_id: cloud-storage
     user_goal: 快速退出不丢尾且无悬空进度
     priority: P0
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [cloud, flush]
     spec_path: docs/e2e/04-云端存储与多端数据调和/02-快速退出丢失尾部与悬空进度.md
@@ -702,8 +630,6 @@ cases:
     journey_id: cloud-storage
     user_goal: 配置保存失败回滚不长期分歧
     priority: P1
-    primary_defense: L1
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [config, rollback]
     spec_path: docs/e2e/04-云端存储与多端数据调和/03-配置乐观保存失败回滚.md
@@ -720,8 +646,6 @@ cases:
     journey_id: persistence-recovery
     user_goal: 进度只增不减且强制重置可通
     priority: P1
-    primary_defense: L1
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [persistence, monotonic]
     spec_path: docs/e2e/04-云端存储与多端数据调和/04-进度单调递增守卫与forceReset.md
@@ -738,8 +662,6 @@ cases:
     journey_id: cloud-storage
     user_goal: 访客与用户数据表级隔离零串读
     priority: P1
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [cloud, isolation]
     spec_path: docs/e2e/04-云端存储与多端数据调和/05-访客与用户表级隔离与零串读.md
@@ -756,8 +678,6 @@ cases:
     journey_id: persistence-recovery
     user_goal: 旧纪元不复活且30天外裁剪
     priority: P2
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: PLANNED
     risk_tags: [persistence, prune]
     spec_path: docs/e2e/04-云端存储与多端数据调和/06-历史记录epoch守卫与30天裁剪.md
@@ -774,8 +694,6 @@ cases:
     journey_id: persistence-recovery
     user_goal: 首访只弹一次且未读跨端一致
     priority: P2
-    primary_defense: L1
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [persistence, onboarding]
     spec_path: docs/e2e/04-云端存储与多端数据调和/07-onboarding首访标记与未读跨会话.md
@@ -792,8 +710,6 @@ cases:
     journey_id: persistence-recovery
     user_goal: 主题只水合一次且双写不丢
     priority: P2
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [persistence, theme]
     spec_path: docs/e2e/04-云端存储与多端数据调和/08-主题配置一次性水合与双写保留.md
@@ -810,8 +726,6 @@ cases:
     journey_id: persistence-recovery
     user_goal: 访客聊天超100条截断不断尾
     priority: P2
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [persistence, truncate]
     spec_path: docs/e2e/04-云端存储与多端数据调和/09-访客聊天100条上限截断.md
@@ -828,8 +742,6 @@ cases:
     journey_id: cloud-storage
     user_goal: 摘要并发不串且公开端点可达
     priority: P1
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [cloud, summary]
     spec_path: docs/e2e/04-云端存储与多端数据调和/10-摘要summarize并发与公开端点.md
@@ -846,8 +758,6 @@ cases:
     journey_id: auth-session
     user_goal: 访客注册三步迁移数据不丢
     priority: P0
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [auth, migrate]
     spec_path: docs/e2e/05-认证授权与会话生命周期/01-访客注册三步迁移与数据保真.md
@@ -867,8 +777,6 @@ cases:
     journey_id: auth-session
     user_goal: 注册中断孤儿行被事务回滚
     priority: P2
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [auth, rollback]
     spec_path: docs/e2e/05-认证授权与会话生命周期/02-注册中断孤儿用户事务回滚.md
@@ -885,8 +793,6 @@ cases:
     journey_id: auth-session
     user_goal: 带访客态登录既有账号不渗漏
     priority: P0
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [auth, isolation]
     spec_path: docs/e2e/05-认证授权与会话生命周期/03-登录既有账号无数据渗漏.md
@@ -903,8 +809,6 @@ cases:
     journey_id: auth-session
     user_goal: 登出清双凭证并重置前端状态
     priority: P0
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [auth, logout]
     spec_path: docs/e2e/05-认证授权与会话生命周期/04-登出双cookie清理与状态重置.md
@@ -921,8 +825,6 @@ cases:
     journey_id: auth-session
     user_goal: 登出再入得全新访客且旧行隔离
     priority: P2
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [auth, isolation]
     spec_path: docs/e2e/05-认证授权与会话生命周期/05-登出后再入访客新身份隔离.md
@@ -939,8 +841,6 @@ cases:
     journey_id: auth-session
     user_goal: 会话失效后闭环提示不卡死
     priority: P1
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [auth, session]
     spec_path: docs/e2e/05-认证授权与会话生命周期/06-会话失效sessionInvalidated闭环.md
@@ -957,8 +857,6 @@ cases:
     journey_id: auth-session
     user_goal: 过期会话遇残留访客凭证按语义复活
     priority: P1
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [auth, session]
     spec_path: docs/e2e/05-认证授权与会话生命周期/07-过期会话加残留访客cookie静默复活.md
@@ -975,8 +873,6 @@ cases:
     journey_id: auth-session
     user_goal: 登录页反向守卫不误拦且回跳安全
     priority: P2
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [auth, guard]
     spec_path: docs/e2e/05-认证授权与会话生命周期/08-auth反向守卫与from回跳安全.md
@@ -993,8 +889,6 @@ cases:
     journey_id: auth-session
     user_goal: 快速切号旧纪元失效不串读
     priority: P1
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: PLANNED
     risk_tags: [auth, epoch]
     spec_path: docs/e2e/05-认证授权与会话生命周期/09-快速账号切换epoch失效不串读.md
@@ -1011,8 +905,6 @@ cases:
     journey_id: auth-session
     user_goal: 校验失败拦住且守卫豁免不误伤
     priority: P1
-    primary_defense: L2
-    secondary_defenses: [L3]
     lifecycle_status: ACTIVE
     risk_tags: [auth, validate]
     spec_path: docs/e2e/05-认证授权与会话生命周期/10-校验失败与sessionGuard豁免.md
@@ -1032,8 +924,6 @@ cases:
     journey_id: error-rate-limit
     user_goal: 访客超限被拒且重试不烧配额
     priority: P0
-    primary_defense: L1
-    secondary_defenses: [L2]
     lifecycle_status: ACTIVE
     risk_tags: [ratelimit, quota]
     spec_path: docs/e2e/06-异常处理与接口限流/01-访客429限流与重试烧配额.md
@@ -1053,8 +943,6 @@ cases:
     journey_id: error-rate-limit
     user_goal: 分层限流且白名单外回退默认
     priority: P2
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [tts, ratelimit]
     spec_path: docs/e2e/06-异常处理与接口限流/02-TTS限流分层与语音白名单回退.md
@@ -1074,8 +962,6 @@ cases:
     journey_id: error-rate-limit
     user_goal: 合成失败即停声不留僵尸态
     priority: P1
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [tts, fail]
     spec_path: docs/e2e/06-异常处理与接口限流/03-TTS合成失败停声不僵尸.md
@@ -1092,8 +978,6 @@ cases:
     journey_id: error-rate-limit
     user_goal: 流中断标失败且重试上下文对
     priority: P1
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [stream, retry]
     spec_path: docs/e2e/06-异常处理与接口限流/04-流式生成中断failed标记与重试.md
@@ -1110,8 +994,6 @@ cases:
     journey_id: error-rate-limit
     user_goal: 断点切换中语音失败可重试有界
     priority: P2
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [tts, retry]
     spec_path: docs/e2e/06-异常处理与接口限流/05-断点与切换TTS失败重试边界.md
@@ -1128,8 +1010,6 @@ cases:
     journey_id: error-rate-limit
     user_goal: 直连受保护接口一律401
     priority: P1
-    primary_defense: L2
-    secondary_defenses: []
     lifecycle_status: ACTIVE
     risk_tags: [auth, guard]
     spec_path: docs/e2e/06-异常处理与接口限流/06-直连受保护API之401守卫矩阵.md
@@ -1146,8 +1026,6 @@ cases:
     journey_id: error-rate-limit
     user_goal: 30天外访客数据被清理
     priority: P2
-    primary_defense: L3
-    secondary_defenses: [L2]
     lifecycle_status: PLANNED
     risk_tags: [gc, prune]
     spec_path: docs/e2e/06-异常处理与接口限流/07-访客数据30天GC清理.md
@@ -1164,8 +1042,6 @@ cases:
     journey_id: error-rate-limit
     user_goal: 往返缓存恢复后可人工确认
     priority: P3
-    primary_defense: L3
-    secondary_defenses: []
     lifecycle_status: MANUAL
     risk_tags: [bfcache, manual]
     spec_path: docs/e2e/06-异常处理与接口限流/08-bfcache与pageshow恢复探针.md

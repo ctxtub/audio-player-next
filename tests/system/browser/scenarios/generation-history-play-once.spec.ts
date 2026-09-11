@@ -1,6 +1,5 @@
 // case_id: generation-history-play-once
 // journey: history-reuse-playback
-// primary_defense: L3
 // legacy_aliases: [E2E-02-11-02, H-21]
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";

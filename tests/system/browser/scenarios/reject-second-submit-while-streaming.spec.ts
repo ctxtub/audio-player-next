@@ -1,6 +1,5 @@
 // case_id: reject-second-submit-while-streaming
 // journey: interactive-race
-// primary_defense: L3
 // legacy_aliases: [E2E-02-02, H-02]
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";

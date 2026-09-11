@@ -18,7 +18,7 @@
 ## 变更影响与测试选择
 
 - 行为契约变化：更新 `docs/e2e`、catalog 与对应 L1/L2/L3 测试。
-- 内部实现变化：声明受影响 catalog case，运行其 primary defense 和 required secondary defense。
+- 内部实现变化：声明受影响 catalog case，运行受影响 case 当前实际绑定的有效 executable。
 - 测试工具或 CI 变化：运行 `test:tooling`、`test:catalog`，并直接验证被改入口。
 - 文档变化：运行链接/静态门；文档中出现的命令和路径必须对照仓库事实。
 - 不能证明的项目标为 `BLOCKED` 或 `NOT_RUN`，不能写成 PASS。

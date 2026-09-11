@@ -1,6 +1,5 @@
 // case_id: history-prompt-start-new-creation
 // journey: reuse-history-to-create
-// primary_defense: L3
 // legacy_aliases: [E2E-02-11-01, H-21]
 // FIXED 2026-09-10：H-21 历史重创作不清空旧会话（RED-2-1，双浏览器复现 run=2026-09-10T01-41-03-283Z-dc4778）→ 方案A ChatLayout 消费 pendingAutoSend 前调 resetStoryFlow()（+2 行），chromium L75/L78 转 PASS（run=2026-09-10T01-43-27-744Z-28d858）；K1/K2 为 oracle 校准非缺陷
 import { test, expect } from "../harness/fixtures";

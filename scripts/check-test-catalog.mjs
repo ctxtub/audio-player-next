@@ -279,7 +279,7 @@ const PRIORITY_SET = new Set(['P0', 'P1', 'P2', 'P3']);
 const LAYER_SET = new Set(['L1', 'L2', 'L3']);
 const LIFECYCLE_SET = new Set(['PLANNED', 'ACTIVE', 'BLOCKED', 'MANUAL', 'LEGACY-NON-COVERAGE', 'RETIRED']);
 // 中文注释：case 允许键集合（含条件键，run_verdict 明确不在其中）。
-const CASE_ALLOWED_KEYS = new Set(['case_id', 'display_name_zh', 'legacy_aliases', 'journey_id', 'user_goal', 'priority', 'primary_defense', 'secondary_defenses', 'lifecycle_status', 'risk_tags', 'spec_path', 'required_assertions', 'executable_ids', 'fixtures', 'owner', 'blocked_reason', 'manual_reason']);
+const CASE_ALLOWED_KEYS = new Set(['case_id', 'display_name_zh', 'legacy_aliases', 'journey_id', 'user_goal', 'priority', 'lifecycle_status', 'risk_tags', 'spec_path', 'required_assertions', 'executable_ids', 'fixtures', 'owner', 'blocked_reason', 'manual_reason']);
 // 中文注释：executable 允许键集合（含 L3 必填 evidence_surfaces）。
 const EXEC_ALLOWED_KEYS = new Set(['executable_id', 'display_name_zh', 'layer', 'path', 'case_ids', 'evidence_surfaces']);
 // 中文注释：语义名 kebab-case 正则。
@@ -333,8 +333,6 @@ function validateSchemaHandwritten(catalog) {
     if (!isNonEmptyString(c.journey_id)) errors.push(`${label} 缺 journey_id`);
     if (!isNonEmptyString(c.user_goal)) errors.push(`${label} 缺 user_goal`);
     if (!PRIORITY_SET.has(c.priority)) errors.push(`${label} 非法枚举 priority（须为 P0-P3，实际=${JSON.stringify(c.priority)}）`);
-    if (!isNonEmptyString(c.primary_defense)) errors.push(`${label} 缺 primary_defense`);
-    if (!Array.isArray(c.secondary_defenses)) errors.push(`${label} 缺 secondary_defenses（须为数组）`);
     if (!LIFECYCLE_SET.has(c.lifecycle_status)) errors.push(`${label} 非法枚举 lifecycle_status（六值之一，实际=${JSON.stringify(c.lifecycle_status)}）`);
     if (!Array.isArray(c.risk_tags)) errors.push(`${label} 缺 risk_tags（须为数组）`);
     if (!isNonEmptyString(c.spec_path) || !SPEC_PATH_RE.test(c.spec_path)) errors.push(`${label} 非法 spec_path（须形如 docs/e2e/...md，实际=${JSON.stringify(c.spec_path)}）`);

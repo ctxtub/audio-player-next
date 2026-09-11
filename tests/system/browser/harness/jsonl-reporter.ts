@@ -161,7 +161,7 @@ function projectNameOf(test: TestCase): string {
 }
 
 /**
- * JSONL reporter：每用例结束追加 v1 行（bound 每 assertion 一行，无绑定一行 BLOCKED）。
+ * JSONL reporter：每用例结束追加单条执行结果行（bound 写 summary，无绑定写 BLOCKED）。
  */
 export default class JsonlReporter implements Reporter {
     /** 证据根目录。 */

@@ -130,7 +130,7 @@ function resolveSpecBinding(specRelPosix: string): SpecBinding {
  *
  * - contextOptions：每用例全新空 storageState（不复用登录态/缓存）；
  * - harnessEnv：当次 run 的服务地址；
- * - auto evidence：用例结束按 testInfo 写 manifest（含 browser/version/assertion 占位）。
+ * - auto evidence：用例结束按 testInfo 写最小 manifest（含 browser/version，配合 Playwright 原始 attachment）。
  */
 export const test = base.extend<HarnessFixtures>({
     // 中文注释：每用例新 context 的隔离选项（fresh storageState/no cache）。

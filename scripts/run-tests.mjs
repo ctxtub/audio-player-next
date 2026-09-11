@@ -446,13 +446,10 @@ async function main() {
     }
     /**
      * 写单行 JSONL（verdict=PASS/FAIL/BLOCKED/SKIPPED，exit 4 为 BLOCKED）。
-     * v1 行协议（WS5/C5，D3 已决：每 assertion 一行）：
-     * 产品 suite 先写 kind=summary 汇总行（含 schema_version/case_ids 由 executable 反查
-     * catalog/旧字段可选透传），再按该 suite 命中的 executable 展开写 kind=assertion
-     * 行（case × executable × assertion × surface 全 join catalog）。
-     * Tooling suite 独立写 kind=tooling-summary 行，不声明产品 case 覆盖。
-     * 写行前用同一校验器校验；非法即记 BLOCKED 并抛 code=3 由调用方补 SKIPPED 后 exit 3
-     * （供给/契约损坏，非产品断言失败；C5 写行语义不动，本轮只改控制流与汇总）。
+     * 执行结果记录协议：
+     * 产品 suite 写 kind=summary（含 schema_version/case_ids 由 executable 反查
+     * catalog/旧字段可选透传）；Tooling suite 独立写 kind=tooling-summary，不声明产品 case 覆盖。
+     * 写行前统一经 evidence validator 校验；非法即记 BLOCKED 并抛 code=3 由调用方补 SKIPPED 后 exit 3。
      * @param entry 注册表条目
      * @param verdict PASS/FAIL/BLOCKED/SKIPPED
      * @param exitCode 退出码
@@ -480,7 +477,7 @@ async function main() {
         return out;
     }
     /**
-     * 组装本 suite 的全部待写 v1 行（首 summary + N assertion，或 tooling-summary 单行）。
+     * 组装本 suite 的单条执行结果行（产品 suite 写 summary，Tooling suite 写 tooling-summary）。
      * @param entry 注册表条目
      * @param verdict PASS/FAIL/BLOCKED
      * @param exitCode 退出码

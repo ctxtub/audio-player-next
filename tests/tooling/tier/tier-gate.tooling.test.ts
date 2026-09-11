@@ -12,7 +12,7 @@ import path from 'node:path';
  * 缺 executable/坏 path/未知 executable 均阻断；空选集阻断 empty-selection；
  * 合法未过期 waiver 放行并标记 WAIVED；过期/缺字段 waiver 阻断；
  * --select 非法值 exit 2；缺 --select exit 2；坏 catalog exit 1）；
- * 真实基线 catalog 断言（--select CANDIDATE/RELEASE 均 RED，缺口清单与
+ * 真实基线 catalog 断言（--select CANDIDATE/RELEASE 均 PASS、阻断集为空，缺口清单与
  * check-test-catalog.mjs 的缺口交叉一致：门阻断集 ⊆ checker 缺口集）。
  *
  * 口径：只跑 node 子进程 + tmp 写，不触 DB/网络；needs_db=false 叶子套件。
@@ -29,13 +29,14 @@ const execTimeoutMs: number = 15000;
 // 中文注释：fixture 好 executable 落盘路径（复用真实存在的仓库文件）。
 const goodExecPath: string = './tests/unit/identity-session/session-roundtrip.unit.test.ts';
 // 中文注释：基线 CANDIDATE/RELEASE P0/P1 门阻断集（销定当前真实缺口；catalog 补测试解阻须同步更新本表）。
-// 2026-09-11 tier-gate-test-supplement ①：guest-register-3step-migrate-fidelity 已补 L2 保真断言并升 ACTIVE，移出阻断集。
-// 2026-09-11 tier-gate-test-supplement ②：login-existing-no-leak 新建 L2（真实 login + 双边不变 + cookie）并升 ACTIVE，移出阻断集。
-// 2026-09-11 tier-gate-test-supplement ③：logout-dual-cookie-clean-reset 新建 L2（真实 logout + 双删断言）并升 ACTIVE，移出阻断集。
-// 2026-09-11 tier-gate-test-supplement ④：clear-during-generate-no-orphan-audio 新建 L2（D1 阳性对照 + D2 竞态）并升 ACTIVE，移出阻断集。
-const baselineBlockedIds: string[] = [
-  'guest-cold-start-first-screen',
-];
+// 2026-09-11 tier-gate-test-supplement：5 阻断逐条解阻——
+// ① guest-register-3step-migrate-fidelity（补 L2 保真断言升 ACTIVE）、
+// ② login-existing-no-leak（新建 L2 升 ACTIVE）、
+// ③ logout-dual-cookie-clean-reset（新建 L2 升 ACTIVE）、
+// ④ clear-during-generate-no-orphan-audio（新建 L2 升 ACTIVE）、
+// ⑤ guest-cold-start-first-screen（新建 L3 升 ACTIVE）。
+// 解阻后阻断集为空（门 PASS）；本常量保留 pin 形态，空数组即当前基线。
+const baselineBlockedIds: string[] = [];
 
 /**
  * fixture case 行（仅 gate 关心的字段；其余 catalog 字段与门无关故省略）。
@@ -404,19 +405,21 @@ function extractCheckerGapIds(stdout: string): string[] {
 }
 
 /**
- * 用例：真实基线 catalog 双选择均 RED，且与 checker 缺口交叉一致。
- * 门阻断集必须 pin 住基线 5 项，且 ⊆ checker 缺口集；CANDIDATE 与 RELEASE
- * 在基线产出同一阻断集（NIGHTLY 全 P2、RELEASE tier 为空，故两选择同构）。
+ * 用例：真实 catalog 双选择均 PASS（5 阻断已解），且与 checker 缺口交叉一致。
+ * 门阻断集 pin 为空；CANDIDATE 与 RELEASE 同构（NIGHTLY 全 P2、RELEASE tier 为空）；
+ * checker 缺口 24 项均为门选集之外（P2/NIGHTLY），门阻断（空）⊆ 缺口恒成立。
  */
 function caseRealBaseline(): void {
   const cand = runGate(['--select', 'CANDIDATE']);
-  assert.strictEqual(cand.status, 1, `基线CANDIDATE应 exit 1，实际=${cand.status} stderr头=${cand.stderr.slice(0, 300)}`);
+  assert.strictEqual(cand.status, 0, `解阻后CANDIDATE应 exit 0，实际=${cand.status} stdout头=${cand.stdout.slice(0, 300)}`);
+  assert.ok(cand.stdout.includes('TIER-GATE PASS'), 'CANDIDATE 应输出 TIER-GATE PASS');
   const rel = runGate(['--select', 'RELEASE']);
-  assert.strictEqual(rel.status, 1, `基线RELEASE应 exit 1，实际=${rel.status}`);
+  assert.strictEqual(rel.status, 0, `解阻后RELEASE应 exit 0，实际=${rel.status}`);
+  assert.ok(rel.stdout.includes('TIER-GATE PASS'), 'RELEASE 应输出 TIER-GATE PASS');
   const candIds: string[] = extractBlockedIds(cand.stdout);
   const relIds: string[] = extractBlockedIds(rel.stdout);
-  assert.deepStrictEqual(candIds, [...baselineBlockedIds].sort(), `CANDIDATE阻断集应 pin 当前基线1项，实际=${JSON.stringify(candIds)}`);
-  assert.deepStrictEqual(relIds, [...baselineBlockedIds].sort(), `RELEASE阻断集应 pin 当前基线1项，实际=${JSON.stringify(relIds)}`);
+  assert.deepStrictEqual(candIds, [...baselineBlockedIds].sort(), `CANDIDATE阻断集应 pin 为空，实际=${JSON.stringify(candIds)}`);
+  assert.deepStrictEqual(relIds, [...baselineBlockedIds].sort(), `RELEASE阻断集应 pin 为空，实际=${JSON.stringify(relIds)}`);
   let checkerOut: string = '';
   try {
     checkerOut = execFileSync(process.execPath, [checkerAbs], { cwd: repoRoot, encoding: 'utf8', timeout: 30000 }) as unknown as string;
@@ -424,11 +427,11 @@ function caseRealBaseline(): void {
     assert.fail(`交叉一致要求 checker 本体 exit 0，实际 status=${String((err as { status?: unknown }).status)}`);
   }
   const gapIds: string[] = extractCheckerGapIds(String(checkerOut));
-  assert.ok(gapIds.length === 25, `checker缺口数基线应为25（④解阻 clear-during-generate-no-orphan-audio 后），实际=${gapIds.length}`);
+  assert.ok(gapIds.length === 24, `checker缺口数基线应为24（⑤解阻 guest-cold-start-first-screen 后），实际=${gapIds.length}`);
   for (const id of candIds) {
     assert.ok(gapIds.includes(id), `门阻断 ${id} 应出现在 checker 缺口清单中（交叉一致）`);
   }
-  console.log(`PASS: 基线双选择均RED（各${candIds.length}项）且与checker缺口交叉一致（checker缺口${gapIds.length}项，门阻断⊆缺口）`);
+  console.log(`PASS: 基线双选择均PASS（阻断${candIds.length}项）且与checker缺口交叉一致（checker缺口${gapIds.length}项，门阻断⊆缺口）`);
 }
 
 /**

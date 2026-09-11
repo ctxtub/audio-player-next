@@ -750,204 +750,163 @@ executables:
     display_name_zh: 会话往返编解码
     layer: L1
     path: ./tests/unit/identity-session/session-roundtrip.unit.test.ts
-    case_ids: [anon-guest-route-guard-open-redirect]
   - executable_id: exec-session-codec
     display_name_zh: 会话编解码分支
     layer: L1
     path: ./tests/unit/identity-session/session-codec.unit.test.ts
-    case_ids: [authed-reverse-guard-from-backjump]
   - executable_id: exec-sliding-window-rate-limit
     display_name_zh: 滑动窗口限流
     layer: L1
     path: ./tests/unit/identity-session/sliding-window-rate-limit.unit.test.ts
-    case_ids: [guest-429-limit-retry-burn-quota]
   - executable_id: exec-audio-ended-guard
     display_name_zh: 音频结束守卫
     layer: L1
     path: ./tests/unit/playback/audio-ended-guard.unit.test.ts
-    case_ids: [segment-end-double-jump-guard]
   - executable_id: exec-onboarding-storage
     display_name_zh: 引导存储
     layer: L1
     path: ./tests/unit/creation-chat/onboarding-storage.unit.test.ts
-    case_ids: [onboarding-first-visit-unread-cross-session]
   - executable_id: exec-budget-exhaustion
     display_name_zh: 预算耗尽
     layer: L1
     path: ./tests/unit/playback/budget-exhaustion.unit.test.ts
-    case_ids: [budget-exhausted-tap-play-audio-state]
   - executable_id: exec-optimistic-rollback
     display_name_zh: 乐观回滚
     layer: L1
     path: ./tests/unit/persistence-config/optimistic-rollback.unit.test.ts
-    case_ids: [config-optimistic-save-rollback]
   - executable_id: exec-save-sequence
     display_name_zh: 保存序列
     layer: L1
     path: ./tests/unit/persistence-config/save-sequence.unit.test.ts
-    case_ids: [progress-monotonic-guard-force-reset]
   - executable_id: exec-preload-context-selection
     display_name_zh: 预载上下文选择
     layer: L1
     path: ./tests/unit/creation-chat/preload-context-selection.unit.test.ts
-    case_ids: [preload-continue-no-chat-pollution]
   - executable_id: exec-identity-procedure-matrix
     display_name_zh: 身份过程矩阵
     layer: L2
     path: ./tests/integration/identity-session/identity-procedure-matrix.integration.test.ts
-    case_ids: [register-login-validate-sessionguard-exempt, protected-api-401-guard-matrix]
   - executable_id: exec-guest-cookie-authorization
     display_name_zh: 访客Cookie鉴权
     layer: L2
     path: ./tests/integration/identity-session/guest-cookie-authorization.integration.test.ts
-    case_ids: [guest-identity-cookie-upgrade]
   - executable_id: exec-agent-summarize-authorization
     display_name_zh: 摘要鉴权
     layer: L2
     path: ./tests/integration/identity-session/agent-summarize-authorization.integration.test.ts
-    case_ids: [summary-summarize-concurrent-public]
   - executable_id: exec-registration-rollback
     display_name_zh: 注册回滚
     layer: L2
     path: ./tests/integration/identity-session/registration-rollback.integration.test.ts
-    case_ids: [register-interrupt-orphan-rollback]
   - executable_id: exec-login-existing-no-leak
     display_name_zh: 登录既有账号无渗漏
     layer: L2
     path: ./tests/integration/identity-session/login-existing-no-leak.integration.test.ts
-    case_ids: [login-existing-no-leak]
   - executable_id: exec-logout-dual-cookie-clean-reset
     display_name_zh: 登出双凭证清理
     layer: L2
     path: ./tests/integration/identity-session/logout-dual-cookie-clean-reset.integration.test.ts
-    case_ids: [logout-dual-cookie-clean-reset]
   - executable_id: exec-guest-config-crud
     display_name_zh: 访客配置增删改查
     layer: L2
     path: ./tests/integration/persistence-config/guest-config-crud.integration.test.ts
-    case_ids: [theme-config-once-hydrate-dual-write]
   - executable_id: exec-guest-creative-sync
     display_name_zh: 访客创作同步
     layer: L2
     path: ./tests/integration/persistence-config/guest-creative-sync.integration.test.ts
-    case_ids: [guest-chat-100-limit-truncate, guest-register-3step-migrate-fidelity]
   - executable_id: exec-guest-multisubject-lifecycle
     display_name_zh: 访客多主体生命周期
     layer: L2
     path: ./tests/integration/persistence-config/guest-multisubject-lifecycle.integration.test.ts
-    case_ids: [guest-user-table-isolation-zero-leak]
   - executable_id: exec-storycard-resume
     display_name_zh: 故事卡恢复
     layer: L2
     path: ./tests/integration/playback/storycard-resume.integration.test.ts
-    case_ids: [history-restore-card-resynth]
   - executable_id: exec-resume-countdown
     display_name_zh: 倒计时恢复
     layer: L2
     path: ./tests/integration/playback/resume-countdown.integration.test.ts
-    case_ids: [countdown-exhaust-ui-audio-consistent]
   - executable_id: exec-final-segment-stop
     display_name_zh: 末段停止
     layer: L2
     path: ./tests/integration/playback/final-segment-stop.integration.test.ts
-    case_ids: [story-complete-clear-progress]
   - executable_id: exec-paragraph-transition-guard
     display_name_zh: 段落切换守卫
     layer: L2
     path: ./tests/integration/playback/paragraph-transition-guard.integration.test.ts
-    case_ids: [pause-in-paragraph-switch-no-resume]
   - executable_id: exec-preload-isolation
     display_name_zh: 预载隔离
     layer: L2
     path: ./tests/integration/creation-chat/preload-isolation.integration.test.ts
-    case_ids: [old-card-replay-no-consume-preload]
   - executable_id: exec-pending-save-flush
     display_name_zh: 待保存落盘
     layer: L2
     path: ./tests/integration/persistence-config/pending-save-flush.integration.test.ts
-    case_ids: [quick-exit-loses-tail-hanging-progress]
   - executable_id: exec-stale-conversation-write
     display_name_zh: 陈旧会话写入
     layer: L2
     path: ./tests/integration/persistence-config/stale-conversation-write.integration.test.ts
-    case_ids: [dual-tab-same-account-write-cover]
   - executable_id: exec-logout-playback-reset
     display_name_zh: 登出播放重置
     layer: L2
     path: ./tests/integration/identity-session/logout-playback-reset.integration.test.ts
-    case_ids: [logout-during-play-instant-silence]
   - executable_id: exec-explicit-play-budget
     display_name_zh: 显式播放预算
     layer: L2
     path: ./tests/integration/playback/explicit-play-budget.integration.test.ts
-    case_ids: [breakpoint-resume-null-budget-state]
   - executable_id: exec-paragraph-resume-mixed-legacy
     display_name_zh: 段落恢复混合遗留
     layer: L2
     path: ./tests/integration/playback/paragraph-resume-mixed.integration.test.ts
-    case_ids: [progress-monotonic-guard-force-reset]
   - executable_id: exec-toast-terminal-priority-legacy
     display_name_zh: 提示终态优先级遗留
     layer: L1
     path: ./tests/unit/creation-chat/toast-terminal-priority.unit.test.ts
-    case_ids: [stream-interrupt-failed-retry]
   - executable_id: exec-double-submit-legacy
     display_name_zh: 双发抑制遗留
     layer: L2
     path: ./tests/integration/creation-chat/reject-second-submit-while-streaming.integration.test.ts
-    case_ids: [rapid-double-submit-guard, streaming-resubmit-mutex]
   - executable_id: exec-clear-during-generate-no-orphan-audio
     display_name_zh: 生成中清空防孤儿播放
     layer: L2
     path: ./tests/integration/creation-chat/clear-during-generate-no-orphan-audio.integration.test.ts
-    case_ids: [clear-during-generate-no-orphan-audio]
   - executable_id: exec-keepalive-dedup-legacy
     display_name_zh: 保活去重遗留
     layer: L2
     path: ./tests/integration/persistence-config/keepalive-dedup.integration.test.ts
-    case_ids: [quick-exit-loses-tail-hanging-progress]
   - executable_id: exec-pending-intent-ui-legacy
     display_name_zh: 待定意图界面遗留
     layer: L1
     path: ./tests/unit/creation-chat/pending-intent-ui.unit.test.ts
-    case_ids: [streaming-resubmit-mutex]
   - executable_id: exec-logout-probe-hardening-legacy
     display_name_zh: 登出探针加固遗留
     layer: L2
     path: ./tests/integration/identity-session/logout-probe-hardening.integration.test.ts
-    case_ids: [logout-during-play-instant-silence]
   - executable_id: exec-agent-schema-bounds
     display_name_zh: 智能体模式边界
     layer: L1
     path: ./tests/unit/persistence-config/agent-schema-bounds.unit.test.ts
-    case_ids: [guest-chat-100-limit-truncate]
   - executable_id: exec-conversation-conflict-refresh
     display_name_zh: 会话冲突刷新
     layer: L2
     path: ./tests/integration/persistence-config/conversation-conflict-refresh.integration.test.ts
-    case_ids: [dual-tab-same-account-write-cover]
   - executable_id: exec-paragraph-segmentation
     display_name_zh: 段落切分
     layer: L1
     path: ./tests/unit/playback/paragraph-segmentation.unit.test.ts
-    case_ids: [history-restore-card-resynth]
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3
     path: ./tests/system/browser/scenarios/reject-second-submit-while-streaming.spec.ts
-    case_ids: [rapid-double-submit-guard, streaming-resubmit-mutex]
   - executable_id: exec-l3-history-prompt-start-new-creation
     display_name_zh: L3从提示词历史开始新创作
     layer: L3
     path: ./tests/system/browser/scenarios/history-prompt-start-new-creation.spec.ts
-    case_ids: [history-prompt-start-new-creation]
   - executable_id: exec-l3-generation-history-play-once
     display_name_zh: L3生成历史本页单次回放
     layer: L3
     path: ./tests/system/browser/scenarios/generation-history-play-once.spec.ts
-    case_ids: [generation-history-play-once]
   - executable_id: exec-l3-guest-cold-start-first-screen
     display_name_zh: L3访客冷启动首屏渲染
     layer: L3
     path: ./tests/system/browser/scenarios/guest-cold-start-first-screen.spec.ts
-    case_ids: [guest-cold-start-first-screen]

@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import { createCaseRecorder } from "./evidence-recorder.mjs";
 import { buildCaseId } from "./jsonl-reporter";
-import { findExecutablesForPath, loadEvidenceCatalog } from "../../../../scripts/evidence-schema.mjs";
+import { findExecutablesForPath, getCaseIdsForExecutable, loadEvidenceCatalog } from "../../../../scripts/evidence-schema.mjs";
 
 /**
  * 浏览器用例 fixtures（任务13 harness）。
@@ -97,7 +97,8 @@ function resolveSpecBinding(specRelPosix: string): SpecBinding {
     const empty: SpecBinding = { catalogCaseId: null, executableId: null, candidateCaseIds: [] };
     let catalog: {
         cases: Map<string, unknown>;
-        executables: Map<string, { executable_id: string; case_ids: string[]; layer: string }>;
+        executables: Map<string, { executable_id: string; layer: string }>;
+        executableToCaseIds?: Map<string, string[]>;
     };
     try {
         catalog = loadEvidenceCatalog(process.cwd()) as unknown as typeof catalog;
@@ -106,14 +107,13 @@ function resolveSpecBinding(specRelPosix: string): SpecBinding {
     }
     const execs = findExecutablesForPath(catalog, specRelPosix, "L3") as Array<{
         executable_id: string;
-        case_ids: string[];
         layer: string;
     }>;
     if (execs.length === 0) return empty;
     const seen: Set<string> = new Set();
     const candidateCaseIds: string[] = [];
     for (const e of execs) {
-        for (const cid of e.case_ids ?? []) {
+        for (const cid of getCaseIdsForExecutable(catalog, e.executable_id)) {
             if (!seen.has(cid)) {
                 seen.add(cid);
                 candidateCaseIds.push(cid);

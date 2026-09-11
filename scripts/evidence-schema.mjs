@@ -131,9 +131,36 @@ export function loadEvidenceCatalog(root = repoRoot, catalog = null) {
     }
   }
   const toolingSuites = loadToolingSuites(r);
-  cachedCatalog = { cases, executables, toolingSuites };
+  const executableToCaseIds = new Map();
+  for (const c of cases.values()) {
+    for (const eid of (c.executable_ids || [])) {
+      if (!executableToCaseIds.has(eid)) executableToCaseIds.set(eid, []);
+      executableToCaseIds.get(eid).push(c.case_id);
+    }
+  }
+  cachedCatalog = { cases, executables, toolingSuites, executableToCaseIds };
   cachedCatalogPath = c;
   return cachedCatalog;
+}
+
+/**
+ * 从 catalog 反向索引查询 executable 绑定的 case_id 列表（由 case.executable_ids 派生）。
+ * @param catalog loadEvidenceCatalog 产物
+ * @param executableId 可执行 ID
+ * @returns {string[]} 绑定的 case_id 列表
+ */
+export function getCaseIdsForExecutable(catalog, executableId) {
+  if (catalog && catalog.executableToCaseIds) {
+    return catalog.executableToCaseIds.get(executableId) ?? [];
+  }
+  const map = new Map();
+  for (const c of (catalog?.cases?.values() ?? [])) {
+    for (const eid of (c.executable_ids || [])) {
+      if (!map.has(eid)) map.set(eid, []);
+      map.get(eid).push(c.case_id);
+    }
+  }
+  return map.get(executableId) ?? [];
 }
 
 /**

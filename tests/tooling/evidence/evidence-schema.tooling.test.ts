@@ -62,6 +62,7 @@ const browserGood = {
 interface EvidenceValidator {
     validateRow: (row: unknown, catalog?: unknown) => { ok: boolean; errors: string[] };
     loadEvidenceCatalog: (root?: string) => unknown;
+    getCaseIdsForExecutable: (catalog: unknown, executableId: string) => string[];
 }
 
 /**
@@ -71,6 +72,7 @@ async function loadValidator(): Promise<EvidenceValidator> {
     const mod = (await import(validatorAbs)) as unknown as Record<string, unknown>;
     assert.strictEqual(typeof mod['validateRow'], 'function', 'validator 必须导出 validateRow');
     assert.strictEqual(typeof mod['loadEvidenceCatalog'], 'function', 'validator 必须导出 loadEvidenceCatalog');
+    assert.strictEqual(typeof mod['getCaseIdsForExecutable'], 'function', 'validator 必须导出 getCaseIdsForExecutable');
     return mod as unknown as EvidenceValidator;
 }
 
@@ -351,16 +353,17 @@ async function caseRealCatalogSpot(): Promise<void> {
     const v: EvidenceValidator = await loadValidator();
     const catalog = v.loadEvidenceCatalog(repoRoot) as unknown as {
         cases: Map<string, { executable_ids: string[] }>;
-        executables: Map<string, { case_ids: string[]; layer: string }>;
+        executables: Map<string, { layer: string }>;
+        executableToCaseIds: Map<string, string[]>;
     };
     const c = catalog.cases.get('guest-identity-cookie-upgrade');
     assert.ok(c, 'catalog 须含 guest-identity-cookie-upgrade');
     assert.ok(c.executable_ids.includes('exec-guest-cookie-authorization'), 'case 须绑定 exec-guest-cookie-authorization');
-    const e = catalog.executables.get('exec-guest-cookie-authorization');
-    assert.ok(e && e.case_ids.includes('guest-identity-cookie-upgrade'), 'executable 反向须含该 case');
+    const boundCases = v.getCaseIdsForExecutable(catalog, 'exec-guest-cookie-authorization');
+    assert.ok(boundCases.includes('guest-identity-cookie-upgrade'), 'getCaseIdsForExecutable 派生反向须含该 case');
     assert.strictEqual(catalog.executables.has('exec-mock-lifecycle'), false, 'catalog 不得包含 tooling executable exec-mock-lifecycle');
     assert.strictEqual(catalog.executables.has('exec-catalog-checker'), false, 'catalog 不得包含 tooling executable exec-catalog-checker');
-    console.log('PASS: 真实 catalog 抽查双向绑定成立（guest-identity-cookie-upgrade ↔ exec-guest-cookie-authorization）且无 Tooling executable');
+    console.log('PASS: 真实 catalog 抽查派生反向绑定成立（guest-identity-cookie-upgrade ↔ exec-guest-cookie-authorization）且无 Tooling executable');
 }
 
 /**

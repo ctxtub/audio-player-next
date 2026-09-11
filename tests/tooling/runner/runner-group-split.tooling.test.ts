@@ -537,10 +537,8 @@ function caseOrdinaryFailuresAggregated(): void {
             'executables:\n' +
             '  - executable_id: exec-agg-a\n' +
             `    path: ${relA}\n` +
-            '    case_ids: [agg-case-a]\n' +
             '  - executable_id: exec-agg-b\n' +
-            `    path: ${relB}\n` +
-            '    case_ids: [agg-case-b]\n';
+            `    path: ${relB}\n`;
         const catalogAbs: string = path.join(tmpBase, 'catalog.yaml');
         writeFileSync(catalogAbs, catalogYaml);
         const runnerAbs: string = path.join(repoRoot, runnerRel);

@@ -77,17 +77,14 @@ function goodCatalogYaml(): string {
     '    display_name_zh: 访客冷启动执行体',
     '    layer: L1',
     '    path: ./tests/unit/identity-session/session-roundtrip.unit.test.ts',
-    '    case_ids: [guest-cold-start]',
     '  - executable_id: resume-countdown-exec',
     '    display_name_zh: 倒计时执行体',
     '    layer: L2',
     '    path: ./tests/integration/playback/resume-countdown.integration.test.ts',
-    '    case_ids: [resume-countdown-check]',
     '  - executable_id: double-submit-exec',
     '    display_name_zh: 双发抑制执行体',
     '    layer: L2',
     '    path: ./tests/integration/creation-chat/reject-second-submit-while-streaming.integration.test.ts',
-    '    case_ids: [double-submit-guard]',
     '',
   ].join('\n');
 }
@@ -155,9 +152,9 @@ function caseIllegalEnum(dir: string): void {
 function caseActiveMissingExecutable(dir: string): void {
   let yaml: string = goodCatalogYaml();
   yaml = yaml.replace('    executable_ids: [guest-cold-start-exec]', '    executable_ids: []');
-  // 中文注释：删首执行体块，保持其余引用一致，使 schema 与反向引用均通过，只剩 ACTIVE 非空检查应拦。
+  // 中文注释：删首执行体块，保持其余引用一致，使 schema 通过，只剩 ACTIVE 非空检查应拦。
   yaml = yaml.replace(
-    '  - executable_id: guest-cold-start-exec\n    display_name_zh: 访客冷启动执行体\n    layer: L1\n    path: ./tests/unit/identity-session/session-roundtrip.unit.test.ts\n    case_ids: [guest-cold-start]\n',
+    '  - executable_id: guest-cold-start-exec\n    display_name_zh: 访客冷启动执行体\n    layer: L1\n    path: ./tests/unit/identity-session/session-roundtrip.unit.test.ts\n',
     '',
   );
   expectBad(dir, 'bad-3-active-no-exec.yaml', yaml, 'ACTIVE', '坏例3ACTIVE缺executable');
@@ -183,19 +180,25 @@ function casePathNotExist(dir: string): void {
 }
 
 /**
- * 用例6：case_ids 反向引用断链（执行体指向幽灵 case）。
+ * 用例6：executable_ids 引用断链（case 指向幽灵 executable）。
  */
-function caseReverseBroken(dir: string): void {
-  const yaml: string = goodCatalogYaml().replace('    case_ids: [guest-cold-start]', '    case_ids: [ghost-case]');
-  expectBad(dir, 'bad-6-reverse-broken.yaml', yaml, '反向引用', '坏例6反向引用断链');
+function caseReferenceBroken(dir: string): void {
+  const yaml: string = goodCatalogYaml().replace('    executable_ids: [guest-cold-start-exec]', '    executable_ids: [ghost-exec]');
+  expectBad(dir, 'bad-6-reference-broken.yaml', yaml, '引用断链', '坏例6引用断链');
 }
 
 /**
- * 用例7：case 包含非法字段（非法额外字段应被严格拒绝）。
+ * 用例7：case 或 executable 包含非法字段（如 executable 含已废除的 case_ids）。
  */
 function caseIllegalField(dir: string): void {
   const yaml: string = goodCatalogYaml().replace('    lifecycle_status: ACTIVE', '    lifecycle_status: ACTIVE\n    illegal_extra_field: []');
   expectBad(dir, 'bad-7-illegal-field.yaml', yaml, '非法字段', '坏例7非法字段');
+
+  const yamlExecWithCaseIds: string = goodCatalogYaml().replace(
+    '  - executable_id: guest-cold-start-exec\n',
+    '  - executable_id: guest-cold-start-exec\n    case_ids: [guest-cold-start]\n',
+  );
+  expectBad(dir, 'bad-7-exec-case-ids.yaml', yamlExecWithCaseIds, '非法字段：case_ids', '坏例7executable含已废除的case_ids');
 }
 
 
@@ -246,7 +249,7 @@ async function main(): Promise<void> {
     caseActiveMissingExecutable(dir);
     caseDuplicateExecutable(dir);
     casePathNotExist(dir);
-    caseReverseBroken(dir);
+    caseReferenceBroken(dir);
     caseIllegalField(dir);
     caseGood(dir);
     caseRealCatalog();

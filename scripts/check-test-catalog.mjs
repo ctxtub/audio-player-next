@@ -281,7 +281,7 @@ const LIFECYCLE_SET = new Set(['PLANNED', 'ACTIVE', 'BLOCKED', 'MANUAL', 'LEGACY
 // 中文注释：case 允许键集合（含条件键，run_verdict 明确不在其中）。
 const CASE_ALLOWED_KEYS = new Set(['case_id', 'display_name_zh', 'legacy_aliases', 'journey_id', 'user_goal', 'priority', 'lifecycle_status', 'risk_tags', 'spec_path', 'executable_ids', 'fixtures', 'owner', 'blocked_reason', 'manual_reason']);
 // 中文注释：executable 允许键集合。
-const EXEC_ALLOWED_KEYS = new Set(['executable_id', 'display_name_zh', 'layer', 'path', 'case_ids']);
+const EXEC_ALLOWED_KEYS = new Set(['executable_id', 'display_name_zh', 'layer', 'path']);
 // 中文注释：语义名 kebab-case 正则。
 const KEBAB_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // 中文注释：spec 路径正则。
@@ -359,8 +359,6 @@ function validateSchemaHandwritten(catalog) {
     if (!isNonEmptyString(e.display_name_zh)) errors.push(`${label} 缺 display_name_zh`);
     if (!LAYER_SET.has(e.layer)) errors.push(`${label} 非法枚举 layer（须为 L1|L2|L3，实际=${JSON.stringify(e.layer)}）`);
     if (!isNonEmptyString(e.path)) errors.push(`${label} 缺 path`);
-    if (!Array.isArray(e.case_ids) || e.case_ids.length === 0) errors.push(`${label} 缺 case_ids（须为非空数组）`);
-    else if (!e.case_ids.every(isNonEmptyString)) errors.push(`${label} 非法 case_ids（须为非空字符串数组）`);
   });
   return errors;
 }
@@ -455,31 +453,12 @@ function main() {
   }
 
   const execById = new Map((catalog.executables || []).map((e) => [e.executable_id, e]));
-  const caseById = new Map((catalog.cases || []).map((c) => [c.case_id, c]));
-
-  // 中文注释：④executables 顶层唯一已在 schema 阶段覆盖，此处做 case_ids 反向引用一致。
+  // 中文注释：引用检查：case.executable_ids 引用的 executable 必须在 catalog.executables 中定义。
   const refErrors = [];
-  for (const e of catalog.executables) {
-    for (const cid of e.case_ids) {
-      if (!caseById.has(cid)) {
-        refErrors.push(`反向引用断链：executable ${e.executable_id} 的 case_ids 含不存在的 case ${cid}`);
-      } else {
-        const c = caseById.get(cid);
-        if (!Array.isArray(c.executable_ids) || !c.executable_ids.includes(e.executable_id)) {
-          refErrors.push(`反向引用不一致：case ${cid} 的 executable_ids 缺 ${e.executable_id}（executable 侧声明了它）`);
-        }
-      }
-    }
-  }
   for (const c of catalog.cases) {
     for (const eid of (c.executable_ids || [])) {
       if (!execById.has(eid)) {
-        refErrors.push(`反向引用断链：case ${c.case_id} 的 executable_ids 含不存在的 executable ${eid}`);
-      } else {
-        const e = execById.get(eid);
-        if (!Array.isArray(e.case_ids) || !e.case_ids.includes(c.case_id)) {
-          refErrors.push(`反向引用不一致：executable ${eid} 的 case_ids 缺 ${c.case_id}（case 侧声明了它）`);
-        }
+        refErrors.push(`引用断链：case ${c.case_id} 的 executable_ids 含不存在的 executable ${eid}`);
       }
     }
   }

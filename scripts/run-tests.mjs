@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createClient } from '@libsql/client';
 import * as safety from './test-database-path-safety.mjs';
-import { loadEvidenceCatalog, validateRow, SCHEMA_VERSION } from './evidence-schema.mjs';
+import { loadEvidenceCatalog, getCaseIdsForExecutable, validateRow, SCHEMA_VERSION } from './evidence-schema.mjs';
 
 const cwd = process.cwd();
 
@@ -447,7 +447,7 @@ async function main() {
     /**
      * 写单行 JSONL（verdict=PASS/FAIL/BLOCKED/SKIPPED，exit 4 为 BLOCKED）。
      * 执行结果记录协议：
-     * 产品 suite 写 kind=summary（含 schema_version/case_ids 由 executable 反查
+     * 产品 suite 写 kind=summary（含 schema_version/case_ids 由 executable 派生反查
      * catalog/旧字段可选透传）；Tooling suite 独立写 kind=tooling-summary，不声明产品 case 覆盖。
      * 写行前统一经 evidence validator 校验；非法即记 BLOCKED 并抛 code=3 由调用方补 SKIPPED 后 exit 3。
      * @param entry 注册表条目
@@ -511,7 +511,7 @@ async function main() {
         const caseIds = [];
         const seenCases = new Set();
         for (const e of execs) {
-            for (const cid of e.case_ids || []) {
+            for (const cid of getCaseIdsForExecutable(evidenceCatalog, e.executable_id)) {
                 if (!seenCases.has(cid)) {
                     seenCases.add(cid);
                     caseIds.push(cid);
@@ -635,7 +635,7 @@ async function main() {
                 const execs = suiteExecutables(e);
                 const seen = new Set();
                 for (const ex of execs) {
-                    for (const cid of ex.case_ids || []) {
+                    for (const cid of getCaseIdsForExecutable(evidenceCatalog, ex.executable_id)) {
                         if (!seen.has(cid)) {
                             seen.add(cid);
                             caseIds.push(cid);

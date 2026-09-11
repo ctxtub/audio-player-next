@@ -3,6 +3,7 @@ import { join, relative, sep } from "node:path";
 import type { Reporter, TestCase, TestResult } from "@playwright/test/reporter";
 import {
     findExecutablesForPath,
+    getCaseIdsForExecutable,
     loadEvidenceCatalog,
     validateRow,
 } from "../../../../scripts/evidence-schema.mjs";
@@ -214,7 +215,8 @@ export default class JsonlReporter implements Reporter {
         const browser: string = projectNameOf(test);
         let catalog: {
             cases: Map<string, unknown>;
-            executables: Map<string, { executable_id: string; case_ids: string[]; layer: string }>;
+            executables: Map<string, { executable_id: string; layer: string }>;
+            executableToCaseIds?: Map<string, string[]>;
         };
         try {
             catalog = loadEvidenceCatalog(repoRoot) as unknown as typeof catalog;
@@ -235,7 +237,6 @@ export default class JsonlReporter implements Reporter {
         }
         const execs = findExecutablesForPath(catalog, specRel, "L3") as Array<{
             executable_id: string;
-            case_ids: string[];
             layer: string;
         }>;
         if (execs.length === 0) {
@@ -261,7 +262,7 @@ export default class JsonlReporter implements Reporter {
                 schema_version: 1,
                 kind: "summary",
                 run_id: this.runId,
-                case_ids: e.case_ids ?? [],
+                case_ids: getCaseIdsForExecutable(catalog, e.executable_id),
                 executable_id: e.executable_id,
                 verdict,
                 evidence_path: evidencePath,

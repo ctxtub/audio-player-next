@@ -424,6 +424,9 @@ async function main() {
     let evidenceCatalog = null;
     try {
         evidenceCatalog = loadEvidenceCatalog(cwd);
+        if (evidenceCatalog) {
+            evidenceCatalog.toolingSuites = new Set(SUITES.filter((s) => s.group === 'tooling').map((s) => s.id));
+        }
     } catch (err) {
         console.error(`证据 catalog 预载失败（写行时将 BLOCKED+exit 3） err=${sanitizeError(err)}`);
     }
@@ -444,9 +447,10 @@ async function main() {
     /**
      * 写单行 JSONL（verdict=PASS/FAIL/BLOCKED/SKIPPED，exit 4 为 BLOCKED）。
      * v1 行协议（WS5/C5，D3 已决：每 assertion 一行）：
-     * 每 suite 先写 kind=summary 汇总行（含 schema_version/case_ids 由 executable 反查
+     * 产品 suite 先写 kind=summary 汇总行（含 schema_version/case_ids 由 executable 反查
      * catalog/旧字段可选透传），再按该 suite 命中的 executable 展开写 kind=assertion
      * 行（case × executable × assertion × surface 全 join catalog）。
+     * Tooling suite 独立写 kind=tooling-summary 行，不声明产品 case 覆盖。
      * 写行前用同一校验器校验；非法即记 BLOCKED 并抛 code=3 由调用方补 SKIPPED 后 exit 3
      * （供给/契约损坏，非产品断言失败；C5 写行语义不动，本轮只改控制流与汇总）。
      * @param entry 注册表条目
@@ -464,6 +468,7 @@ async function main() {
      */
     function suiteExecutables(entry) {
         if (evidenceCatalog === null) return [];
+        if (entry.group === 'tooling') return [];
         const norm = entry.path.replace(/\\/g, '/').replace(/^\.\//, '');
         const out = [];
         for (const e of evidenceCatalog.executables.values()) {
@@ -475,7 +480,7 @@ async function main() {
         return out;
     }
     /**
-     * 组装本 suite 的全部待写 v1 行（首 summary + N assertion）。
+     * 组装本 suite 的全部待写 v1 行（首 summary + N assertion，或 tooling-summary 单行）。
      * @param entry 注册表条目
      * @param verdict PASS/FAIL/BLOCKED
      * @param exitCode 退出码
@@ -484,6 +489,27 @@ async function main() {
      */
     function buildResultRows(entry, verdict, exitCode, durationMs) {
         const evidencePath = suiteEvidencePath(entry);
+        if (entry.group === 'tooling') {
+            const summary = {
+                schema_version: SCHEMA_VERSION,
+                kind: 'tooling-summary',
+                run_id: runId,
+                suite_id: entry.id,
+                suite: entry.id,
+                id: entry.id,
+                group: entry.group,
+                needs_db: entry.needs_db,
+                verdict,
+                status: verdict,
+                exit_code: exitCode,
+                exitCode,
+                duration_ms: durationMs,
+                durationMs: durationMs,
+                evidence_path: evidencePath,
+                commit: commitSha,
+            };
+            return [summary];
+        }
         const execs = suiteExecutables(entry);
         const caseIds = [];
         const seenCases = new Set();
@@ -554,7 +580,7 @@ async function main() {
                     resultsPath,
                     `${JSON.stringify({
                         schema_version: SCHEMA_VERSION,
-                        kind: 'summary',
+                        kind: entry.group === 'tooling' ? 'tooling-summary' : 'summary',
                         run_id: runId,
                         suite_id: entry.id,
                         verdict: 'BLOCKED',
@@ -588,6 +614,44 @@ async function main() {
     function writeSkippedForRemaining(fromIndex, blockedBy) {
         for (let j = fromIndex; j < selected.length; j += 1) {
             const e = selected[j];
+            if (e.group === 'tooling') {
+                const row = {
+                    schema_version: SCHEMA_VERSION,
+                    kind: 'tooling-summary',
+                    run_id: runId,
+                    suite_id: e.id,
+                    suite: e.id,
+                    id: e.id,
+                    group: e.group,
+                    needs_db: e.needs_db,
+                    verdict: 'SKIPPED',
+                    status: 'SKIPPED',
+                    exit_code: 3,
+                    exitCode: 3,
+                    duration_ms: 0,
+                    durationMs: 0,
+                    evidence_path: suiteEvidencePath(e),
+                    reason: `blocked_by:${blockedBy}`,
+                    blocked_by: blockedBy,
+                    commit: commitSha,
+                };
+                try {
+                    const res = validateRow(row, evidenceCatalog);
+                    if (!res.ok) {
+                        fs.appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
+                    } else {
+                        fs.appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
+                    }
+                } catch {
+                    try {
+                        fs.appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
+                    } catch {
+                        // 忽略写失败，不掩盖 exit 3
+                    }
+                }
+                skippedCount += 1;
+                continue;
+            }
             let caseIds = [];
             try {
                 const execs = suiteExecutables(e);

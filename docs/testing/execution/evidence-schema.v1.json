@@ -1,12 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "evidence-result-row",
-  "description": "Node/浏览器统一证据行 v1：每 assertion 一行（D3 已决），suite/case 级汇总行标 kind=summary。校验以 scripts/evidence-schema.mjs 为准，本文件为机读字段声明。",
+  "description": "Node/浏览器统一证据行 v1：每 assertion 一行（D3 已决），产品汇总行标 kind=summary，基础设施汇总行标 kind=tooling-summary。校验以 scripts/evidence-schema.mjs 为准，本文件为机读字段声明。",
   "version": 1,
   "type": "object",
   "properties": {
     "schema_version": { "description": "schema 版本，恒为 1", "const": 1 },
-    "kind": { "description": "行种类：assertion（每 assertion 一行）或 summary（汇总）", "enum": ["assertion", "summary"] },
+    "kind": { "description": "行种类：assertion（每 assertion 一行）、summary（产品汇总）或 tooling-summary（基础设施汇总）", "enum": ["assertion", "summary", "tooling-summary"] },
     "run_id": { "description": "运行标识", "type": "string" },
     "case_id": { "description": "catalog case_id（kebab-case；assertion 行必填；无绑定汇总行不得编造）", "type": "string" },
     "case_ids": { "description": "Node suite 汇总行附带的 case 集合（由 executable 反查 catalog）", "type": "array", "items": { "type": "string" } },
@@ -37,6 +37,7 @@
   "summary_rules": [
     "verdict 为 PASS/FAIL/FLAKY 的汇总行须带有效 case 绑定（防伪造 PASS）",
     "无绑定的 BLOCKED/SKIPPED 汇总行须带非空 reason（如 no-catalog-binding），且不得编造 case_id",
+    "tooling-summary 须来自已注册 tooling suite，不得包含或声称产品 case 覆盖",
     "run_verdict 永不写回 catalog"
   ]
 }

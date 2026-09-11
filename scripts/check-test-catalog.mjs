@@ -276,7 +276,7 @@ function parseYamlSubset(text) {
 
 // 中文注释：允许的枚举集合。
 const PRIORITY_SET = new Set(['P0', 'P1', 'P2', 'P3']);
-const LAYER_SET = new Set(['L1', 'L2', 'L3', 'TOOLING']);
+const LAYER_SET = new Set(['L1', 'L2', 'L3']);
 const LIFECYCLE_SET = new Set(['PLANNED', 'ACTIVE', 'BLOCKED', 'MANUAL', 'LEGACY-NON-COVERAGE', 'RETIRED']);
 // 中文注释：case 允许键集合（含条件键，run_verdict 明确不在其中）。
 const CASE_ALLOWED_KEYS = new Set(['case_id', 'display_name_zh', 'legacy_aliases', 'journey_id', 'user_goal', 'priority', 'primary_defense', 'secondary_defenses', 'lifecycle_status', 'risk_tags', 'spec_path', 'required_assertions', 'executable_ids', 'fixtures', 'owner', 'blocked_reason', 'manual_reason']);
@@ -371,7 +371,7 @@ function validateSchemaHandwritten(catalog) {
     else if (execIds.has(e.executable_id)) errors.push(`${label} 重复 executable_id（顶层唯一）：${e.executable_id}`);
     else execIds.add(e.executable_id);
     if (!isNonEmptyString(e.display_name_zh)) errors.push(`${label} 缺 display_name_zh`);
-    if (!LAYER_SET.has(e.layer)) errors.push(`${label} 非法枚举 layer（须为 L1|L2|L3|TOOLING，实际=${JSON.stringify(e.layer)}）`);
+    if (!LAYER_SET.has(e.layer)) errors.push(`${label} 非法枚举 layer（须为 L1|L2|L3，实际=${JSON.stringify(e.layer)}）`);
     if (!isNonEmptyString(e.path)) errors.push(`${label} 缺 path`);
     if (!Array.isArray(e.case_ids) || e.case_ids.length === 0) errors.push(`${label} 缺 case_ids（须为非空数组）`);
     else if (!e.case_ids.every(isNonEmptyString)) errors.push(`${label} 非法 case_ids（须为非空字符串数组）`);
@@ -400,15 +400,13 @@ function normalizeSuitePath(p) {
 }
 
 /**
- * 递归收集磁盘 suite 路径。
+ * 递归收集磁盘 suite 路径（仅 Node 产品层：tests/unit/** 与 tests/integration/**）。
  *
- * 可执行集合口径（Fix 1 meta-suite 闭环后）：
- * - 纳入：tests/** 下全部 `*.test.ts`（含 tests/tooling/runner、tests/tooling/catalog、
- *   tests/tooling/ci 三个元测试目录——它们是 needs_db=false 的叶子套件，无自指递归，禁止排除掩盖）；
+ * 可执行集合口径（P1-01 Tooling 解耦后）：
+ * - 纳入：tests/unit/** 与 tests/integration/** 下全部 `*.test.ts`（L1 与 L2 产品可执行套件）；
  * - 排除 tests/support/**（支撑实现非可执行套件）；
- * - 排除 tests/system/**（Playwright 浏览器域：由 playwright 直接执行的多浏览器 L3 spec，
- *   runner suite-worker 无法执行；其 L3 executable 另按“存在 + spec 绑定 + evidence surfaces”校验，
- *   不进入 Node 三方集合比较——执行器不同是 principled 划分，有测试与 manifest 证据，非掩盖）。
+ * - 排除 tests/system/**（Playwright 浏览器域：由 playwright 直接执行的多浏览器 L3 spec）；
+ * - 排除 tests/tooling/**（测试基础设施自测域：由 yarn test:tooling 独立执行，不进入产品 catalog）。
  * @param dir 起始目录
  * @param out 输出数组
  */
@@ -424,19 +422,21 @@ function collectDiskSuites(dir, out) {
     if (ent.isDirectory()) {
       if (abs.replace(/\\/g, '/').includes('tests/support')) continue;
       if (abs.replace(/\\/g, '/').includes('tests/system')) continue;
+      if (abs.replace(/\\/g, '/').includes('tests/tooling')) continue;
       collectDiskSuites(abs, out);
     } else if (ent.isFile() && ent.name.endsWith('.ts')) {
       const rel = path.relative(repoRoot, abs).replace(/\\/g, '/');
       if (!rel.startsWith('tests/')) continue;
       if (rel.startsWith('tests/support/')) continue;
       if (rel.startsWith('tests/system/')) continue;
+      if (rel.startsWith('tests/tooling/')) continue;
       out.push(rel);
     }
   }
 }
 
 /**
- * 获取 runner 注册表路径集合（调 node scripts/run-tests.mjs --list）。
+ * 获取 runner 注册表路径集合（调 node scripts/run-tests.mjs --list 并过滤产品组 unit/integration）。
  * @returns 规范路径数组
  */
 function getRegistryPaths() {
@@ -444,7 +444,9 @@ function getRegistryPaths() {
   const out = execFileSync(process.execPath, [runner, '--list'], { cwd: repoRoot, encoding: 'utf8', timeout: 15000 });
   const arr = JSON.parse(out);
   if (!Array.isArray(arr)) throw new Error('registry --list 非数组');
-  return arr.map((e) => normalizeSuitePath(e.path));
+  return arr
+    .filter((e) => e.group === 'unit' || e.group === 'integration')
+    .map((e) => normalizeSuitePath(e.path));
 }
 
 /**
@@ -616,9 +618,9 @@ function main() {
     }
   }
 
-  // 中文注释：⑤suite path 集合与 runner registry 与磁盘三方一致（排除 support/** 与 Playwright tests/system/**）。
-  // 中文注释：L3 executable 由 playwright 执行、不进 runner 注册表，故三方集合比较只覆盖 Node 层
-  // （L1|L2|TOOLING）；L3 executable 仍受“path 落盘”检查（上文）约束，缺失即 exit 1。
+  // 中文注释：⑤suite path 集合与 runner registry 与磁盘三方一致（排除 support/**、Playwright tests/system/** 与 tests/tooling/**）。
+  // 中文注释：L3 executable 由 playwright 执行、不进 runner 注册表；Tooling 测试属于基础设施域自测、
+  // 不进入产品 catalog；故三方集合比较只覆盖 Node 产品层（L1|L2）。L3 executable 仍受“path 落盘”检查（上文）约束，缺失即 exit 1。
   if (!skipRegistryCheck) {
     let registryPaths = [];
     try {
@@ -630,7 +632,7 @@ function main() {
     const diskPaths = [];
     collectDiskSuites(path.join(repoRoot, 'tests'), diskPaths);
     const nodeExecPaths = catalog.executables
-      .filter((e) => e.layer !== 'L3')
+      .filter((e) => e.layer === 'L1' || e.layer === 'L2')
       .map((e) => normalizeSuitePath(e.path))
       .sort();
     const l3ExecPaths = catalog.executables

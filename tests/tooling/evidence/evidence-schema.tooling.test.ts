@@ -399,7 +399,9 @@ async function caseRealCatalogSpot(): Promise<void> {
     );
     const e = catalog.executables.get('exec-guest-cookie-authorization');
     assert.ok(e && e.case_ids.includes('guest-identity-cookie-upgrade'), 'executable 反向须含该 case');
-    console.log('PASS: 真实 catalog 抽查 join 成立（guest-identity-cookie-upgrade ↔ exec-guest-cookie-authorization ↔ guest-row-persisted）');
+    assert.strictEqual(catalog.executables.has('exec-mock-lifecycle'), false, 'catalog 不得包含 tooling executable exec-mock-lifecycle');
+    assert.strictEqual(catalog.executables.has('exec-catalog-checker'), false, 'catalog 不得包含 tooling executable exec-catalog-checker');
+    console.log('PASS: 真实 catalog 抽查 join 成立（guest-identity-cookie-upgrade ↔ exec-guest-cookie-authorization ↔ guest-row-persisted）且无 Tooling executable');
 }
 
 /**
@@ -554,6 +556,114 @@ function checkOneCjsChainTarget(
 }
 
 /**
+ * 用例 10：正常 Tooling PASS（kind=tooling-summary）无 product case 绑定，仍能合法 PASS。
+ */
+async function caseToolingSummaryGood(): Promise<void> {
+    const v: EvidenceValidator = await loadValidator();
+    const catalog: unknown = v.loadEvidenceCatalog(repoRoot);
+    const toolingGood = {
+        schema_version: 1,
+        kind: 'tooling-summary',
+        run_id: 'tooling-evidence-run',
+        suite_id: 'mock-lifecycle',
+        suite: 'mock-lifecycle',
+        id: 'mock-lifecycle',
+        group: 'tooling',
+        needs_db: true,
+        verdict: 'PASS',
+        status: 'PASS',
+        exit_code: 0,
+        exitCode: 0,
+        duration_ms: 150,
+        durationMs: 150,
+        evidence_path: '.e2e-results/tooling-evidence-run/mock-lifecycle',
+    };
+    const res = v.validateRow(toolingGood, catalog);
+    assert.strictEqual(res.ok, true, `Tooling 正例行应通过校验，实际 errors=${JSON.stringify(res.errors)}`);
+    console.log('PASS: 正常 Tooling PASS（tooling-summary）无 case 绑定合法通过');
+}
+
+/**
+ * 用例 11：Tooling summary 不得声称产品用例覆盖（含 case_ids / case_id 必被拒绝）。
+ */
+async function caseToolingSummaryRejectsProductCoverage(): Promise<void> {
+    const v: EvidenceValidator = await loadValidator();
+    const catalog: unknown = v.loadEvidenceCatalog(repoRoot);
+    const base = {
+        schema_version: 1,
+        kind: 'tooling-summary',
+        run_id: 'tooling-evidence-run',
+        suite_id: 'mock-lifecycle',
+        group: 'tooling',
+        verdict: 'PASS',
+        evidence_path: '.e2e-results/tooling-evidence-run/mock-lifecycle',
+    };
+    const withCaseIds = { ...base, case_ids: ['guest-identity-cookie-upgrade'] };
+    const res1 = v.validateRow(withCaseIds, catalog);
+    assert.strictEqual(res1.ok, false, 'tooling-summary 带 case_ids 应被拒绝');
+    assert.ok(
+        res1.errors.some((e) => e.includes('tooling-summary-has-product-coverage')),
+        `应指明 tooling-summary-has-product-coverage，实际=${JSON.stringify(res1.errors)}`,
+    );
+
+    const withCaseId = { ...base, case_id: 'guest-identity-cookie-upgrade' };
+    const res2 = v.validateRow(withCaseId, catalog);
+    assert.strictEqual(res2.ok, false, 'tooling-summary 带 case_id 应被拒绝');
+    assert.ok(
+        res2.errors.some((e) => e.includes('tooling-summary-has-product-coverage')),
+        `应指明 tooling-summary-has-product-coverage，实际=${JSON.stringify(res2.errors)}`,
+    );
+    console.log('PASS: Tooling summary 声明产品覆盖被坚决拒收（防伪造 R3）');
+}
+
+/**
+ * 用例 12：Tooling summary 必须来自已注册 tooling suite（未注册 suite 必被拒绝）。
+ */
+async function caseToolingSummaryRejectsUnregisteredSuite(): Promise<void> {
+    const v: EvidenceValidator = await loadValidator();
+    const catalog: unknown = v.loadEvidenceCatalog(repoRoot);
+    const unreg = {
+        schema_version: 1,
+        kind: 'tooling-summary',
+        run_id: 'tooling-evidence-run',
+        suite_id: 'nonexistent-ghost-suite',
+        group: 'tooling',
+        verdict: 'PASS',
+        evidence_path: '.e2e-results/tooling-evidence-run/ghost',
+    };
+    const res = v.validateRow(unreg, catalog);
+    assert.strictEqual(res.ok, false, '未注册 tooling suite 应被拒绝');
+    assert.ok(
+        res.errors.some((e) => e.includes('unregistered-tooling-suite')),
+        `应指明 unregistered-tooling-suite，实际=${JSON.stringify(res.errors)}`,
+    );
+    console.log('PASS: 未注册 tooling suite 被坚决拒收');
+}
+
+/**
+ * 用例 13：产品 summary 无有效 case 绑定必被拒绝（防伪造规则不因 Tooling 解耦放宽）。
+ */
+async function caseProductSummaryUnboundRejected(): Promise<void> {
+    const v: EvidenceValidator = await loadValidator();
+    const catalog: unknown = v.loadEvidenceCatalog(repoRoot);
+    const unbound = {
+        schema_version: 1,
+        kind: 'summary',
+        run_id: 'tooling-evidence-run',
+        suite_id: 'session-roundtrip',
+        verdict: 'PASS',
+        evidence_path: '.e2e-results/tooling-evidence-run/session-roundtrip',
+    };
+    const res = v.validateRow(unbound, catalog);
+    assert.strictEqual(res.ok, false, '产品 summary 无 case 绑定应被拒');
+    assert.ok(
+        res.errors.some((e) => e.includes('summary-without-binding')),
+        `应指明 summary-without-binding，实际=${JSON.stringify(res.errors)}`,
+    );
+    console.log('PASS: 产品 summary 无有效 case 绑定被拒绝（防伪造护栏有效）');
+}
+
+/**
  * 测试入口：顺序执行全部用例。
  */
 async function main(): Promise<void> {
@@ -565,6 +675,10 @@ async function main(): Promise<void> {
     await caseReporterUnboundBlocked();
     await caseCliCheck();
     await caseRealCatalogSpot();
+    await caseToolingSummaryGood();
+    await caseToolingSummaryRejectsProductCoverage();
+    await caseToolingSummaryRejectsUnregisteredSuite();
+    await caseProductSummaryUnboundRejected();
     await caseCjsReporterChainLoadable();
 }
 

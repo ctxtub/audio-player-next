@@ -11,8 +11,8 @@ import { parseYamlSubset, normalizeSuitePath } from './check-test-catalog.mjs';
 export const SCHEMA_VERSION = 1;
 // 中文注释：verdict 枚举（与 runner/浏览器 harness 一致）。
 const VERDICTS = new Set(['PASS', 'FAIL', 'BLOCKED', 'SKIPPED', 'FLAKY']);
-// 中文注释：行种类——assertion（每 assertion 一行，D3 已决）与 summary（suite/case 级汇总）。
-const KINDS = new Set(['assertion', 'summary']);
+// 中文注释：行种类——assertion（每 assertion 一行，D3 已决）、summary（产品汇总）与 tooling-summary（基础设施汇总）。
+const KINDS = new Set(['assertion', 'summary', 'tooling-summary']);
 // 中文注释：仓库根（默认 cwd，可用 --repo-root 覆盖）。
 let repoRoot = process.cwd();
 // 中文注释：catalog 默认路径（相对仓库根）。
@@ -71,11 +71,46 @@ function parseArgs(argv) {
 let cachedCatalogPath = '';
 let cachedCatalog = null;
 
+// 中文注释：tooling 套件缓存。
+let cachedToolingSuites = null;
+let cachedToolingSuitesRoot = '';
+
 /**
- * 读并解析 catalog，建成 case/executable 双索引（失败即抛，调用方定退出码）。
+ * 提取已注册的 tooling 套件 ID 集合（从 scripts/run-tests.mjs 静态提取）。
+ * @param root 仓库根
+ * @returns {Set<string>}
+ */
+export function loadToolingSuites(root = repoRoot) {
+  const r = root ?? repoRoot;
+  if (cachedToolingSuites !== null && cachedToolingSuitesRoot === r) return cachedToolingSuites;
+  const set = new Set();
+  try {
+    const runnerPath = path.join(r, 'scripts', 'run-tests.mjs');
+    if (fs.existsSync(runnerPath)) {
+      const runnerText = fs.readFileSync(runnerPath, 'utf8');
+      const re = /\{\s*id:\s*['"]([^'"]+)['"][^}]+group:\s*['"]tooling['"]/g;
+      let m;
+      while ((m = re.exec(runnerText)) !== null) {
+        set.add(m[1]);
+      }
+      const re2 = /\{\s*[^}]+group:\s*['"]tooling['"][^}]+id:\s*['"]([^'"]+)['"]/g;
+      while ((m = re2.exec(runnerText)) !== null) {
+        set.add(m[1]);
+      }
+    }
+  } catch {
+    // 忽略读取错误
+  }
+  cachedToolingSuites = set;
+  cachedToolingSuitesRoot = r;
+  return set;
+}
+
+/**
+ * 读并解析 catalog，建成 case/executable 双索引与 tooling 套件集合（失败即抛，调用方定退出码）。
  * @param root 仓库根（缺省模块级 repoRoot；测试可显式传入）
  * @param catalog catalog 文件绝对路径（缺省默认路径）
- * @returns {{ cases: Map, executables: Map }}
+ * @returns {{ cases: Map, executables: Map, toolingSuites: Set<string> }}
  */
 export function loadEvidenceCatalog(root = repoRoot, catalog = null) {
   const r = root ?? repoRoot;
@@ -95,7 +130,8 @@ export function loadEvidenceCatalog(root = repoRoot, catalog = null) {
       executables.set(item.executable_id, item);
     }
   }
-  cachedCatalog = { cases, executables };
+  const toolingSuites = loadToolingSuites(r);
+  cachedCatalog = { cases, executables, toolingSuites };
   cachedCatalogPath = c;
   return cachedCatalog;
 }
@@ -191,7 +227,7 @@ export function validateRow(row, catalog = null) {
     errors.push(`bad-schema_version（须为 ${SCHEMA_VERSION}，实际=${JSON.stringify(row.schema_version)})`);
   }
   if (typeof row.kind !== 'string' || !KINDS.has(row.kind)) {
-    errors.push(`bad-kind（须为 assertion|summary，实际=${JSON.stringify(row.kind)})`);
+    errors.push(`bad-kind（须为 assertion|summary|tooling-summary，实际=${JSON.stringify(row.kind)})`);
   }
   if (!isNonEmptyString(row.run_id)) {
     errors.push('bad-run_id（须为非空字符串）');
@@ -266,6 +302,33 @@ export function validateRow(row, catalog = null) {
       if (boundCount === 0 && !isNonEmptyString(row.reason)) {
         errors.push('summary-blocked-without-reason（无绑定 BLOCKED/SKIPPED 须带非空 reason)');
       }
+    }
+  } else if (row.kind === 'tooling-summary') {
+    // 中文注释：tooling-summary（基础设施汇总）——必须来自已注册 tooling suite，不得声明产品 case 覆盖。
+    const suiteId = row.suite_id || row.suite || row.id;
+    if (!isNonEmptyString(suiteId)) {
+      errors.push('missing-suite_id（tooling-summary 必须有真实 runner suite 标识）');
+    } else {
+      const toolingSuites = (cat && cat.toolingSuites instanceof Set) ? cat.toolingSuites : loadToolingSuites();
+      if (!toolingSuites.has(suiteId)) {
+        errors.push(`unregistered-tooling-suite（${String(suiteId)} 不是已注册的 tooling suite）`);
+      }
+    }
+    if (row.group !== undefined && row.group !== 'tooling') {
+      errors.push(`bad-group（tooling-summary 的 group 必须为 tooling，实际=${JSON.stringify(row.group)}）`);
+    }
+    if (row.case_id !== undefined && row.case_id !== null) {
+      errors.push('tooling-summary-has-product-coverage（tooling-summary 不得包含 case_id）');
+    }
+    if (row.case_ids !== undefined) {
+      if (!Array.isArray(row.case_ids)) {
+        errors.push('bad-case_ids（须为数组）');
+      } else if (row.case_ids.length > 0) {
+        errors.push('tooling-summary-has-product-coverage（tooling-summary 不得包含 case_ids）');
+      }
+    }
+    if (row.reason !== undefined && !isNonEmptyString(row.reason)) {
+      errors.push('bad-reason（reason 须为非空字符串）');
     }
   }
   return { ok: errors.length === 0, errors };

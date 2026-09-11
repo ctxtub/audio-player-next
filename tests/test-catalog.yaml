@@ -39,7 +39,7 @@ cases:
       - assertion_id: guest-row-persisted
         display_name_zh: 访客行落库
         surface: db
-    executable_ids: [exec-guest-cookie-authorization, exec-evidence-schema, exec-governance-docs, exec-auto-delivery]
+    executable_ids: [exec-guest-cookie-authorization]
     fixtures: []
     owner: smoke-baseline
   - case_id: first-story-stream-autoplay
@@ -237,7 +237,7 @@ cases:
       - assertion_id: input-kept-intact
         display_name_zh: 输入框不受污染
         surface: ui
-    executable_ids: [exec-preload-context-selection, exec-e2e-stream-observer, exec-catalog-checker]
+    executable_ids: [exec-preload-context-selection]
     fixtures: []
     owner: interactive-race
   - case_id: clear-during-generate-no-orphan-audio
@@ -450,7 +450,7 @@ cases:
       - assertion_id: countdown-exhaust-stops
         display_name_zh: 耗尽即停
         surface: state
-    executable_ids: [exec-resume-countdown, exec-mock-lifecycle]
+    executable_ids: [exec-resume-countdown]
     fixtures: []
     owner: playback-kernel
   - case_id: budget-exhausted-tap-play-audio-state
@@ -489,7 +489,7 @@ cases:
       - assertion_id: state-reset-after-logout
         display_name_zh: 登出后状态重置
         surface: state
-    executable_ids: [exec-logout-playback-reset, exec-logout-probe-hardening-legacy, exec-browser-harness]
+    executable_ids: [exec-logout-playback-reset, exec-logout-probe-hardening-legacy]
     fixtures: []
     owner: playback-kernel
   - case_id: pause-in-paragraph-switch-no-resume
@@ -729,7 +729,7 @@ cases:
       - assertion_id: progress-monotonic
         display_name_zh: 进度单调
         surface: db
-    executable_ids: [exec-save-sequence, exec-paragraph-resume-mixed-legacy, exec-e2e-db-guard-regression]
+    executable_ids: [exec-save-sequence, exec-paragraph-resume-mixed-legacy]
     fixtures: []
     owner: persistence-recovery
   - case_id: guest-user-table-isolation-zero-leak
@@ -747,7 +747,7 @@ cases:
       - assertion_id: zero-cross-read
         display_name_zh: 零串读
         surface: db
-    executable_ids: [exec-guest-multisubject-lifecycle, exec-e2e-db-guard]
+    executable_ids: [exec-guest-multisubject-lifecycle]
     fixtures: []
     owner: cloud-storage
   - case_id: history-epoch-guard-30day-prune
@@ -876,7 +876,7 @@ cases:
       - assertion_id: orphan-rolled-back
         display_name_zh: 孤儿被回滚
         surface: db
-    executable_ids: [exec-registration-rollback, exec-runner-database-path-safety, exec-runner-group-split]
+    executable_ids: [exec-registration-rollback]
     fixtures: []
     owner: auth-session
   - case_id: login-existing-no-leak
@@ -1363,46 +1363,6 @@ executables:
     layer: L1
     path: ./tests/unit/playback/paragraph-segmentation.unit.test.ts
     case_ids: [history-restore-card-resynth]
-  - executable_id: exec-mock-lifecycle
-    display_name_zh: Mock生命周期
-    layer: TOOLING
-    path: ./tests/tooling/mock/mock-lifecycle.tooling.test.ts
-    case_ids: [countdown-exhaust-ui-audio-consistent]
-  - executable_id: exec-e2e-db-guard
-    display_name_zh: 数据库守卫
-    layer: TOOLING
-    path: ./tests/tooling/db-guard/e2e-db-guard.tooling.test.ts
-    case_ids: [guest-user-table-isolation-zero-leak]
-  - executable_id: exec-e2e-db-guard-regression
-    display_name_zh: 数据库守卫回归
-    layer: TOOLING
-    path: ./tests/tooling/db-guard/e2e-db-guard-regression.tooling.test.ts
-    case_ids: [progress-monotonic-guard-force-reset]
-  - executable_id: exec-e2e-stream-observer
-    display_name_zh: 流观察器
-    layer: TOOLING
-    path: ./tests/tooling/observer/e2e-stream-observer.tooling.test.ts
-    case_ids: [preload-continue-no-chat-pollution]
-  - executable_id: exec-runner-database-path-safety
-    display_name_zh: 运行器路径安全
-    layer: TOOLING
-    path: ./tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts
-    case_ids: [register-interrupt-orphan-rollback]
-  - executable_id: exec-browser-harness
-    display_name_zh: 浏览器harness自测
-    layer: TOOLING
-    path: ./tests/tooling/browser/browser-harness.tooling.test.ts
-    case_ids: [logout-during-play-instant-silence]
-  - executable_id: exec-runner-group-split
-    display_name_zh: 执行器分组元测试
-    layer: TOOLING
-    path: ./tests/tooling/runner/runner-group-split.tooling.test.ts
-    case_ids: [register-interrupt-orphan-rollback]
-  - executable_id: exec-catalog-checker
-    display_name_zh: 资产目录校验器自测
-    layer: TOOLING
-    path: ./tests/tooling/catalog/catalog-checker.tooling.test.ts
-    case_ids: [preload-continue-no-chat-pollution]
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3
@@ -1427,18 +1387,3 @@ executables:
     path: ./tests/system/browser/scenarios/guest-cold-start-first-screen.spec.ts
     case_ids: [guest-cold-start-first-screen]
     evidence_surfaces: [ui, audio, network, db]
-  - executable_id: exec-evidence-schema
-    display_name_zh: 证据版本化join自测
-    layer: TOOLING
-    path: ./tests/tooling/evidence/evidence-schema.tooling.test.ts
-    case_ids: [guest-identity-cookie-upgrade]
-  - executable_id: exec-governance-docs
-    display_name_zh: 治理文档对齐自测
-    layer: TOOLING
-    path: ./tests/tooling/docs/governance-docs.tooling.test.ts
-    case_ids: [guest-identity-cookie-upgrade]
-  - executable_id: exec-auto-delivery
-    display_name_zh: 自动交付链守卫自测
-    layer: TOOLING
-    path: ./tests/tooling/delivery/auto-delivery.tooling.test.ts
-    case_ids: [guest-identity-cookie-upgrade]

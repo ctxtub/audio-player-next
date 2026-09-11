@@ -1,8 +1,10 @@
 # 自动交付链：main push 触发的串行交付（spec）
 
+> **勘误 / 已取代**：自 `main@5fc99a7` 起，本文件 §5、§7 中关于 SSH 自动部署及 staleness guard 的描述不再代表当前仓库执行事实。当前 workflow 以 `.github/workflows/auto-delivery.yml` 和 `docs/engineering/change-workflow.md` 为准。本文件保留为历史设计记录，不再作为 current-state authority。
+
 - 日期：2026-09-11
 - change-id：`restore-main-auto-delivery-20260911`
-- 状态：current-state authority（与实现同口径；旧政策文档见文末替代声明）
+- 状态：历史设计记录 / 已被当前实现取代（旧政策文档见文末替代声明）
 - 取代：`301c58a`“删除全部 CI 自动触发”决策与 `ac45dc4`“仅 workflow_dispatch”决策；
   `docs/specs/2026-09-10-governance-and-release-hardening.md` §WS1/WS2、
   `docs/plans/2026-09-10-governance-and-release-hardening.md` WS1/WS2/C1 为历史快照，不再是现行规范。

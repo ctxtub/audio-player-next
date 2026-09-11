@@ -12,7 +12,7 @@
    - 并行分支须同时声明落地契约（目标/顺序/验证/清理），细节见 `docs/specs/2026-09-10-multi-writer-concurrency-rule.md`。
 6. **独立验收**：不同会话复核 diff、测试、进程、端口、数据库与秘密边界；不采信实现者自报。
 7. **安全门**：检查 tracked 范围、历史、依赖、Actions、Docker context、日志和前端产物。
-8. **发布**：`push` 到 `main` 即自动触发交付链（全仓唯一的 `.github/workflows/auto-delivery.yml`）：quality fail-closed 全绿 → 构建并推送 GHCR（只发 `sha-<short>` 不可变标签，不发任何移动标签）→ 自动 SSH 部署生产（改写 compose 的 `image:` 为本次 sha，备份 + 原子替换 + 健康断言 200 + 失败自动回滚 + 产物一致性校验）→ 成功/失败都发 Bark 通知；技术 APPROVE 不等于发布授权，推 `main` 前必须先跑通本地完成门。细节与失败语义见 `docs/specs/2026-09-11-main-auto-delivery.md`。
+8. **发布**：`push` 到 `main` 即自动触发交付链（全仓唯一的 `.github/workflows/auto-delivery.yml`）：quality fail-closed 全绿 → 构建并推送 GHCR（只发 `sha-<short>` 不可变标签，不发任何移动标签）→ 成功/失败都发 Bark 通知；生产部署由仓库外机制负责或另有流程，当前仓库 `.github/workflows/auto-delivery.yml` 本身不执行 SSH 上线；技术 APPROVE 不等于发布授权，推 `main` 前必须先跑通本地完成门。历史设计细节见 `docs/specs/2026-09-11-main-auto-delivery.md`。
 9. **运行验收与收尾**：回读远端状态、记录回滚点、遗留问题和精炼 closeout。
 
 ## 变更影响与测试选择
@@ -28,7 +28,7 @@
 - 一个提交只承担一个工程目标，遵循 Conventional Commits。
 - PR 必须填写 `.github/pull_request_template.md` 的测试影响与验证记录。
 - PR 不触发任何 workflow（交付链只在 `push` 到 `main` 时运行）：PR 合并前必须在本地跑通完成门并如实填写 PR 模板验证记录；浏览器可观察行为必须附 `test:browser:smoke` 证据。
-- 交付链 `quality` 即 required 语义：红即阻断发布与部署，不存在可忽略的红。
+- 交付链 `quality` 即 required 语义：红即阻断发布，不存在可忽略的红。
 - GitHub required checks 由仓库管理员在分支保护中配置；workflow 文件存在本身不构成 required check 证明。
 
 ## 文档状态

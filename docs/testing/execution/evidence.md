@@ -107,16 +107,17 @@ run_id, case_id, executable_id, assertion_id, surface, verdict, evidence_path
 - `evidence_path` 只记相对路径，不记绝对路径（含用户目录名）、`file:` URL 与 `DATABASE_URL` 值；日志经 runner `sanitizeError` 口径脱敏后方可落盘。
 - 运行产物在执行前后运行 `git status --porcelain` 自检，除预先授权的规范文件外必须保持工作区干净；证据目录本身已被 `.gitignore` 忽略，严禁 `git add`。
 
-## 6. CI 工件（发布 workflow：白名单/黑名单/脱敏与留存）
+## 6. CI 工件（白名单/黑名单/脱敏与留存）
 
-发布 workflow 仅上传白名单工件，并设显式 `retention-days: 30`（接线见发布 workflow，本文为规范指针，不复述 workflow 全文）。
+当前 `auto-delivery.yml` 不上传 `.e2e-results` / evidence artifact，也未配置 `retention-days`。本地 evidence 仍必须遵守脱敏规则。未来如重新接入 CI artifact，应单独定义留存期，而不是沿用历史数值。
 
+未来接入或本地归档规范：
 - 白名单（仅允许上传）：`results.jsonl`、`manifest.json`、汇总日志、P0 烟雾截图、digest 回读记录。
 - 记录口径：pathname-only，无 query，无 body 载荷。
 - 黑名单（永不上传）：`.env*`、一切数据库文件（含隔离库、共享开发库 `prisma/dev.db`、生产库）、一切 secret/token/cookie/连接串、`.e2e-runtime/` 全量。
 - 脱敏规则：日志上传前复核 `file:` URL 与 `DATABASE_URL=` 值已脱敏（runner `sanitizeError` 口径，CI 侧复核）；
   网络证据只记 pathname；`evidence_path` 只记相对仓库根路径。
-- 留存：`retention-days: 30`。
+- 留存：当前未配置 `retention-days`。
 
 ## 7. 任务 manifest schema（D5：本节为规范正文，索引见工程留存文档）
 

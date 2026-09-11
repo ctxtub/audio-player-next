@@ -16,7 +16,7 @@ import path from 'node:path';
  *    以 `case_id`/`yarn test:catalog`/`lifecycle_status` 为准）；
  * 4. 任务 manifest schema + 结项 schema 样例经专用 Tooling 校验器
  *    （D5 已决：独立 suite，不并入 `check-test-catalog.mjs`）正负例全过；
- * 5. `evidence.md` 含 CI 工件白名单/黑名单/脱敏规则与 `retention-days: 30` 指针；
+ * 5. `evidence.md` 含 CI 工件白名单/黑名单/脱敏规则与 `retention-days`（未配置）指针；
  * 6. `artifacts-and-retention.md` 含三落点索引。
  *
  * 口径：只读仓库 tracked 文档 + 内存 schema 校验，不触 DB/网络/浏览器；
@@ -334,15 +334,15 @@ async function caseCloseoutSchema(): Promise<void> {
 }
 
 /**
- * 用例 7：evidence.md 补 CI 工件节（白名单/黑名单/脱敏 + retention-days: 30 指针）。
+ * 用例 7：evidence.md 补 CI 工件节（白名单/黑名单/脱敏 + retention-days 未配置指针）。
  */
 async function caseCiArtifactsSection(): Promise<void> {
     const raw: string = readFileSync(evidenceAbs, 'utf8');
-    for (const anchor of ['results.jsonl', 'manifest.json', '.env', 'retention-days', '30']) {
+    for (const anchor of ['results.jsonl', 'manifest.json', '.env', 'retention-days', '未配置']) {
         assert.ok(raw.includes(anchor), `evidence.md CI 工件节须含：${anchor}`);
     }
     assert.ok(raw.includes('脱敏'), 'evidence.md CI 工件节须含脱敏规则');
-    console.log('PASS: evidence.md 含 CI 工件白名单/黑名单/脱敏 + retention-days: 30');
+    console.log('PASS: evidence.md 含 CI 工件白名单/黑名单/脱敏 + retention-days: 未配置');
 }
 
 /**

@@ -45,7 +45,7 @@ yarn build
 git diff --check
 ```
 
-修改 `scripts/**`、`tests/tooling/**` 或 `prisma/schema.prisma` 时加跑 `yarn test:tooling`。`push` 到 `main` 自动触发交付链（quality 全量门 → GHCR 发布 → 生产部署 → Bark 通知，见 `docs/engineering/change-workflow.md` 发布节）；本地仍按需手动执行上述命令。浏览器可观察行为必须跑 `yarn test:browser:smoke`；产品失败不得靠重试或弱化 oracle 洗绿。
+修改 `scripts/**`、`tests/tooling/**` 或 `prisma/schema.prisma` 时加跑 `yarn test:tooling`。`push` 到 `main` 自动触发交付链（quality 全量门 → GHCR 发布 → Bark 通知，生产部署由仓库外机制负责，见 `docs/engineering/change-workflow.md` 发布节）；本地仍按需手动执行上述命令。浏览器可观察行为必须跑 `yarn test:browser:smoke`；产品失败不得靠重试或弱化 oracle 洗绿。
 
 ## 安全边界
 

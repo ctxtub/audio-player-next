@@ -56,6 +56,8 @@ node scripts/run-tests.mjs --list          # 查看 runner 注册表（三方一
 yarn test:unit                              # L1
 yarn test:integration                       # L2
 yarn test:tooling                           # Tooling
+yarn test:browser                           # L3（正式产品场景）
+yarn test:browser:diagnostics               # smoke 环境手诊（不属产品 coverage，不作为完成条件）
 ```
 
-分层速查：L1 单进程单单元确定性；L2 多真实生产模块穿越明确 seam；L3 运行中 production build + 真实浏览器；Tooling 为测试基础设施自测。Tooling 独立运行，不属于产品 catalog，不计产品覆盖，Tooling PASS 不等于任何产品 case PASS。
+分层速查：L1 单进程单单元确定性；L2 多真实生产模块穿越明确 seam；L3 运行中 production build + 真实浏览器；Tooling 为测试基础设施自测。Tooling 独立运行，不属于产品 catalog，不计产品覆盖，Tooling PASS 不等于任何产品 case PASS。smoke 为环境手诊入口（`yarn test:browser:diagnostics` 或 `npx playwright test --config tests/system/browser/playwright.config.ts tests/system/browser/smoke.spec.ts`），不属产品 coverage、不作为完成条件。

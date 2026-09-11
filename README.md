@@ -139,7 +139,7 @@ yarn build
 git diff --check
 ```
 
-浏览器可观察行为另须运行 `yarn test:browser`；修改测试工具或 workflow 时另须运行 `yarn test:tooling`。
+浏览器可观察行为另须运行 `yarn test:browser`；修改测试工具或 workflow 时另须运行 `yarn test:tooling`（smoke 为环境手诊入口、不属产品 coverage、不作为完成条件：`yarn test:browser:diagnostics`）。
 
 ## 贡献指南
 

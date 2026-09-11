@@ -27,7 +27,7 @@
 
 - 一个提交只承担一个工程目标，遵循 Conventional Commits。
 - PR 必须填写 `.github/pull_request_template.md` 的测试影响与验证记录。
-- PR 不触发任何 workflow（交付链只在 `push` 到 `main` 时运行）：PR 合并前必须在本地跑通完成门并如实填写 PR 模板验证记录；浏览器可观察行为必须附 `test:browser` 证据。
+- PR 不触发任何 workflow（交付链只在 `push` 到 `main` 时运行）：PR 合并前必须在本地跑通完成门并如实填写 PR 模板验证记录；浏览器可观察行为必须附 `test:browser` 证据（smoke 仅为环境手诊入口、不属产品 coverage、不作为完成条件：`yarn test:browser:diagnostics`）。
 - 交付链 `quality` 即 required 语义：红即阻断发布，不存在可忽略的红。
 - GitHub required checks 由仓库管理员在分支保护中配置；workflow 文件存在本身不构成 required check 证明。
 

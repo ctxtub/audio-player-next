@@ -260,15 +260,14 @@ cases:
     priority: P0
     primary_defense: L2
     secondary_defenses: [L3]
-    lifecycle_status: BLOCKED
+    lifecycle_status: ACTIVE
     risk_tags: [race, orphan]
     spec_path: docs/e2e/02-交互并发与竞态防御/04-生成中清空防止孤儿播放.md
     required_assertions:
       - assertion_id: no-orphan-after-clear
         display_name_zh: 清空后无孤儿声
         surface: audio
-    executable_ids: []
-    blocked_reason: 无真实孤儿播放行为覆盖：现存 keepalive-dedup 仅覆盖退出时 pending flush 去重，未覆盖“生成中清空后完成回调到达”的竞态分支；需新增 L2 用例“清空后完成回调到达不断言播放未启动”方可解 BLOCKED。P0 缺口，保持 CANDIDATE 高声。
+    executable_ids: [exec-clear-during-generate-no-orphan-audio]
     fixtures: []
     ci_tier: CANDIDATE
     owner: interactive-race
@@ -1406,6 +1405,11 @@ executables:
     layer: L2
     path: ./tests/integration/creation-chat/reject-second-submit-while-streaming.integration.test.ts
     case_ids: [rapid-double-submit-guard, streaming-resubmit-mutex]
+  - executable_id: exec-clear-during-generate-no-orphan-audio
+    display_name_zh: 生成中清空防孤儿播放
+    layer: L2
+    path: ./tests/integration/creation-chat/clear-during-generate-no-orphan-audio.integration.test.ts
+    case_ids: [clear-during-generate-no-orphan-audio]
   - executable_id: exec-conversation-write-wiring-legacy
     display_name_zh: 会话写入接线遗留
     layer: STATIC

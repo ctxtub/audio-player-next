@@ -28,7 +28,7 @@ const ALLOWED_GROUPS = ['unit', 'integration', 'contract', 'tooling', 'static', 
 // 中文注释：unit 禁止导入 lib/db 的静态扫描正则。
 const LIB_DB_IMPORT_RE = /from\s+['"].*lib\/db['"]|require\(['"].*lib\/db['"]\)/;
 
-// 中文注释：套件注册表（52 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit/static 与无库 tooling 元测试为 false）。
+// 中文注释：套件注册表（53 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit/static 与无库 tooling 元测试为 false）。
 // 中文注释：meta-suite 策略——runner 自身测试（runner/catalog/ci 三个 tooling 元测试）以 needs_db=false 的叶子套件登记进 tooling 组，
 // 它们只做 --list 只读查询 / 沙箱 catalog 校验 / 文件结构断言，从不触发套件执行与建库，故无自指递归（由 runner-group-split 用例⑧测试证明）；
 // 禁止用 checker 硬编码目录排除来掩盖测试。
@@ -64,6 +64,7 @@ const SUITES = [
     { id: 'budget-exhaustion', path: './tests/unit/playback/budget-exhaustion.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'paragraph-transition-guard', path: './tests/integration/playback/paragraph-transition-guard.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'preload-isolation', path: './tests/integration/creation-chat/preload-isolation.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'clear-during-generate-no-orphan-audio', path: './tests/integration/creation-chat/clear-during-generate-no-orphan-audio.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'pending-save-flush', path: './tests/integration/persistence-config/pending-save-flush.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'stale-conversation-write', path: './tests/integration/persistence-config/stale-conversation-write.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'optimistic-rollback', path: './tests/unit/persistence-config/optimistic-rollback.unit.test.ts', group: 'unit', needs_db: false },

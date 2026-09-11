@@ -32,8 +32,8 @@ const goodExecPath: string = './tests/unit/identity-session/session-roundtrip.un
 // 2026-09-11 tier-gate-test-supplement ①：guest-register-3step-migrate-fidelity 已补 L2 保真断言并升 ACTIVE，移出阻断集。
 // 2026-09-11 tier-gate-test-supplement ②：login-existing-no-leak 新建 L2（真实 login + 双边不变 + cookie）并升 ACTIVE，移出阻断集。
 // 2026-09-11 tier-gate-test-supplement ③：logout-dual-cookie-clean-reset 新建 L2（真实 logout + 双删断言）并升 ACTIVE，移出阻断集。
+// 2026-09-11 tier-gate-test-supplement ④：clear-during-generate-no-orphan-audio 新建 L2（D1 阳性对照 + D2 竞态）并升 ACTIVE，移出阻断集。
 const baselineBlockedIds: string[] = [
-  'clear-during-generate-no-orphan-audio',
   'guest-cold-start-first-screen',
 ];
 
@@ -415,8 +415,8 @@ function caseRealBaseline(): void {
   assert.strictEqual(rel.status, 1, `基线RELEASE应 exit 1，实际=${rel.status}`);
   const candIds: string[] = extractBlockedIds(cand.stdout);
   const relIds: string[] = extractBlockedIds(rel.stdout);
-  assert.deepStrictEqual(candIds, [...baselineBlockedIds].sort(), `CANDIDATE阻断集应 pin 当前基线2项，实际=${JSON.stringify(candIds)}`);
-  assert.deepStrictEqual(relIds, [...baselineBlockedIds].sort(), `RELEASE阻断集应 pin 当前基线2项，实际=${JSON.stringify(relIds)}`);
+  assert.deepStrictEqual(candIds, [...baselineBlockedIds].sort(), `CANDIDATE阻断集应 pin 当前基线1项，实际=${JSON.stringify(candIds)}`);
+  assert.deepStrictEqual(relIds, [...baselineBlockedIds].sort(), `RELEASE阻断集应 pin 当前基线1项，实际=${JSON.stringify(relIds)}`);
   let checkerOut: string = '';
   try {
     checkerOut = execFileSync(process.execPath, [checkerAbs], { cwd: repoRoot, encoding: 'utf8', timeout: 30000 }) as unknown as string;
@@ -424,7 +424,7 @@ function caseRealBaseline(): void {
     assert.fail(`交叉一致要求 checker 本体 exit 0，实际 status=${String((err as { status?: unknown }).status)}`);
   }
   const gapIds: string[] = extractCheckerGapIds(String(checkerOut));
-  assert.ok(gapIds.length === 26, `checker缺口数基线应为26（③解阻 logout-dual-cookie-clean-reset 后），实际=${gapIds.length}`);
+  assert.ok(gapIds.length === 25, `checker缺口数基线应为25（④解阻 clear-during-generate-no-orphan-audio 后），实际=${gapIds.length}`);
   for (const id of candIds) {
     assert.ok(gapIds.includes(id), `门阻断 ${id} 应出现在 checker 缺口清单中（交叉一致）`);
   }

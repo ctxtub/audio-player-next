@@ -9,15 +9,13 @@ import path from 'node:path';
  * 在沙箱 tmp 造 7 类坏 catalog 逐个断言 checker exit 1 且 stderr 指明原因；
  * 好 catalog（最小合法 4 case 样本，含 1 PLANNED 缺口）断言 exit 0；
  * 另有 L3 surface 覆盖正例（声明覆盖 timeline+state）断言 exit 0。
- * 全程仅 tmp 写 + 只读真实 schema/checker/套件路径，不触 DB/网络。
+ * 全程仅 tmp 写 + 只读真实 checker/套件路径，不触 DB/网络。
  */
 
-// 中文注释：仓库根（解析 checker 与 schema 用）。
+// 中文注释：仓库根（解析 checker 用）。
 const repoRoot: string = process.cwd();
 // 中文注释：真 checker 绝对路径（子进程跑 node）。
 const checkerAbs: string = path.join(repoRoot, 'scripts', 'check-test-catalog.mjs');
-// 中文注释：真 schema 绝对路径（沙箱 catalog 共用）。
-const schemaAbs: string = path.join(repoRoot, 'tests', 'test-catalog.schema.json');
 
 /**
  * 好 catalog 最小合法样本（4 case：3 ACTIVE + 1 PLANNED 缺口，3 executable 指向真实落盘套件）。
@@ -132,7 +130,7 @@ function runChecker(catalogYaml: string, dir: string, name: string): { status: n
   try {
     const stdout: string = execFileSync(
       process.execPath,
-      [checkerAbs, '--catalog', catalogFile, '--schema', schemaAbs, '--repo-root', repoRoot, '--skip-registry-check'],
+      [checkerAbs, '--catalog', catalogFile, '--repo-root', repoRoot, '--skip-registry-check'],
       { cwd: repoRoot, encoding: 'utf8', timeout: 15000 },
     ) as unknown as string;
     return { status: 0, stdout: String(stdout), stderr: '' };

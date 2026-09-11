@@ -1,15 +1,14 @@
 #!/usr/bin/env node
-// 中文注释：测试资产目录校验器——读 catalog+schema+磁盘 tests/**，做六项校验并输出统计（零新依赖）。
-// 用法：node scripts/check-test-catalog.mjs [--catalog <path>] [--schema <path>] [--repo-root <dir>] [--skip-registry-check]
+// 中文注释：测试资产目录校验器——读 catalog+磁盘 tests/**，做六项校验并输出统计（零新依赖）。
+// 用法：node scripts/check-test-catalog.mjs [--catalog <path>] [--repo-root <dir>] [--skip-registry-check] [--require-full-spec-coverage]
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 // 中文注释：仓库根（默认 cwd，可用 --repo-root 覆盖，沙箱测试用）。
 let repoRoot = process.cwd();
-// 中文注释：catalog 与 schema 默认路径（相对仓库根）。
+// 中文注释：catalog 默认路径（相对仓库根）。
 let catalogPath = path.join(repoRoot, 'tests', 'test-catalog.yaml');
-let schemaPath = path.join(repoRoot, 'tests', 'test-catalog.schema.json');
 // 中文注释：是否跳过 registry 三方一致（沙箱最小 catalog 用，真实 CI 不跳过）。
 let skipRegistryCheck = false;
 // 中文注释：是否强制 docs/e2e 场景文件全被 case 引用（真实 static 门用；沙箱最小 catalog 不开）。
@@ -27,25 +26,19 @@ function parseArgs(argv) {
       if (!v || v.startsWith('--')) { console.error('参数错误：--catalog 缺取值'); process.exit(2); }
       catalogPath = path.isAbsolute(v) ? v : path.join(repoRoot, v);
       i += 1;
-    } else if (a === '--schema') {
-      const v = argv[i + 1];
-      if (!v || v.startsWith('--')) { console.error('参数错误：--schema 缺取值'); process.exit(2); }
-      schemaPath = path.isAbsolute(v) ? v : path.join(repoRoot, v);
-      i += 1;
     } else if (a === '--repo-root') {
       const v = argv[i + 1];
       if (!v || v.startsWith('--')) { console.error('参数错误：--repo-root 缺取值'); process.exit(2); }
       repoRoot = path.isAbsolute(v) ? v : path.join(process.cwd(), v);
-      // 中文注释：repo-root 变更后，若 catalog/schema 仍为默认则跟随重算。
+      // 中文注释：repo-root 变更后，若 catalog 仍为默认则跟随重算。
       if (catalogPath.startsWith(process.cwd())) catalogPath = path.join(repoRoot, 'tests', 'test-catalog.yaml');
-      if (schemaPath.startsWith(process.cwd())) schemaPath = path.join(repoRoot, 'tests', 'test-catalog.schema.json');
       i += 1;
     } else if (a === '--skip-registry-check') {
       skipRegistryCheck = true;
     } else if (a === '--require-full-spec-coverage') {
       requireFullSpecCoverage = true;
     } else if (a === '--help' || a === '-h') {
-      console.log('用法：node scripts/check-test-catalog.mjs [--catalog <path>] [--schema <path>] [--repo-root <dir>] [--skip-registry-check] [--require-full-spec-coverage]');
+      console.log('用法：node scripts/check-test-catalog.mjs [--catalog <path>] [--repo-root <dir>] [--skip-registry-check] [--require-full-spec-coverage]');
       process.exit(0);
     } else {
       console.error(`参数错误：未知参数 ${a}`);
@@ -279,7 +272,7 @@ function parseYamlSubset(text) {
   return parseMapBlock(first.indent);
 }
 
-// ===== 手写 schema 断言（零新依赖，与 tests/test-catalog.schema.json 同口径） =====
+// ===== 手写 schema 断言（零新依赖） =====
 
 // 中文注释：允许的枚举集合。
 const PRIORITY_SET = new Set(['P0', 'P1', 'P2', 'P3']);
@@ -469,14 +462,7 @@ function main() {
     console.error(`catalog 读取失败：${catalogPath} 原因=${err.message}`);
     process.exit(1);
   }
-  // 中文注释：读 schema（仅验存在与 JSON 合法，断言手写以零依赖）。
-  try {
-    const schemaText = fs.readFileSync(schemaPath, 'utf8');
-    JSON.parse(schemaText);
-  } catch (err) {
-    console.error(`schema 读取/解析失败：${schemaPath} 原因=${err.message}`);
-    process.exit(1);
-  }
+
   // 中文注释：①YAML 可解析且 schema 合法（手写断言）。
   let catalog = null;
   try {

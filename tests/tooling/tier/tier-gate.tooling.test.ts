@@ -407,7 +407,7 @@ function extractCheckerGapIds(stdout: string): string[] {
 /**
  * 用例：真实 catalog 双选择均 PASS（5 阻断已解），且与 checker 缺口交叉一致。
  * 门阻断集 pin 为空；CANDIDATE 与 RELEASE 同构（NIGHTLY 全 P2、RELEASE tier 为空）；
- * checker 缺口 24 项均为门选集之外（P2/NIGHTLY），门阻断（空）⊆ 缺口恒成立。
+ * checker 缺口 25 项均为门选集之外（P2/NIGHTLY/NONE），门阻断（空）⊆ 缺口恒成立。
  */
 function caseRealBaseline(): void {
   const cand = runGate(['--select', 'CANDIDATE']);
@@ -427,7 +427,7 @@ function caseRealBaseline(): void {
     assert.fail(`交叉一致要求 checker 本体 exit 0，实际 status=${String((err as { status?: unknown }).status)}`);
   }
   const gapIds: string[] = extractCheckerGapIds(String(checkerOut));
-  assert.ok(gapIds.length === 24, `checker缺口数基线应为24（⑤解阻 guest-cold-start-first-screen 后），实际=${gapIds.length}`);
+  assert.ok(gapIds.length === 25, `checker缺口数基线应为25（P0-05 config-init-gate-retry 恢复为真实缺口后），实际=${gapIds.length}`);
   for (const id of candIds) {
     assert.ok(gapIds.includes(id), `门阻断 ${id} 应出现在 checker 缺口清单中（交叉一致）`);
   }

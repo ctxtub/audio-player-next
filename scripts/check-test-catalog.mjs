@@ -276,7 +276,7 @@ function parseYamlSubset(text) {
 
 // 中文注释：允许的枚举集合。
 const PRIORITY_SET = new Set(['P0', 'P1', 'P2', 'P3']);
-const LAYER_SET = new Set(['L1', 'L2', 'L3', 'TOOLING', 'STATIC']);
+const LAYER_SET = new Set(['L1', 'L2', 'L3', 'TOOLING']);
 const LIFECYCLE_SET = new Set(['PLANNED', 'ACTIVE', 'BLOCKED', 'MANUAL', 'LEGACY-NON-COVERAGE', 'RETIRED']);
 const CI_TIER_SET = new Set(['CANDIDATE', 'NIGHTLY', 'RELEASE', 'PATH_FILTERED', 'NONE']);
 // 中文注释：case 允许键集合（含条件键，run_verdict 明确不在其中）。
@@ -373,7 +373,7 @@ function validateSchemaHandwritten(catalog) {
     else if (execIds.has(e.executable_id)) errors.push(`${label} 重复 executable_id（顶层唯一）：${e.executable_id}`);
     else execIds.add(e.executable_id);
     if (!isNonEmptyString(e.display_name_zh)) errors.push(`${label} 缺 display_name_zh`);
-    if (!LAYER_SET.has(e.layer)) errors.push(`${label} 非法枚举 layer（须为 L1|L2|L3|TOOLING|STATIC，实际=${JSON.stringify(e.layer)}）`);
+    if (!LAYER_SET.has(e.layer)) errors.push(`${label} 非法枚举 layer（须为 L1|L2|L3|TOOLING，实际=${JSON.stringify(e.layer)}）`);
     if (!isNonEmptyString(e.path)) errors.push(`${label} 缺 path`);
     if (!Array.isArray(e.case_ids) || e.case_ids.length === 0) errors.push(`${label} 缺 case_ids（须为非空数组）`);
     else if (!e.case_ids.every(isNonEmptyString)) errors.push(`${label} 非法 case_ids（须为非空字符串数组）`);
@@ -620,7 +620,7 @@ function main() {
 
   // 中文注释：⑤suite path 集合与 runner registry 与磁盘三方一致（排除 support/** 与 Playwright tests/system/**）。
   // 中文注释：L3 executable 由 playwright 执行、不进 runner 注册表，故三方集合比较只覆盖 Node 层
-  // （L1|L2|TOOLING|STATIC）；L3 executable 仍受“path 落盘”检查（上文）约束，缺失即 exit 1。
+  // （L1|L2|TOOLING）；L3 executable 仍受“path 落盘”检查（上文）约束，缺失即 exit 1。
   if (!skipRegistryCheck) {
     let registryPaths = [];
     try {

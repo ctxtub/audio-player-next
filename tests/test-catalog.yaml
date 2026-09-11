@@ -106,7 +106,7 @@ cases:
       - assertion_id: retry-recovers
         display_name_zh: 重试可恢复
         surface: ui
-    executable_ids: [exec-batch-source-locks-legacy]
+    executable_ids: []
     fixtures: []
     ci_tier: NONE
     owner: smoke-baseline
@@ -570,7 +570,7 @@ cases:
       - assertion_id: ended-single-advance
         display_name_zh: 结束只推进一次
         surface: state
-    executable_ids: [exec-audio-ended-guard, exec-audio-ended-guard-wiring-legacy]
+    executable_ids: [exec-audio-ended-guard]
     fixtures: []
     ci_tier: NIGHTLY
     owner: playback-kernel
@@ -706,7 +706,7 @@ cases:
       - assertion_id: last-writer-wins-snapshot
         display_name_zh: 快照整体覆盖
         surface: db
-    executable_ids: [exec-stale-conversation-write, exec-conversation-write-wiring-legacy, exec-conversation-conflict-refresh]
+    executable_ids: [exec-stale-conversation-write, exec-conversation-conflict-refresh]
     fixtures: []
     ci_tier: CANDIDATE
     owner: cloud-storage
@@ -1196,7 +1196,7 @@ cases:
       - assertion_id: direct-hits-401
         display_name_zh: 直连均401
         surface: network
-    executable_ids: [exec-procedure-source-locks-legacy, exec-identity-procedure-matrix]
+    executable_ids: [exec-identity-procedure-matrix]
     fixtures: []
     ci_tier: NONE
     owner: error-rate-limit
@@ -1375,16 +1375,6 @@ executables:
     layer: L2
     path: ./tests/integration/playback/explicit-play-budget.integration.test.ts
     case_ids: [breakpoint-resume-null-budget-state]
-  - executable_id: exec-procedure-source-locks-legacy
-    display_name_zh: 过程源码锁遗留
-    layer: STATIC
-    path: ./tests/static/procedure-source-locks.static.test.ts
-    case_ids: [protected-api-401-guard-matrix]
-  - executable_id: exec-batch-source-locks-legacy
-    display_name_zh: 批量源码锁遗留
-    layer: STATIC
-    path: ./tests/static/batch-source-locks.static.test.ts
-    case_ids: [config-init-gate-retry]
   - executable_id: exec-paragraph-resume-mixed-legacy
     display_name_zh: 段落恢复混合遗留
     layer: L2
@@ -1395,11 +1385,6 @@ executables:
     layer: L1
     path: ./tests/unit/creation-chat/toast-terminal-priority.unit.test.ts
     case_ids: [stream-interrupt-failed-retry]
-  - executable_id: exec-audio-ended-guard-wiring-legacy
-    display_name_zh: 结束守卫接线遗留
-    layer: STATIC
-    path: ./tests/static/audio-ended-guard-wiring.static.test.ts
-    case_ids: [segment-end-double-jump-guard]
   - executable_id: exec-double-submit-legacy
     display_name_zh: 双发抑制遗留
     layer: L2
@@ -1410,11 +1395,6 @@ executables:
     layer: L2
     path: ./tests/integration/creation-chat/clear-during-generate-no-orphan-audio.integration.test.ts
     case_ids: [clear-during-generate-no-orphan-audio]
-  - executable_id: exec-conversation-write-wiring-legacy
-    display_name_zh: 会话写入接线遗留
-    layer: STATIC
-    path: ./tests/static/conversation-write-wiring.static.test.ts
-    case_ids: [dual-tab-same-account-write-cover]
   - executable_id: exec-keepalive-dedup-legacy
     display_name_zh: 保活去重遗留
     layer: L2

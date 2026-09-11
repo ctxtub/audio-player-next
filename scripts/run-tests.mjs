@@ -24,18 +24,16 @@ const EXPECTED_TABLES = [
 // 中文注释：单 suite 执行上限毫秒（180 秒，超时 exit 4）。
 const SUITE_TIMEOUT_MS = 180000;
 // 中文注释：允许的 group 枚举（含任务流全部层级）。
-const ALLOWED_GROUPS = ['unit', 'integration', 'tooling', 'static'];
+const ALLOWED_GROUPS = ['unit', 'integration', 'tooling'];
 // 中文注释：unit 禁止导入 lib/db 的静态扫描正则。
 const LIB_DB_IMPORT_RE = /from\s+['"].*lib\/db['"]|require\(['"].*lib\/db['"]\)/;
 
-// 中文注释：套件注册表（53 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit/static 与无库 tooling 元测试为 false）。
+// 中文注释：套件注册表（49 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit 与无库 tooling 元测试为 false）。
 // 中文注释：meta-suite 策略——runner 自身测试（runner/catalog/ci 三个 tooling 元测试）以 needs_db=false 的叶子套件登记进 tooling 组，
 // 它们只做 --list 只读查询 / 沙箱 catalog 校验 / 文件结构断言，从不触发套件执行与建库，故无自指递归（由 runner-group-split 用例⑧测试证明）；
 // 禁止用 checker 硬编码目录排除来掩盖测试。
 const SUITES = [
     { id: 'session-roundtrip', path: './tests/unit/identity-session/session-roundtrip.unit.test.ts', group: 'unit', needs_db: false },
-    { id: 'procedure-source-locks', path: './tests/static/procedure-source-locks.static.test.ts', group: 'static', needs_db: false },
-    { id: 'batch-source-locks', path: './tests/static/batch-source-locks.static.test.ts', group: 'static', needs_db: false },
     { id: 'identity-procedure-matrix', path: './tests/integration/identity-session/identity-procedure-matrix.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'guest-cookie-authorization', path: './tests/integration/identity-session/guest-cookie-authorization.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'agent-summarize-authorization', path: './tests/integration/identity-session/agent-summarize-authorization.integration.test.ts', group: 'integration', needs_db: true },
@@ -57,7 +55,6 @@ const SUITES = [
     { id: 'e2e-stream-observer', path: './tests/tooling/observer/e2e-stream-observer.tooling.test.ts', group: 'tooling', needs_db: true },
     { id: 'toast-terminal-priority', path: './tests/unit/creation-chat/toast-terminal-priority.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'audio-ended-guard', path: './tests/unit/playback/audio-ended-guard.unit.test.ts', group: 'unit', needs_db: false },
-    { id: 'audio-ended-guard-wiring', path: './tests/static/audio-ended-guard-wiring.static.test.ts', group: 'static', needs_db: false },
     { id: 'onboarding-storage', path: './tests/unit/creation-chat/onboarding-storage.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'reject-second-submit-while-streaming', path: './tests/integration/creation-chat/reject-second-submit-while-streaming.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'budget-exhaustion', path: './tests/unit/playback/budget-exhaustion.unit.test.ts', group: 'unit', needs_db: false },
@@ -69,7 +66,6 @@ const SUITES = [
     { id: 'optimistic-rollback', path: './tests/unit/persistence-config/optimistic-rollback.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'logout-playback-reset', path: './tests/integration/identity-session/logout-playback-reset.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'explicit-play-budget', path: './tests/integration/playback/explicit-play-budget.integration.test.ts', group: 'integration', needs_db: true },
-    { id: 'conversation-write-wiring', path: './tests/static/conversation-write-wiring.static.test.ts', group: 'static', needs_db: false },
     { id: 'preload-context-selection', path: './tests/unit/creation-chat/preload-context-selection.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'keepalive-dedup', path: './tests/integration/persistence-config/keepalive-dedup.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'pending-intent-ui', path: './tests/unit/creation-chat/pending-intent-ui.unit.test.ts', group: 'unit', needs_db: false },

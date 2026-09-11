@@ -41,6 +41,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: npx prisma generate
+
       - name: Static check
         run: yarn test:static
 
@@ -85,6 +88,9 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: npx prisma generate
 
       - name: Install Playwright browsers (chromium + webkit)
         run: npx playwright install --with-deps chromium webkit

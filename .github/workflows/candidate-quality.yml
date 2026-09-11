@@ -36,6 +36,12 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
       - name: Detect tooling-changes (path-filter)
         run: |
           echo "检测 tooling 敏感路径（path-filter 步骤级阻断语义，GitHub paths 仅触发过滤故此处步骤级阻断）…"

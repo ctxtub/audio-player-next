@@ -65,6 +65,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: npx prisma generate
+
       - name: Detect tooling-changes (path-filter)
         run: |
           echo "检测 tooling 敏感路径（path-filter 步骤级阻断语义）…"
@@ -127,6 +130,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Generate Prisma client
+        run: npx prisma generate
+
       - name: Tier gate (fail-closed)
         run: |
           if [ "${{ github.ref_type }}" = "tag" ]; then
@@ -153,6 +159,9 @@ jobs:
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: npx prisma generate
 
       - name: Install Playwright browsers (chromium + webkit)
         run: npx playwright install --with-deps chromium webkit

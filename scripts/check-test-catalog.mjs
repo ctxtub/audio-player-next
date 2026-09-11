@@ -298,7 +298,7 @@ function isNonEmptyString(v) {
 }
 
 /**
- * 手写 schema 合法性校验（与 JSON Schema 同口径，错误信息指明原因）。
+ * 手写 catalog 结构合法性校验（错误信息指明原因）。
  * @param catalog 解析后 catalog 对象
  * @returns 错误列表（空即通过）
  */

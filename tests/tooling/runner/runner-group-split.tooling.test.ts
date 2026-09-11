@@ -7,7 +7,7 @@ import path from 'node:path';
  * 按测试类型拆分执行器契约测试（任务2，Tooling；Fix 1 闭环重写）。
  *
  * meta-suite 执行策略（显式设计，非排除掩盖）：
- * runner 自身三元测试（本文件 + catalog-checker + candidate-quality-workflow）
+ * runner 自身三元测试（本文件 + catalog-checker + delivery/auto-delivery）
  * 以 needs_db=false 的叶子套件登记进 tooling 组。它们只做 `--list` 只读查询、
  * 沙箱 catalog 校验、文件结构断言，从不触发套件执行与建库，故无自指递归；
  * 用例⑧以静态规则 + 自宿主运行双重证明该性质。
@@ -35,8 +35,8 @@ const knownToolingSuiteId: string = 'runner-database-path-safety';
 // 中文注释：已知 tooling 套件路径后缀（注册表 path 断言用）。
 const knownToolingPathSuffix: string = 'tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts';
 // 中文注释：元测试 suite ID（meta-suite 策略主体，needs_db 必须为 false）。
-// 2026-09-11：candidate-quality-workflow 随 GitHub Actions 一并删除，故元测试集缩为两个。
-const metaSuiteIds: string[] = ['runner-group-split', 'catalog-checker'];
+// 2026-09-11：main 自动交付链恢复，delivery/auto-delivery 为新的只读文件结构元测试，故元测试集为三个。
+const metaSuiteIds: string[] = ['runner-group-split', 'catalog-checker', 'auto-delivery'];
 // 中文注释：磁盘扫描排除前缀（与 scripts/check-test-catalog.mjs 同口径：支撑实现与 Playwright 浏览器域非 runner 可执行）。
 const diskExcludePrefixes: string[] = ['tests/support/', 'tests/system/'];
 // 中文注释：层级后缀剥离正则（与 scripts/test-database-path-safety.mjs 同口径）。

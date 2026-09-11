@@ -1,0 +1,270 @@
+# 自动交付链（全仓唯一 workflow，用户决策 2026-09-11 现行政策）。
+#
+# 触发：仅 main push。无 pull_request / schedule / tag / workflow_dispatch——
+# 多入口会产生可并发的第二条链，与“恰好一条串行链”矛盾，故全部不设。
+# 失败重跑用 GitHub Re-run；重部署同提交用空提交 push，保证每次交付都过完整 quality 门。
+#
+# 链：quality（fail-closed）→ publish（GHCR 双 tag）→ deploy（SSH）→ notify（Bark，always）。
+# 标签：单次构建同时推送 sha-<short>（不可变主标签）与 main（生产追踪移动指针），
+# 同一 digest，永不推送 latest 浮动标签（守卫见 tests/tooling/delivery/）。
+# Bark 语义 warn-only：通知传输失败只记 warning，不翻转交付结论（见 notify job 注释与 spec §6）。
+# Staleness：deploy 前确认待部署提交仍是 main 头部，否则绿退跳过（见 deploy job 注释与 spec §7）。
+name: Auto Delivery (main)
+
+'on':
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+concurrency:
+  group: auto-delivery-main
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Quality Gate (fail-closed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-11 supply-chain-pin（API 已验真）
+
+      - name: Set up Node.js
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0 2026-09-11 supply-chain-pin（API 已验真）
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Verify action pin SHAs (supply chain, fail-closed)
+        run: node scripts/verify-action-pins.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Static check
+        run: yarn test:static
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Generate Next.js type definitions
+        run: npx next typegen
+
+      - name: Typecheck
+        run: yarn tsc --noEmit --incremental false
+
+      - name: L1 unit tests
+        run: yarn test:unit
+
+      - name: L2 integration tests
+        run: yarn test:integration
+
+      # 中文注释：无条件全量跑 test:tooling，不做 path-filter 抽查——交付链结论必须与守卫测试结论一致，
+      # “未命中 tooling 路径就跳过”是旧链弱化，本链不接受。
+      - name: Tooling guard tests
+        run: yarn test:tooling
+
+      - name: Build
+        run: yarn build
+
+  publish:
+    name: Build and push image to GHCR
+    needs: [quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-11 supply-chain-pin（API 已验真）
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0 2026-09-11 supply-chain-pin（API 已验真）
+
+      - name: Login to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0 2026-09-11 supply-chain-pin（API 已验真）
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
+
+      # 中文注释：main push 下 ref_name=main，脚本单次构建推送 main + sha-<short> 同一 digest；
+      # 脚本内有 latest 字面守卫，永不产出 latest 浮动标签。
+      - name: Push immutable image via script (main tag + sha tag, never latest)
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_REF_TYPE: ${{ github.ref_type }}
+        run: |
+          chmod +x scripts/push-ghcr.sh
+          echo "sha=${{ github.sha }} ref=${{ github.ref_name }}"
+          ./scripts/push-ghcr.sh "${{ github.ref_name }}"
+
+  deploy:
+    name: Deploy to production over SSH
+    needs: [publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-11 supply-chain-pin（API 已验真）
+        with:
+          fetch-depth: 0
+
+      # 中文注释：secret 缺失门（fail-closed）。任一必填为空即 exit 1，并给出
+      # “缺哪个 secret、在哪配、配完如何重跑”三段可照做报错；绝不静默成功。
+      # 只用 secret 名，不读不打印任何值（GitHub 对映射进 env 的 secret 自动脱敏，
+      # 本步骤禁 echo 变量值、禁 set -x）。
+      - name: Check deploy secrets present (fail-closed)
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_COMPOSE_DIR: ${{ secrets.DEPLOY_COMPOSE_DIR }}
+          DEPLOY_SERVICE: ${{ secrets.DEPLOY_SERVICE }}
+        run: |
+          MISSING=""
+          [ -n "${DEPLOY_SSH_KEY}" ] || MISSING="${MISSING} DEPLOY_SSH_KEY"
+          [ -n "${DEPLOY_KNOWN_HOSTS}" ] || MISSING="${MISSING} DEPLOY_KNOWN_HOSTS"
+          [ -n "${DEPLOY_HOST}" ] || MISSING="${MISSING} DEPLOY_HOST"
+          [ -n "${DEPLOY_USER}" ] || MISSING="${MISSING} DEPLOY_USER"
+          [ -n "${DEPLOY_COMPOSE_DIR}" ] || MISSING="${MISSING} DEPLOY_COMPOSE_DIR"
+          [ -n "${DEPLOY_SERVICE}" ] || MISSING="${MISSING} DEPLOY_SERVICE"
+          if [ -n "${MISSING}" ]; then
+            echo "RED: 部署 secret 未配置:${MISSING}"
+            echo "请按以下步骤补齐后重跑（空提交 push 触发新链：git commit --allow-empty -m 'chore: retrigger delivery' && git push origin main）："
+            echo "1. 打开仓库 Settings → Secrets and variables → Actions → New repository secret；"
+            echo "2. 逐个新建上述同名 secret（SSH 私钥填 DEPLOY_SSH_KEY；ssh-keyscan 主机行填 DEPLOY_KNOWN_HOSTS；主机/用户/compose 目录/service 名按生产事实填）；"
+            echo "3. 可选 DEPLOY_PORT（默认 22，不配即用默认）。"
+            exit 1
+          fi
+          echo "deploy secrets present（仅校验非空，未打印任何值）。"
+
+      # 中文注释：staleness 守卫——过期提交不得覆盖新部署。待部署提交不是 main 头部
+      # 即 stale=true，后续 SSH/健康步骤全部跳过，本 job 绿退并显式说明（skip 不是 fail，
+      # 旧 run 变红会误导值班）。只有 main 头部的那次运行会真正 SSH。
+      - name: Check staleness (skip when superseded)
+        id: stale
+        run: |
+          git fetch origin main --quiet
+          HEAD_NOW="$(git rev-parse origin/main)"
+          SHORT_NOW="$(echo "${HEAD_NOW}" | cut -c1-7)"
+          SHORT_MINE="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          if [ "${HEAD_NOW}" != "${GITHUB_SHA}" ]; then
+            echo "stale=true" >> "${GITHUB_OUTPUT}"
+            echo "STALE: 待部署 ${SHORT_MINE} 已不是 main 头部（头部=${SHORT_NOW}），跳过本次部署，后续新链会部署头部版本。"
+          else
+            echo "stale=false" >> "${GITHUB_OUTPUT}"
+            echo "FRESH: 待部署 ${SHORT_MINE} 仍是 main 头部，继续部署。"
+          fi
+
+      # 中文注释：隔离的部署步骤（本 job 唯一的对外写操作）。传输=系统 ssh，
+      # 不引入第三方 ssh action。私钥落临时文件 chmod 600，结束即删；
+      # StrictHostKeyChecking=yes + DEPLOY_KNOWN_HOSTS 防中间人；禁 set -x、禁 echo secret。
+      # 幂等：同 SHA 重跑 = pull 无新层 + up -d 无重建 + 健康通过。
+      # 失败穿透：ssh 远端脚本非零即本步骤非零（fail-closed）。
+      - name: Pull, restart and health-check over SSH (isolated)
+        if: steps.stale.outputs.stale != 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_COMPOSE_DIR: ${{ secrets.DEPLOY_COMPOSE_DIR }}
+          DEPLOY_SERVICE: ${{ secrets.DEPLOY_SERVICE }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          set -euo pipefail
+          PORT="${DEPLOY_PORT:-22}"
+          SHORT_SHA="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER}/audio-player-next"
+          KEY_FILE="$(mktemp)"
+          KNOWN_FILE="$(mktemp)"
+          cleanup() { rm -f "${KEY_FILE}" "${KNOWN_FILE}"; }
+          trap cleanup EXIT
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > "${KEY_FILE}"
+          chmod 600 "${KEY_FILE}"
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${KNOWN_FILE}"
+          chmod 600 "${KNOWN_FILE}"
+          ssh -i "${KEY_FILE}" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${KNOWN_FILE}" \
+            -o ConnectTimeout=15 -p "${PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "IMAGE='${IMAGE}' TAG='sha-${SHORT_SHA}' DIR='${DEPLOY_COMPOSE_DIR}' SVC='${DEPLOY_SERVICE}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "${DIR}"
+          FILE=""
+          for f in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
+            if [ -f "${f}" ]; then FILE="${f}"; break; fi
+          done
+          if [ -z "${FILE}" ]; then
+            echo "RED: ${DIR} 下未找到 compose 文件（docker-compose.yml/yaml、compose.yml/yaml 均无）。"
+            exit 1
+          fi
+          # 前置：生产 compose 必须引用 main 追踪标签；仍引用 latest 浮动标签则拒部署。
+          if ! grep -F "image:" "${FILE}" | grep -Fq "${IMAGE}:main"; then
+            echo "RED: ${FILE} 未引用 ${IMAGE}:main。"
+            echo "一次性运维前置：把该 service 的 image 改为 ${IMAGE}:main 后重跑（空提交 push 触发新链）。"
+            exit 1
+          fi
+          docker compose -f "${FILE}" pull "${SVC}"
+          docker compose -f "${FILE}" up -d "${SVC}"
+          OK="0"
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 10 "http://127.0.0.1:38080/" >/dev/null 2>&1; then OK="1"; break; fi
+            sleep 10
+          done
+          if [ "${OK}" != "1" ]; then
+            echo "RED: 健康检查失败（http://127.0.0.1:38080/ 120 秒内未 200），近 50 行日志如下："
+            docker compose -f "${FILE}" logs --tail=50 "${SVC}" || true
+            exit 1
+          fi
+          docker compose -f "${FILE}" ps "${SVC}"
+          docker compose -f "${FILE}" images "${SVC}" || true
+          echo "DEPLOY OK: ${IMAGE}:${TAG} 已上线并通过健康检查。"
+          REMOTE
+          echo "SSH deploy step exit=$? sha=${SHORT_SHA}"
+
+  notify:
+    name: Bark notification (always)
+    needs: [quality, publish, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      # 中文注释：Bark 语义 warn-only（已选定，见 spec §6）：curl 失败只记 ::warning::，
+      # 不翻转交付结论——通知是可观察性旁路，Bark 抖动不得把成功部署标红；
+      # 失败标题已尽力送出，warning 注解保证可见。无 BARK_WEBHOOK 则跳过提示，exit 0。
+      - name: Send Bark notification (warn-only transport)
+        env:
+          BARK_WEBHOOK: ${{ secrets.BARK_WEBHOOK }}
+        run: |
+          if [ -z "${BARK_WEBHOOK}" ]; then
+            echo "BARK_WEBHOOK 未配置，跳过 Bark 通知（去仓库 Settings → Secrets and variables → Actions 新建同名 secret 后续链即恢复通知）。"
+            exit 0
+          fi
+          STATUS="${{ needs.deploy.result }}"
+          if [ "${STATUS}" = "success" ]; then
+            MESSAGE_TITLE="生产部署 推送成功"
+          else
+            MESSAGE_TITLE="生产部署 推送失败"
+          fi
+          REPO_NAME=$(basename "${GITHUB_REPOSITORY}")
+          COMMIT_ID=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          MESSAGE_BODY="仓库：${REPO_NAME} 分支：${GITHUB_REF_NAME} 提交：${COMMIT_ID} 结论：${STATUS}"
+          ENCODED_TITLE=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_TITLE}")
+          ENCODED_BODY=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_BODY}")
+          curl -fsS --max-time 15 "${BARK_WEBHOOK}/${ENCODED_TITLE}/${ENCODED_BODY}" \
+            || echo "::warning::Bark 通知传输失败（不翻转交付结论）：${MESSAGE_TITLE} ${COMMIT_ID}"

@@ -1,0 +1,37 @@
+{
+  "note": "由 scripts/verify-action-pins.mjs --update 生成；请勿手改。CI 会用真实 GitHub API 复验。",
+  "entries": [
+    {
+      "repo": "actions/checkout",
+      "tag": "v4.2.2",
+      "sha": "11bd71901bbe5b1630ceea73d27597364c9af683",
+      "files": [
+        "auto-delivery.yml"
+      ]
+    },
+    {
+      "repo": "actions/setup-node",
+      "tag": "v4.2.0",
+      "sha": "1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a",
+      "files": [
+        "auto-delivery.yml"
+      ]
+    },
+    {
+      "repo": "docker/login-action",
+      "tag": "v3.3.0",
+      "sha": "9780b0c442fbb1117ed29e0efdff1e18412f7567",
+      "files": [
+        "auto-delivery.yml"
+      ]
+    },
+    {
+      "repo": "docker/setup-buildx-action",
+      "tag": "v3.10.0",
+      "sha": "b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2",
+      "files": [
+        "auto-delivery.yml"
+      ]
+    }
+  ]
+}

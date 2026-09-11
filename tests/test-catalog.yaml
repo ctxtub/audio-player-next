@@ -40,7 +40,7 @@ cases:
       - assertion_id: guest-row-persisted
         display_name_zh: 访客行落库
         surface: db
-    executable_ids: [exec-guest-cookie-authorization, exec-tier-gate, exec-evidence-schema, exec-governance-docs]
+    executable_ids: [exec-guest-cookie-authorization, exec-tier-gate, exec-evidence-schema, exec-governance-docs, exec-auto-delivery]
     fixtures: []
     ci_tier: CANDIDATE
     owner: smoke-baseline
@@ -1541,4 +1541,9 @@ executables:
     display_name_zh: 治理文档对齐自测
     layer: TOOLING
     path: ./tests/tooling/docs/governance-docs.tooling.test.ts
+    case_ids: [guest-identity-cookie-upgrade]
+  - executable_id: exec-auto-delivery
+    display_name_zh: 自动交付链守卫自测
+    layer: TOOLING
+    path: ./tests/tooling/delivery/auto-delivery.tooling.test.ts
     case_ids: [guest-identity-cookie-upgrade]

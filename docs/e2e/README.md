@@ -7,7 +7,6 @@
 ## 前往新入口
 
 - 人工入口：[docs/testing/README.md](../testing/README.md)
-- 风险语义索引：[docs/testing/risks.md](../testing/risks.md)
 - 执行规范：[隔离执行](../testing/execution/isolation.md)、[合成数据与夹具](../testing/execution/fixtures.md)、[证据与留档](../testing/execution/evidence.md)、[verdict 语义](../testing/execution/verdicts.md)、[抖动策略](../testing/execution/flaky-policy.md)、[维护与变更](../testing/execution/maintenance.md)
 
 ## 产品场景目录（语义权威，保留在原目录）

@@ -33,15 +33,14 @@
 - 校验器覆盖：schema 合法、case->executable 引用完整、ACTIVE 非空、executable 路径落盘、registry/磁盘/catalog 三方一致、统计输出。
 - Tooling 独立说明：Tooling（`tests/tooling/**`）为测试基础设施自测套件，独立运行与自测，不属于产品 catalog，不绑定产品 case；Tooling PASS 不等于任何产品 case PASS。
 
-旧编号回查：`E2E-XX-YY`、`H-XX` 只出现在 `legacy_aliases[]` 与 [风险语义索引](./risks.md) 中，不作为新文件名、目录名、主标题或汇报首列。
+旧编号回查：`E2E-XX-YY`、`H-XX` 只作为历史别名保存在 catalog `legacy_aliases[]` 中（可在 `tests/test-catalog.yaml` 内检索），不作为新文件名、目录名、主标题或汇报首列。
 
 ## 3. 文档地图
 
-- [风险语义 slug 索引](./risks.md)——风险语义名为第一身份，旧 `H-XX` 只作历史别名。
 - 执行规范（`execution/`）：
   - [隔离执行](./execution/isolation.md)（由 `docs/e2e/execution-isolation.md` 迁移）
   - [合成数据与夹具](./execution/fixtures.md)（由 `docs/e2e/fixtures.md` 迁移）
-  - [证据与留档](./execution/evidence.md)（新写：`.e2e-results` 结构、manifest 要求、指纹/脱敏）
+  - [证据与留档](./execution/evidence.md)（新写：`.e2e-results` 结构、manifest 要求与脱敏规则）
   - [verdict 语义与退出码](./execution/verdicts.md)（新写：PASS/FAIL/BLOCKED/SKIPPED/FLAKY，exit 0/1/2/3/4）
   - [抖动测试策略](./execution/flaky-policy.md)（新写：产品失败禁自动重试、quarantine 门槛）
   - [维护与变更](./execution/maintenance.md)（由 `docs/e2e/MAINTENANCE.md` 迁移）

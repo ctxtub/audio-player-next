@@ -18,7 +18,7 @@
 
 - `P0` 不得长期 quarantine。
 - 其他 quarantine 必须同时具备 `owner + issue + 截止日`，缺一不可，且不计覆盖。
-- quarantine 期间该 case 的缺口不得计入已实现数，覆盖矩阵如实标出。
+- quarantine 期间该 case 的缺口不得计入已实现数，catalog 如实标出。
 - 到期未解决必须升级为 `BLOCKED` 或完成修复，不得静默延长。
 
 ## 4. 与覆盖的关系

@@ -6,10 +6,10 @@ import path from 'node:path';
  * main 自动交付链 tooling 守卫（2026-09-11 新政策，fail-closed）。
  *
  * 钉死 `.github/workflows/auto-delivery.yml`（全仓唯一 workflow）：
- * ①触发：仅 main push，无 pull_request/schedule/tag/dispatch；
+ * ①触发：仅 main push（allowlist 恰为 {push}，无 pull_request_target/workflow_call/workflow_run/release 等）；
  * ②job 图：quality → publish → deploy → notify(always)；
  * ③concurrency：整链单组串行，不取消旧链；
- * ④permissions：顶层空，job 最小，唯一的 packages:write 在 publish；
+ * ④permissions：顶层空，job 最小，packages:write 只在 publish、packages:read 只在 deploy；
  * ⑤pin：全部第三方 action 为真实完整 SHA + tag 注释，与 lock 一致；
  * ⑥无自动 latest 漂移；
  * ⑦deploy 在 publish 之后，含 staleness 守卫与 secret fail-closed 门；
@@ -74,19 +74,43 @@ function jobSection(workflow: string, jobName: string): string {
 }
 
 /**
- * 用例①：全仓恰好一个 workflow，且触发仅为 main push。
+ * 抽取顶层 on: 触发键（仅 2 空格缩进的一级键；4 空格为 push 配置，忽略）。
+ */
+function triggerKeys(workflow: string): string[] {
+  const lines: string[] = workflow.split('\n');
+  const onIdx: number = lines.findIndex((l) => /^'on':\s*$/.test(l) || /^on:\s*$/.test(l));
+  assert.ok(onIdx >= 0, '缺顶层 on: 段=RED');
+  const keys: string[] = [];
+  for (let i = onIdx + 1; i < lines.length; i++) {
+    const line: string = lines[i];
+    // 顶层键（permissions/jobs/concurrency/name）出现即 on 段结束。
+    if (/^[A-Za-z0-9_'"]+:\s*(#.*)?$/.test(line) && !line.startsWith(' ')) break;
+    if (/^(permissions|jobs|concurrency|name):/.test(line)) break;
+    const m: RegExpExecArray | null = /^  ([A-Za-z0-9_-]+):\s*(#.*)?$/.exec(line);
+    if (m) keys.push(m[1]);
+  }
+  return keys;
+}
+
+/**
+ * 用例①：全仓恰好一个 workflow，且触发仅为 main push（allowlist，防新键绕过）。
  */
 async function caseSingleWorkflowMainPushOnly(): Promise<void> {
   const dir: string = path.join(repoRoot, '.github', 'workflows');
   const files: string[] = fs.readdirSync(dir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml')).sort();
   assert.deepStrictEqual(files, ['auto-delivery.yml'], `全仓必须恰好一条交付链，实际=${JSON.stringify(files)}=RED`);
   const workflow: string = readText(workflowRel);
-  assert.ok(/^\s{2}push:/m.test(workflow), '缺 push 触发=RED');
+  // 触发键 allowlist：顶层集合恰为 {push}（黑名单可被新键 pull_request_target 等绕过，故用 allowlist）。
+  const keys: string[] = triggerKeys(workflow);
+  assert.deepStrictEqual(keys, ['push'], `触发键集合必须恰为 {push}，实际=${JSON.stringify(keys)}=RED`);
+  // 显式否高危多链入口（allowlist 已覆盖，此处逐键点名防回归）。
+  for (const denied of ['pull_request', 'pull_request_target', 'workflow_call', 'workflow_run', 'release', 'schedule', 'workflow_dispatch']) {
+    assert.ok(!keys.includes(denied), `不得存在 ${denied} 触发=RED（第二条链入口）`);
+    assert.ok(!new RegExp(`^  ${denied}:\\s*`, 'm').test(workflow), `不得存在顶层 ${denied}: 段=RED`);
+  }
   assert.ok(workflow.includes('branches:') && workflow.includes('- main'), 'push 必须限定 branches main=RED');
-  assert.ok(!/^\s{2}pull_request:/m.test(workflow), '不得存在 pull_request 触发=RED（第二条链入口）');
-  assert.ok(!workflow.includes('schedule:'), '不得存在 schedule 触发=RED');
-  assert.ok(!workflow.includes('workflow_dispatch:'), '不得存在 workflow_dispatch 触发=RED（交付不需要人工二次点击）');
-  assert.ok(!workflow.includes('tags:'), '不得存在 tag 触发=RED（main push 是唯一入口）');
+  // push 段内禁 tags:（同属 push 键下的第二触发面，allowlist 看不到，需另行点名）。
+  assert.ok(!/^    tags:\s*$/m.test(workflow), 'push 段内不得存在 tags:（tag 是第二入口）=RED');
   console.log('PASS: 用例① 全仓唯一 workflow 且仅 main push 触发');
 }
 
@@ -124,19 +148,24 @@ async function caseConcurrency(): Promise<void> {
 }
 
 /**
- * 用例④：顶层空权限 + job 最小权限，全仓唯一的 packages:write 在 publish。
+ * 用例④：顶层空权限 + job 最小权限，packages 写只在 publish、读只在 deploy。
  */
 async function casePermissions(): Promise<void> {
   const workflow: string = readText(workflowRel);
   assert.ok(/^permissions: \{\}\s*$/m.test(workflow), '顶层必须 permissions: {}=RED');
   assert.strictEqual((workflow.match(/packages:\s*write/g) || []).length, 1, 'packages:write 必须恰出现一次=RED');
   assert.ok(/packages:\s*write/.test(jobSection(workflow, 'publish')), '唯一的 packages:write 必须在 publish=RED');
+  // deploy 回退 token（GHCR_TOKEN || GITHUB_TOKEN）拉私有包需 packages:read，否则 login 成功但 pull 鉴权失败。
+  assert.ok(/packages:\s*read/.test(jobSection(workflow, 'deploy')), 'deploy 须 packages: read（私有包 pull 鉴权）=RED');
+  assert.strictEqual((workflow.match(/packages:\s*read/g) || []).length, 1, 'packages:read 必须恰出现一次（deploy）=RED');
+  assert.ok(!/packages:/.test(jobSection(workflow, 'quality')), 'quality 不得含 packages 域（只需 contents:read）=RED');
+  assert.ok(!/packages:/.test(jobSection(workflow, 'notify')), 'notify 不得含 packages 域（须空权限）=RED');
   assert.ok(/contents:\s*read/.test(jobSection(workflow, 'quality')), 'quality 须 contents: read=RED');
   assert.ok(/contents:\s*read/.test(jobSection(workflow, 'deploy')), 'deploy 须 contents: read（staleness 需 git 数据）=RED');
   assert.ok(/^ {4}permissions: \{\}\s*$/m.test(jobSection(workflow, 'notify')), 'notify 须 job 级 permissions: {}=RED');
   assert.ok(!workflow.includes('write-all'), '不得出现 write-all=RED');
   assert.ok(!workflow.includes('contents: write'), '不得出现 contents: write=RED');
-  console.log('PASS: 用例④ 最小权限 + 唯一 packages:write 在 publish');
+  console.log('PASS: 用例④ 最小权限 + packages 写只在 publish、读只在 deploy');
 }
 
 /**
@@ -192,8 +221,14 @@ async function caseNoLatestDrift(): Promise<void> {
   assert.ok(script.includes('add_tag "sha-${SHORT_SHA}"'), '脚本须产出不可变 sha-<short> 标签=RED');
   assert.ok(!script.includes('"main"'), 'push-ghcr.sh 不得被加 main 标签逻辑=RED（脚本契约不动）');
   // 中文注释：publish 必须无参数调用（空 tag = sha-only 既有语义），不得传 ref 名造移动标签。
+  // 行级正则：字面传参（./scripts/push-ghcr.sh main）会绕过旧的子串守卫并真的推出 main 浮动标签，故必须逐行动词断言。
   const publish: string = jobSection(workflow, 'publish');
-  assert.ok(publish.includes('./scripts/push-ghcr.sh'), 'publish 须经 push-ghcr.sh 发布=RED');
+  const publishCodeLines: string[] = publish.split('\n').filter((l) => !l.trimStart().startsWith('#'));
+  const invocations: string[] = publishCodeLines.filter((l) => l.trimStart().startsWith('./scripts/push-ghcr.sh'));
+  assert.ok(invocations.length >= 1, 'publish 须经 push-ghcr.sh 发布=RED');
+  for (const line of invocations) {
+    assert.ok(/^\s*\.\/scripts\/push-ghcr\.sh\s*$/.test(line), `publish 必须无参调用 push-ghcr.sh（空 tag=sha-only），违规行=${line.trim()}=RED`);
+  }
   assert.ok(!publish.includes('github.ref_name'), 'publish 不得传 ref 名（会造移动标签）=RED');
   console.log('PASS: 用例⑥ 只发 sha 不可变标签（无 main/latest 移动标签）');
 }
@@ -211,6 +246,15 @@ async function caseDeployGuards(): Promise<void> {
   }
   assert.ok(deploy.includes("steps.stale.outputs.stale != 'true'"), 'SSH 步骤必须以 staleness 输出为门=RED');
   assert.ok(deploy.includes('STALE'), '过期跳过必须显式说明=RED');
+  // 硬化：保留锚子串但门恒真（if: … != 'true' || true）须判红；只查 if: 代码行，不误伤 do_rollback || true 等合法或。
+  const deployIfLines: string[] = deploy
+    .split('\n')
+    .filter((l) => !l.trimStart().startsWith('#'))
+    .filter((l) => l.trimStart().startsWith('if:'));
+  assert.ok(deployIfLines.length >= 1, 'deploy 须有 if: 门=RED');
+  for (const line of deployIfLines) {
+    assert.ok(!line.includes('||'), `stale 门禁止 ||（恒真绕过）违规行=${line.trim()}=RED`);
+  }
   // 中文注释：部署 secret 名齐全（只断言名）。
   for (const name of requiredDeploySecrets) {
     assert.ok(deploy.includes(`secrets.${name}`), `deploy 缺 secret 名 ${name}=RED`);
@@ -220,12 +264,36 @@ async function caseDeployGuards(): Promise<void> {
   assert.ok(deploy.includes('up -d'), 'deploy 须 up -d=RED');
   assert.ok(deploy.includes('38080'), 'deploy 健康校验须命中生产端口事实 38080=RED');
   assert.ok(deploy.includes('exit 1'), 'deploy 须有 fail-closed 退出=RED');
+  // 硬化：exit 1 || true 把 fail-closed 中和，保留锚子串但永不红，须判红。
+  // 只否 exit 1 ||，不否 do_rollback || true / awk … || true 等合法或。
+  // 无值泄露与 sed -i 检查只查代码行（注释行会讨论被禁写法，需排除），下文复用 deployCode。
+  const deployCode: string = deploy.split('\n').filter((l) => !l.trimStart().startsWith('#')).join('\n');
+  assert.ok(!deployCode.includes('exit 1 ||'), 'deploy 禁止 exit 1 ||（中和 fail-closed）=RED');
+  // R1：probe 禁 -f（-f 在 4xx/5xx 下先打印码再 exit 22，|| echo 会拼出 500000）；超时 -w 本身输出 000，禁 || echo。
+  // 只查代码行（注释行会讨论被禁写法，需排除；栽赃注释不得算数）。
+  assert.ok(!deployCode.includes('curl -fsS'), 'probe 禁 -f（会把 500 拼成 500000）=RED');
+  assert.ok(deployCode.includes('curl -sS --max-time 10'), 'probe 须 curl -sS 取真实码=RED');
+  assert.ok(!deployCode.includes("|| echo '000'"), 'probe 禁 || echo 000（超时 -w 已输出 000，会拼成 000000）=RED');
+  // R3：token 禁止进 ssh argv（ps 可见）；须经 stdin 首行 + 远端 read（只查代码行）。
+  assert.ok(!deployCode.includes("GHCR_TOKEN='${GHCR_DEPLOY_TOKEN}'"), 'GHCR token 禁止进 ssh argv（单引号）=RED');
+  assert.ok(!deployCode.includes('GHCR_TOKEN="${GHCR_DEPLOY_TOKEN}"'), 'GHCR token 禁止进 ssh argv（双引号）=RED');
+  assert.ok(deployCode.includes('printf \'%s\\n\' "${GHCR_DEPLOY_TOKEN}"'), 'token 须经 stdin 首行传递（printf 内建）=RED');
+  assert.ok(deployCode.includes('IFS= read -r GHCR_TOKEN'), '远端须 read -r 消费 stdin 首行 token=RED');
   // 中文注释：备份 + 原子替换（禁 sed -i 就地改）。
   assert.ok(deploy.includes('.bak.'), 'deploy 须带时间戳备份 compose=RED');
   assert.ok(deploy.includes('cp "${FILE}" "${BACKUP}"') || deploy.includes('cp "${BACKUP}" "${FILE}"'), 'deploy 须 cp 备份/还原=RED');
   assert.ok(deploy.includes('mv "${TMP_NEW}" "${FILE}"'), 'deploy 须经临时文件 mv 原子替换（禁 sed -i）=RED');
+  // R2：临时文件须与目标同目录，否则跨 FS 是拷贝+删除而非原子重命名（只查代码行）。
+  assert.ok(deployCode.includes('mktemp -p "$(dirname "${FILE}")"'), '临时文件须 mktemp -p 与目标同目录=RED');
+  assert.ok(!deployCode.includes('TMP_NEW="$(mktemp)"'), '禁止 /tmp 落临时文件（跨 FS 非原子）=RED');
+  // 有界保留：远端每次非幂等部署留备份，须只留最近 5 个防堆积（只查代码行）。
+  assert.ok(deployCode.includes('tail -n +6'), '备份须有界保留（只留最近 5 个）=RED');
+  // 凭据隔离：docker login 不得污染宿主 /root/.docker/config.json，须临时 DOCKER_CONFIG + 清理（只查代码行）。
+  assert.ok(deployCode.includes('DOCKER_CONFIG="$(mktemp -d)"'), '须用临时 DOCKER_CONFIG 承接 login=RED');
+  assert.ok(deployCode.includes('rm -rf "${DOCKER_CONFIG}"'), '临时 DOCKER_CONFIG 须清理=RED');
+  // 单副本假设：ps -q 多行会使 inspect 多行恒不等误判回滚，须取首行（只查代码行）。
+  assert.ok(deployCode.includes('ps -q "${SVC}" | head -n 1'), 'ps -q 须取首行防多副本误判=RED');
   // 中文注释：无值泄露与 sed -i 检查只查代码行（注释行会讨论被禁写法，需排除）。
-  const deployCode: string = deploy.split('\n').filter((l) => !l.trimStart().startsWith('#')).join('\n');
   assert.ok(!deployCode.includes('sed -i'), 'deploy 禁止 sed -i 就地改生产文件=RED');
   // 中文注释：替换后先校验再拉取。
   assert.ok(deploy.includes('config -q'), 'deploy 替换后须 compose config -q 校验=RED');
@@ -245,10 +313,12 @@ async function caseDeployGuards(): Promise<void> {
   assert.ok(deploy.includes('回滚点'), 'deploy 须打印回滚点=RED');
   // 中文注释：幂等——同 SHA 跳过替换，直接校验。
   assert.ok(deploy.includes('IDEMPOTENT'), 'deploy 须有同 SHA no-op 幂等分支=RED');
-  // 中文注释：无值泄露——禁 echo secret 变量、禁 set -x（deployCode 已在上文定义，只查代码行）。
-  assert.ok(!deployCode.includes('echo "${DEPLOY_') && !deployCode.includes("echo '${DEPLOY_"), 'deploy 禁止 echo secret 变量值=RED');
-  assert.ok(!deployCode.includes('echo "${GHCR_') && !deployCode.includes("echo '${GHCR_"), 'deploy 禁止 echo GHCR token 变量值=RED');
+  // 中文注释：无值泄露——禁 echo secret 变量（无论是否加引号，echo ${VAR} 同样泄露）、禁 set -x/xtrace、禁 env|sort。
+  assert.ok(!/echo[^#\n]*\$\{?DEPLOY_/.test(deployCode), 'deploy 禁止 echo secret 变量值（无论是否加引号）=RED');
+  assert.ok(!/echo[^#\n]*\$\{?GHCR_/.test(deployCode), 'deploy 禁止 echo GHCR token 变量值（无论是否加引号）=RED');
   assert.ok(!deployCode.includes('set -x'), 'deploy 禁止 set -x（会泄露 secret）=RED');
+  assert.ok(!deployCode.includes('xtrace'), 'deploy 禁止 set -o xtrace（会泄露 secret）=RED');
+  assert.ok(!/env\s*\|\s*sort/.test(deployCode), 'deploy 禁止 env|sort（会泄露 secret）=RED');
   console.log('PASS: 用例⑦ deploy 隔离 + staleness + fail-closed + 备份/原子替换/健康/回滚/产物一致');
 }
 
@@ -258,9 +328,12 @@ async function caseDeployGuards(): Promise<void> {
 async function caseBarkNotify(): Promise<void> {
   const workflow: string = readText(workflowRel);
   const notify: string = jobSection(workflow, 'notify');
+  // 只查代码行：注释行栽赃 ::warning:: 不得算数；|| exit 1 会把 warn-only 翻成 fail，不得出现。
+  const notifyCode: string = notify.split('\n').filter((l) => !l.trimStart().startsWith('#')).join('\n');
   assert.ok(notify.includes('BARK_WEBHOOK'), 'notify 须用 BARK_WEBHOOK=RED');
   assert.ok(notify.includes('needs.deploy.result'), 'notify 标题须按 deploy 结论区分成功/失败=RED');
-  assert.ok(notify.includes('::warning::'), 'Bark 传输失败须记 ::warning::（warn-only，不翻转结论）=RED');
+  assert.ok(notifyCode.includes('::warning::'), 'Bark 传输失败须记 ::warning::（代码行，非注释，warn-only 不翻转结论）=RED');
+  assert.ok(!notifyCode.includes('|| exit 1'), 'notify 禁止 || exit 1（翻转 warn-only）=RED');
   assert.ok(!workflow.includes('${{ secrets.BARK_WEBHOOK }}/'), 'BARK_WEBHOOK 禁止直接拼进 run 字面（须 env 映射）=RED');
   console.log('PASS: 用例⑧ Bark 成功/失败通知 + warn-only + secret 卫生');
 }

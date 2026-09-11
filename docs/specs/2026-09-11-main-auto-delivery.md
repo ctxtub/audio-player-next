@@ -103,8 +103,11 @@ quality → publish → deploy → notify(always)
 | `DEPLOY_PORT` | 可选，默认 `22` |
 
 注：SSH 步骤另把 `secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN` 映射为
-`GHCR_DEPLOY_TOKEN` 传给远端先登录再拉（token 经 `--password-stdin`，
-不落日志）；宿主 GHCR 凭据寿命未知（UNPROVEN），绝不依赖宿主既有凭据。
+`GHCR_DEPLOY_TOKEN` 传给远端先登录再拉：runner 侧经 stdin 首行传递
+（`printf '%s\n'` 为 shell 内建，不进 `ssh` argv，`ps` 不可见；远端
+`IFS= read -r GHCR_TOKEN; export GHCR_TOKEN` 消费首行后 `bash -s` 读剩余脚本），
+远端再经 `--password-stdin` 进 `docker login`，不落日志；
+宿主 GHCR 凭据寿命未知（UNPROVEN），绝不依赖宿主既有凭据。
 
 失败语义（全部 fail-closed，静默成功是 bug）：
 
@@ -119,17 +122,24 @@ quality → publish → deploy → notify(always)
    （`{{.Config.Image}}`）。
 5. 备份 + 原子替换：compose 备份为同目录时间戳副本
    （`<file>.bak.<UTC时间戳>`）；只替换目标 service 的 `image:` 值为
-   `${IMAGE}:sha-${SHORT_SHA}`，写入临时文件后 `mv` 原子替换，
-   禁 `sed -i` 就地改。
+   `${IMAGE}:sha-${SHORT_SHA}`，临时文件须 `mktemp -p "$(dirname "${FILE}")"`
+   与目标同目录（跨文件系统 `mv` 是拷贝＋删除而非原子重命名），写入后 `mv`
+   原子替换，禁 `sed -i` 就地改。有界保留：只留最近 5 个备份
+  （`ls -1t <file>.bak.* | tail -n +6 | xargs -r rm -f`），防无限堆积。
 6. 替换后先校验再拉取：`docker compose config -q` 必须成功；
    失败即还原备份并 `exit 1`。
-7. 先 `docker login ghcr.io`（注入的 token 经 `--password-stdin`，
-   不落日志；宿主 GHCR 凭据寿命未知=UNPROVEN，不依赖宿主既有凭据），
+7. 先 `docker login ghcr.io`（临时 `DOCKER_CONFIG="$(mktemp -d)"` 承接登录，
+   `trap 'rm -rf "${DOCKER_CONFIG}"' EXIT` 结束即删，不写宿主
+   `/root/.docker/config.json`、不污染宿主持久凭据库；注入的 token 经
+   `--password-stdin`，不落日志；宿主 GHCR 凭据寿命未知=UNPROVEN，不依赖宿主既有凭据），
    再 `docker compose pull <service> && docker compose up -d <service>`；
    任一失败即 `exit 1`（`set -euo pipefail` + SSH 非零穿透：
    `ssh … bash -s` 的退出码即远端脚本退出码）。
 8. 主动健康探测（生产容器无 Docker healthcheck，这是唯一真实探针）：
-   `curl -fsS --max-time 10 -o /dev/null -w '%{http_code}' http://127.0.0.1:38080/`，
+   `curl -sS --max-time 10 -o /dev/null -w '%{http_code}' http://127.0.0.1:38080/`，
+   禁 `-f`（`-f` 在 4xx/5xx 下先打印码再 exit 22，会与 fallback 拼出 `500000`；
+   去掉后 4xx/5xx 由 `-w` 直出真实码并 exit 0，交断言处理；超时/连不上 `-w`
+   本身输出 `000`，故 fallback 用 `|| true` 而不用 `|| echo '000'`，否则拼出 `000000`），
    有界重试（12 次 × 10 秒），必须实际断言 200 并打印状态码。
 9. 健康失败必须自动回滚：还原备份 → `up -d` → 再探测一次 →
    打印回滚结果 → 仍然 `exit 1`（回滚成功不等于交付成功）；
@@ -138,9 +148,16 @@ quality → publish → deploy → notify(always)
 10. 产物一致性：`up -d` 后读取运行中容器的 image ID，与本次
     `sha-${SHORT_SHA}` 对应本地 image ID 比对，一致才算通过；
     不一致按失败处理（含回滚分支）。不得只凭 `pull`/`up` 退出码
-    判定生产已更新。
+    判定生产已更新。生产当前单副本；`ps -q` 取首行
+   （`ps -q "${SVC}" | head -n 1`）防 `replicas>1` 时多行误判回滚。
 11. 幂等：同一 SHA 重跑时 image 行已是目标值，跳过备份替换，
     直接做健康与产物一致性校验（no-op 路径）。
+
+副作用边界（deploy 远端）：`docker login` 的凭据只写临时 `DOCKER_CONFIG`
+目录（`mktemp -d`，`trap EXIT` 删除），`pull` 用该临时凭据；宿主
+`/root/.docker/config.json` 不被改写、不残留本次 token。边界：同一宿主上
+的并发外部 `docker` 调用不受本链控制；`trap` 仅保证本脚本退出（成功/失败/
+回滚）时删除临时目录，不清理宿主既有凭据。
 
 ## 6. Bark 通知（成功与失败，warn-only）
 
@@ -180,7 +197,9 @@ quality → publish → deploy → notify(always)
   跳过才是可证明的顺序安全）。
 - 顶层 `permissions: {}`；`quality: contents:read`；
   `publish: contents:read + packages:write`（全仓唯一的 `packages:write`）；
-  `deploy: contents:read`（staleness 需 git 数据，无写需求）；
+  `deploy: contents:read + packages:read`（staleness 需 git 数据；回退 token
+  `GHCR_TOKEN || GITHUB_TOKEN` 拉私有包需 `packages` 域，否则 login 成功但 pull
+  鉴权失败，无写需求）；
   `notify: {}`。
 - 第三方 action 全部固定真实完整 SHA + `# <tag>` 注释，
   由 `scripts/verify-action-pins.mjs` 向 GitHub API 实解析复验
@@ -209,7 +228,7 @@ quality → publish → deploy → notify(always)
    publish 推出 revert 后 content 的镜像，deploy 上线它；即“回滚即一次
    正常交付”，无需特殊通道）。
 2. 镜像坏/上线错版本：生产 compose 同目录有时间戳备份
-   （链每次改写前自动留），手动 `cp <备份> docker-compose.yml &&
+   （链每次非幂等改写前自动留，有界保留只留最近 5 个），手动 `cp <备份> docker-compose.yml &&
    docker compose up -d` 即回滚；或直接把 `image:` 改为上一个绿
    `sha-<short>` 再 `pull + up -d`；不可变 `sha-` 标签永不覆盖，
    旧产物一直在 registry 可取。

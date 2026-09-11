@@ -1,6 +1,7 @@
 # 自动交付链（全仓唯一 workflow，用户决策 2026-09-11 现行政策）。
 #
-# 触发：仅 main push。无 pull_request / schedule / tag / workflow_dispatch——
+# 触发：仅 main push（allowlist 恰为 {push}）。无 pull_request / pull_request_target / schedule /
+# tag / workflow_dispatch / workflow_call / workflow_run / release——
 # 多入口会产生可并发的第二条链，与“恰好一条串行链”矛盾，故全部不设。
 # 失败重跑用 GitHub Re-run；重部署同提交用空提交 push，保证每次交付都过完整 quality 门。
 #
@@ -115,6 +116,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      packages: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-11 supply-chain-pin（API 已验真）
@@ -205,9 +207,10 @@ jobs:
           chmod 600 "${KEY_FILE}"
           printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${KNOWN_FILE}"
           chmod 600 "${KNOWN_FILE}"
-          ssh -i "${KEY_FILE}" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${KNOWN_FILE}" \
-            -o ConnectTimeout=15 -p "${PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "IMAGE='${IMAGE}' TAG='sha-${SHORT_SHA}' DIR='${DEPLOY_COMPOSE_DIR}' SVC='${DEPLOY_SERVICE}' GHCR_USER='${GITHUB_REPOSITORY_OWNER}' GHCR_TOKEN='${GHCR_DEPLOY_TOKEN}' bash -s" <<'REMOTE'
+          # 中文注释：GHCR token 经 stdin 首行传递（printf 为 shell 内建，不进 ssh argv，ps 不可见）；
+          # 远端先 read -r 消费首行并 export，后续 bash -s 从剩余 stdin 读脚本；IMAGE/TAG/DIR/SVC/GHCR_USER
+          # 非秘密可留 argv，GHCR_TOKEN 禁止出现在 ssh 命令行（远端仍经 --password-stdin 进 docker login）。
+          { printf '%s\n' "${GHCR_DEPLOY_TOKEN}"; cat <<'REMOTE'
           set -euo pipefail
           cd "${DIR}"
           FILE=""
@@ -235,8 +238,11 @@ jobs:
             echo "回滚点 目标 service 当前未运行（cold deploy，无运行中产物可比）。"
           fi
           # 主动健康探测：生产容器无 Docker healthcheck，这是唯一真实探针；必须断言 200 并打印状态码。
+          # 注意：curl 禁 -f（-f 会在 4xx/5xx 下 exit 22，导致 -w 已打印的状态码后又追加 fallback，出现 500000；
+          # 去掉 -f 后 4xx/5xx 由 -w 直接输出真实码并 exit 0，交由 [ = 200 ] 断言；连接失败/超时 -w 本身输出 000，
+          # 故 fallback 用 || true（防 set -e），不用 || echo '000'（会把 000 再拼成 000000）。
           probe_once() {
-            _code="$(curl -fsS --max-time 10 -o /dev/null -w '%{http_code}' 'http://127.0.0.1:38080/' 2>/dev/null || echo '000')"
+            _code="$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' 'http://127.0.0.1:38080/' 2>/dev/null || true)"
             echo "${_code}"
             [ "${_code}" = "200" ]
           }
@@ -275,7 +281,10 @@ jobs:
             BACKUP="${FILE}.bak.$(date -u +%Y%m%dT%H%M%SZ)"
             cp "${FILE}" "${BACKUP}"
             echo "已备份：${BACKUP}"
-            TMP_NEW="$(mktemp)"
+            # 有界保留：只留最近 5 个时间戳备份，防无限堆积（见 spec §5/§10）。
+            ls -1t "${FILE}".bak.* 2>/dev/null | tail -n +6 | xargs -r rm -f -- || true
+            # 同目录 mktemp：跨文件系统 mv 是拷贝+删除而非原子重命名，故临时文件必须与目标同目录。
+            TMP_NEW="$(mktemp -p "$(dirname "${FILE}")" .tmp.XXXXXX)"
             if ! awk -v svc="${SVC}" -v img="${TARGET}" '
               /^  [A-Za-z0-9_-]+:/ { in_svc = ($1 == svc ":") }
               in_svc && /^[[:space:]]*image:/ { sub(/image:[ \t]*[^ \t]+/, "image: " img); replaced = 1 }
@@ -297,6 +306,9 @@ jobs:
             echo "compose config 校验通过。"
           fi
           # 先登录再拉：宿主 GHCR 凭据寿命未知（UNPROVEN），不依赖宿主既有凭据；token 经 stdin，不落日志。
+          # 凭据隔离：用临时 DOCKER_CONFIG 目录承接 docker login，不写宿主 /root/.docker/config.json，结束即删。
+          export DOCKER_CONFIG="$(mktemp -d)"
+          trap 'rm -rf "${DOCKER_CONFIG}"' EXIT
           printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
           docker compose -f "${FILE}" pull "${SVC}"
           docker compose -f "${FILE}" up -d "${SVC}"
@@ -310,7 +322,8 @@ jobs:
             exit 1
           fi
           # 产物一致性：运行中容器的 image ID 必须等于本次拉取产物的 image ID；只凭 pull/up 退出码不算数。
-          NEW_CID="$(docker compose -f "${FILE}" ps -q "${SVC}")"
+          # 单副本假设：replicas>1 时 ps -q 输出多行，inspect 多行恒不等会误判回滚，故取首行（生产当前单副本）。
+          NEW_CID="$(docker compose -f "${FILE}" ps -q "${SVC}" | head -n 1)"
           RUN_ID="$(docker inspect --format '{{.Image}}' "${NEW_CID}")"
           LOCAL_ID="$(docker inspect --format '{{.Id}}' "${TARGET}")"
           echo "运行中 imageID=${RUN_ID}"
@@ -327,6 +340,9 @@ jobs:
           docker compose -f "${FILE}" ps "${SVC}"
           echo "DEPLOY OK: ${TARGET} 已上线，健康 200，产物一致。"
           REMOTE
+          } | ssh -i "${KEY_FILE}" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${KNOWN_FILE}" \
+            -o ConnectTimeout=15 -p "${PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "IFS= read -r GHCR_TOKEN; export GHCR_TOKEN; IMAGE='${IMAGE}' TAG='sha-${SHORT_SHA}' DIR='${DEPLOY_COMPOSE_DIR}' SVC='${DEPLOY_SERVICE}' GHCR_USER='${GITHUB_REPOSITORY_OWNER}' bash -s"
           echo "SSH deploy step exit=$? sha=${SHORT_SHA}"
 
   notify:

@@ -317,15 +317,11 @@ export function validateRow(row, catalog = null) {
     if (row.group !== undefined && row.group !== 'tooling') {
       errors.push(`bad-group（tooling-summary 的 group 必须为 tooling，实际=${JSON.stringify(row.group)}）`);
     }
-    if (row.case_id !== undefined && row.case_id !== null) {
+    if (Object.prototype.hasOwnProperty.call(row, 'case_id')) {
       errors.push('tooling-summary-has-product-coverage（tooling-summary 不得包含 case_id）');
     }
-    if (row.case_ids !== undefined) {
-      if (!Array.isArray(row.case_ids)) {
-        errors.push('bad-case_ids（须为数组）');
-      } else if (row.case_ids.length > 0) {
-        errors.push('tooling-summary-has-product-coverage（tooling-summary 不得包含 case_ids）');
-      }
+    if (Object.prototype.hasOwnProperty.call(row, 'case_ids')) {
+      errors.push('tooling-summary-has-product-coverage（tooling-summary 不得包含 case_ids）');
     }
     if (row.reason !== undefined && !isNonEmptyString(row.reason)) {
       errors.push('bad-reason（reason 须为非空字符串）');

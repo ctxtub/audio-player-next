@@ -613,7 +613,23 @@ async function caseToolingSummaryRejectsProductCoverage(): Promise<void> {
         res2.errors.some((e) => e.includes('tooling-summary-has-product-coverage')),
         `应指明 tooling-summary-has-product-coverage，实际=${JSON.stringify(res2.errors)}`,
     );
-    console.log('PASS: Tooling summary 声明产品覆盖被坚决拒收（防伪造 R3）');
+
+    const withCaseIdNull = { ...base, case_id: null };
+    const res3 = v.validateRow(withCaseIdNull, catalog);
+    assert.strictEqual(res3.ok, false, 'tooling-summary 带 case_id: null 应被拒绝');
+    assert.ok(
+        res3.errors.some((e) => e.includes('tooling-summary-has-product-coverage')),
+        `应指明 tooling-summary-has-product-coverage，实际=${JSON.stringify(res3.errors)}`,
+    );
+
+    const withCaseIdsEmpty = { ...base, case_ids: [] };
+    const res4 = v.validateRow(withCaseIdsEmpty, catalog);
+    assert.strictEqual(res4.ok, false, 'tooling-summary 带 case_ids: [] 应被拒绝');
+    assert.ok(
+        res4.errors.some((e) => e.includes('tooling-summary-has-product-coverage')),
+        `应指明 tooling-summary-has-product-coverage，实际=${JSON.stringify(res4.errors)}`,
+    );
+    console.log('PASS: Tooling summary 声明产品覆盖被坚决拒收（防伪造 R3，含 null / [] 字段拒绝）');
 }
 
 /**

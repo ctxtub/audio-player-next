@@ -24,7 +24,7 @@
    旧 `E2E-XX-YY` 编号已退役，仅 `legacy_aliases` 保留作回查，不得作主编号使用，不得新增旧编号。
 2. **单用例规范要素完备性**：
    每份用例规范文件必须具备以下完整要素：
-   - **元数据表格**：`case_id`、所属旅程（`journey_id`）、规范层级、优先级（P0/P1/P2/P3）、生命周期（`lifecycle_status`）、执行绑定（`executable_ids`）、CI 分层（`ci_tier`）。
+   - **元数据表格**：`case_id`、所属旅程（`journey_id`）、规范层级、优先级（P0/P1/P2/P3）、生命周期（`lifecycle_status`）、执行绑定（`executable_ids`）。
    - **用例规格**：
      - 前置条件与数据夹具（使用统一符号标识符如 `{{GUEST_FRESH}}`、`{{E2E_PORT}}`）。
      - 清晰的操作步骤序列。
@@ -56,8 +56,8 @@
 ## 4. 调度治理与终态准入
 
 1. **catalog 驱动调度**：
-   - 自动调度集合以 `tests/test-catalog.yaml` 的 `lifecycle_status`、`executable_ids` 与 `ci_tier` 为准；
-     `MANUAL` case 不进入自动执行队列；`PLANNED`/`BLOCKED` 缺口按 tier 门阻断（见 tier 门规范）。
+   - 自动调度集合以 `tests/test-catalog.yaml` 的 `lifecycle_status` 与 `executable_ids` 为准；
+     `MANUAL` case 不进入自动执行队列。
    - 固定同一目标 SHA 的只读调研与 review 可以并行，但不得修改文件、启动服务或清理进程；
      独立 worktree 只有在显式分配独立 runtime/results 根和所有权后才能并行执行。
 2. **终态门禁与通过项保护**：

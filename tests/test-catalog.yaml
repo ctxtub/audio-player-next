@@ -20,7 +20,6 @@ cases:
         surface: audio
     executable_ids: [exec-l3-guest-cold-start-first-screen]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: smoke-baseline
   - case_id: guest-identity-cookie-upgrade
     display_name_zh: 访客身份创建与凭证升级续签
@@ -40,9 +39,8 @@ cases:
       - assertion_id: guest-row-persisted
         display_name_zh: 访客行落库
         surface: db
-    executable_ids: [exec-guest-cookie-authorization, exec-tier-gate, exec-evidence-schema, exec-governance-docs, exec-auto-delivery]
+    executable_ids: [exec-guest-cookie-authorization, exec-evidence-schema, exec-governance-docs, exec-auto-delivery]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: smoke-baseline
   - case_id: first-story-stream-autoplay
     display_name_zh: 首个故事生成流式渲染与自动播放
@@ -64,7 +62,6 @@ cases:
         surface: audio
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: smoke-baseline
   - case_id: triple-playback-mirror-consistent
     display_name_zh: 三处播放镜像状态一致
@@ -86,7 +83,6 @@ cases:
         surface: audio
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: smoke-baseline
   - case_id: config-init-gate-retry
     display_name_zh: 配置初始化门控与错误屏重试
@@ -108,7 +104,6 @@ cases:
         surface: ui
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: smoke-baseline
   - case_id: anon-guest-route-guard-open-redirect
     display_name_zh: 匿名与访客路由守卫及开放重定向安全
@@ -130,7 +125,6 @@ cases:
         surface: network
     executable_ids: [exec-session-roundtrip]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: smoke-baseline
   - case_id: authed-reverse-guard-from-backjump
     display_name_zh: 已登录反向守卫与来源回跳
@@ -152,7 +146,6 @@ cases:
         surface: network
     executable_ids: [exec-session-codec]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: smoke-baseline
   - case_id: hard-refresh-loses-playback
     display_name_zh: 硬刷新丢失播放
@@ -171,7 +164,6 @@ cases:
         surface: audio
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: smoke-baseline
   - case_id: mobile-viewport-float-overlap
     display_name_zh: 移动端视口浮窗遮挡与开关
@@ -190,7 +182,6 @@ cases:
         surface: ui
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: smoke-baseline
   - case_id: rapid-double-submit-guard
     display_name_zh: 连续快速双发防重
@@ -209,7 +200,6 @@ cases:
         surface: network
     executable_ids: [exec-double-submit-legacy, exec-l3-reject-second-submit-while-streaming]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: interactive-race
   - case_id: streaming-resubmit-mutex
     display_name_zh: 流式生成中再次提交互斥
@@ -228,7 +218,6 @@ cases:
         surface: ui
     executable_ids: [exec-double-submit-legacy, exec-pending-intent-ui-legacy, exec-l3-reject-second-submit-while-streaming]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: interactive-race
   - case_id: preload-continue-no-chat-pollution
     display_name_zh: 预载续写不污染聊天流
@@ -250,7 +239,6 @@ cases:
         surface: ui
     executable_ids: [exec-preload-context-selection, exec-e2e-stream-observer, exec-catalog-checker]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: interactive-race
   - case_id: clear-during-generate-no-orphan-audio
     display_name_zh: 生成中清空防止孤儿播放
@@ -269,7 +257,6 @@ cases:
         surface: audio
     executable_ids: [exec-clear-during-generate-no-orphan-audio]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: interactive-race
   - case_id: story-card-double-tap-suppress
     display_name_zh: 故事卡连击双发抑制
@@ -288,7 +275,6 @@ cases:
         surface: audio
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: interactive-race
   - case_id: suggest-click-blocked-while-sending
     display_name_zh: 发送中建议项点击拦截
@@ -307,7 +293,6 @@ cases:
         surface: ui
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: interactive-race
   - case_id: draft-preserved-during-auto-continue
     display_name_zh: 自动续写期间输入框草稿保留
@@ -326,7 +311,6 @@ cases:
         surface: ui
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: interactive-race
   - case_id: tab-switch-unread-badge-consistent
     display_name_zh: 生成中切标签页未读徽标一致
@@ -345,7 +329,6 @@ cases:
         surface: ui
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: interactive-race
   - case_id: pause-resume-burst-final-consistent
     display_name_zh: 暂停恢复快速连击终态一致
@@ -364,7 +347,6 @@ cases:
         surface: audio
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: interactive-race
   - case_id: failed-message-retry-context
     display_name_zh: 失败消息重试上下文正确
@@ -383,7 +365,6 @@ cases:
         surface: network
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: interactive-race
   - case_id: history-prompt-start-new-creation
     display_name_zh: 从提示词历史开始新创作
@@ -408,7 +389,6 @@ cases:
         surface: audio
     executable_ids: [exec-l3-history-prompt-start-new-creation]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: history-reuse-create
   - case_id: generation-history-play-once
     display_name_zh: 生成历史本页单次回放
@@ -433,7 +413,6 @@ cases:
         surface: audio
     executable_ids: [exec-l3-generation-history-play-once]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: history-reuse-playback
   - case_id: tts-voice-fallback-browser-behavior
     display_name_zh: 语音回退浏览器行为占位
@@ -452,7 +431,6 @@ cases:
         surface: audio
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: persistence-recovery
   - case_id: countdown-exhaust-ui-audio-consistent
     display_name_zh: 倒计时耗尽界面与音频一致
@@ -474,7 +452,6 @@ cases:
         surface: state
     executable_ids: [exec-resume-countdown, exec-mock-lifecycle]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: playback-kernel
   - case_id: budget-exhausted-tap-play-audio-state
     display_name_zh: 预算耗尽后点击播放音频状态
@@ -493,7 +470,6 @@ cases:
         surface: state
     executable_ids: [exec-budget-exhaustion, exec-l3-stop-audio-when-budget-exhausted]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: playback-kernel
   - case_id: logout-during-play-instant-silence
     display_name_zh: 播放中登出立即停声与重置
@@ -515,7 +491,6 @@ cases:
         surface: state
     executable_ids: [exec-logout-playback-reset, exec-logout-probe-hardening-legacy, exec-browser-harness, exec-l3-pause-audio-before-logout-unload]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: playback-kernel
   - case_id: pause-in-paragraph-switch-no-resume
     display_name_zh: 段落切换窗口内暂停不续播
@@ -534,7 +509,6 @@ cases:
         surface: audio
     executable_ids: [exec-paragraph-transition-guard]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: playback-kernel
   - case_id: breakpoint-resume-null-budget-state
     display_name_zh: 断点恢复空预算播放状态
@@ -553,7 +527,6 @@ cases:
         surface: state
     executable_ids: [exec-explicit-play-budget]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: playback-kernel
   - case_id: segment-end-double-jump-guard
     display_name_zh: 段落收尾结束双跳竞态防线
@@ -572,7 +545,6 @@ cases:
         surface: state
     executable_ids: [exec-audio-ended-guard]
     fixtures: []
-    ci_tier: NIGHTLY
     owner: playback-kernel
   - case_id: multi-paragraph-prefetch-progress-persist
     display_name_zh: 多段落前瞻预取推进与进度落库
@@ -591,7 +563,6 @@ cases:
         surface: network
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: playback-kernel
   - case_id: story-complete-clear-progress
     display_name_zh: 故事播完清理进度收尾
@@ -610,7 +581,6 @@ cases:
         surface: db
     executable_ids: [exec-final-segment-stop]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: playback-kernel
   - case_id: client-route-nav-play-continuity
     display_name_zh: 客户端路由导航播放连续
@@ -629,7 +599,6 @@ cases:
         surface: audio
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: playback-kernel
   - case_id: history-restore-card-resynth
     display_name_zh: 历史恢复卡回放重合成
@@ -651,7 +620,6 @@ cases:
         surface: db
     executable_ids: [exec-storycard-resume, exec-paragraph-segmentation]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: playback-kernel
   - case_id: old-card-replay-no-consume-preload
     display_name_zh: 旧卡回放不消费新预载
@@ -670,7 +638,6 @@ cases:
         surface: state
     executable_ids: [exec-preload-isolation]
     fixtures: []
-    ci_tier: NIGHTLY
     owner: playback-kernel
   - case_id: setting-preview-dual-audio-source
     display_name_zh: 设置页试音与主播放双声源
@@ -689,7 +656,6 @@ cases:
         surface: audio
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: playback-kernel
   - case_id: dual-tab-same-account-write-cover
     display_name_zh: 双标签同账号并发写入覆盖
@@ -708,7 +674,6 @@ cases:
         surface: db
     executable_ids: [exec-stale-conversation-write, exec-conversation-conflict-refresh]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: cloud-storage
   - case_id: quick-exit-loses-tail-hanging-progress
     display_name_zh: 快速退出丢失尾部与悬空进度
@@ -730,7 +695,6 @@ cases:
         surface: db
     executable_ids: [exec-pending-save-flush, exec-keepalive-dedup-legacy, exec-l3-persist-tail-before-page-exit]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: cloud-storage
   - case_id: config-optimistic-save-rollback
     display_name_zh: 配置乐观保存失败回滚
@@ -749,7 +713,6 @@ cases:
         surface: state
     executable_ids: [exec-optimistic-rollback]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: cloud-storage
   - case_id: progress-monotonic-guard-force-reset
     display_name_zh: 进度单调递增守卫与强制重置
@@ -768,7 +731,6 @@ cases:
         surface: db
     executable_ids: [exec-save-sequence, exec-paragraph-resume-mixed-legacy, exec-e2e-db-guard-regression]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: persistence-recovery
   - case_id: guest-user-table-isolation-zero-leak
     display_name_zh: 访客与用户表级隔离零串读
@@ -787,7 +749,6 @@ cases:
         surface: db
     executable_ids: [exec-guest-multisubject-lifecycle, exec-e2e-db-guard]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: cloud-storage
   - case_id: history-epoch-guard-30day-prune
     display_name_zh: 历史纪元守卫与30天裁剪
@@ -806,7 +767,6 @@ cases:
         surface: db
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: persistence-recovery
   - case_id: onboarding-first-visit-unread-cross-session
     display_name_zh: 首访标记与未读跨会话一致
@@ -825,7 +785,6 @@ cases:
         surface: state
     executable_ids: [exec-onboarding-storage]
     fixtures: []
-    ci_tier: NIGHTLY
     owner: persistence-recovery
   - case_id: theme-config-once-hydrate-dual-write
     display_name_zh: 主题配置一次性水合并双写保留
@@ -844,7 +803,6 @@ cases:
         surface: state
     executable_ids: [exec-guest-config-crud]
     fixtures: []
-    ci_tier: NIGHTLY
     owner: persistence-recovery
   - case_id: guest-chat-100-limit-truncate
     display_name_zh: 访客聊天100条上限截断
@@ -863,7 +821,6 @@ cases:
         surface: db
     executable_ids: [exec-guest-creative-sync, exec-agent-schema-bounds]
     fixtures: []
-    ci_tier: NIGHTLY
     owner: persistence-recovery
   - case_id: summary-summarize-concurrent-public
     display_name_zh: 摘要并发与公开端点
@@ -882,7 +839,6 @@ cases:
         surface: network
     executable_ids: [exec-agent-summarize-authorization]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: cloud-storage
   - case_id: guest-register-3step-migrate-fidelity
     display_name_zh: 访客注册三步迁移与数据保真
@@ -904,7 +860,6 @@ cases:
         surface: db
     executable_ids: [exec-guest-creative-sync]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: auth-session
   - case_id: register-interrupt-orphan-rollback
     display_name_zh: 注册中断孤儿用户事务回滚
@@ -923,7 +878,6 @@ cases:
         surface: db
     executable_ids: [exec-registration-rollback, exec-runner-database-path-safety, exec-runner-group-split]
     fixtures: []
-    ci_tier: NIGHTLY
     owner: auth-session
   - case_id: login-existing-no-leak
     display_name_zh: 登录既有账号无数据渗漏
@@ -942,7 +896,6 @@ cases:
         surface: db
     executable_ids: [exec-login-existing-no-leak]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: auth-session
   - case_id: logout-dual-cookie-clean-reset
     display_name_zh: 登出双凭证清理与状态重置
@@ -961,7 +914,6 @@ cases:
         surface: network
     executable_ids: [exec-logout-dual-cookie-clean-reset]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: auth-session
   - case_id: relogin-new-guest-isolation
     display_name_zh: 登出后再入访客新身份隔离
@@ -980,7 +932,6 @@ cases:
         surface: db
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: auth-session
   - case_id: session-invalidated-closed-loop
     display_name_zh: 会话失效闭环
@@ -999,7 +950,6 @@ cases:
         surface: ui
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: auth-session
   - case_id: expired-session-guest-cookie-revive
     display_name_zh: 过期会话加残留访客凭证静默复活
@@ -1018,7 +968,6 @@ cases:
         surface: network
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: auth-session
   - case_id: auth-reverse-guard-from-safety
     display_name_zh: 登录页反向守卫与来源回跳安全
@@ -1037,7 +986,6 @@ cases:
         surface: ui
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: auth-session
   - case_id: fast-account-switch-epoch-no-crossread
     display_name_zh: 快速账号切换纪元失效不串读
@@ -1056,7 +1004,6 @@ cases:
         surface: db
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: auth-session
   - case_id: register-login-validate-sessionguard-exempt
     display_name_zh: 注册登录校验失败与守卫豁免
@@ -1078,7 +1025,6 @@ cases:
         surface: ui
     executable_ids: [exec-identity-procedure-matrix]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: auth-session
   - case_id: guest-429-limit-retry-burn-quota
     display_name_zh: 访客限流与重试烧配额
@@ -1100,7 +1046,6 @@ cases:
         surface: state
     executable_ids: [exec-sliding-window-rate-limit]
     fixtures: []
-    ci_tier: CANDIDATE
     owner: error-rate-limit
   - case_id: tts-limit-tier-voice-fallback
     display_name_zh: 语音合成限流分层与白名单回退
@@ -1122,7 +1067,6 @@ cases:
         surface: network
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: error-rate-limit
   - case_id: tts-synthesize-fail-no-zombie
     display_name_zh: 语音合成失败停声不僵尸
@@ -1141,7 +1085,6 @@ cases:
         surface: audio
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: error-rate-limit
   - case_id: stream-interrupt-failed-retry
     display_name_zh: 流式中断失败标记与重试
@@ -1160,7 +1103,6 @@ cases:
         surface: ui
     executable_ids: [exec-toast-terminal-priority-legacy]
     fixtures: []
-    ci_tier: NONE
     owner: error-rate-limit
   - case_id: breakpoint-switch-tts-fail-retry-bound
     display_name_zh: 断点与切换语音失败重试边界
@@ -1179,7 +1121,6 @@ cases:
         surface: ui
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: error-rate-limit
   - case_id: protected-api-401-guard-matrix
     display_name_zh: 直连受保护接口401守卫矩阵
@@ -1198,7 +1139,6 @@ cases:
         surface: network
     executable_ids: [exec-identity-procedure-matrix]
     fixtures: []
-    ci_tier: NONE
     owner: error-rate-limit
   - case_id: guest-data-30day-gc-clean
     display_name_zh: 访客数据30天清理
@@ -1217,7 +1157,6 @@ cases:
         surface: db
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: error-rate-limit
   - case_id: bfcache-pageshow-recover-probe
     display_name_zh: 往返缓存恢复探针
@@ -1236,7 +1175,6 @@ cases:
         surface: ui
     executable_ids: []
     fixtures: []
-    ci_tier: NONE
     owner: error-rate-limit
     manual_reason: 需要人工在真实浏览器确认往返缓存恢复
 executables:
@@ -1465,11 +1403,6 @@ executables:
     layer: TOOLING
     path: ./tests/tooling/catalog/catalog-checker.tooling.test.ts
     case_ids: [preload-continue-no-chat-pollution]
-  - executable_id: exec-tier-gate
-    display_name_zh: tier完整性门自测
-    layer: TOOLING
-    path: ./tests/tooling/tier/tier-gate.tooling.test.ts
-    case_ids: [guest-identity-cookie-upgrade]
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

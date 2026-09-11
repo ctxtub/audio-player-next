@@ -129,11 +129,11 @@ async function caseMaintenanceCatalogDriven(): Promise<void> {
     assert.ok(!/E2E-\d{2}-/.test(raw), 'maintenance.md 不得以 E2E-XX-YY 具体实例作主编号');
     // 中文注释：文档内禁手工总数（数字 + 个父/个原子这类手维护计数）。
     assert.ok(!/\d+\s*个(父|原子)/.test(raw), 'maintenance.md 不得含手工总数');
-    // 中文注释：身份/数量/调度三权威口径齐全。
-    for (const anchor of ['case_id', 'legacy_aliases', 'yarn test:catalog', 'lifecycle_status', 'executable_ids', 'ci_tier', 'MANUAL']) {
+    // 中文注释：身份/数量/调度权威口径齐全。
+    for (const anchor of ['case_id', 'legacy_aliases', 'yarn test:catalog', 'lifecycle_status', 'executable_ids', 'MANUAL']) {
         assert.ok(raw.includes(anchor), `maintenance.md 须含 catalog 驱动锚点：${anchor}`);
     }
-    console.log('PASS: maintenance.md 为 catalog 驱动（case_id 身份 + checker 计数 + tier 调度）');
+    console.log('PASS: maintenance.md 为 catalog 驱动（case_id 身份 + checker 计数 + catalog 调度）');
 }
 
 // ---------------------------------------------------------------------------

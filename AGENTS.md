@@ -14,7 +14,7 @@
 ## 测试事实源
 
 - 产品场景与 oracle：`docs/e2e/**`。
-- case、executable、层级、生命周期与 CI tier：`tests/test-catalog.yaml`。
+- case、executable、层级与生命周期：`tests/test-catalog.yaml`。
 - 机器一致性：`yarn test:catalog`；统计与文档冲突时以 checker 为准并阻断。
 - L1：`yarn test:unit`；L2：`yarn test:integration`；Tooling：`yarn test:tooling`；L3：`yarn test:browser:smoke`。
 - `MANUAL` 不进入自动执行队列；不得把 PLANNED/BLOCKED 伪装为 ACTIVE 或 PASS。

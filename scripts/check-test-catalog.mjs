@@ -278,9 +278,8 @@ function parseYamlSubset(text) {
 const PRIORITY_SET = new Set(['P0', 'P1', 'P2', 'P3']);
 const LAYER_SET = new Set(['L1', 'L2', 'L3', 'TOOLING']);
 const LIFECYCLE_SET = new Set(['PLANNED', 'ACTIVE', 'BLOCKED', 'MANUAL', 'LEGACY-NON-COVERAGE', 'RETIRED']);
-const CI_TIER_SET = new Set(['CANDIDATE', 'NIGHTLY', 'RELEASE', 'PATH_FILTERED', 'NONE']);
 // 中文注释：case 允许键集合（含条件键，run_verdict 明确不在其中）。
-const CASE_ALLOWED_KEYS = new Set(['case_id', 'display_name_zh', 'legacy_aliases', 'journey_id', 'user_goal', 'priority', 'primary_defense', 'secondary_defenses', 'lifecycle_status', 'risk_tags', 'spec_path', 'required_assertions', 'executable_ids', 'fixtures', 'ci_tier', 'owner', 'blocked_reason', 'manual_reason']);
+const CASE_ALLOWED_KEYS = new Set(['case_id', 'display_name_zh', 'legacy_aliases', 'journey_id', 'user_goal', 'priority', 'primary_defense', 'secondary_defenses', 'lifecycle_status', 'risk_tags', 'spec_path', 'required_assertions', 'executable_ids', 'fixtures', 'owner', 'blocked_reason', 'manual_reason']);
 // 中文注释：executable 允许键集合（含 L3 必填 evidence_surfaces）。
 const EXEC_ALLOWED_KEYS = new Set(['executable_id', 'display_name_zh', 'layer', 'path', 'case_ids', 'evidence_surfaces']);
 // 中文注释：语义名 kebab-case 正则。
@@ -354,7 +353,6 @@ function validateSchemaHandwritten(catalog) {
     if (!Array.isArray(c.executable_ids)) errors.push(`${label} 缺 executable_ids（须为数组）`);
     else if (!c.executable_ids.every(isNonEmptyString)) errors.push(`${label} 非法 executable_ids（须为非空字符串数组）`);
     if (!Array.isArray(c.fixtures)) errors.push(`${label} 缺 fixtures（须为数组）`);
-    if (!CI_TIER_SET.has(c.ci_tier)) errors.push(`${label} 非法枚举 ci_tier（五值之一，实际=${JSON.stringify(c.ci_tier)}）`);
     if (!isNonEmptyString(c.owner)) errors.push(`${label} 缺 owner`);
     if (c.lifecycle_status === 'BLOCKED' && !isNonEmptyString(c.blocked_reason)) errors.push(`${label} 缺 blocked_reason（lifecycle=BLOCKED 时必填）`);
     if (c.lifecycle_status === 'MANUAL' && !isNonEmptyString(c.manual_reason)) errors.push(`${label} 缺 manual_reason（lifecycle=MANUAL 时必填）`);
@@ -686,7 +684,7 @@ function main() {
   console.log('CHECK PASS：测试资产目录校验通过');
 }
 
-// 中文注释：C3 导出共用解析函数供 scripts/check-tier-gate.mjs 复用（catalog 解析只允许这一份）。
+// 中文注释：导出共用解析函数供 scripts/evidence-schema.mjs 复用（catalog 解析只允许这一份）。
 // 被 import 时不执行 main；直接运行本文件时行为与输出不变。
 // main 判定与加载器无关（与 scripts/evidence-schema.mjs 同一改法）：本文件经
 // evidence-schema 被 Playwright reporter 链 CJS 转换加载（已由 smoke 实证），

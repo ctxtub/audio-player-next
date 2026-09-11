@@ -934,14 +934,14 @@ cases:
     priority: P0
     primary_defense: L3
     secondary_defenses: [L2]
-    lifecycle_status: PLANNED
+    lifecycle_status: ACTIVE
     risk_tags: [auth, isolation]
     spec_path: docs/e2e/05-认证授权与会话生命周期/03-登录既有账号无数据渗漏.md
     required_assertions:
       - assertion_id: no-leak-on-login
         display_name_zh: 登录无渗漏
         surface: db
-    executable_ids: []
+    executable_ids: [exec-login-existing-no-leak]
     fixtures: []
     ci_tier: CANDIDATE
     owner: auth-session
@@ -1307,6 +1307,11 @@ executables:
     layer: L2
     path: ./tests/integration/identity-session/registration-rollback.integration.test.ts
     case_ids: [register-interrupt-orphan-rollback]
+  - executable_id: exec-login-existing-no-leak
+    display_name_zh: 登录既有账号无渗漏
+    layer: L2
+    path: ./tests/integration/identity-session/login-existing-no-leak.integration.test.ts
+    case_ids: [login-existing-no-leak]
   - executable_id: exec-guest-config-crud
     display_name_zh: 访客配置增删改查
     layer: L2

@@ -30,9 +30,12 @@
 - 新建 `tests/tooling/delivery/auto-delivery.tooling.test.ts`，钉死：
   触发条件（仅 main push，无 pr/schedule/tag/dispatch）、job 依赖顺序、
   concurrency、顶层+job 级 permissions（唯一的 `packages:write` 在 publish）、
-  pin 全 SHA、无自动 `latest`（workflow 无 `:latest` 字面、脚本无
-  `add_tag "latest"`）、deploy 在 publish 之后、staleness 守卫存在、
-  部署 secret 名齐全、notify `always()` + Bark warn-only 标记。
+  pin 全 SHA、只发 sha 不可变标签（workflow 代码无 `:main`/`:latest`、
+  publish 不传 ref 名、脚本无 `"main"` 逻辑与 `add_tag "latest"`）、
+  deploy 在 publish 之后、staleness 守卫存在、部署 secret 名齐全、
+  deploy 含备份+原子替换（禁 `sed -i`）+`config -q`+先登录再拉+
+  健康断言 200+失败自动回滚+产物一致性校验+回滚点记录+幂等分支、
+  notify `always()` + Bark warn-only 标记。
 - 接线：`scripts/run-tests.mjs` 注册 `auto-delivery`（总数注释 53→54）；
   `tests/test-catalog.yaml` 新增 `exec-auto-delivery` 并双向挂到
   `guest-identity-cookie-upgrade`（与 `exec-tier-gate` 等同口径）；
@@ -44,7 +47,8 @@
 
 - `AGENTS.md` 完成门：删“仓库不含 CI 自动触发”，改为 main push 自动交付 + 本地手动命令。
 - `docs/engineering/change-workflow.md` §8 发布节 + 提交与 PR 节：
-  改为“main push 自动交付链；sha-<short> 不可变 + main 追踪标签；永不自动 latest；
+  改为“main push 自动交付链；只发 sha-<short> 不可变标签，不发移动标签；
+  部署改 compose 上线，备份+原子替换+健康+失败回滚+产物一致；
   全仓唯一串行发布者 auto-delivery.yml”。
 - `tests/tooling/runner/runner-group-split.tooling.test.ts` 第 38 行注释：
   “缩为两个”→ 含新 delivery 元测试的表述。
@@ -72,13 +76,23 @@
 | publish | 非零退出 | 红，deploy 不运行 |
 | deploy secret 缺失 | 空变量 | 红 + 三段式可照做报错 |
 | deploy staleness | 非头部 | 绿退 skip，显式说明 |
-| deploy preflight/远端/健康 | 非零/超时 | 红 |
+| deploy image 行缺失/config 非法 | 定位失败/校验失败 | 红（config 失败先还原备份） |
+| deploy pull/up/健康/产物不一致 | 非零/超时/ID 不等 | 红 + 自动回滚（还原→重起→再探测→打印结果），仍 exit 非零 |
 | notify Bark 传输 | curl 失败 | `::warning::`，不翻转结论 |
 | notify 无 BARK_WEBHOOK | 空 | 跳过提示，exit 0 |
 
+## 设计修正记录（2026-09-11 第二轮，ROBOT 生产实测后）
+
+- 否掉“发布 `main` 移动标签 + 生产 compose 引用 `:main`”方案：
+  生产实际钉的是 `sha-e5f41be`，且生产容器无 Docker healthcheck；
+  移动指针在失败时无法回滚。改为 publish 只发 `sha-<short>`，
+  deploy 直接改写 compose 的 `image:` 行为本次 sha。
+- 新增：回滚点打印、时间戳备份、`mv` 原子替换（禁 `sed -i`）、
+  `config -q` 先验、远端先 `docker login`（宿主凭据寿命 UNPROVEN）、
+  curl 断言 200、健康失败自动回滚、运行中 image ID 与产物比对、
+  同 SHA no-op 幂等分支。
+
 ## 回滚（与 spec §10 同口径，不重复）
 
-revert 即正常交付；旧镜像 `sha-` 标签可取；Actions 全停时回
-`scripts/push-ghcr.sh` 手动链。生产 compose `:latest`→`:main`
-的一次性运维前置由 deploy preflight fail-closed 守住，未改之前
-deploy 红是预期行为，不是 bug。
+revert 即正常交付；旧镜像 `sha-` 标签可取；生产 compose 同目录时间戳
+备份可直接恢复；Actions 全停时回 `scripts/push-ghcr.sh` 手动链。

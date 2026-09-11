@@ -178,21 +178,29 @@ async function casePins(): Promise<void> {
 }
 
 /**
- * 用例⑥：无自动 latest 漂移。
+ * 用例⑥：只发 sha-<short> 不可变标签，无任何移动标签（无 main、无 latest）。
  */
 async function caseNoLatestDrift(): Promise<void> {
   const workflow: string = readText(workflowRel);
   const script: string = readText(pushScriptRel);
-  assert.ok(!workflow.includes(':latest'), 'workflow 不得出现 :latest 字面=RED（永不自动 latest）');
+  assert.ok(!workflow.includes(':latest'), 'workflow 不得出现 :latest 字面=RED（永不发 latest）');
+  // 中文注释：只查代码行——注释里可以讨论被否掉的方案，代码里不许留。
+  const workflowCode: string = workflow.split('\n').filter((l) => !l.trimStart().startsWith('#')).join('\n');
+  assert.ok(!workflowCode.includes(':main'), 'workflow 代码不得引用 main 移动标签=RED（只发 sha 不可变标签）');
   assert.ok(!script.includes('add_tag "latest"'), 'push-ghcr.sh 不得含 add_tag "latest"=RED');
   assert.ok(script.includes('!= "latest"'), 'push-ghcr.sh 须保留 latest 输入守卫=RED');
   assert.ok(script.includes('add_tag "sha-${SHORT_SHA}"'), '脚本须产出不可变 sha-<short> 标签=RED');
-  assert.ok(workflow.includes('./scripts/push-ghcr.sh "${{ github.ref_name }}"'), 'publish 须经 push-ghcr.sh 以 ref 名发布（main 追踪标签）=RED');
-  console.log('PASS: 用例⑥ 无自动 latest 漂移（sha 不可变 + main 追踪）');
+  assert.ok(!script.includes('"main"'), 'push-ghcr.sh 不得被加 main 标签逻辑=RED（脚本契约不动）');
+  // 中文注释：publish 必须无参数调用（空 tag = sha-only 既有语义），不得传 ref 名造移动标签。
+  const publish: string = jobSection(workflow, 'publish');
+  assert.ok(publish.includes('./scripts/push-ghcr.sh'), 'publish 须经 push-ghcr.sh 发布=RED');
+  assert.ok(!publish.includes('github.ref_name'), 'publish 不得传 ref 名（会造移动标签）=RED');
+  console.log('PASS: 用例⑥ 只发 sha 不可变标签（无 main/latest 移动标签）');
 }
 
 /**
- * 用例⑦：deploy 隔离、staleness 守卫、secret fail-closed、无值泄露。
+ * 用例⑦：deploy 隔离、staleness 守卫、secret fail-closed、无值泄露、
+ * 备份 + 原子替换 + 健康探测 + 失败回滚 + 产物一致性校验。
  */
 async function caseDeployGuards(): Promise<void> {
   const workflow: string = readText(workflowRel);
@@ -212,11 +220,36 @@ async function caseDeployGuards(): Promise<void> {
   assert.ok(deploy.includes('up -d'), 'deploy 须 up -d=RED');
   assert.ok(deploy.includes('38080'), 'deploy 健康校验须命中生产端口事实 38080=RED');
   assert.ok(deploy.includes('exit 1'), 'deploy 须有 fail-closed 退出=RED');
-  // 中文注释：无值泄露——禁 echo secret 变量、禁 set -x（只查代码行，注释行除外）。
+  // 中文注释：备份 + 原子替换（禁 sed -i 就地改）。
+  assert.ok(deploy.includes('.bak.'), 'deploy 须带时间戳备份 compose=RED');
+  assert.ok(deploy.includes('cp "${FILE}" "${BACKUP}"') || deploy.includes('cp "${BACKUP}" "${FILE}"'), 'deploy 须 cp 备份/还原=RED');
+  assert.ok(deploy.includes('mv "${TMP_NEW}" "${FILE}"'), 'deploy 须经临时文件 mv 原子替换（禁 sed -i）=RED');
+  // 中文注释：无值泄露与 sed -i 检查只查代码行（注释行会讨论被禁写法，需排除）。
   const deployCode: string = deploy.split('\n').filter((l) => !l.trimStart().startsWith('#')).join('\n');
+  assert.ok(!deployCode.includes('sed -i'), 'deploy 禁止 sed -i 就地改生产文件=RED');
+  // 中文注释：替换后先校验再拉取。
+  assert.ok(deploy.includes('config -q'), 'deploy 替换后须 compose config -q 校验=RED');
+  // 中文注释：先登录再拉（不依赖宿主既有凭据；token 经 stdin）。
+  assert.ok(deploy.includes('docker login') && deploy.includes('--password-stdin'), 'deploy 须先 docker login（stdin，不依赖宿主凭据）=RED');
+  // 中文注释：主动健康探测必须断言 200 并打印状态码（生产容器无 healthcheck）。
+  assert.ok(deploy.includes('http_code'), 'deploy 健康探测须取 http_code=RED');
+  assert.ok(deploy.includes('"200"'), 'deploy 健康探测须断言 200=RED');
+  // 中文注释：健康失败必须自动回滚（还原 → 重起 → 再探测 → 仍 exit 非零），回滚失败给人工指引。
+  for (const anchor of ['ROLLBACK', 'do_rollback', '人工介入']) {
+    assert.ok(deploy.includes(anchor), `deploy 缺回滚要素 ${anchor}=RED`);
+  }
+  // 中文注释：产物一致性——运行中 image ID 必须等于本次产物 image ID，不只看 pull/up 退出码。
+  assert.ok(deploy.includes('{{.Image}}') && deploy.includes('{{.Id}}'), 'deploy 须比对运行中 image ID 与本次产物 image ID=RED');
+  assert.ok(deploy.includes('不一致'), '产物不一致须按失败处理=RED');
+  // 中文注释：回滚点记录（当前 image 行 + 运行中容器 image ID）。
+  assert.ok(deploy.includes('回滚点'), 'deploy 须打印回滚点=RED');
+  // 中文注释：幂等——同 SHA 跳过替换，直接校验。
+  assert.ok(deploy.includes('IDEMPOTENT'), 'deploy 须有同 SHA no-op 幂等分支=RED');
+  // 中文注释：无值泄露——禁 echo secret 变量、禁 set -x（deployCode 已在上文定义，只查代码行）。
   assert.ok(!deployCode.includes('echo "${DEPLOY_') && !deployCode.includes("echo '${DEPLOY_"), 'deploy 禁止 echo secret 变量值=RED');
+  assert.ok(!deployCode.includes('echo "${GHCR_') && !deployCode.includes("echo '${GHCR_"), 'deploy 禁止 echo GHCR token 变量值=RED');
   assert.ok(!deployCode.includes('set -x'), 'deploy 禁止 set -x（会泄露 secret）=RED');
-  console.log('PASS: 用例⑦ deploy 隔离 + staleness + secret fail-closed + 无值泄露');
+  console.log('PASS: 用例⑦ deploy 隔离 + staleness + fail-closed + 备份/原子替换/健康/回滚/产物一致');
 }
 
 /**

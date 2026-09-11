@@ -12,7 +12,7 @@
    - 并行分支须同时声明落地契约（目标/顺序/验证/清理），细节见 `docs/specs/2026-09-10-multi-writer-concurrency-rule.md`。
 6. **独立验收**：不同会话复核 diff、测试、进程、端口、数据库与秘密边界；不采信实现者自报。
 7. **安全门**：检查 tracked 范围、历史、依赖、Actions、Docker context、日志和前端产物。
-8. **发布**：`push` 到 `main` 即自动触发交付链（全仓唯一的 `.github/workflows/auto-delivery.yml`）：quality fail-closed 全绿 → 构建并推送 GHCR（`sha-<short>` 不可变标签 + `main` 生产追踪标签，永不自动 `latest`）→ 自动 SSH 部署生产并健康校验 → 成功/失败都发 Bark 通知；技术 APPROVE 不等于发布授权，推 `main` 前必须先跑通本地完成门。细节与失败语义见 `docs/specs/2026-09-11-main-auto-delivery.md`。
+8. **发布**：`push` 到 `main` 即自动触发交付链（全仓唯一的 `.github/workflows/auto-delivery.yml`）：quality fail-closed 全绿 → 构建并推送 GHCR（只发 `sha-<short>` 不可变标签，不发任何移动标签）→ 自动 SSH 部署生产（改写 compose 的 `image:` 为本次 sha，备份 + 原子替换 + 健康断言 200 + 失败自动回滚 + 产物一致性校验）→ 成功/失败都发 Bark 通知；技术 APPROVE 不等于发布授权，推 `main` 前必须先跑通本地完成门。细节与失败语义见 `docs/specs/2026-09-11-main-auto-delivery.md`。
 9. **运行验收与收尾**：回读远端状态、记录回滚点、遗留问题和精炼 closeout。
 
 ## 变更影响与测试选择

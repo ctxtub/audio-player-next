@@ -67,17 +67,15 @@ quality → publish → deploy → notify(always)
 - 超时上限：`quality` 30 分钟，`publish` 20 分钟，`deploy` 15 分钟，
   `notify` 5 分钟。超时即红（fail-closed），不静默挂起。
 
-## 4. publish（GHCR，单次构建双 tag）
+## 4. publish（GHCR，只发不可变 sha 标签）
 
 - 登录：`docker/login-action`，`password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}`
  （与旧链一致：私有 GHCR 写优先用 `GHCR_TOKEN`，回退 `GITHUB_TOKEN`）。
-- 构建：复用 `scripts/push-ghcr.sh "${{ github.ref_name }}"`。
-  在 main push 下 `ref_name=main`，脚本产出两个 tag（同一次 buildx 构建、
-  同一 digest，无重构建漂移）：
-  - `sha-<shortSHA>`：不可变主标签，部署与追踪以它为准；
-  - `main`：生产追踪移动指针，语义“最后一次 main 绿链的产物”。
-- 永不推送 `latest`：脚本内 `add_tag` 对 `latest` 有字面守卫；
-  tooling 守卫钉死 workflow 与脚本中无自动 `latest` 发布。
+- 构建：复用 `scripts/push-ghcr.sh`，**无参数调用** = 只发 `sha-<shortSHA>`
+  （脚本既有语义：空 tag 即 sha-only；与生产既有 `sha-e5f41be` 约定一致，7 位）。
+- 不发任何移动标签：不发 `main`（移动指针在部署失败时无法回滚），
+  不发 `latest`（脚本内 `add_tag` 有字面守卫）；tooling 守卫钉死
+  workflow 代码无 `:main`/`:latest`、publish 不传 ref 名、脚本无 `"main"` 逻辑。
 - 平台：`linux/amd64`（生产 VPS 单架构）。因此不需要 QEMU 模拟：
   旧链的 `setup-qemu-action` 在本链删除，供应链暴露面减一。
   若将来生产出现多架构，再加 qemu + 平台矩阵（届时同步更新 lock 与守卫）。
@@ -104,22 +102,45 @@ quality → publish → deploy → notify(always)
 | `DEPLOY_SERVICE` | compose service 名（与根 `docker-compose.yml` 同口径，默认约定 `web`，仍必须显式配置） |
 | `DEPLOY_PORT` | 可选，默认 `22` |
 
+注：SSH 步骤另把 `secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN` 映射为
+`GHCR_DEPLOY_TOKEN` 传给远端先登录再拉（token 经 `--password-stdin`，
+不落日志）；宿主 GHCR 凭据寿命未知（UNPROVEN），绝不依赖宿主既有凭据。
+
 失败语义（全部 fail-closed，静默成功是 bug）：
 
 1. secret 缺失门：任一必填 secret 为空即 `exit 1`，报错信息给出
    “缺哪个 secret、在哪个仓库 Settings → Secrets and variables → Actions
    配、配完重跑方式（空提交 push）”三段，可直接照做。
 2. staleness 守卫（§7）通过后才 SSH。
-3. 远端 preflight：生产 compose 的 `image:` 必须引用 `:main`
-   追踪标签（一次性运维前置，见 §8 回滚点）；仍引用 `:latest` 则 fail-closed
-   并打印改法，不猜、不自动改生产文件。
-4. `docker compose pull <service> && docker compose up -d <service>`；
-   任一失败即 `exit 1`（`set -euo pipefail` + SSH 非零穿透：`ssh … bash -s`
-   的退出码即远端脚本退出码）。
-5. 健康校验：远端循环 `curl -fsS http://127.0.0.1:38080/`（12 次 × 10 秒，
-   端口是生产事实 `38080`）；超时未 200 即 `exit 1`。
-6. 幂等：同一 SHA 重跑 = pull 无新层 + `up -d` 无重建 + 健康通过；
-   远端不写除 compose 拉起外的任何状态。
+3. 远端定位目标 service 的 `image:` 行：必须存在，否则 fail-closed
+   并打印该 service 段实际内容（不猜、不自动改生产文件）。
+4. 部署前记录并打印回滚点：当前 `image:` 行原文 + 运行中容器的
+   image ID（`docker inspect --format '{{.Image}}'`）与配置引用
+   （`{{.Config.Image}}`）。
+5. 备份 + 原子替换：compose 备份为同目录时间戳副本
+   （`<file>.bak.<UTC时间戳>`）；只替换目标 service 的 `image:` 值为
+   `${IMAGE}:sha-${SHORT_SHA}`，写入临时文件后 `mv` 原子替换，
+   禁 `sed -i` 就地改。
+6. 替换后先校验再拉取：`docker compose config -q` 必须成功；
+   失败即还原备份并 `exit 1`。
+7. 先 `docker login ghcr.io`（注入的 token 经 `--password-stdin`，
+   不落日志；宿主 GHCR 凭据寿命未知=UNPROVEN，不依赖宿主既有凭据），
+   再 `docker compose pull <service> && docker compose up -d <service>`；
+   任一失败即 `exit 1`（`set -euo pipefail` + SSH 非零穿透：
+   `ssh … bash -s` 的退出码即远端脚本退出码）。
+8. 主动健康探测（生产容器无 Docker healthcheck，这是唯一真实探针）：
+   `curl -fsS --max-time 10 -o /dev/null -w '%{http_code}' http://127.0.0.1:38080/`，
+   有界重试（12 次 × 10 秒），必须实际断言 200 并打印状态码。
+9. 健康失败必须自动回滚：还原备份 → `up -d` → 再探测一次 →
+   打印回滚结果 → 仍然 `exit 1`（回滚成功不等于交付成功）；
+   回滚失败打印明确的人工介入指引（登录生产、目录、备份文件名、
+   手动恢复命令）。
+10. 产物一致性：`up -d` 后读取运行中容器的 image ID，与本次
+    `sha-${SHORT_SHA}` 对应本地 image ID 比对，一致才算通过；
+    不一致按失败处理（含回滚分支）。不得只凭 `pull`/`up` 退出码
+    判定生产已更新。
+11. 幂等：同一 SHA 重跑时 image 行已是目标值，跳过备份替换，
+    直接做健康与产物一致性校验（no-op 路径）。
 
 ## 6. Bark 通知（成功与失败，warn-only）
 
@@ -187,8 +208,11 @@ quality → publish → deploy → notify(always)
    （revert 自身也会触发一次链——预期内：revert 后的链 quality 照跑，
    publish 推出 revert 后 content 的镜像，deploy 上线它；即“回滚即一次
    正常交付”，无需特殊通道）。
-2. 镜像坏：生产手动 `docker pull ghcr.io/ctxtub/audio-player-next:sha-<上一个绿short> && docker tag …:main && docker compose up -d`；
-   不可变 `sha-` 标签永不覆盖，旧产物一直在 registry 可取。
+2. 镜像坏/上线错版本：生产 compose 同目录有时间戳备份
+   （链每次改写前自动留），手动 `cp <备份> docker-compose.yml &&
+   docker compose up -d` 即回滚；或直接把 `image:` 改为上一个绿
+   `sha-<short>` 再 `pull + up -d`；不可变 `sha-` 标签永不覆盖，
+   旧产物一直在 registry 可取。
 3. 流水线全停（Actions 中断）：回退到 `scripts/push-ghcr.sh` 手动推镜像 +
    手动 SSH 上线（该脚本与本链同 tag 语义，未动）。
 4. 恢复锚点：base `9edddfa6cecf3104eaca759fe3b952dd35c08737`；

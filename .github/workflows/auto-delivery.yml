@@ -4,9 +4,9 @@
 # 多入口会产生可并发的第二条链，与“恰好一条串行链”矛盾，故全部不设。
 # 失败重跑用 GitHub Re-run；重部署同提交用空提交 push，保证每次交付都过完整 quality 门。
 #
-# 链：quality（fail-closed）→ publish（GHCR 双 tag）→ deploy（SSH）→ notify（Bark，always）。
-# 标签：单次构建同时推送 sha-<short>（不可变主标签）与 main（生产追踪移动指针），
-# 同一 digest，永不推送 latest 浮动标签（守卫见 tests/tooling/delivery/）。
+# 链：quality（fail-closed）→ publish（GHCR 不可变 sha 标签）→ deploy（SSH 改 compose 上线）→ notify（Bark，always）。
+# 标签：只发 sha-<short> 不可变标签（与生产既有 sha-e5f41be 约定一致），不发任何移动标签
+# （不发 main、不发 latest），失败回滚才有可用的旧产物（守卫见 tests/tooling/delivery/）。
 # Bark 语义 warn-only：通知传输失败只记 warning，不翻转交付结论（见 notify job 注释与 spec §6）。
 # Staleness：deploy 前确认待部署提交仍是 main 头部，否则绿退跳过（见 deploy job 注释与 spec §7）。
 name: Auto Delivery (main)
@@ -98,17 +98,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
 
-      # 中文注释：main push 下 ref_name=main，脚本单次构建推送 main + sha-<short> 同一 digest；
-      # 脚本内有 latest 字面守卫，永不产出 latest 浮动标签。
-      - name: Push immutable image via script (main tag + sha tag, never latest)
+      # 中文注释：无参数调用 = 只发 sha-<short> 不可变标签（脚本既有语义：空 tag 即 sha-only）。
+      # 不传 ref 名，不造任何移动标签；脚本内另有 latest 字面守卫。
+      - name: Push immutable image via script (sha tag only, never floating)
         env:
           GITHUB_SHA: ${{ github.sha }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
-          GITHUB_REF_TYPE: ${{ github.ref_type }}
         run: |
           chmod +x scripts/push-ghcr.sh
-          echo "sha=${{ github.sha }} ref=${{ github.ref_name }}"
-          ./scripts/push-ghcr.sh "${{ github.ref_name }}"
+          echo "sha=${{ github.sha }} (sha-only, no floating tag)"
+          ./scripts/push-ghcr.sh
 
   deploy:
     name: Deploy to production over SSH
@@ -174,9 +172,16 @@ jobs:
       # 中文注释：隔离的部署步骤（本 job 唯一的对外写操作）。传输=系统 ssh，
       # 不引入第三方 ssh action。私钥落临时文件 chmod 600，结束即删；
       # StrictHostKeyChecking=yes + DEPLOY_KNOWN_HOSTS 防中间人；禁 set -x、禁 echo secret。
-      # 幂等：同 SHA 重跑 = pull 无新层 + up -d 无重建 + 健康通过。
+      # 远端流程：定位 service image 行（必须存在）→ 记录回滚点（当前 image 行 + 运行中容器
+      # image ID）→ 备份 compose（同目录时间戳副本）→ awk 改写目标 image 为本次 sha 并 mv
+      # 原子替换（禁 sed -i）→ compose config -q 校验（失败即还原）→ docker login（注入 token，
+      # 不依赖宿主既有凭据）→ pull + up -d → 主动健康探测（curl 断言 200，生产容器无 healthcheck，
+      # 这是唯一真实探针）→ 产物一致性校验（运行中 image ID == 本次产物 image ID）。
+      # 健康/一致性失败 → 自动回滚（还原备份 → up -d → 再探测 → 打印结果），仍 exit 非零
+      # （回滚成功不等于交付成功）；回滚失败打印人工介入指引。
+      # 幂等：同 SHA 重跑时 image 行已是目标值，跳过备份替换，直接健康 + 一致性校验。
       # 失败穿透：ssh 远端脚本非零即本步骤非零（fail-closed）。
-      - name: Pull, restart and health-check over SSH (isolated)
+      - name: Deploy pinned image over SSH (isolated, rollback on failure)
         if: steps.stale.outputs.stale != 'true'
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -186,6 +191,7 @@ jobs:
           DEPLOY_COMPOSE_DIR: ${{ secrets.DEPLOY_COMPOSE_DIR }}
           DEPLOY_SERVICE: ${{ secrets.DEPLOY_SERVICE }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          GHCR_DEPLOY_TOKEN: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           PORT="${DEPLOY_PORT:-22}"
@@ -201,7 +207,7 @@ jobs:
           chmod 600 "${KNOWN_FILE}"
           ssh -i "${KEY_FILE}" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${KNOWN_FILE}" \
             -o ConnectTimeout=15 -p "${PORT}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "IMAGE='${IMAGE}' TAG='sha-${SHORT_SHA}' DIR='${DEPLOY_COMPOSE_DIR}' SVC='${DEPLOY_SERVICE}' bash -s" <<'REMOTE'
+            "IMAGE='${IMAGE}' TAG='sha-${SHORT_SHA}' DIR='${DEPLOY_COMPOSE_DIR}' SVC='${DEPLOY_SERVICE}' GHCR_USER='${GITHUB_REPOSITORY_OWNER}' GHCR_TOKEN='${GHCR_DEPLOY_TOKEN}' bash -s" <<'REMOTE'
           set -euo pipefail
           cd "${DIR}"
           FILE=""
@@ -212,27 +218,114 @@ jobs:
             echo "RED: ${DIR} 下未找到 compose 文件（docker-compose.yml/yaml、compose.yml/yaml 均无）。"
             exit 1
           fi
-          # 前置：生产 compose 必须引用 main 追踪标签；仍引用 latest 浮动标签则拒部署。
-          if ! grep -F "image:" "${FILE}" | grep -Fq "${IMAGE}:main"; then
-            echo "RED: ${FILE} 未引用 ${IMAGE}:main。"
-            echo "一次性运维前置：把该 service 的 image 改为 ${IMAGE}:main 后重跑（空提交 push 触发新链）。"
+          TARGET="${IMAGE}:${TAG}"
+          # 定位目标 service 的 image 行：必须存在，否则 fail-closed 并打印实际读到的段。
+          CUR_LINE="$(awk -v svc="${SVC}" '/^  [A-Za-z0-9_-]+:/{in_svc=($1==svc":")} in_svc && /^[[:space:]]*image:/{print; exit}' "${FILE}")"
+          if [ -z "${CUR_LINE}" ]; then
+            echo "RED: 在 ${FILE} 中未找到 service ${SVC} 的 image 行，拒绝继续。该 service 段实际内容如下："
+            awk -v svc="${SVC}" '/^  [A-Za-z0-9_-]+:/{in_svc=($1==svc":")} in_svc{print}' "${FILE}" || true
             exit 1
           fi
+          echo "当前 image 行：${CUR_LINE}"
+          # 回滚点：运行中容器的 image ID 与配置引用。
+          CID="$(docker compose -f "${FILE}" ps -q "${SVC}" || true)"
+          if [ -n "${CID}" ]; then
+            echo "回滚点 容器ID=${CID} imageID=$(docker inspect --format '{{.Image}}' "${CID}") Config.Image=$(docker inspect --format '{{.Config.Image}}' "${CID}")"
+          else
+            echo "回滚点 目标 service 当前未运行（cold deploy，无运行中产物可比）。"
+          fi
+          # 主动健康探测：生产容器无 Docker healthcheck，这是唯一真实探针；必须断言 200 并打印状态码。
+          probe_once() {
+            _code="$(curl -fsS --max-time 10 -o /dev/null -w '%{http_code}' 'http://127.0.0.1:38080/' 2>/dev/null || echo '000')"
+            echo "${_code}"
+            [ "${_code}" = "200" ]
+          }
+          wait_healthy() {
+            _i="0"
+            _code="000"
+            for _i in $(seq 1 12); do
+              if _code="$(probe_once)"; then
+                echo "HEALTH OK [${1}]: code=${_code}"
+                return 0
+              fi
+              echo "HEALTH WAIT [${1}]: try ${_i}/12 code=${_code}"
+              sleep 10
+            done
+            echo "HEALTH FAIL [${1}]: last code=${_code}"
+            return 1
+          }
+          do_rollback() {
+            echo "ROLLBACK: 还原备份 ${BACKUP} 并重起…"
+            cp "${BACKUP}" "${FILE}"
+            if ! docker compose -f "${FILE}" up -d "${SVC}"; then
+              echo "RED: 回滚重起失败，需人工介入：登录生产，进入 ${DIR}，比对 ${FILE} 与备份 ${BACKUP}，手动执行 docker compose up -d ${SVC} 并检查 38080 是否 200。"
+              return 1
+            fi
+            if wait_healthy "rollback"; then
+              echo "ROLLBACK OK: 已回到备份版本且健康 200。"
+              return 0
+            fi
+            echo "RED: 回滚后仍不健康，需人工介入：登录生产，进入 ${DIR}，用备份 ${BACKUP} 恢复 ${FILE} 后 docker compose up -d ${SVC}，并检查容器日志与 38080。"
+            return 1
+          }
+          BACKUP=""
+          if echo "${CUR_LINE}" | grep -Fq "${TARGET}"; then
+            echo "IDEMPOTENT: image 已是 ${TARGET}，跳过替换，直接做健康与产物一致性校验。"
+          else
+            BACKUP="${FILE}.bak.$(date -u +%Y%m%dT%H%M%SZ)"
+            cp "${FILE}" "${BACKUP}"
+            echo "已备份：${BACKUP}"
+            TMP_NEW="$(mktemp)"
+            if ! awk -v svc="${SVC}" -v img="${TARGET}" '
+              /^  [A-Za-z0-9_-]+:/ { in_svc = ($1 == svc ":") }
+              in_svc && /^[[:space:]]*image:/ { sub(/image:[ \t]*[^ \t]+/, "image: " img); replaced = 1 }
+              { print }
+              END { exit (replaced ? 0 : 1) }
+            ' "${FILE}" > "${TMP_NEW}"; then
+              echo "RED: image 替换未命中目标行，还原备份并退出。"
+              cp "${BACKUP}" "${FILE}"
+              rm -f "${TMP_NEW}"
+              exit 1
+            fi
+            mv "${TMP_NEW}" "${FILE}"
+            echo "已原子替换 image 为 ${TARGET}（备份：${BACKUP}）。"
+            if ! docker compose -f "${FILE}" config -q; then
+              echo "RED: compose config 校验失败，还原备份并退出。"
+              cp "${BACKUP}" "${FILE}"
+              exit 1
+            fi
+            echo "compose config 校验通过。"
+          fi
+          # 先登录再拉：宿主 GHCR 凭据寿命未知（UNPROVEN），不依赖宿主既有凭据；token 经 stdin，不落日志。
+          printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER}" --password-stdin
           docker compose -f "${FILE}" pull "${SVC}"
           docker compose -f "${FILE}" up -d "${SVC}"
-          OK="0"
-          for i in $(seq 1 12); do
-            if curl -fsS --max-time 10 "http://127.0.0.1:38080/" >/dev/null 2>&1; then OK="1"; break; fi
-            sleep 10
-          done
-          if [ "${OK}" != "1" ]; then
-            echo "RED: 健康检查失败（http://127.0.0.1:38080/ 120 秒内未 200），近 50 行日志如下："
-            docker compose -f "${FILE}" logs --tail=50 "${SVC}" || true
+          if ! wait_healthy "deploy"; then
+            echo "RED: 新版本健康检查失败，开始自动回滚。"
+            if [ -n "${BACKUP}" ]; then
+              do_rollback || true
+            else
+              echo "RED: 幂等路径（未改动任何文件）健康失败，需人工检查生产（容器日志与 38080）。"
+            fi
+            exit 1
+          fi
+          # 产物一致性：运行中容器的 image ID 必须等于本次拉取产物的 image ID；只凭 pull/up 退出码不算数。
+          NEW_CID="$(docker compose -f "${FILE}" ps -q "${SVC}")"
+          RUN_ID="$(docker inspect --format '{{.Image}}' "${NEW_CID}")"
+          LOCAL_ID="$(docker inspect --format '{{.Id}}' "${TARGET}")"
+          echo "运行中 imageID=${RUN_ID}"
+          echo "本次产物 imageID=${LOCAL_ID}（${TARGET}）"
+          if [ "${RUN_ID}" != "${LOCAL_ID}" ]; then
+            echo "RED: 运行中镜像与本次构建产物不一致，开始自动回滚。"
+            if [ -n "${BACKUP}" ]; then
+              do_rollback || true
+            else
+              echo "RED: 幂等路径产物不一致（未改动文件），需人工检查生产是否有外部改动。"
+            fi
             exit 1
           fi
           docker compose -f "${FILE}" ps "${SVC}"
-          docker compose -f "${FILE}" images "${SVC}" || true
-          echo "DEPLOY OK: ${IMAGE}:${TAG} 已上线并通过健康检查。"
+          echo "DEPLOY OK: ${TARGET} 已上线，健康 200，产物一致。"
           REMOTE
           echo "SSH deploy step exit=$? sha=${SHORT_SHA}"
 

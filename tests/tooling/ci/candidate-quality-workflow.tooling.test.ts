@@ -82,28 +82,32 @@ function caseImageNeedsQuality(content: string): void {
 }
 
 /**
- * 用例③：触发器含普通分支 push、普通 PR 与 manual dispatch；普通检查无镜像发布 job。
- * WS1 checks-only：保留 push（普通分支）+ pull_request + workflow_dispatch 检查入口，但无 image job。
+ * 用例③：仅手动 dispatch 触发；普通检查无镜像发布 job。
+ * 2026-09-11 决策：删除全部自动触发（push / pull_request / schedule / tag），
+ * 4 条流水线一律只在显式 workflow_dispatch 下运行；本用例反向钉死"不得存在自动触发"。
  * @param content candidate-quality.yml 全文
  */
 function caseTriggers(content: string): void {
-  assert.ok(content.includes('push:'), '缺 push 触发=RED');
-  assert.ok(/^\s{2}pull_request:/m.test(content), '缺普通 pull_request 质量门=RED');
   assert.ok(content.includes('workflow_dispatch'), '缺 manual dispatch 触发=RED');
+  assert.ok(!/^\s{2}push:/m.test(content), '不得存在 push 自动触发=RED（已改为仅手动 dispatch）');
+  assert.ok(!/^\s{2}pull_request:/m.test(content), '不得存在 pull_request 自动触发=RED');
+  assert.ok(!/^\s{2}schedule:/m.test(content), '不得存在 schedule 定时触发=RED');
   assert.ok(!/^\s{2}image:/m.test(content), '普通检查 workflow 不得含 image job=RED（checks-only）');
-  console.log('PASS: 用例③ push/pull_request/manual 触发且无镜像发布');
+  console.log('PASS: 用例③ 仅手动 dispatch 触发（无 push/PR/schedule）且无镜像发布');
 }
 
 /**
- * 用例③b：普通 PR 必须进入独立 P0 Chromium + WebKit 浏览器硬门。
+ * 用例③b：浏览器硬门仍须依赖同 SHA quality，且不得含自动触发。
  * @param content browser.yml 全文
  */
 function caseBrowserPullRequestGate(content: string): void {
-  assert.ok(/^\s{2}pull_request:/m.test(content), 'browser workflow 缺普通 pull_request 触发=RED');
+  assert.ok(!/^\s{2}push:/m.test(content), 'browser workflow 不得存在 push 自动触发=RED');
+  assert.ok(!/^\s{2}pull_request:/m.test(content), 'browser workflow 不得存在 pull_request 自动触发=RED');
+  assert.ok(content.includes('workflow_dispatch'), 'browser workflow 须保留手动 dispatch=RED');
   assert.ok(content.includes('needs: quality'), 'browser smoke 必须依赖同 SHA quality=RED');
   assert.ok(content.includes('chromium') && content.includes('webkit'), 'browser smoke 必须含 Chromium + WebKit=RED');
   assert.ok(content.includes('yarn test:browser:smoke'), 'browser smoke 缺真实执行命令=RED');
-  console.log('PASS: 用例③b 普通 PR 进入 P0 Chromium + WebKit 硬门');
+  console.log('PASS: 用例③b 浏览器硬门仅手动触发且依赖同 SHA quality');
 }
 
 /**

@@ -5,9 +5,6 @@
 name: Docker Push
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       tier_select:

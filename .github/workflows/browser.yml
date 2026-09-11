@@ -8,12 +8,6 @@
 name: Browser Smoke (P0)
 
 on:
-  push:
-    branches:
-      - main
-      - 'candidate/**'
-      - 'release/**'
-  pull_request:
   workflow_dispatch:
 
 permissions: {}

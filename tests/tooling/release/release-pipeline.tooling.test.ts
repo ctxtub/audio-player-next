@@ -66,9 +66,10 @@ console.log('--- Testing Release Pipeline & Security Controls ---');
 assert(fs.existsSync(workflowPath), 'Workflow file must exist');
 const workflowContent = fs.readFileSync(workflowPath, 'utf-8');
 
-// Triggers (WS2: 唯一可发布事件为 v* tag 与显式 dispatch；main push 永不发布)
+// Triggers (2026-09-11 决策：删除全部自动触发，docker-push 仅显式 dispatch)
 assert(!workflowContent.includes('branches:\n      - main'), 'WS2: docker-push must not trigger on main push');
-assert(workflowContent.includes('tags:\n      - \'v*\''), 'Workflow must trigger on push to v* tags');
+assert(!workflowContent.includes("tags:\n      - 'v*'"), 'docker-push 不得保留 v* tag 自动触发=RED（已改为仅手动 dispatch）');
+assert(!/^\s{2}push:/m.test(workflowContent), 'docker-push 不得存在 push 自动触发=RED');
 assert(workflowContent.includes('workflow_dispatch:'), 'Workflow must support workflow_dispatch');
 
 // Least privilege permissions
@@ -89,7 +90,7 @@ console.log('PASS: .github/workflows/docker-push.yml structure, triggers, permis
   assert(scriptContentWs2.includes('--sbom=true'), 'WS2: push-ghcr.sh must enable --sbom=true=RED');
   assert(scriptContentWs2.includes('--provenance=true'), 'WS2: push-ghcr.sh must enable --provenance=true=RED');
   assert(!workflowContent.includes('branches:\n      - main'), 'WS2: docker-push must not trigger on main push=RED');
-  assert(workflowContent.includes("tags:\n      - 'v*'"), 'WS2: docker-push must trigger on v* tags=RED');
+  assert(!workflowContent.includes("tags:\n      - 'v*'"), 'WS2: docker-push 不得保留 v* tag 自动触发=RED');
   assert(workflowContent.includes('tier_select'), 'WS2: docker-push dispatch must have tier_select input=RED');
   assert(workflowContent.includes('source_digest'), 'WS2: docker-push dispatch must have source_digest input=RED');
   assert(workflowContent.includes('promote_latest'), 'WS2: docker-push dispatch must have promote_latest input=RED');

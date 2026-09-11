@@ -11,7 +11,6 @@
     "test": "node scripts/run-tests.mjs",
     "test:unit": "node scripts/run-tests.mjs --group unit",
     "test:integration": "node scripts/run-tests.mjs --group integration",
-    "test:contract": "node -e \"console.log('NOT_APPLICABLE');process.exit(0)\"",
     "test:tooling": "node scripts/run-tests.mjs --group tooling",
     "test:list": "node scripts/run-tests.mjs --list",
     "test:catalog": "node scripts/check-test-catalog.mjs --require-full-spec-coverage",

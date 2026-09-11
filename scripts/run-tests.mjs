@@ -24,7 +24,7 @@ const EXPECTED_TABLES = [
 // 中文注释：单 suite 执行上限毫秒（180 秒，超时 exit 4）。
 const SUITE_TIMEOUT_MS = 180000;
 // 中文注释：允许的 group 枚举（含任务流全部层级）。
-const ALLOWED_GROUPS = ['unit', 'integration', 'contract', 'tooling', 'static', 'legacy', 'e2e', 'browser'];
+const ALLOWED_GROUPS = ['unit', 'integration', 'tooling', 'static'];
 // 中文注释：unit 禁止导入 lib/db 的静态扫描正则。
 const LIB_DB_IMPORT_RE = /from\s+['"].*lib\/db['"]|require\(['"].*lib\/db['"]\)/;
 

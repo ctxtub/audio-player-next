@@ -29,7 +29,7 @@ const execTimeoutMs: number = 6000;
 // 中文注释：自宿主运行上限毫秒（runner 跑自身元测试，需留出子进程 exec 余量）。
 const selfHostTimeoutMs: number = 120000;
 // 中文注释：允许的 group 枚举（含任务流全部层级，防未来分组被误判）。
-const allowedGroups: string[] = ['unit', 'integration', 'contract', 'tooling', 'static', 'legacy', 'e2e', 'browser'];
+const allowedGroups: string[] = ['unit', 'integration', 'tooling', 'static'];
 // 中文注释：已知 tooling 套件 ID（现有 db-guard 套件，拆分后归 tooling 组）。
 const knownToolingSuiteId: string = 'runner-database-path-safety';
 // 中文注释：已知 tooling 套件路径后缀（注册表 path 断言用）。

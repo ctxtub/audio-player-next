@@ -59,4 +59,4 @@ yarn test:integration                       # L2
 yarn test:tooling                           # Tooling
 ```
 
-分层速查：L1 单进程单单元确定性；L2 多真实生产模块穿越明确 seam；L3 运行中 production build + 真实浏览器；Contract 为边界兼容；Tooling 为测试工具自身；Static 为架构与资产禁令。Contract/Tooling/Static 不计产品覆盖。
+分层速查：L1 单进程单单元确定性；L2 多真实生产模块穿越明确 seam；L3 运行中 production build + 真实浏览器；Tooling 为测试工具自身；Static 为架构与资产禁令。Tooling/Static 不计产品覆盖。

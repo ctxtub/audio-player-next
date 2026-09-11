@@ -953,15 +953,14 @@ cases:
     priority: P0
     primary_defense: L2
     secondary_defenses: [L3]
-    lifecycle_status: BLOCKED
+    lifecycle_status: ACTIVE
     risk_tags: [auth, logout]
     spec_path: docs/e2e/05-认证授权与会话生命周期/04-登出双cookie清理与状态重置.md
     required_assertions:
       - assertion_id: dual-cookie-cleared
         display_name_zh: 双凭证清除
         surface: network
-    executable_ids: []
-    blocked_reason: 无登出双凭证清除行为覆盖：现存 logout-playback-reset 仅覆盖登出链 reset→pause 采样与播态清空，logout-probe-hardening 仅覆盖故障注入隔离与深拷贝隔离，均不断言 auth/session 双 cookie 被清除；需新增 L2 用例“登出后双 cookie 为空且状态重置”方可解 BLOCKED。P0 缺口，保持 CANDIDATE 高声。
+    executable_ids: [exec-logout-dual-cookie-clean-reset]
     fixtures: []
     ci_tier: CANDIDATE
     owner: auth-session
@@ -1312,6 +1311,11 @@ executables:
     layer: L2
     path: ./tests/integration/identity-session/login-existing-no-leak.integration.test.ts
     case_ids: [login-existing-no-leak]
+  - executable_id: exec-logout-dual-cookie-clean-reset
+    display_name_zh: 登出双凭证清理
+    layer: L2
+    path: ./tests/integration/identity-session/logout-dual-cookie-clean-reset.integration.test.ts
+    case_ids: [logout-dual-cookie-clean-reset]
   - executable_id: exec-guest-config-crud
     display_name_zh: 访客配置增删改查
     layer: L2

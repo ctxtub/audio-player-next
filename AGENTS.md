@@ -25,7 +25,7 @@
 |---|---|
 | 用户行为、API 契约、鉴权、状态机变化 | 更新/新增对应 `docs/e2e` 场景；核对 catalog case 与 oracle |
 | case 生命周期、优先级、执行绑定变化 | 更新 `tests/test-catalog.yaml` 并运行 `yarn test:static` |
-| runner、harness、workflow、测试工具变化 | 更新/新增 Tooling 测试并运行 `yarn test:tooling` |
+| runner、harness、测试工具变化 | 更新/新增 Tooling 测试并运行 `yarn test:tooling` |
 | 内部实现变化但外部契约不变 | 不强制碰文档；必须声明受影响 case 并运行对应回归 |
 | 非平凡功能或架构变化 | 先写 dated spec/plan，再实现；已发布历史文档不改写为当前事实 |
 
@@ -45,7 +45,7 @@ yarn build
 git diff --check
 ```
 
-修改 `scripts/**`、`.github/workflows/**`、`tests/tooling/**` 或 `prisma/schema.prisma` 时加跑 `yarn test:tooling`。浏览器可观察行为必须跑 `yarn test:browser:smoke`；产品失败不得靠重试或弱化 oracle 洗绿。
+修改 `scripts/**`、`tests/tooling/**` 或 `prisma/schema.prisma` 时加跑 `yarn test:tooling`。所有检查一律在本地按需手动执行（仓库不含 CI 自动触发）。浏览器可观察行为必须跑 `yarn test:browser:smoke`；产品失败不得靠重试或弱化 oracle 洗绿。
 
 ## 安全边界
 

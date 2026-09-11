@@ -40,7 +40,7 @@ cases:
       - assertion_id: guest-row-persisted
         display_name_zh: 访客行落库
         surface: db
-    executable_ids: [exec-guest-cookie-authorization, exec-release-pipeline, exec-candidate-quality-workflow, exec-tier-gate, exec-evidence-schema, exec-governance-docs]
+    executable_ids: [exec-guest-cookie-authorization, exec-tier-gate, exec-evidence-schema, exec-governance-docs]
     fixtures: []
     ci_tier: CANDIDATE
     owner: smoke-baseline
@@ -1445,11 +1445,6 @@ executables:
     layer: L1
     path: ./tests/unit/playback/paragraph-segmentation.unit.test.ts
     case_ids: [history-restore-card-resynth]
-  - executable_id: exec-release-pipeline
-    display_name_zh: 发布流水线
-    layer: TOOLING
-    path: ./tests/tooling/release/release-pipeline.tooling.test.ts
-    case_ids: [guest-identity-cookie-upgrade]
   - executable_id: exec-mock-lifecycle
     display_name_zh: Mock生命周期
     layer: TOOLING
@@ -1490,11 +1485,6 @@ executables:
     layer: TOOLING
     path: ./tests/tooling/catalog/catalog-checker.tooling.test.ts
     case_ids: [preload-continue-no-chat-pollution]
-  - executable_id: exec-candidate-quality-workflow
-    display_name_zh: 候选质量门结构断言
-    layer: TOOLING
-    path: ./tests/tooling/ci/candidate-quality-workflow.tooling.test.ts
-    case_ids: [guest-identity-cookie-upgrade]
   - executable_id: exec-tier-gate
     display_name_zh: tier完整性门自测
     layer: TOOLING

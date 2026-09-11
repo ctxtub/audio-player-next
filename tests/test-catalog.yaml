@@ -854,14 +854,17 @@ executables:
     display_name_zh: 显式播放预算
     layer: L2
     path: ./tests/integration/playback/explicit-play-budget.integration.test.ts
+  # P2-02 复核：保留。涵盖具名访客断点恢复、跨设备同步、GC、漂移检测与单调推进等 17 项完整 L2 行为断言。
   - executable_id: exec-paragraph-resume-mixed-legacy
     display_name_zh: 段落恢复混合遗留
     layer: L2
     path: ./tests/integration/playback/paragraph-resume-mixed.integration.test.ts
+  # P2-02 复核：保留。涵盖真实 GlassToast 组件单例渲染、终态替换过程态及 DOM 可见性 L1 行为断言。
   - executable_id: exec-toast-terminal-priority-legacy
     display_name_zh: 提示终态优先级遗留
     layer: L1
     path: ./tests/unit/creation-chat/toast-terminal-priority.unit.test.ts
+  # P2-02 复核：保留。涵盖真实 Composer 同 tick 连击防重、流式中互斥禁用及失败重试释放 L2 行为断言。
   - executable_id: exec-double-submit-legacy
     display_name_zh: 双发抑制遗留
     layer: L2
@@ -870,14 +873,17 @@ executables:
     display_name_zh: 生成中清空防孤儿播放
     layer: L2
     path: ./tests/integration/creation-chat/clear-during-generate-no-orphan-audio.integration.test.ts
+  # P2-02 复核：保留。涵盖并发双触发 flushInFlight 在途去重、底层 keepalive:true 透传及结算释放 L2 行为断言。
   - executable_id: exec-keepalive-dedup-legacy
     display_name_zh: 保活去重遗留
     layer: L2
     path: ./tests/integration/persistence-config/keepalive-dedup.integration.test.ts
+  # P2-02 复核：保留。涵盖 ChatLayout 空闲预填、发送中暂存 pending 及生成结束消费 L1 状态机与渲染断言。
   - executable_id: exec-pending-intent-ui-legacy
     display_name_zh: 待定意图界面遗留
     layer: L1
     path: ./tests/unit/creation-chat/pending-intent-ui.unit.test.ts
+  # P2-02 复核：保留。涵盖登出清理链单 store 故障注入隔离（try/finally 吞错续跑）与探针深冻保护 L2 行为断言。
   - executable_id: exec-logout-probe-hardening-legacy
     display_name_zh: 登出探针加固遗留
     layer: L2

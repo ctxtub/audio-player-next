@@ -106,7 +106,7 @@ node -e "const{createClient}=require('@libsql/client');(async()=>{
 
 ## 11. 调度说明
 
-执行调度以 catalog 为准（`lifecycle_status`/`executable_ids`/`ci_tier`），`MANUAL` 不进自动队列；数量口径以 `yarn test:static` 为准。
+执行调度以 catalog 为准（`lifecycle_status`/`executable_ids`/`ci_tier`），`MANUAL` 不进自动队列；数量口径以 `yarn test:catalog` 为准。
 详见 [维护规范](./maintenance.md)。
 
 ## 12. 写库单元防损坏标准流程（缺陷 #6，06-07 实证固化）

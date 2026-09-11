@@ -16,7 +16,7 @@
 
 > 填写真实命令、退出码和关键结果；未运行写 `NOT_RUN` 与原因。
 
-- [ ] `yarn test:static`
+- [ ] `yarn test:catalog`
 - [ ] `yarn lint`
 - [ ] `yarn tsc --noEmit --incremental false`
 - [ ] `yarn test:unit`

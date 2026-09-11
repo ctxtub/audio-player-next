@@ -15,7 +15,7 @@
 
 - 产品场景与 oracle：`docs/e2e/**`。
 - case、executable、层级、生命周期与 CI tier：`tests/test-catalog.yaml`。
-- 机器一致性：`yarn test:static`；统计与文档冲突时以 checker 为准并阻断。
+- 机器一致性：`yarn test:catalog`；统计与文档冲突时以 checker 为准并阻断。
 - L1：`yarn test:unit`；L2：`yarn test:integration`；Tooling：`yarn test:tooling`；L3：`yarn test:browser:smoke`。
 - `MANUAL` 不进入自动执行队列；不得把 PLANNED/BLOCKED 伪装为 ACTIVE 或 PASS。
 
@@ -24,7 +24,7 @@
 | 变更 | 必须处理 |
 |---|---|
 | 用户行为、API 契约、鉴权、状态机变化 | 更新/新增对应 `docs/e2e` 场景；核对 catalog case 与 oracle |
-| case 生命周期、优先级、执行绑定变化 | 更新 `tests/test-catalog.yaml` 并运行 `yarn test:static` |
+| case 生命周期、优先级、执行绑定变化 | 更新 `tests/test-catalog.yaml` 并运行 `yarn test:catalog` |
 | runner、harness、测试工具变化 | 更新/新增 Tooling 测试并运行 `yarn test:tooling` |
 | 内部实现变化但外部契约不变 | 不强制碰文档；必须声明受影响 case 并运行对应回归 |
 | 非平凡功能或架构变化 | 先写 dated spec/plan，再实现；已发布历史文档不改写为当前事实 |
@@ -36,7 +36,7 @@
 按变更影响运行窄测；提交前至少执行：
 
 ```bash
-yarn test:static
+yarn test:catalog
 yarn lint
 yarn tsc --noEmit --incremental false
 yarn test:unit

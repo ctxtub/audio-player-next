@@ -51,7 +51,7 @@
 ## 4. 常用命令
 
 ```bash
-yarn test:static                             # catalog 校验（含 docs/e2e 全认领）
+yarn test:catalog                            # catalog 校验（含 docs/e2e 全认领）
 node scripts/check-tier-gate.mjs --select CANDIDATE|RELEASE # 候选/发布门
 node scripts/run-tests.mjs --list          # 查看 runner 注册表（三方一致的一方）
 yarn test:unit                              # L1

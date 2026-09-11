@@ -13,7 +13,7 @@ import path from 'node:path';
  * 2. `isolation.md` 含 harness 真相锚点
  *   （`31120-31150`、`active.json`、`app-handle-`、`ownedMock`）；
  * 3. `maintenance.md` 为 catalog 驱动（无 `E2E-XX-YY` 主编号、无手工总数，
- *    以 `case_id`/`yarn test:static`/`lifecycle_status` 为准）；
+ *    以 `case_id`/`yarn test:catalog`/`lifecycle_status` 为准）；
  * 4. 任务 manifest schema + 结项 schema 样例经专用 Tooling 校验器
  *    （D5 已决：独立 suite，不并入 `check-test-catalog.mjs`）正负例全过；
  * 5. `evidence.md` 含 CI 工件白名单/黑名单/脱敏规则与 `retention-days: 30` 指针；
@@ -130,7 +130,7 @@ async function caseMaintenanceCatalogDriven(): Promise<void> {
     // 中文注释：文档内禁手工总数（数字 + 个父/个原子这类手维护计数）。
     assert.ok(!/\d+\s*个(父|原子)/.test(raw), 'maintenance.md 不得含手工总数');
     // 中文注释：身份/数量/调度三权威口径齐全。
-    for (const anchor of ['case_id', 'legacy_aliases', 'yarn test:static', 'lifecycle_status', 'executable_ids', 'ci_tier', 'MANUAL']) {
+    for (const anchor of ['case_id', 'legacy_aliases', 'yarn test:catalog', 'lifecycle_status', 'executable_ids', 'ci_tier', 'MANUAL']) {
         assert.ok(raw.includes(anchor), `maintenance.md 须含 catalog 驱动锚点：${anchor}`);
     }
     console.log('PASS: maintenance.md 为 catalog 驱动（case_id 身份 + checker 计数 + tier 调度）');
@@ -268,7 +268,7 @@ const goodManifest: TaskManifest = {
     handover: {
         commit_sha: '2f4910fe8f178bcf164406b6d16a9afa48820557',
         changed_files: ['docs/testing/execution/isolation.md'],
-        commands: [{ command: 'yarn test:static', exit_code: 0 }],
+        commands: [{ command: 'yarn test:catalog', exit_code: 0 }],
         not_run: ['yarn test:browser:smoke'],
         ownership: { pids: 'none', ports: 'none', db: 'untouched' },
         recovery: 'git rev-parse HEAD',

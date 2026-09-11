@@ -51,8 +51,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - name: Static check
-        run: yarn test:static
+      - name: Catalog check
+        run: yarn test:catalog
 
       - name: Lint
         run: yarn lint

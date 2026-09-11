@@ -89,6 +89,9 @@ jobs:
       - name: Lint
         run: yarn lint
 
+      - name: Generate Next.js type definitions
+        run: npx next typegen
+
       - name: Typecheck
         run: yarn tsc --noEmit --incremental false
 

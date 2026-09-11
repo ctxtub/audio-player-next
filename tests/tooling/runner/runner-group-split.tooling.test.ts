@@ -34,8 +34,9 @@ const allowedGroups: string[] = ['unit', 'integration', 'contract', 'tooling', '
 const knownToolingSuiteId: string = 'runner-database-path-safety';
 // 中文注释：已知 tooling 套件路径后缀（注册表 path 断言用）。
 const knownToolingPathSuffix: string = 'tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts';
-// 中文注释：三个元测试 suite ID（meta-suite 策略主体，needs_db 必须为 false）。
-const metaSuiteIds: string[] = ['runner-group-split', 'catalog-checker', 'candidate-quality-workflow'];
+// 中文注释：元测试 suite ID（meta-suite 策略主体，needs_db 必须为 false）。
+// 2026-09-11：candidate-quality-workflow 随 GitHub Actions 一并删除，故元测试集缩为两个。
+const metaSuiteIds: string[] = ['runner-group-split', 'catalog-checker'];
 // 中文注释：磁盘扫描排除前缀（与 scripts/check-test-catalog.mjs 同口径：支撑实现与 Playwright 浏览器域非 runner 可执行）。
 const diskExcludePrefixes: string[] = ['tests/support/', 'tests/system/'];
 // 中文注释：层级后缀剥离正则（与 scripts/test-database-path-safety.mjs 同口径）。
@@ -395,7 +396,6 @@ function metaSuiteRelPaths(): string[] {
     return [
         path.join('tests', 'tooling', 'runner', 'runner-group-split.tooling.test.ts'),
         path.join('tests', 'tooling', 'catalog', 'catalog-checker.tooling.test.ts'),
-        path.join('tests', 'tooling', 'ci', 'candidate-quality-workflow.tooling.test.ts'),
     ];
 }
 

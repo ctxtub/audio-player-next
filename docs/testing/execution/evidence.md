@@ -1,6 +1,6 @@
 # 证据与留档规范（evidence，v1）
 
-本文档定义运行证据的目录结构、manifest 要求、指纹与脱敏规则。
+本文档定义运行证据的目录结构、manifest 要求与脱敏规则。
 私有运行产物不得入库，结论不得回写 catalog。
 
 行协议版本：v1（最小执行结果协议，`scripts/evidence-schema.mjs` 为唯一校验器，Node/浏览器/CI 共用同一口径；

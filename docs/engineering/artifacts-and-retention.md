@@ -42,7 +42,7 @@ docs/testing/**                        # 当前测试体系权威
   acceptance/
 ```
 
-现有 runner 的 `.e2e-results/<run-id>/` 与浏览器 reporter 的 `.e2e-results/browser/<run-id>/` 是兼容入口；多 Agent 编排层必须在 handoff 中记录真实路径，不得伪造统一位置。支持自定义结果根的工具优先配置到 `<change-id>/<run-id>`；不支持时保留原生路径并在 change manifest 建立索引。
+现有 runner 的 `.e2e-results/<run-id>/` 与浏览器 reporter 的 `.e2e-results/browser/<run-id>/` 是兼容入口；多 Agent 编排如需统一索引，可在交接记录中注明真实路径，不得伪造统一位置。支持自定义结果根的工具可优先配置到 `<change-id>/<run-id>`；不支持时保留原生路径即可。
 
 ### `.agent-runs/`
 

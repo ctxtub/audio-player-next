@@ -86,6 +86,25 @@ jobs:
       contents: read
       packages: write
     steps:
+      # 中文注释：开始通知 warn-only：缺 webhook 跳过（exit 0），curl 失败只记 ::warning::，
+      # 绝不阻塞后续 GHCR 发布——通知是可观察性旁路；历史语义标题 Docker镜像 编译开始。
+      - name: Send Bark start notification
+        env:
+          BARK_WEBHOOK: ${{ secrets.BARK_WEBHOOK }}
+        run: |
+          if [ -z "${BARK_WEBHOOK}" ]; then
+            echo "BARK_WEBHOOK 未配置，跳过 Bark 开始通知（去仓库 Settings → Secrets and variables → Actions 新建同名 secret 后续链即恢复通知）。"
+            exit 0
+          fi
+          MESSAGE_TITLE="Docker镜像 编译开始"
+          REPO_NAME=$(basename "${GITHUB_REPOSITORY}")
+          COMMIT_ID=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          MESSAGE_BODY="仓库：${REPO_NAME} 分支：${GITHUB_REF_NAME} 提交：${COMMIT_ID}"
+          ENCODED_TITLE=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_TITLE}")
+          ENCODED_BODY=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "${MESSAGE_BODY}")
+          curl -fsS --max-time 15 "${BARK_WEBHOOK}/${ENCODED_TITLE}/${ENCODED_BODY}" \
+            || echo "::warning::Bark 开始通知传输失败（不阻塞 GHCR 发布）：${MESSAGE_TITLE} ${COMMIT_ID}"
+
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 2026-09-11 supply-chain-pin（API 已验真）
 

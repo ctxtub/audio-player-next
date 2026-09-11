@@ -13,7 +13,7 @@ import path from 'node:path';
  * ⑤pin：全部第三方 action 为真实完整 SHA + tag 注释，与 lock 一致；
  * ⑥无自动 latest 漂移；
  * ⑦轻量契约：无 deploy、无 SSH、无 DEPLOY_前缀、无 compose 改写、无回滚、无生产健康逻辑（重上线构造全部缺席）；
- * ⑧notify 必须 always()，按 publish 结论区分标题，Bark 传输 warn-only。
+ * ⑧开始 + 结果两次 Bark 通知：publish 首步开始通知（历史标题 Docker镜像 编译开始）+ notify 按 publish 结论区分成功/失败标题，两次都 warn-only。
  *
  * 口径：纯文件结构断言，不触 DB/网络/浏览器；needs_db=false 叶子套件。
  * 本文件只读 workflow/脚本/lock 与 runner 注册表文本，不执行任何套件，无自指递归。
@@ -267,21 +267,50 @@ async function caseLightweightNoDeploy(): Promise<void> {
 }
 
 /**
- * 用例⑧：Bark 成功/失败通知 + warn-only 传输语义 + secret 卫生（按 publish 结论）。
+ * 用例⑧：Bark 开始 + 成功/失败结果两次通知 + warn-only 传输语义 + secret 卫生。
  */
 async function caseBarkNotify(): Promise<void> {
   const workflow: string = readText(workflowRel);
   const notify: string = jobSection(workflow, 'notify');
+  const publish: string = jobSection(workflow, 'publish');
   // 只查代码行：注释行栽赃 ::warning:: 不得算数；|| exit 1 会把 warn-only 翻成 fail，不得出现。
   const notifyCode: string = notify.split('\n').filter((l) => !l.trimStart().startsWith('#')).join('\n');
+  const publishCode: string = publish.split('\n').filter((l) => !l.trimStart().startsWith('#')).join('\n');
+  const workflowCode: string = workflow.split('\n').filter((l) => !l.trimStart().startsWith('#')).join('\n');
+  // 中文注释：恰好两次通知发送——publish 首步开始通知 + notify 结果通知（只数代码行，注释栽赃不算数）。
+  const sendSteps: string[] = workflowCode.split('\n').filter((l) => /-\s*name:\s*Send Bark/.test(l));
+  assert.strictEqual(sendSteps.length, 2, `Bark 发送步骤必须恰为两次（开始 + 结果），实际=${sendSteps.length}=RED`);
+  assert.ok(publish.includes('Send Bark start notification'), 'publish 首步必须为 Send Bark start notification=RED');
+  assert.ok(notify.includes('Send Bark notification'), 'notify 须保留 Send Bark notification 结果通知=RED');
+  // 中文注释：开始通知必须为 publish 首个有意义步骤（先于 Checkout/Buildx/Login/push，避免重排序吞掉开始语义）。
+  const publishStepNames: string[] = publishCode.split('\n').filter((l) => /^\s*-\s*name:\s*/.test(l));
+  assert.ok(publishStepNames.length >= 2, 'publish 须至少含开始通知 + 发布步骤=RED');
+  assert.ok(
+    publishStepNames[0].includes('Send Bark start notification'),
+    `publish 首步必须为开始通知，实际=${publishStepNames[0] ?? ''}=RED`,
+  );
+  // 中文注释：开始通知历史语义标题 Docker镜像 编译开始；结果通知按 publish 结论区分成功/失败。
+  assert.ok(publish.includes('Docker镜像 编译开始'), 'publish 开始通知须用历史标题 Docker镜像 编译开始=RED');
+  assert.ok(!publishCode.includes('needs.publish.result'), '开始通知不得引用 publish 结论（尚无结果，只能是开始语义）=RED');
   assert.ok(notify.includes('BARK_WEBHOOK'), 'notify 须用 BARK_WEBHOOK=RED');
+  assert.ok(publish.includes('BARK_WEBHOOK'), 'publish 开始通知须用 BARK_WEBHOOK=RED');
+  // 中文注释：两次发送都须经 env 映射 secrets.BARK_WEBHOOK（各一次，共两次），禁止直接拼进 run 字面。
+  const envMappings: RegExpMatchArray | null = workflowCode.match(/BARK_WEBHOOK:\s*\$\{\{\s*secrets\.BARK_WEBHOOK\s*\}\}/g);
+  assert.strictEqual(envMappings?.length ?? 0, 2, `BARK_WEBHOOK env 映射必须恰两次（开始 + 结果），实际=${envMappings?.length ?? 0}=RED`);
+  const curlSends: RegExpMatchArray | null = workflowCode.match(/curl\s.*"\$\{BARK_WEBHOOK\}\//g);
+  assert.strictEqual(curlSends?.length ?? 0, 2, `curl 发送必须恰两次（开始 + 结果），实际=${curlSends?.length ?? 0}=RED`);
   assert.ok(notify.includes('needs.publish.result'), 'notify 标题须按 publish 结论区分成功/失败=RED');
   assert.ok(!notify.includes('needs.deploy'), 'notify 不得引用已删除的 deploy 结论=RED');
   assert.ok(notify.includes('推送成功') && notify.includes('推送失败'), 'notify 须区分推送成功/失败标题=RED');
+  // 中文注释：两次通知都 warn-only：缺 webhook 跳过（exit 0），curl 失败只记 ::warning::，不得 || exit 1 阻塞发布。
   assert.ok(notifyCode.includes('::warning::'), 'Bark 传输失败须记 ::warning::（代码行，非注释，warn-only 不翻转结论）=RED');
+  assert.ok(publishCode.includes('::warning::'), '开始通知传输失败须记 ::warning::（代码行，warn-only 不阻塞 GHCR 发布）=RED');
   assert.ok(!notifyCode.includes('|| exit 1'), 'notify 禁止 || exit 1（翻转 warn-only）=RED');
+  assert.ok(!publishCode.includes('|| exit 1'), 'publish 开始通知禁止 || exit 1（阻塞发布）=RED');
+  assert.ok(notifyCode.includes('exit 0'), 'notify 缺 webhook 须 exit 0 跳过=RED');
+  assert.ok(publishCode.includes('exit 0'), '开始通知缺 webhook 须 exit 0 跳过（不阻塞发布）=RED');
   assert.ok(!workflow.includes('${{ secrets.BARK_WEBHOOK }}/'), 'BARK_WEBHOOK 禁止直接拼进 run 字面（须 env 映射）=RED');
-  console.log('PASS: 用例⑧ Bark 成功/失败通知 + warn-only + secret 卫生');
+  console.log('PASS: 用例⑧ Bark 开始 + 成功/失败结果两次通知 + warn-only + secret 卫生');
 }
 
 /**

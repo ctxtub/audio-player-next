@@ -43,31 +43,38 @@ test("访客冷启动首屏渲染", async ({ page, harnessEnv, evidence }) => {
     page.on("pageerror", (err) => {
         pageErrors.push(String(err).slice(0, 300));
     });
-    /** trpc 响应收集（promise 化，断言前 await 收敛，无悬空）。 */
-    const trpcPending: Array<Promise<{ url: string; status: number; ok: boolean }>> = [];
+    /** trpc 单条收集结果（timedOut 仅为证据标记；ok=false 不计入 oracle 满足集）。 */
+    type TrpcCall = { url: string; status: number; ok: boolean; timedOut?: boolean };
+    /** trpc 响应收集（promise 化，断言前 await 收敛；单条 15s 超时兜底，
+     * 防个别长尾/不断流响应拖住整用例——超时条记 ok=false，不满足 oracle，严格性不变）。 */
+    const trpcPending: Array<Promise<TrpcCall>> = [];
     page.on("response", (res) => {
         const url: string = res.url();
         if (!url.includes("/api/trpc")) {
             return;
         }
+        const status: number = res.status();
         const short: string =
             url.split("?")[0] +
             (url.includes("config") ? "?config" : url.includes("auth") ? "?auth" : "");
         trpcPending.push(
-            (async () => {
-                let ok = res.status() === 200;
-                try {
-                    const txt: string = await res.text();
-                    const parsed: unknown = JSON.parse(txt);
-                    const arr: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
-                    ok =
-                        arr.every((r) => !(r as { error?: unknown }).error) &&
-                        res.status() === 200;
-                } catch {
-                    ok = res.status() === 200;
-                }
-                return { url: short, status: res.status(), ok };
-            })(),
+            Promise.race([
+                (async (): Promise<TrpcCall> => {
+                    let ok = status === 200;
+                    try {
+                        const txt: string = await res.text();
+                        const parsed: unknown = JSON.parse(txt);
+                        const arr: unknown[] = Array.isArray(parsed) ? parsed : [parsed];
+                        ok = arr.every((r) => !(r as { error?: unknown }).error) && status === 200;
+                    } catch {
+                        ok = status === 200;
+                    }
+                    return { url: short, status, ok };
+                })(),
+                new Promise<TrpcCall>((resolve) =>
+                    setTimeout(() => resolve({ url: short, status, ok: false, timedOut: true }), 15000),
+                ),
+            ]),
         );
     });
 
@@ -97,7 +104,12 @@ test("访客冷启动首屏渲染", async ({ page, harnessEnv, evidence }) => {
         }
         return out;
     }
-    const dbBefore: Record<string, number> = await readDirtyCounts();
+    const dbBefore: Record<string, number> = await Promise.race([
+        readDirtyCounts(),
+        new Promise<Record<string, number>>((_, reject) =>
+            setTimeout(() => reject(new Error("db-read-timeout: 隔离库直读 30s 未返回")), 30000),
+        ),
+    ]);
 
     // 中文注释：全新隔离 context（fixtures 每用例空 storageState）打开 /，记录重定向链。
     const redirectChain: string[] = [];
@@ -190,7 +202,13 @@ test("访客冷启动首屏渲染", async ({ page, harnessEnv, evidence }) => {
     recorder.step("关键trpc成功", trpcCalls);
 
     // 中文注释：四表零脏行（delta：本用例未新增任何脏行；绝对值记证据）。
-    const dbAfter: Record<string, number> = await readDirtyCounts();
+    // 读库 30s 兜底：隔离库直读必须秒回，超时即大声失败（防 180s 全局超时掩盖根因）。
+    const dbAfter: Record<string, number> = await Promise.race([
+        readDirtyCounts(),
+        new Promise<Record<string, number>>((_, reject) =>
+            setTimeout(() => reject(new Error("db-read-timeout: 隔离库直读 30s 未返回")), 30000),
+        ),
+    ]);
     client.close();
     const dbDelta: Record<string, number> = {};
     for (const t of dirtyTables) {

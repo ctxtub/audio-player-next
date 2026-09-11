@@ -437,6 +437,67 @@ function caseSupplyChainPins(
   assert.ok(script.includes('--provenance=true'), 'WS2: 构建缺 --provenance=true=RED');
   assert.ok(dockerPush.includes('upload-artifact'), 'WS2: 发布 workflow 缺脱敏 upload-artifact=RED');
   assert.ok(dockerPush.includes('retention-days: 30'), 'WS2: 工件缺 retention-days: 30=RED');
+
+  // 真实解析锁：形状校验（上面那条 40-hex 正则）抓不到"长度合法但 upstream 不存在"的伪造 SHA。
+  // 2026-09-11 事故：5 个 action 被钉到编造 SHA，4 个 workflow 的每个 job 都在 Set up job 秒挂。
+  // 这里用经 GitHub API 真实解析生成的 lock 做值一致性校验（离线、确定性）；
+  // 在线复验由 CI 步骤 `node scripts/verify-action-pins.mjs` 完成（带 token）。
+  const lockRel: string = path.join('tests', 'tooling', 'ci', 'action-pins.lock.json');
+  const lockAbs: string = path.join(repoRoot, lockRel);
+  assert.ok(
+    fs.existsSync(lockAbs),
+    'WS2: 缺 action-pins.lock.json=RED（跑 `node scripts/verify-action-pins.mjs --update` 生成）',
+  );
+  const lockEntries: Array<{ repo: string; tag: string; sha: string }> = JSON.parse(
+    fs.readFileSync(lockAbs, 'utf8'),
+  ).entries;
+  assert.ok(Array.isArray(lockEntries) && lockEntries.length >= 2, 'WS2: pin lock 条目过少=RED');
+  const lockMap: Map<string, string> = new Map(
+    lockEntries.map((e): [string, string] => [`${e.repo}@${e.tag}`, e.sha]),
+  );
+
+  const livePins: Map<string, string> = new Map();
+  const pinConflicts: string[] = [];
+  for (const [wfName, content] of [
+    ['candidate-quality.yml', candidate],
+    ['docker-push.yml', dockerPush],
+    ['browser.yml', browser],
+    ['nightly-browser.yml', nightly],
+  ] as Array<[string, string]>) {
+    for (const line of content.split('\n').filter((l) => l.includes('uses:'))) {
+      const m: RegExpExecArray | null =
+        /uses:\s*([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)@([0-9a-f]{40})\s*#\s*(v[\w.\-]+)/.exec(line);
+      if (!m) continue;
+      const key: string = `${m[1]}@${m[3]}`;
+      const prev: string | undefined = livePins.get(key);
+      // 同一 repo@tag 在不同 workflow 里被钉成不同 SHA：必须立即 RED，
+      // 否则后写覆盖会让伪造值被其它文件的好值掩盖（真负例证明过这个洞）。
+      if (prev !== undefined && prev !== m[2]) {
+        pinConflicts.push(`${key}（${prev} vs ${m[2]} @ ${wfName}）`);
+      }
+      livePins.set(key, m[2]);
+    }
+  }
+  assert.ok(
+    pinConflicts.length === 0,
+    `WS2: 同一 pin 在不同 workflow 中被钉成不同 SHA=RED：${pinConflicts.join('；')}`,
+  );
+  for (const [key, sha] of livePins) {
+    const locked: string | undefined = lockMap.get(key);
+    assert.ok(
+      locked !== undefined,
+      `WS2: workflow 中的 pin ${key} 未登记在 action-pins.lock.json=RED（${sha}）`,
+    );
+    assert.ok(
+      locked === sha,
+      `WS2: ${key} 的 SHA 与经真实解析的 lock 不一致=RED（workflow=${sha} lock=${locked}）`,
+    );
+  }
+  for (const key of lockMap.keys()) {
+    assert.ok(livePins.has(key), `WS2: action-pins.lock.json 存在已不使用的陈旧条目 ${key}=RED`);
+  }
+  console.log(`PASS: 用例⑪b pin 与真实解析 lock 一致（${livePins.size} 个唯一 pin，离线校验）`);
+
   console.log('PASS: 用例⑪ 全 pin + SBOM/provenance + 脱敏工件');
 }
 

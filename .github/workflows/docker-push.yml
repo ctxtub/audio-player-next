@@ -86,6 +86,11 @@ jobs:
             echo "未命中 tooling 路径，跳过强制门"
           fi
 
+      - name: Verify action pin SHAs (supply chain)
+        run: node scripts/verify-action-pins.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Static check
         run: yarn test:static
 

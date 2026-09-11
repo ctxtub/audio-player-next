@@ -41,6 +41,11 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Verify action pin SHAs (supply chain)
+        run: node scripts/verify-action-pins.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Static check
         run: yarn test:static
 

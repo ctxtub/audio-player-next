@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createClient } from '@libsql/client';
 import * as safety from './test-database-path-safety.mjs';
-import { loadEvidenceCatalog, validateRow, expandAssertionClaims, SCHEMA_VERSION } from './evidence-schema.mjs';
+import { loadEvidenceCatalog, validateRow, SCHEMA_VERSION } from './evidence-schema.mjs';
 
 const cwd = process.cwd();
 
@@ -541,26 +541,7 @@ async function main() {
             case_ids: caseIds,
             commit: commitSha,
         };
-        const rows = [summary];
-        for (const e of execs) {
-            for (const claim of expandAssertionClaims(evidenceCatalog, e.executable_id)) {
-                rows.push({
-                    schema_version: SCHEMA_VERSION,
-                    kind: 'assertion',
-                    run_id: runId,
-                    case_id: claim.case_id,
-                    executable_id: e.executable_id,
-                    assertion_id: claim.assertion_id,
-                    surface: claim.surface,
-                    verdict,
-                    evidence_path: evidencePath,
-                    duration_ms: durationMs,
-                    commit: commitSha,
-                    suite_id: entry.id,
-                });
-            }
-        }
-        return rows;
+        return [summary];
     }
     function writeResultsLine(entry, verdict, exitCode, durationMs) {
         const rows = buildResultRows(entry, verdict, exitCode, durationMs);

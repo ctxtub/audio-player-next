@@ -279,9 +279,9 @@ const PRIORITY_SET = new Set(['P0', 'P1', 'P2', 'P3']);
 const LAYER_SET = new Set(['L1', 'L2', 'L3']);
 const LIFECYCLE_SET = new Set(['PLANNED', 'ACTIVE', 'BLOCKED', 'MANUAL', 'LEGACY-NON-COVERAGE', 'RETIRED']);
 // 中文注释：case 允许键集合（含条件键，run_verdict 明确不在其中）。
-const CASE_ALLOWED_KEYS = new Set(['case_id', 'display_name_zh', 'legacy_aliases', 'journey_id', 'user_goal', 'priority', 'lifecycle_status', 'risk_tags', 'spec_path', 'required_assertions', 'executable_ids', 'fixtures', 'owner', 'blocked_reason', 'manual_reason']);
-// 中文注释：executable 允许键集合（含 L3 必填 evidence_surfaces）。
-const EXEC_ALLOWED_KEYS = new Set(['executable_id', 'display_name_zh', 'layer', 'path', 'case_ids', 'evidence_surfaces']);
+const CASE_ALLOWED_KEYS = new Set(['case_id', 'display_name_zh', 'legacy_aliases', 'journey_id', 'user_goal', 'priority', 'lifecycle_status', 'risk_tags', 'spec_path', 'executable_ids', 'fixtures', 'owner', 'blocked_reason', 'manual_reason']);
+// 中文注释：executable 允许键集合。
+const EXEC_ALLOWED_KEYS = new Set(['executable_id', 'display_name_zh', 'layer', 'path', 'case_ids']);
 // 中文注释：语义名 kebab-case 正则。
 const KEBAB_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // 中文注释：spec 路径正则。
@@ -336,18 +336,6 @@ function validateSchemaHandwritten(catalog) {
     if (!LIFECYCLE_SET.has(c.lifecycle_status)) errors.push(`${label} 非法枚举 lifecycle_status（六值之一，实际=${JSON.stringify(c.lifecycle_status)}）`);
     if (!Array.isArray(c.risk_tags)) errors.push(`${label} 缺 risk_tags（须为数组）`);
     if (!isNonEmptyString(c.spec_path) || !SPEC_PATH_RE.test(c.spec_path)) errors.push(`${label} 非法 spec_path（须形如 docs/e2e/...md，实际=${JSON.stringify(c.spec_path)}）`);
-    if (!Array.isArray(c.required_assertions) || c.required_assertions.length === 0) errors.push(`${label} 缺 required_assertions（须为非空数组）`);
-    else {
-      c.required_assertions.forEach((a, j) => {
-        if (a === null || typeof a !== 'object' || Array.isArray(a)) { errors.push(`${label}.required_assertions[${j}] 必须为映射`); return; }
-        if ('run_verdict' in a) errors.push(`${label}.required_assertions[${j}] 出现非法字段 run_verdict`);
-        if (!isNonEmptyString(a.assertion_id) || !KEBAB_RE.test(a.assertion_id)) errors.push(`${label}.required_assertions[${j}] 非法 assertion_id：${JSON.stringify(a.assertion_id)}`);
-        if (!isNonEmptyString(a.display_name_zh)) errors.push(`${label}.required_assertions[${j}] 缺 display_name_zh`);
-        for (const k of Object.keys(a)) {
-          if (!['assertion_id', 'display_name_zh', 'surface'].includes(k)) errors.push(`${label}.required_assertions[${j}] 非法字段：${k}`);
-        }
-      });
-    }
     if (!Array.isArray(c.executable_ids)) errors.push(`${label} 缺 executable_ids（须为数组）`);
     else if (!c.executable_ids.every(isNonEmptyString)) errors.push(`${label} 非法 executable_ids（须为非空字符串数组）`);
     if (!Array.isArray(c.fixtures)) errors.push(`${label} 缺 fixtures（须为数组）`);
@@ -373,15 +361,6 @@ function validateSchemaHandwritten(catalog) {
     if (!isNonEmptyString(e.path)) errors.push(`${label} 缺 path`);
     if (!Array.isArray(e.case_ids) || e.case_ids.length === 0) errors.push(`${label} 缺 case_ids（须为非空数组）`);
     else if (!e.case_ids.every(isNonEmptyString)) errors.push(`${label} 非法 case_ids（须为非空字符串数组）`);
-    if (e.layer === 'L3') {
-      if (!Array.isArray(e.evidence_surfaces) || e.evidence_surfaces.length === 0 || !e.evidence_surfaces.every(isNonEmptyString)) {
-        errors.push(`${label} 缺 evidence_surfaces（layer=L3 必填非空字符串数组，绑定真实证据面）`);
-      }
-    } else if (e.evidence_surfaces !== undefined) {
-      if (!Array.isArray(e.evidence_surfaces) || !e.evidence_surfaces.every(isNonEmptyString)) {
-        errors.push(`${label} 非法 evidence_surfaces（须为字符串数组）`);
-      }
-    }
   });
   return errors;
 }
@@ -539,28 +518,6 @@ function main() {
   }
   if (pathErrors.length > 0) {
     for (const e of pathErrors) console.error(`path 非法：${e}`);
-    process.exit(1);
-  }
-
-  // 中文注释：②b executable evidence_surfaces 必须覆盖其绑定 case 的 required_assertions[].surface 并集（state 面护栏，与 evidence-schema 同口径）。
-  const surfaceErrors = [];
-  for (const e of catalog.executables) {
-    if (!Array.isArray(e.evidence_surfaces)) continue;
-    const declared = new Set(e.evidence_surfaces);
-    for (const cid of (e.case_ids || [])) {
-      const c = caseById.get(cid);
-      if (!c || !Array.isArray(c.required_assertions)) continue;
-      for (const a of c.required_assertions) {
-        const surf = a !== null && typeof a === 'object' ? a.surface : undefined;
-        if (typeof surf !== 'string' || surf.length === 0) continue;
-        if (!declared.has(surf)) {
-          surfaceErrors.push(`executable ${e.executable_id} 的 evidence_surfaces 缺 ${surf}（case ${cid} 的 required_assertions 要求 assertion ${a.assertion_id}）`);
-        }
-      }
-    }
-  }
-  if (surfaceErrors.length > 0) {
-    for (const e of surfaceErrors) console.error(`surface 非法：${e}`);
     process.exit(1);
   }
 

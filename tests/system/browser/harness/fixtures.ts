@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, sep } from "node:path";
 import { createCaseRecorder } from "./evidence-recorder.mjs";
 import { buildCaseId } from "./jsonl-reporter";
-import { expandAssertionClaims, findExecutablesForPath, loadEvidenceCatalog } from "../../../../scripts/evidence-schema.mjs";
+import { findExecutablesForPath, loadEvidenceCatalog } from "../../../../scripts/evidence-schema.mjs";
 
 /**
  * 浏览器用例 fixtures（任务13 harness）。
@@ -85,8 +85,6 @@ interface SpecBinding {
     executableId: string | null;
     /** 全部候选 case_id。 */
     candidateCaseIds: string[];
-    /** 主 case 的 required assertion 展开。 */
-    claims: Array<{ assertion_id: string; surface: string }>;
 }
 
 /**
@@ -96,7 +94,7 @@ interface SpecBinding {
  * @returns 绑定解析结果
  */
 function resolveSpecBinding(specRelPosix: string): SpecBinding {
-    const empty: SpecBinding = { catalogCaseId: null, executableId: null, candidateCaseIds: [], claims: [] };
+    const empty: SpecBinding = { catalogCaseId: null, executableId: null, candidateCaseIds: [] };
     let catalog: {
         cases: Map<string, unknown>;
         executables: Map<string, { executable_id: string; case_ids: string[]; layer: string }>;
@@ -124,14 +122,7 @@ function resolveSpecBinding(specRelPosix: string): SpecBinding {
     }
     if (candidateCaseIds.length === 0) return empty;
     const catalogCaseId: string = candidateCaseIds[0] as string;
-    const claims = (
-        expandAssertionClaims(catalog, execs[0]?.executable_id as string) as Array<{
-            case_id: string;
-            assertion_id: string;
-            surface: string;
-        }>
-    ).filter((c) => c.case_id === catalogCaseId);
-    return { catalogCaseId, executableId: execs[0]?.executable_id as string, candidateCaseIds, claims };
+    return { catalogCaseId, executableId: execs[0]?.executable_id as string, candidateCaseIds };
 }
 
 /**
@@ -203,24 +194,12 @@ export const test = base.extend<HarnessFixtures>({
             await use(recorder);
             const browserVersion: string = page.context().browser()?.version() ?? "unknown";
             recorder.step("用例结束", { status: testInfo.status });
-            // 中文注释：C5——bound 用例按主 case 的 required_assertions 逐条记录
-            //（含 surface；passed 由终态 verdict 派生）；无绑定用例 verdict 强制
-            // BLOCKED 且 assertions 置空（manifest.case_id 已为 null，不伪证）。
             const mappedVerdict = statusToVerdict(testInfo.status);
             const finalVerdict = binding.catalogCaseId === null ? "BLOCKED" : mappedVerdict;
             recorder.finish({
                 verdict: finalVerdict,
                 browser: testInfo.project.name,
                 browserVersion,
-                assertions:
-                    binding.catalogCaseId === null
-                        ? []
-                        : binding.claims.map((c) => ({
-                              assertion_id: c.assertion_id,
-                              surface: c.surface,
-                              passed: finalVerdict === "PASS",
-                              detail: `status=${testInfo.status}`,
-                          })),
             });
         },
         { auto: true },

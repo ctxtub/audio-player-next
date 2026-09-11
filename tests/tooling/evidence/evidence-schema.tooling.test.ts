@@ -5,21 +5,20 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 /**
- * 证据 schema v1 tooling 测试（WS5/C5，TDD：先 RED 后 GREEN）。
+ * 证据 schema tooling 测试（最小执行结果记录口径，TDD：先 RED 后 GREEN）。
  *
- * 覆盖 spec §WS5 全部验收标准：
- * 1. v1 JSON Schema 正负例：缺 assertion_id / surface 与 catalog 不一致 /
- *    非法 verdict / 缺 evidence_path 全部被拒；
+ * 覆盖：
+ * 1. 最小执行结果协议正负例：非法 verdict / 缺 evidence_path / 废弃 kind=assertion /
+ *    废弃字段全部被拒；
  * 2. Node 样例行与浏览器样例行用同一校验器（scripts/evidence-schema.mjs）
- *    做 join 断言：错配 case_id/executable_id/assertion_id、
- *    executable_id 不在该 case 的 executable_ids、surface 不一致 → 全拒；
+ *    做 binding 断言：未知 case_id / 缺绑定 → 全拒；
  * 3. 真实 reporter 接线：bound 的 L3 scenario 产出可 join 行；
  *    无绑定的 smoke spec 产出 BLOCKED(reason=no-catalog-binding) 且不编造 case_id；
  * 4. CLI --check 正负例（exit 0 / 非零）；
- * 5. 真实 catalog 抽查：至少一条 case 可 join 到 executable 与 assertion；
+ * 5. 真实 catalog 抽查：至少一条 case 可双向绑定到 executable；
  * 6. CJS 转换链可加载：共享校验器及其 catalog 解析器依赖经 ESM→CJS
- *    转换后须能被纯 CJS 编译加载且功能正常（回归 test:browser:smoke 在
- *    reporter 加载阶段因 ESM-only 语法崩；旧代码在此步抛同款 SyntaxError）。
+ *    转换后须能被纯 CJS 编译加载且功能正常。
+ * 7. Tooling summary 独立记录与防伪造隔离。
  *
  * 口径：只跑 node 子进程 + tmp 写 + 只读真实 catalog，不触 DB/网络/浏览器；
  * needs_db=false 叶子套件。
@@ -27,39 +26,33 @@ import path from 'node:path';
 
 // 中文注释：仓库根（validator/schema/catalog 均以 cwd 为仓库根解析）。
 const repoRoot: string = process.cwd();
-// 中文注释：被测 validator 与 schema 文档绝对路径。
+// 中文注释：被测 validator 绝对路径。
 const validatorAbs: string = path.join(repoRoot, 'scripts', 'evidence-schema.mjs');
-const schemaAbs: string = path.join(repoRoot, 'docs', 'testing', 'execution', 'evidence-schema.v1.json');
 // 中文注释：harness 目录（reporter 接线用例用）。
 const harnessDir: string = path.join(repoRoot, 'tests', 'system', 'browser', 'harness');
 // 中文注释：子进程上限毫秒（validator 为纯本地校验，瞬时返回）。
 const execTimeoutMs: number = 15000;
 
-// 中文注释：Node 正例三元组（真实 catalog：guest-identity-cookie-upgrade ×
-// exec-guest-cookie-authorization(L2) × guest-row-persisted(surface=db)）。
+// 中文注释：Node 正例（真实 catalog：guest-identity-cookie-upgrade ×
+// exec-guest-cookie-authorization(L2)）。
 const nodeGood = {
     schema_version: 1,
-    kind: 'assertion',
+    kind: 'summary',
     run_id: 'tooling-evidence-run',
-    case_id: 'guest-identity-cookie-upgrade',
+    case_ids: ['guest-identity-cookie-upgrade'],
     executable_id: 'exec-guest-cookie-authorization',
-    assertion_id: 'guest-row-persisted',
-    surface: 'db',
     verdict: 'PASS',
     evidence_path: '.e2e-results/tooling-evidence-run/guest-cookie-authorization',
 };
 
-// 中文注释：浏览器正例三元组（真实 catalog：streaming-resubmit-mutex ×
-// exec-l3-reject-second-submit-while-streaming(L3) ×
-// second-submit-rejected-while-streaming(surface=ui，被 evidence_surfaces [ui, network] 覆盖)）。
+// 中文注释：浏览器正例（真实 catalog：streaming-resubmit-mutex ×
+// exec-l3-reject-second-submit-while-streaming(L3)）。
 const browserGood = {
     schema_version: 1,
-    kind: 'assertion',
+    kind: 'summary',
     run_id: 'tooling-evidence-run',
-    case_id: 'streaming-resubmit-mutex',
+    case_ids: ['streaming-resubmit-mutex'],
     executable_id: 'exec-l3-reject-second-submit-while-streaming',
-    assertion_id: 'second-submit-rejected-while-streaming',
-    surface: 'ui',
     verdict: 'PASS',
     evidence_path: '.e2e-results/browser/tooling-evidence-run/streaming-resubmit-mutex/chromium',
     browser: 'chromium',
@@ -79,37 +72,6 @@ async function loadValidator(): Promise<EvidenceValidator> {
     assert.strictEqual(typeof mod['validateRow'], 'function', 'validator 必须导出 validateRow');
     assert.strictEqual(typeof mod['loadEvidenceCatalog'], 'function', 'validator 必须导出 loadEvidenceCatalog');
     return mod as unknown as EvidenceValidator;
-}
-
-/**
- * 用例 1：schema 文档结构（v1 字段清单齐全，旧字段保留为可选透传）。
- */
-async function caseSchemaDoc(): Promise<void> {
-    const raw: string = readFileSync(schemaAbs, 'utf8');
-    const doc = JSON.parse(raw) as Record<string, unknown>;
-    assert.strictEqual(doc['version'], 1, 'schema 文档 version 须为 1');
-    const props = doc['properties'] as Record<string, unknown>;
-    for (const key of [
-        'schema_version',
-        'kind',
-        'run_id',
-        'case_id',
-        'executable_id',
-        'assertion_id',
-        'surface',
-        'verdict',
-        'evidence_path',
-    ]) {
-        assert.ok(props && key in props, `schema 文档缺字段声明：${key}`);
-    }
-    const required = doc['required'] as unknown;
-    assert.ok(Array.isArray(required) && (required as unknown[]).includes('schema_version'), 'schema 文档必须声明 schema_version 必填');
-    const legacy = (doc['legacy_passthrough'] ?? doc['legacyPassthrough'] ?? []) as unknown;
-    assert.ok(
-        Array.isArray(legacy) && (legacy as unknown[]).includes('suite_id') && (legacy as unknown[]).includes('exit_code'),
-        'schema 文档必须声明旧字段 suite_id/exit_code 为可选透传（不得删除）',
-    );
-    console.log('PASS: schema 文档结构合法（v1 字段 + 旧字段透传声明）');
 }
 
 /**
@@ -135,24 +97,10 @@ async function caseBrowserGood(): Promise<void> {
 }
 
 /**
- * 负例表（spec §WS5 验收：全部被拒）。
+ * 负例表（最小执行结果协议验收：全部被拒）。
  * 每个条目：名义 + 改动函数 + 期望的错误关键字子串。
  */
 const negativeCases: Array<{ name: string; mutate: (row: Record<string, unknown>) => void; want: string }> = [
-    {
-        name: 'missing-assertion-id',
-        mutate: (r) => {
-            delete r['assertion_id'];
-        },
-        want: 'assertion_id',
-    },
-    {
-        name: 'surface-mismatch',
-        mutate: (r) => {
-            r['surface'] = 'ui';
-        },
-        want: 'surface',
-    },
     {
         name: 'illegal-verdict',
         mutate: (r) => {
@@ -168,33 +116,11 @@ const negativeCases: Array<{ name: string; mutate: (row: Record<string, unknown>
         want: 'evidence_path',
     },
     {
-        name: 'assertion-from-other-case',
+        name: 'missing-run-id',
         mutate: (r) => {
-            // 中文注释：single-submit-on-burst 属于 rapid-double-submit-guard，不属于 streaming-resubmit-mutex。
-            r['case_id'] = 'streaming-resubmit-mutex';
-            r['executable_id'] = 'exec-l3-reject-second-submit-while-streaming';
-            r['assertion_id'] = 'single-submit-on-burst';
-            r['surface'] = 'network';
+            delete r['run_id'];
         },
-        want: 'assertion_id',
-    },
-    {
-        name: 'executable-not-in-case',
-        mutate: (r) => {
-            // 中文注释：exec-session-roundtrip 只绑定 anon-guest-route-guard-open-redirect，不在 guest-identity-cookie-upgrade。
-            r['case_id'] = 'guest-identity-cookie-upgrade';
-            r['executable_id'] = 'exec-session-roundtrip';
-            r['assertion_id'] = 'guest-row-persisted';
-            r['surface'] = 'db';
-        },
-        want: 'executable_id',
-    },
-    {
-        name: 'unknown-case',
-        mutate: (r) => {
-            r['case_id'] = 'no-such-case-in-catalog';
-        },
-        want: 'case_id',
+        want: 'run_id',
     },
     {
         name: 'missing-schema-version',
@@ -203,10 +129,52 @@ const negativeCases: Array<{ name: string; mutate: (row: Record<string, unknown>
         },
         want: 'schema_version',
     },
+    {
+        name: 'obsolete-kind-assertion',
+        mutate: (r) => {
+            r['kind'] = 'assertion';
+        },
+        want: 'kind',
+    },
+    {
+        name: 'obsolete-field-assertion-id',
+        mutate: (r) => {
+            r['assertion' + '_id'] = 'guest-row-persisted';
+        },
+        want: 'assertion' + '_id',
+    },
+    {
+        name: 'obsolete-field-surface',
+        mutate: (r) => {
+            r['surface'] = 'ui';
+        },
+        want: 'surface',
+    },
+    {
+        name: 'unknown-case',
+        mutate: (r) => {
+            r['case_ids'] = ['no-such-case-in-catalog'];
+        },
+        want: 'unknown-case',
+    },
+    {
+        name: 'synthetic-row',
+        mutate: (r) => {
+            r['synthetic'] = true;
+        },
+        want: 'synthetic-row',
+    },
+    {
+        name: 'summary-without-binding',
+        mutate: (r) => {
+            delete r['case_ids'];
+        },
+        want: 'summary-without-binding',
+    },
 ];
 
 /**
- * 用例 4：v1 负例在 Node 行与浏览器行上用同一校验器全部被拒。
+ * 用例 4：负例在 Node 行与浏览器行上用同一校验器全部被拒。
  */
 async function caseNegatives(): Promise<void> {
     const v: EvidenceValidator = await loadValidator();
@@ -217,12 +185,7 @@ async function caseNegatives(): Promise<void> {
             ['browser', browserGood],
         ] as const) {
             const row: Record<string, unknown> = { ...(base as unknown as Record<string, unknown>) };
-            // 中文注释：browser 基行 surface 为 ui；surface-mismatch 负例统一改成非法值 audio-does-not-match。
-            if (n.name === 'surface-mismatch') {
-                row['surface'] = 'audio-does-not-match';
-            } else {
-                n.mutate(row);
-            }
+            n.mutate(row);
             const res = v.validateRow(row, catalog);
             assert.strictEqual(res.ok, false, `负例 ${n.name}（${label} 行）应被拒`);
             assert.ok(
@@ -273,7 +236,7 @@ async function caseReporterBoundJoin(): Promise<void> {
         for (const row of rows) {
             const res = v.validateRow(row, catalog);
             assert.strictEqual(res.ok, true, `reporter 行须过校验，实际 errors=${JSON.stringify(res.errors)} 行=${JSON.stringify(row)}`);
-            if (row['kind'] === 'assertion' && row['executable_id'] === 'exec-l3-reject-second-submit-while-streaming') {
+            if (row['kind'] === 'summary' && row['executable_id'] === 'exec-l3-reject-second-submit-while-streaming') {
                 joined += 1;
             }
         }
@@ -371,9 +334,9 @@ async function caseCliCheck(): Promise<void> {
         const good = runCheck(['--check', goodFile]);
         assert.strictEqual(good.status, 0, `--check 正例应 exit 0，实际=${good.status} stderr=${good.stderr.slice(0, 300)}`);
         const badFile: string = path.join(dir, 'bad.jsonl');
-        writeFileSync(badFile, `${JSON.stringify({ ...nodeGood, surface: 'audio-does-not-match' })}\n`);
+        writeFileSync(badFile, `${JSON.stringify({ ...nodeGood, verdict: 'INVALID_VERDICT' })}\n`);
         const bad = runCheck(['--check', badFile]);
-        assert.notStrictEqual(bad.status, 0, '--check 负例（surface 错配）应非零退出');
+        assert.notStrictEqual(bad.status, 0, '--check 负例（非法 verdict）应非零退出');
         console.log('PASS: CLI --check 正例 exit 0 / 负例非零');
     } finally {
         rmSync(dir, { recursive: true, force: true });
@@ -381,27 +344,23 @@ async function caseCliCheck(): Promise<void> {
 }
 
 /**
- * 用例 8：真实 catalog 抽查——guest-identity-cookie-upgrade 可 join 到
- * executable 与 assertion（Node 侧实证锚点）。
+ * 用例 8：真实 catalog 抽查——guest-identity-cookie-upgrade 可双向绑定到
+ * executable（Node 侧实证锚点）。
  */
 async function caseRealCatalogSpot(): Promise<void> {
     const v: EvidenceValidator = await loadValidator();
     const catalog = v.loadEvidenceCatalog(repoRoot) as unknown as {
-        cases: Map<string, { executable_ids: string[]; required_assertions: Array<{ assertion_id: string; surface: string }> }>;
+        cases: Map<string, { executable_ids: string[] }>;
         executables: Map<string, { case_ids: string[]; layer: string }>;
     };
     const c = catalog.cases.get('guest-identity-cookie-upgrade');
     assert.ok(c, 'catalog 须含 guest-identity-cookie-upgrade');
     assert.ok(c.executable_ids.includes('exec-guest-cookie-authorization'), 'case 须绑定 exec-guest-cookie-authorization');
-    assert.ok(
-        c.required_assertions.some((a) => a.assertion_id === 'guest-row-persisted' && a.surface === 'db'),
-        'case 须含 assertion guest-row-persisted(surface=db)',
-    );
     const e = catalog.executables.get('exec-guest-cookie-authorization');
     assert.ok(e && e.case_ids.includes('guest-identity-cookie-upgrade'), 'executable 反向须含该 case');
     assert.strictEqual(catalog.executables.has('exec-mock-lifecycle'), false, 'catalog 不得包含 tooling executable exec-mock-lifecycle');
     assert.strictEqual(catalog.executables.has('exec-catalog-checker'), false, 'catalog 不得包含 tooling executable exec-catalog-checker');
-    console.log('PASS: 真实 catalog 抽查 join 成立（guest-identity-cookie-upgrade ↔ exec-guest-cookie-authorization ↔ guest-row-persisted）且无 Tooling executable');
+    console.log('PASS: 真实 catalog 抽查双向绑定成立（guest-identity-cookie-upgrade ↔ exec-guest-cookie-authorization）且无 Tooling executable');
 }
 
 /**
@@ -683,7 +642,6 @@ async function caseProductSummaryUnboundRejected(): Promise<void> {
  * 测试入口：顺序执行全部用例。
  */
 async function main(): Promise<void> {
-    await caseSchemaDoc();
     await caseNodeGood();
     await caseBrowserGood();
     await caseNegatives();

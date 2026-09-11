@@ -11,8 +11,8 @@ import { parseYamlSubset, normalizeSuitePath } from './check-test-catalog.mjs';
 export const SCHEMA_VERSION = 1;
 // 中文注释：verdict 枚举（与 runner/浏览器 harness 一致）。
 const VERDICTS = new Set(['PASS', 'FAIL', 'BLOCKED', 'SKIPPED', 'FLAKY']);
-// 中文注释：行种类——assertion（每 assertion 一行，D3 已决）、summary（产品汇总）与 tooling-summary（基础设施汇总）。
-const KINDS = new Set(['assertion', 'summary', 'tooling-summary']);
+// 中文注释：行种类——summary（产品汇总）与 tooling-summary（基础设施汇总）。
+const KINDS = new Set(['summary', 'tooling-summary']);
 // 中文注释：仓库根（默认 cwd，可用 --repo-root 覆盖）。
 let repoRoot = process.cwd();
 // 中文注释：catalog 默认路径（相对仓库根）。
@@ -153,27 +153,6 @@ export function findExecutablesForPath(catalog, specRelPosix, layer) {
   return out;
 }
 
-/**
- * 取某 executable 的全部 (case × assertion) claim 展开（由 catalog 反查）。
- * @param catalog loadEvidenceCatalog 产物
- * @param executableId catalog executable_id
- * @returns [{ case_id, assertion_id, surface }]（executable/case 缺失即空数组）
- */
-export function expandAssertionClaims(catalog, executableId) {
-  const out = [];
-  const e = catalog.executables.get(executableId);
-  if (e === undefined || !Array.isArray(e.case_ids)) return out;
-  for (const caseId of e.case_ids) {
-    const c = catalog.cases.get(caseId);
-    if (c === undefined || !Array.isArray(c.required_assertions)) continue;
-    for (const a of c.required_assertions) {
-      if (a !== null && typeof a === 'object' && typeof a.assertion_id === 'string' && typeof a.surface === 'string') {
-        out.push({ case_id: caseId, assertion_id: a.assertion_id, surface: a.surface });
-      }
-    }
-  }
-  return out;
-}
 
 /**
  * 是否为非空字符串。
@@ -227,7 +206,7 @@ export function validateRow(row, catalog = null) {
     errors.push(`bad-schema_version（须为 ${SCHEMA_VERSION}，实际=${JSON.stringify(row.schema_version)})`);
   }
   if (typeof row.kind !== 'string' || !KINDS.has(row.kind)) {
-    errors.push(`bad-kind（须为 assertion|summary|tooling-summary，实际=${JSON.stringify(row.kind)})`);
+    errors.push(`bad-kind（须为 summary|tooling-summary，实际=${JSON.stringify(row.kind)})`);
   }
   if (!isNonEmptyString(row.run_id)) {
     errors.push('bad-run_id（须为非空字符串）');
@@ -238,40 +217,12 @@ export function validateRow(row, catalog = null) {
   if (!isRelativeEvidencePath(row.evidence_path)) {
     errors.push(`bad-evidence_path（须为相对仓库根的非空相对路径，实际=${JSON.stringify(row.evidence_path)})`);
   }
-  if (row.kind === 'assertion') {
-    if (!isNonEmptyString(row.case_id)) errors.push('missing-case_id');
-    if (!isNonEmptyString(row.executable_id)) errors.push('missing-executable_id');
-    if (!isNonEmptyString(row.assertion_id)) errors.push('missing-assertion_id');
-    if (!isNonEmptyString(row.surface)) errors.push('missing-surface');
-    if (errors.length > 0) return { ok: false, errors };
-    // 中文注释：join 四段——case 存在 → executable 存在 → 双向绑定 → assertion 存在且 surface 一致。
-    const c = cat.cases.get(row.case_id);
-    if (c === undefined) {
-      errors.push(`unknown-case_id:${String(row.case_id)}`);
-      return { ok: false, errors };
+  for (const field of ['assertion' + '_id', 'surface']) {
+    if (Object.prototype.hasOwnProperty.call(row, field)) {
+      errors.push(`unsupported-field:${field}（已废弃字段）`);
     }
-    const e = cat.executables.get(row.executable_id);
-    if (e === undefined) {
-      errors.push(`unknown-executable_id:${String(row.executable_id)}`);
-      return { ok: false, errors };
-    }
-    if (!Array.isArray(c.executable_ids) || !c.executable_ids.includes(row.executable_id)) {
-      errors.push(`executable-not-in-case（${String(row.executable_id)} 不在 ${String(row.case_id)} 的 executable_ids)`);
-    }
-    if (!Array.isArray(e.case_ids) || !e.case_ids.includes(row.case_id)) {
-      errors.push(`case-not-in-executable（${String(row.case_id)} 不在 ${String(row.executable_id)} 的 case_ids)`);
-    }
-    const list = Array.isArray(c.required_assertions) ? c.required_assertions : [];
-    const a = list.find((x) => x !== null && typeof x === 'object' && x.assertion_id === row.assertion_id);
-    if (a === undefined) {
-      errors.push(`unknown-assertion_id:${String(row.assertion_id)}（不在 ${String(row.case_id)} 的 required_assertions)`);
-    } else if (a.surface !== row.surface) {
-      errors.push(`surface-mismatch（catalog=${JSON.stringify(a.surface)}，行=${JSON.stringify(row.surface)})`);
-    }
-    if (e.layer === 'L3' && Array.isArray(e.evidence_surfaces) && !e.evidence_surfaces.includes(row.surface)) {
-      errors.push(`surface-not-covered-by-executable（${String(row.surface)} 不在 ${String(row.executable_id)} 的 evidence_surfaces)`);
-    }
-  } else if (row.kind === 'summary') {
+  }
+  if (row.kind === 'summary') {
     // 中文注释：case_ids（数组）逐项须 join；单 case_id 若出现须为已知 case。
     let boundCount = 0;
     if (row.case_ids !== undefined) {

@@ -2,7 +2,6 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import type { Reporter, TestCase, TestResult } from "@playwright/test/reporter";
 import {
-    expandAssertionClaims,
     findExecutablesForPath,
     loadEvidenceCatalog,
     validateRow,
@@ -12,10 +11,9 @@ import {
  * Playwright 自定义 JSONL reporter（任务13 harness；C5 升级为证据 schema v1）。
  *
  * suite 结束 append .e2e-results/browser/<run-id>/results.jsonl，
- * 行协议 v1（`docs/testing/execution/evidence-schema.v1.json`，校验器
- * `scripts/evidence-schema.mjs`，与 Node runner 共用同一口径）：
- * - 有 catalog 绑定的 spec（location.file 反查 L3 executable）：每 assertion 一行
- *  （kind=assertion，case/executable/assertion/surface 全 join catalog）；
+ * 行协议 v1（校验器 `scripts/evidence-schema.mjs`，与 Node runner 共用同一口径）：
+ * - 有 catalog 绑定的 spec（location.file 反查 L3 executable）：记 summary 行
+ *   （kind=summary，case_ids/executable 全 join catalog）；
  * - 无绑定的 spec（如 smoke.spec.ts 尚未登记 L3 executable）：记一行
  *   BLOCKED(reason=no-catalog-binding)，严禁伪造 PASS 或编造 case_id；
  * - 无 location 的合成调用（ frozen 的 browser-harness 单元测试直调口径）：
@@ -34,22 +32,20 @@ export type PlaywrightOutcome = "expected" | "unexpected" | "flaky" | "skipped";
 /** 证据 verdict 枚举（方案第14节，与 runner 一致）。 */
 export type EvidenceVerdict = "PASS" | "FAIL" | "BLOCKED" | "SKIPPED" | "FLAKY";
 
-/** JSONL 结果行（v1 超集：assertion 行必填 join 四元组，summary 行按规则携带绑定或 reason）。 */
+/** JSONL 结果行（最小结果协议：summary 行携带绑定或 reason）。 */
 export interface JsonlResultRow {
     /** schema 版本（恒 1）。 */
     schema_version?: number;
-    /** 行种类（assertion|summary）。 */
+    /** 行种类（summary）。 */
     kind?: string;
     /** 运行标识。 */
     run_id: string;
-    /** 用例标识（v1 bound 行用 catalog case_id；legacy fallback 用标题归一化）。 */
+    /** 用例标识。 */
     case_id?: string;
-    /** catalog executable（assertion 行必填）。 */
+    /** catalog case_ids。 */
+    case_ids?: string[];
+    /** catalog executable。 */
     executable_id?: string;
-    /** catalog assertion（assertion 行必填）。 */
-    assertion_id?: string;
-    /** 证据面（assertion 行必填，须与 catalog 一致）。 */
-    surface?: string;
     /** 结论枚举。 */
     verdict: EvidenceVerdict;
     /** 耗时毫秒。 */
@@ -261,42 +257,18 @@ export default class JsonlReporter implements Reporter {
         }
         const rows: Record<string, unknown>[] = [];
         for (const e of execs) {
-            const claims = expandAssertionClaims(catalog, e.executable_id) as Array<{
-                case_id: string;
-                assertion_id: string;
-                surface: string;
-            }>;
-            for (const claim of claims) {
-                rows.push({
-                    schema_version: 1,
-                    kind: "assertion",
-                    run_id: this.runId,
-                    case_id: claim.case_id,
-                    executable_id: e.executable_id,
-                    assertion_id: claim.assertion_id,
-                    surface: claim.surface,
-                    verdict,
-                    evidence_path: evidencePath,
-                    duration_ms: durationMs,
-                    browser,
-                    spec_path: specRel,
-                });
-            }
-        }
-        if (rows.length === 0) {
-            return [
-                {
-                    schema_version: 1,
-                    kind: "summary",
-                    run_id: this.runId,
-                    verdict: "BLOCKED",
-                    reason: "evidence-claims-empty",
-                    spec_path: specRel,
-                    browser,
-                    evidence_path: evidencePath,
-                    duration_ms: durationMs,
-                },
-            ];
+            rows.push({
+                schema_version: 1,
+                kind: "summary",
+                run_id: this.runId,
+                case_ids: e.case_ids ?? [],
+                executable_id: e.executable_id,
+                verdict,
+                evidence_path: evidencePath,
+                duration_ms: durationMs,
+                browser,
+                spec_path: specRel,
+            });
         }
         return rows;
     }

@@ -7,8 +7,7 @@ import path from 'node:path';
 /**
  * catalog 校验器 tooling 测试（任务8 STEP-1）。
  * 在沙箱 tmp 造 7 类坏 catalog 逐个断言 checker exit 1 且 stderr 指明原因；
- * 好 catalog（最小合法 4 case 样本，含 1 PLANNED 缺口）断言 exit 0；
- * 另有 L3 surface 覆盖正例（声明覆盖 timeline+state）断言 exit 0。
+ * 好 catalog（最小合法 4 case 样本，含 1 PLANNED 缺口）断言 exit 0。
  * 全程仅 tmp 写 + 只读真实 checker/套件路径，不触 DB/网络。
  */
 
@@ -34,9 +33,6 @@ function goodCatalogYaml(): string {
     '    lifecycle_status: ACTIVE',
     '    risk_tags: [smoke]',
     '    spec_path: docs/e2e/01-基础冒烟与页面基线/01-访客冷启动首屏渲染.md',
-    '    required_assertions:',
-    '      - assertion_id: first-screen-renders',
-    '        display_name_zh: 首屏正确渲染',
     '    executable_ids: [guest-cold-start-exec]',
     '    fixtures: []',
     '    owner: smoke',
@@ -49,9 +45,6 @@ function goodCatalogYaml(): string {
     '    lifecycle_status: ACTIVE',
     '    risk_tags: [playback]',
     '    spec_path: docs/e2e/03-播放状态与内核一致性/01-倒计时耗尽UI与音频一致性.md',
-    '    required_assertions:',
-    '      - assertion_id: countdown-ui-audio-consistent',
-    '        display_name_zh: 界面与音频一致',
     '    executable_ids: [resume-countdown-exec]',
     '    fixtures: []',
     '    owner: playback',
@@ -64,9 +57,6 @@ function goodCatalogYaml(): string {
     '    lifecycle_status: ACTIVE',
     '    risk_tags: [race]',
     '    spec_path: docs/e2e/02-交互并发与竞态防御/01-快速双发防重.md',
-    '    required_assertions:',
-    '      - assertion_id: single-submit-on-rapid-click',
-    '        display_name_zh: 连击只提交一次',
     '    executable_ids: [double-submit-exec]',
     '    fixtures: []',
     '    owner: interaction',
@@ -79,9 +69,6 @@ function goodCatalogYaml(): string {
     '    lifecycle_status: PLANNED',
     '    risk_tags: [future]',
     '    spec_path: docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md',
-    '    required_assertions:',
-    '      - assertion_id: future-assert',
-    '        display_name_zh: 未来断言',
     '    executable_ids: []',
     '    fixtures: []',
     '    owner: interaction',
@@ -204,69 +191,13 @@ function caseReverseBroken(dir: string): void {
 }
 
 /**
- * 用例7：L3 executable evidence_surfaces 缺 state（与 evidence-schema 同口径，state 面护栏）。
- * 沙箱单 case（timeline+state）配 L3 执行体仅声明 [audio, timeline, ui]，应 exit 1 且指明 executable/case/缺失 surface。
+ * 用例7：case 包含非法字段（非法额外字段应被严格拒绝）。
  */
-function caseSurfaceMissing(dir: string): void {
-  const yaml: string = surfaceCatalogYaml(true);
-  const r = runChecker(yaml, dir, 'bad-7-surface-missing.yaml');
-  assert.strictEqual(r.status, 1, `坏例7surface缺失应 exit 1，实际=${r.status} stdout头=${r.stdout.slice(0, 200)}`);
-  assert.ok(r.stderr.includes('surface 非法'), `坏例7 stderr 应含「surface 非法」，实际头=${r.stderr.slice(0, 400)}`);
-  assert.ok(r.stderr.includes('surface-probe-exec'), `坏例7 stderr 应含 executable surface-probe-exec，实际头=${r.stderr.slice(0, 400)}`);
-  assert.ok(r.stderr.includes('surface-probe-case'), `坏例7 stderr 应含 case surface-probe-case，实际头=${r.stderr.slice(0, 400)}`);
-  assert.ok(r.stderr.includes('state'), `坏例7 stderr 应含缺失 surface state，实际头=${r.stderr.slice(0, 400)}`);
-  console.log('PASS: 坏例7surface缺失 exit 1 且 stderr 含 executable/case/state');
+function caseIllegalField(dir: string): void {
+  const yaml: string = goodCatalogYaml().replace('    lifecycle_status: ACTIVE', '    lifecycle_status: ACTIVE\n    illegal_extra_field: []');
+  expectBad(dir, 'bad-7-illegal-field.yaml', yaml, '非法字段', '坏例7非法字段');
 }
 
-/**
- * L3 surface 覆盖沙箱 catalog 生成器（单 case timeline+state，执行体按缺/全声明）。
- * @param missing 缺 state 即坏例，全即正例
- * @returns YAML 文本
- */
-function surfaceCatalogYaml(missing: boolean): string {
-  const surfaces: string = missing ? '[audio, timeline, ui]' : '[audio, timeline, ui, state]';
-  return [
-    'schema_version: 1',
-    'cases:',
-    '  - case_id: surface-probe-case',
-    '    display_name_zh: 表面覆盖探针',
-    '    legacy_aliases: [E2E-03-03]',
-    '    journey_id: playback-kernel',
-    '    user_goal: 探针目标',
-    '    priority: P0',
-    '    lifecycle_status: ACTIVE',
-    '    risk_tags: [playback]',
-    '    spec_path: docs/e2e/03-播放状态与内核一致性/03-播放中登出立即停声与状态重置.md',
-    '    required_assertions:',
-    '      - assertion_id: pause-before-unload',
-    '        display_name_zh: 停声先于卸载',
-    '        surface: timeline',
-    '      - assertion_id: state-reset-after-logout',
-    '        display_name_zh: 登出后状态重置',
-    '        surface: state',
-    '    executable_ids: [surface-probe-exec]',
-    '    fixtures: []',
-    '    owner: playback-kernel',
-    'executables:',
-    '  - executable_id: surface-probe-exec',
-    '    display_name_zh: 探针执行体',
-    '    layer: L3',
-    '    path: ./tests/system/browser/scenarios/reject-second-submit-while-streaming.spec.ts',
-    '    case_ids: [surface-probe-case]',
-    `    evidence_surfaces: ${surfaces}`,
-    '',
-  ].join('\n');
-}
-
-/**
- * 正例：L3 surface 全覆盖（timeline+state 均声明）应 exit 0。
- */
-function caseSurfaceCovered(dir: string): void {
-  const r = runChecker(surfaceCatalogYaml(false), dir, 'good-surface-covered.yaml');
-  assert.strictEqual(r.status, 0, `surface正例应 exit 0，实际=${r.status} stderr头=${r.stderr.slice(0, 400)}`);
-  assert.ok(r.stdout.includes('CHECK PASS'), `surface正例 stdout 应含 CHECK PASS，实际头=${r.stdout.slice(0, 300)}`);
-  console.log('PASS: surface正例全覆盖 exit 0');
-}
 
 /**
  * 正例：好 catalog（最小合法 4 case，含 1 PLANNED 缺口）应 exit 0。
@@ -305,7 +236,7 @@ function caseRealCatalog(): string {
 }
 
 /**
- * 测试入口：顺序执行 7 坏 + 2 好 + 真实 catalog 门。
+ * 测试入口：顺序执行 7 坏 + 1 好 + 真实 catalog 门。
  */
 async function main(): Promise<void> {
   const dir: string = mkdtempSync(path.join(tmpdir(), 'catalog-checker-'));
@@ -316,9 +247,8 @@ async function main(): Promise<void> {
     caseDuplicateExecutable(dir);
     casePathNotExist(dir);
     caseReverseBroken(dir);
-    caseSurfaceMissing(dir);
+    caseIllegalField(dir);
     caseGood(dir);
-    caseSurfaceCovered(dir);
     caseRealCatalog();
   } finally {
     rmSync(dir, { recursive: true, force: true });

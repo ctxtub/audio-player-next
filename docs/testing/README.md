@@ -25,7 +25,7 @@
 机器目录 catalog（tests/test-catalog.yaml：case ↔ executable 双向引用）
   ↕ executable_ids / case_ids（双向一致 + executable.path 落盘）
 可执行套件 suite（tests/unit/**、tests/integration/** 为 Node 层，tests/system/browser/** 为 Playwright L3 层）
-  ↕ Node 层经 runner 注册表（scripts/run-tests.mjs --list）与磁盘 glob 三方一致；L3 层经 catalog evidence_surfaces + manifest 证据绑定
+  ↕ Node 层经 runner 注册表（scripts/run-tests.mjs --list）与磁盘 glob 三方一致；L3 层经 catalog 与 manifest 证据绑定
 ```
 
 - 正向：从任一场景 spec 出发，经 `spec_path` 找到 catalog case，再经 `executable_ids` 找到可执行文件与 runner 注册项。

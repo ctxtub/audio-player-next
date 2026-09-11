@@ -261,7 +261,7 @@ function surfaceCatalogYaml(missing: boolean): string {
     '  - executable_id: surface-probe-exec',
     '    display_name_zh: 探针执行体',
     '    layer: L3',
-    '    path: ./tests/system/browser/scenarios/pause-audio-before-logout-unload.spec.ts',
+    '    path: ./tests/system/browser/scenarios/reject-second-submit-while-streaming.spec.ts',
     '    case_ids: [surface-probe-case]',
     `    evidence_surfaces: ${surfaces}`,
     '',

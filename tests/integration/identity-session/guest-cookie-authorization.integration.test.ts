@@ -1,12 +1,15 @@
 import assert from 'node:assert';
 import { randomUUID } from 'node:crypto';
+import * as nextHeaders from 'next/headers';
 import { router, guardedProcedure, TRPCError } from '../../../lib/trpc/init';
 import {
     createContext,
     buildGuestCookieHeader,
+    GUEST_COOKIE,
     GUEST_COOKIE_MAX_AGE,
 } from '../../../lib/trpc/context';
 import { encodeGuestId, decodeGuestCookie } from '../../../lib/session';
+import { authRouter } from '../../../lib/trpc/routers/auth';
 
 process.env.SESSION_SECRET = 'test-secret-signed-guest-fix02-12345';
 
@@ -160,6 +163,105 @@ async function runSignedGuestCookieTests() {
     });
     assert.strictEqual(noSecretCtx.isGuest, false, '无密钥时必须匿名');
     process.env.SESSION_SECRET = savedSecret;
+
+    console.log('--- 8. enterGuestMode fail-closed：无密钥受控失败零 Cookie 零 GC，有密钥正常签发 ---');
+    {
+        const savedSecret8 = process.env.SESSION_SECRET;
+        const originalCookies = nextHeaders.cookies;
+        const originalRandom = Math.random;
+        const setCalls: Array<{
+            name: string;
+            value: string;
+            httpOnly?: boolean;
+            sameSite?: string;
+            path?: string;
+            maxAge?: number;
+        }> = [];
+        let randomCalls = 0;
+        (nextHeaders as { cookies: unknown }).cookies = async () => ({
+            get: () => undefined,
+            set: (opts: {
+                name: string;
+                value: string;
+                httpOnly?: boolean;
+                sameSite?: string;
+                path?: string;
+                maxAge?: number;
+            }) => {
+                setCalls.push({ ...opts });
+            },
+            delete: () => {},
+        });
+        try {
+            // 8a. 有密钥 → 正常签发：成功、可验签、HttpOnly/SameSite/maxAge、GC 门仍被评估
+            process.env.SESSION_SECRET = savedSecret8;
+            setCalls.length = 0;
+            randomCalls = 0;
+            Math.random = () => {
+                randomCalls += 1;
+                return 0.99;
+            };
+            const callerWithSecret = authRouter.createCaller({
+                session: null,
+                isGuest: false,
+                clientIp: '127.0.0.1',
+            });
+            const issued = await callerWithSecret.enterGuestMode();
+            assert.strictEqual(issued.success, true, '有密钥时签发必须成功');
+            assert.strictEqual(setCalls.length, 1, '有密钥时必须写入一条 Cookie');
+            assert.strictEqual(setCalls[0]?.name, GUEST_COOKIE, '须写入 guest Cookie');
+            const issuedValue = setCalls[0]?.value ?? '';
+            assert.ok(issuedValue.includes('.'), '签发值须为 payload.signature 结构');
+            const restoredGid = decodeGuestCookie(issuedValue);
+            assert.ok(
+                restoredGid !== null && restoredGid.startsWith('g_'),
+                '签发值必须可验签还原出访客 gid'
+            );
+            assert.notStrictEqual(issuedValue, restoredGid, '签发值不得是明文 guestId');
+            assert.strictEqual(setCalls[0]?.httpOnly, true, '须 HttpOnly');
+            assert.strictEqual(setCalls[0]?.sameSite, 'lax', '须 SameSite=Lax');
+            assert.strictEqual(setCalls[0]?.path, '/', '须 Path=/');
+            assert.strictEqual(setCalls[0]?.maxAge, GUEST_COOKIE_MAX_AGE, '须 30 天 Max-Age');
+            assert.strictEqual(randomCalls, 1, '正常签发须评估 GC 概率门（保持现有 GC 语义）');
+
+            // 8b. 无密钥 → 受控失败：稳定脱敏 INTERNAL_SERVER_ERROR、零 Cookie、零 GC
+            delete process.env.SESSION_SECRET;
+            setCalls.length = 0;
+            randomCalls = 0;
+            Math.random = () => {
+                randomCalls += 1;
+                return 0;
+            };
+            const callerNoSecret = authRouter.createCaller({
+                session: null,
+                isGuest: false,
+                clientIp: '127.0.0.1',
+            });
+            await assert.rejects(
+                async () => {
+                    await callerNoSecret.enterGuestMode();
+                },
+                (err: unknown) => {
+                    if (!(err instanceof TRPCError)) return false;
+                    if (err.code !== 'INTERNAL_SERVER_ERROR') return false;
+                    if (err.message !== '访客模式暂不可用，请稍后重试') return false;
+                    if (err.message.includes('SESSION_SECRET')) return false;
+                    return true;
+                },
+                '无密钥时必须以稳定脱敏 INTERNAL_SERVER_ERROR 受控失败'
+            );
+            assert.strictEqual(setCalls.length, 0, '无密钥时不得写入任何 Cookie');
+            assert.strictEqual(randomCalls, 0, '无密钥时不得评估 GC 概率门（零 GC）');
+        } finally {
+            if (savedSecret8 === undefined) {
+                delete process.env.SESSION_SECRET;
+            } else {
+                process.env.SESSION_SECRET = savedSecret8;
+            }
+            (nextHeaders as { cookies: unknown }).cookies = originalCookies;
+            Math.random = originalRandom;
+        }
+    }
 
     console.log('ALL SIGNED GUEST COOKIE TESTS PASSED');
 }

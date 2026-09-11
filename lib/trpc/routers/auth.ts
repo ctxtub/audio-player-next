@@ -149,17 +149,28 @@ export const authRouter = router({
      * 密钥缺失时签发失败（失败闭环，不颁发无签名身份）。
      */
     enterGuestMode: publicProcedure.mutation(async () => {
-        const cookieStore = await cookies();
-        const guestId = `g_${crypto.randomUUID()}`;
-        cookieStore.set({
-            name: GUEST_COOKIE,
-            value: encodeGuestId(guestId),
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/',
-            maxAge: GUEST_COOKIE_MAX_AGE,
-        });
+        // 访客签发失败闭环：SESSION_SECRET 缺失或 encodeGuestId 失败时统一转为受控
+        // 脱敏 TRPCError；签发失败时不写 Cookie、不评估 GC 概率门（零 GC）。
+        try {
+            const cookieStore = await cookies();
+            const guestId = `g_${crypto.randomUUID()}`;
+            const signed = encodeGuestId(guestId);
+            cookieStore.set({
+                name: GUEST_COOKIE,
+                value: signed,
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                path: '/',
+                maxAge: GUEST_COOKIE_MAX_AGE,
+            });
+        } catch (error) {
+            if (error instanceof TRPCError) throw error;
+            throw new TRPCError({
+                code: 'INTERNAL_SERVER_ERROR',
+                message: '访客模式暂不可用，请稍后重试',
+            });
+        }
 
         // 概率淘汰：2% 概率异步触发清理 30 天未更新的访客数据（配置 + 创作记录）
         if (Math.random() < 0.02) {

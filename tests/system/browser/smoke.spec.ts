@@ -1,12 +1,12 @@
 import { test, expect } from "./harness/fixtures";
 
 /**
- * 真实浏览器烟雾用例（任务13：已迁移至 harness，不再自管服务启停）。
+ * 真实浏览器烟雾用例（harness/environment manual diagnostic；不属于产品 coverage；不进入默认 product L3）。
  *
  * 服务来源：globalSetup 拉起的 isolation production server（harnessEnv.appUrl）
  * 与可编程 mock（harnessEnv.mockMp3Url）；证据由 fixtures 自动记录 manifest。
  *
- * 覆盖矩阵：
+ * 覆盖矩阵（仅供手动环境探针诊断，无产品 catalog binding）：
  * ① production server 首屏可达；
  * ② 固定 MP3 触发浏览器自然 loadedmetadata/ended 真媒体事件；
  * ④ Safari/Chromium autoplay 与手势策略实测记录（只记录、不硬断言 autoplay 允许与否）。

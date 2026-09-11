@@ -13,7 +13,7 @@ const playwrightOutputDir: string = process.env.PLAYWRIGHT_OUTPUT_DIR ?? ".e2e-r
  */
 export default defineConfig({
     testDir: ".",
-    testMatch: ["smoke.spec.ts", "scenarios/*.spec.ts"],
+    testMatch: ["scenarios/*.spec.ts"],
     timeout: 120000,
     globalTimeout: 30 * 60 * 1000,
     fullyParallel: false,

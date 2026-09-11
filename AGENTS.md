@@ -16,7 +16,7 @@
 - 产品场景与 oracle：`docs/e2e/**`。
 - case、executable、层级与生命周期：`tests/test-catalog.yaml`。
 - 机器一致性：`yarn test:catalog`；统计与文档冲突时以 checker 为准并阻断。
-- L1：`yarn test:unit`；L2：`yarn test:integration`；Tooling：`yarn test:tooling`；L3：`yarn test:browser:smoke`。
+- L1：`yarn test:unit`；L2：`yarn test:integration`；Tooling：`yarn test:tooling`；L3：`yarn test:browser`。
 - `MANUAL` 不进入自动执行队列；不得把 PLANNED/BLOCKED 伪装为 ACTIVE 或 PASS。
 
 ## 变更时必须同步什么
@@ -45,7 +45,7 @@ yarn build
 git diff --check
 ```
 
-修改 `scripts/**`、`tests/tooling/**` 或 `prisma/schema.prisma` 时加跑 `yarn test:tooling`。`push` 到 `main` 自动触发交付链（quality 全量门 → GHCR 发布 → Bark 通知，生产部署由仓库外机制负责，见 `docs/engineering/change-workflow.md` 发布节）；本地仍按需手动执行上述命令。浏览器可观察行为必须跑 `yarn test:browser:smoke`；产品失败不得靠重试或弱化 oracle 洗绿。
+修改 `scripts/**`、`tests/tooling/**` 或 `prisma/schema.prisma` 时加跑 `yarn test:tooling`。`push` 到 `main` 自动触发交付链（quality 全量门 → GHCR 发布 → Bark 通知，生产部署由仓库外机制负责，见 `docs/engineering/change-workflow.md` 发布节）；本地仍按需手动执行上述命令。浏览器可观察行为必须跑 `yarn test:browser`；产品失败不得靠重试或弱化 oracle 洗绿。
 
 ## 安全边界
 

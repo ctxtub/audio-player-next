@@ -15,7 +15,7 @@
     "test:list": "node scripts/run-tests.mjs --list",
     "test:catalog": "node scripts/check-test-catalog.mjs --require-full-spec-coverage",
     "test:runner-database-safety": "node scripts/suite-worker.mjs ./tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts",
-    "test:browser:smoke": "playwright test --config tests/system/browser/playwright.config.ts tests/system/browser --project=chromium --project=webkit",
+    "test:browser": "playwright test --config tests/system/browser/playwright.config.ts tests/system/browser --project=chromium --project=webkit",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up",
     "docker:push": "./scripts/push-ghcr.sh"

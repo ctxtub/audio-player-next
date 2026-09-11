@@ -369,7 +369,7 @@ async function caseRealCatalogSpot(): Promise<void> {
 /**
  * 用例 9：共享校验器须经得起 Playwright reporter 链的 CJS 转换加载。
  *
- * 回归 test:browser:smoke 在 reporter 加载阶段崩
+ * 回归 test:browser 在 reporter 加载阶段崩
  * （SyntaxError: Cannot use 'import.meta' outside a module）：
  * Playwright 经 babel 把链上脚本转 CJS 后按 CJS 编译执行——`export/import`
  * 可被改写，但表达式里的 ESM-only 语法会原样残留致语法错误。
@@ -508,7 +508,7 @@ function checkOneCjsChainTarget(
         assert.strictEqual(
             status,
             0,
-            `${targetName} 须能被 CJS 转换链加载（test:browser:smoke reporter 同款路径），子进程 exit=${status} stdout=${stdout.slice(0, 300)} stderr=${stderr.slice(0, 800)}`,
+            `${targetName} 须能被 CJS 转换链加载（test:browser reporter 同款路径），子进程 exit=${status} stdout=${stdout.slice(0, 300)} stderr=${stderr.slice(0, 800)}`,
         );
         assert.ok(stdout.includes('CJS-CHAIN-LOAD-OK'), `${targetName} 子进程须输出 CJS-CHAIN-LOAD-OK`);
     } finally {

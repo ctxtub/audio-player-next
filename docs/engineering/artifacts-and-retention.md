@@ -4,7 +4,7 @@
 
 - Git 保存长期事实：产品契约、测试规范、机器 schema、工程决策和精炼 closeout。
 - `.e2e-results/` 保存一次运行实际发生了什么。
-- `.agent-runs/` 保存谁在什么权限下做了什么。
+- `.agent-runs/` 保存可选 Agent 调试/恢复记录。
 - `.e2e-runtime/` 只承载运行中的短命环境。
 - 任何目录都不得保存真实 secret、生产数据或未脱敏载荷。
 
@@ -46,28 +46,15 @@ docs/testing/**                        # 当前测试体系权威
 
 ### `.agent-runs/`
 
-```text
-.agent-runs/<change-id>/
-  manifest.yaml
-  planner/<session-id>/
-  implementer/<session-id>/
-  reviewer/<session-id>/
-  fixup/<session-id>/
-  acceptance/<session-id>/
-```
-
-可保存脱敏 prompt、授权范围、目标 SHA、会话 ID、报告、失败原因和恢复锚点；测试 oracle 原始证据仍归 `.e2e-results/`。
+可选 Agent 调试/恢复记录，不作为普通测试完成条件。
+可按需保存脱敏 prompt、授权范围、目标 SHA、会话 ID、报告、失败原因和恢复锚点；测试 oracle 原始证据仍归 `.e2e-results/`。
 
 ### Playwright 临时输出
 
 Playwright attachment/output 统一放 `.e2e-results/playwright/`。历史默认目录 `/test-results/` 与 `/playwright-report/` 继续列入 `.gitignore`，防旧命令或第三方 reporter 污染工作区。
 
-## 规范落点索引（治理硬化 WS7）
+## 规范落点索引
 
-- 任务 manifest schema（规范正文）：[`docs/testing/execution/evidence.md`](../testing/execution/evidence.md) §7
- （含 `handover` 所有权与恢复锚点字段）；校验器为 `tests/tooling/docs/` 下专用 Tooling 校验测试（D5，不并入 checker）。
-- 结项 closeout schema（规范正文）：[`docs/testing/execution/evidence.md`](../testing/execution/evidence.md) §8
- （`docs/changes/YYYY-MM-DD-<topic>.md` 必填：状态/基准 SHA/结果/入口/已知非阻断项/结论边界）。
 - CI 工件清单（白名单/黑名单/脱敏规则与 `retention-days` 指针）：[`docs/testing/execution/evidence.md`](../testing/execution/evidence.md) §6。
 - 前代调度政策历史（非现行规范，仅追溯）：[`docs/archive/governance-hardening-20260910/`](../archive/governance-hardening-20260910/README.md)。
 

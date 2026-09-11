@@ -80,7 +80,6 @@ const SUITES = [
     { id: 'catalog-checker', path: './tests/tooling/catalog/catalog-checker.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'evidence-schema', path: './tests/tooling/evidence/evidence-schema.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'auto-delivery', path: './tests/tooling/delivery/auto-delivery.tooling.test.ts', group: 'tooling', needs_db: false },
-    { id: 'governance-docs', path: './tests/tooling/docs/governance-docs.tooling.test.ts', group: 'tooling', needs_db: false },
 ];
 
 /** 当前拥有的子进程（信号处理用）。 */

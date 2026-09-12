@@ -224,17 +224,24 @@ async function runGuestCreativeSyncTests() {
     assert.strictEqual(cappedChat[0].messageId, 'msg_21', 'Oldest messages beyond 100 should be truncated');
     assert.strictEqual(cappedChat[99].messageId, 'msg_120', 'Newest message must be preserved');
 
-    // 4.2 Generation History Cap (100 records)
+    // 4.2 Generation History Cutover (No cap / Permanently retained, M2-07)
     for (let i = 1; i <= 105; i++) {
         await recordGenerationHistoryForSubject(
             { type: 'guest', id: guestCap },
             { prompt: `Prompt ${i}`, storyText: `Story ${i}` }
         );
     }
-    const genCapCount = await prisma.guestStoryWork.count({ where: { guestId: guestCap } });
-    assert.strictEqual(genCapCount, 100, 'Guest generation history must be capped at 100 records in DB');
+    const genCount = await prisma.guestStoryWork.count({ where: { guestId: guestCap } });
+    assert.strictEqual(genCount, 105, 'Guest generation history must not be capped; all 105 records retained in DB');
+    const firstGen = await prisma.guestStoryWork.findFirst({
+        where: { guestId: guestCap, prompt: 'Prompt 1' },
+    });
+    assert(firstGen !== null, 'First generation record must still exist after 105 writes');
 
-    console.log('PASS: Hard caps (chat <= 100, generation history <= 100) enforced');
+    const genList50 = await listGenerationHistoryForSubject({ type: 'guest', id: guestCap });
+    assert.strictEqual(genList50.length, 50, 'listGenerationHistoryForSubject must return at most 50 display records');
+
+    console.log('PASS: Chat cap (<= 100) and generation history no-cap cutover (105 retained) verified');
 
     console.log('=== 5. Testing 30-Day GC Selection Predicate ===');
     const guestExpired = `g_expired_${Date.now()}`;

@@ -790,7 +790,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-work, library, create, idempotency, retention]
     spec_path: docs/e2e/07-故事库与作品资产/03-StoryWork创作入库与幂等.md
-    executable_ids: [exec-story-work-create]
+    executable_ids: [exec-story-work-create, exec-legacy-generation-history-cutover]
     fixtures: []
     owner: story-library
   - case_id: story-work-lifecycle-mutations
@@ -996,6 +996,10 @@ executables:
     display_name_zh: StoryWork tRPC路由与客户端门面
     layer: L2
     path: ./tests/integration/persistence-config/story-work-router-facade.integration.test.ts
+  - executable_id: exec-legacy-generation-history-cutover
+    display_name_zh: Legacy生成历史兼容切换
+    layer: L2
+    path: ./tests/integration/persistence-config/legacy-generation-history-cutover.integration.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

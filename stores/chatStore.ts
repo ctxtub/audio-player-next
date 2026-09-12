@@ -213,6 +213,30 @@ const findAssistantIndexById = (
 };
 
 /**
+ * M4-02 fixup 身份定位辅助：按 assistant attempt 向前找其配对 user。
+ * 从 assistantIndex 向前找最近一条 role==='user' 的 message，即该 assistant attempt 的 paired user。
+ * 三个 terminal handler（finish/fail/abort）共用此唯一实现，只修改 paired user，
+ * 旧 Attempt 的 terminal 事件不得污染其它 Attempt（E2E-08-02 冻结语义）。
+ * @param messages 当前消息列表。
+ * @param assistantIndex 目标助手消息下标（attempt 身份）。
+ * @returns 配对 user 下标，未找到返回 -1。
+ */
+const findUserIndexForAssistant = (
+  messages: ChatMessage[],
+  assistantIndex: number,
+): number => {
+  if (assistantIndex < 0 || assistantIndex >= messages.length) {
+    return -1;
+  }
+  for (let i = assistantIndex - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      return i;
+    }
+  }
+  return -1;
+};
+
+/**
  * 取消息内 Modern Artifact 片段（有且仅有一个）。
  */
 const getStoryArtifactPart = (msg: ChatMessage): StoryArtifactPart | undefined =>
@@ -703,9 +727,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         case 'stream.finish': {
           // M4-02：done 仅标记传输结束（sending→delivered），绝不隐式 complete/promotion/ready。
           // story_complete→done 仍是同一个 complete；done→story_complete 仍可随后 complete（不因 done 提前制造 ready）。
-          const targetIndex = action.messageId
-            ? messages.findIndex((m) => m.id === action.messageId && m.role === 'assistant')
-            : messages.findLastIndex((m) => m.role === 'assistant' && m.status === 'sending');
+          // M4-02 fixup：只修改 paired user（assistantIndex 向前最近 user），旧 Attempt 不得污染其它 Attempt。
+          const targetIndex = findAssistantIndexById(messages, action.messageId);
           if (targetIndex === -1) return state;
 
           const payload = action.payload as ChatStreamDoneEvent | undefined;
@@ -718,10 +741,10 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             },
           };
 
-          // 确保最近的 User 消息也是 delivered
-          const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
-          if (lastUserIndex !== -1) {
-            messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'delivered' };
+          // M4-02 fixup：仅配对 user sending→delivered（共用 findUserIndexForAssistant）。
+          const pairedUserIndex = findUserIndexForAssistant(messages, targetIndex);
+          if (pairedUserIndex !== -1 && messages[pairedUserIndex].status === 'sending') {
+            messages[pairedUserIndex] = { ...messages[pairedUserIndex], status: 'delivered' };
           }
 
           return {
@@ -731,9 +754,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         }
         case 'stream.fail': {
           // M4-02：error/abort → draft→interrupted，不出现 complete；按 id 定位，stale 直接忽略。
-          const targetIndex = action.messageId
-            ? messages.findIndex((m) => m.id === action.messageId && m.role === 'assistant')
-            : messages.findLastIndex((m) => m.role === 'assistant' && m.status === 'sending');
+          // M4-02 fixup：只修改 paired user（共用 findUserIndexForAssistant），旧 Attempt 不得污染其它 Attempt。
+          const targetIndex = findAssistantIndexById(messages, action.messageId);
           if (targetIndex !== -1) {
             const msg = messages[targetIndex];
             const existing = getStoryArtifactPart(msg);
@@ -753,19 +775,20 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           } else if (action.messageId) {
             // 带 id 却找不到：stale/已清空，绝不复活、不误伤其它 attempt。
             return state;
+          } else {
+            return state;
           }
 
-          const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
-          if (lastUserIndex !== -1) {
-            messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'failed' };
+          const pairedUserIndex = findUserIndexForAssistant(messages, targetIndex);
+          if (pairedUserIndex !== -1 && messages[pairedUserIndex].status === 'sending') {
+            messages[pairedUserIndex] = { ...messages[pairedUserIndex], status: 'failed' };
           }
 
           return { messages };
         }
         case 'stream.abort': {
-          const targetIndex = action.messageId
-            ? messages.findIndex((m) => m.id === action.messageId && m.role === 'assistant')
-            : messages.findLastIndex((m) => m.role === 'assistant' && m.status === 'sending');
+          // M4-02 fixup：只修改 paired user（共用 findUserIndexForAssistant），旧 Attempt 不得污染其它 Attempt。
+          const targetIndex = findAssistantIndexById(messages, action.messageId);
           if (targetIndex !== -1) {
             const msg = messages[targetIndex];
             const existing = getStoryArtifactPart(msg);
@@ -784,10 +807,12 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             }
           } else if (action.messageId) {
             return state;
+          } else {
+            return state;
           }
-          const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
-          if (lastUserIndex !== -1) {
-            messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'failed' };
+          const pairedUserIndex = findUserIndexForAssistant(messages, targetIndex);
+          if (pairedUserIndex !== -1 && messages[pairedUserIndex].status === 'sending') {
+            messages[pairedUserIndex] = { ...messages[pairedUserIndex], status: 'failed' };
           }
           return { messages };
         }

@@ -92,6 +92,20 @@ function finish(id: string): void {
   } as DispatchArg);
 }
 
+function failAttempt(id: string, error = 'boom'): void {
+  useChatStore.getState().dispatch({ type: 'stream.fail', error, messageId: id } as DispatchArg);
+}
+
+function abortAttempt(id: string, reason = 'aborted'): void {
+  useChatStore.getState().dispatch({ type: 'stream.abort', messageId: id, reason } as DispatchArg);
+}
+
+function getUserMessageByIndex(order: number): ChatMsg {
+  const users = useChatStore.getState().messages.filter((m) => m.role === 'user');
+  assert.ok(users[order], `第 ${order} 条 user 必须存在`);
+  return users[order] as ChatMsg;
+}
+
 async function main(): Promise<void> {
   console.log('=== M4-02-01: sourceMessageId === assistantMessage.id ===');
   {
@@ -163,8 +177,9 @@ async function main(): Promise<void> {
     console.log('PASS: M4-02-04 done-first no premature ready');
   }
 
-  console.log('=== M4-02-05: stale Attempt A complete 在 B 后到达绝不覆盖 B ===');
+  console.log('=== M4-02-05: cross-attempt terminal isolation（finish/fail/abort paired user + stale）===');
   {
+    // 05-1 并发双 attempt：stale A complete 不得污染 B（原有冻结语义保留）。
     resetBaseline();
     // 并发双 attempt：A 先建，B 后建；stale A complete 不得污染 B。
     const idA = submitAndGetAssistantId('第一问-A');
@@ -182,6 +197,88 @@ async function main(): Promise<void> {
     assert.strictEqual(artifactB.part.artifact.status, 'draft', 'stale A 不得推进 B');
     assert.strictEqual(artifactB.part.artifact.storyText, 'B-草稿');
     assert.strictEqual(artifactB.part.artifact.sourceMessageId, idB);
+    console.log('PASS: M4-02-05-1 stale complete isolation');
+
+    // 05-2 finish(A) 只配对 User A：userA delivered / assistantA delivered / userB 仍 sending / assistantB 不变。
+    resetBaseline();
+    const finishA = submitAndGetAssistantId('第一问-A-finish');
+    intentStory(finishA);
+    delta(finishA, 'A-草稿-finish');
+    const finishB = submitAndGetAssistantId('第二问-B-finish');
+    intentStory(finishB);
+    delta(finishB, 'B-草稿-finish');
+    const finishUserA = getUserMessageByIndex(0);
+    const finishUserB = getUserMessageByIndex(1);
+    assert.strictEqual(finishUserA.status, 'sending');
+    assert.strictEqual(finishUserB.status, 'sending');
+    finish(finishA);
+    const finishUserAAfter = getMessage(finishUserA.id) as ChatMsg;
+    const finishUserBAfter = getMessage(finishUserB.id) as ChatMsg;
+    const finishAssistantAAfter = getMessage(finishA) as ChatMsg;
+    const finishAssistantBAfter = getMessage(finishB) as ChatMsg;
+    assert.strictEqual(finishUserAAfter.status, 'delivered', 'finish(A) 必须只配对 User A delivered');
+    assert.strictEqual(finishAssistantAAfter.status, 'delivered', 'finish(A) assistantA delivered');
+    assert.strictEqual(finishUserBAfter.status, 'sending', 'finish(A) 不得污染 User B');
+    assert.strictEqual(finishAssistantBAfter.status, 'sending', 'finish(A) 不得污染 Assistant B');
+    const finishArtifactB = getArtifact(finishB);
+    assert.strictEqual(finishArtifactB.part.artifact.status, 'draft', 'finish(A) 不得推进 B Artifact');
+    assert.strictEqual(finishArtifactB.part.artifact.storyText, 'B-草稿-finish');
+    assert.strictEqual(finishArtifactB.part.artifact.sourceMessageId, finishB);
+    console.log('PASS: M4-02-05-2 finish paired isolation');
+
+    // 05-3 fail(A) 只配对 User A：userA failed / assistantA interrupted / userB 仍 sending / B Artifact 不变。
+    resetBaseline();
+    const failA = submitAndGetAssistantId('第一问-A-fail');
+    intentStory(failA);
+    delta(failA, 'A-草稿-fail');
+    const failB = submitAndGetAssistantId('第二问-B-fail');
+    intentStory(failB);
+    delta(failB, 'B-草稿-fail');
+    const failUserA = getUserMessageByIndex(0);
+    const failUserB = getUserMessageByIndex(1);
+    failAttempt(failA, 'boom-A');
+    const failUserAAfter = getMessage(failUserA.id) as ChatMsg;
+    const failUserBAfter = getMessage(failUserB.id) as ChatMsg;
+    const failAssistantAAfter = getMessage(failA) as ChatMsg;
+    const failAssistantBAfter = getMessage(failB) as ChatMsg;
+    assert.strictEqual(failUserAAfter.status, 'failed', 'fail(A) 必须只配对 User A failed');
+    assert.strictEqual(failAssistantAAfter.status, 'failed', 'fail(A) assistantA failed');
+    assert.strictEqual(failUserBAfter.status, 'sending', 'fail(A) 不得污染 User B');
+    assert.strictEqual(failAssistantBAfter.status, 'sending', 'fail(A) 不得污染 Assistant B');
+    const failArtifactA = getArtifact(failA);
+    assert.strictEqual(failArtifactA.part.artifact.status, 'interrupted', 'fail(A) draft→interrupted');
+    const failArtifactB = getArtifact(failB);
+    assert.strictEqual(failArtifactB.part.artifact.status, 'draft', 'fail(A) 不得推进 B Artifact');
+    assert.strictEqual(failArtifactB.part.artifact.storyText, 'B-草稿-fail');
+    assert.strictEqual(failArtifactB.part.artifact.sourceMessageId, failB);
+    console.log('PASS: M4-02-05-3 fail paired isolation');
+
+    // 05-4 abort(A) 只配对 User A：同 fail（userA failed / userB 仍 sending / B Artifact 不变）。
+    resetBaseline();
+    const abortA = submitAndGetAssistantId('第一问-A-abort');
+    intentStory(abortA);
+    delta(abortA, 'A-草稿-abort');
+    const abortB = submitAndGetAssistantId('第二问-B-abort');
+    intentStory(abortB);
+    delta(abortB, 'B-草稿-abort');
+    const abortUserA = getUserMessageByIndex(0);
+    const abortUserB = getUserMessageByIndex(1);
+    abortAttempt(abortA, 'aborted');
+    const abortUserAAfter = getMessage(abortUserA.id) as ChatMsg;
+    const abortUserBAfter = getMessage(abortUserB.id) as ChatMsg;
+    const abortAssistantAAfter = getMessage(abortA) as ChatMsg;
+    const abortAssistantBAfter = getMessage(abortB) as ChatMsg;
+    assert.strictEqual(abortUserAAfter.status, 'failed', 'abort(A) 必须只配对 User A failed');
+    assert.strictEqual(abortAssistantAAfter.status, 'failed', 'abort(A) assistantA failed');
+    assert.strictEqual(abortUserBAfter.status, 'sending', 'abort(A) 不得污染 User B');
+    assert.strictEqual(abortAssistantBAfter.status, 'sending', 'abort(A) 不得污染 Assistant B');
+    const abortArtifactA = getArtifact(abortA);
+    assert.strictEqual(abortArtifactA.part.artifact.status, 'interrupted', 'abort(A) draft→interrupted');
+    const abortArtifactB = getArtifact(abortB);
+    assert.strictEqual(abortArtifactB.part.artifact.status, 'draft', 'abort(A) 不得推进 B Artifact');
+    assert.strictEqual(abortArtifactB.part.artifact.storyText, 'B-草稿-abort');
+    assert.strictEqual(abortArtifactB.part.artifact.sourceMessageId, abortB);
+    console.log('PASS: M4-02-05-4 abort paired isolation');
 
     // retry 分支：A 失败被清理后，stale A 事件不得复活、不得碰 B。
     resetBaseline();
@@ -195,6 +292,46 @@ async function main(): Promise<void> {
     assert.strictEqual(getMessage(retryA), undefined, '已清理的 A 不得复活');
     const artifactRetryB = getArtifact(retryB);
     assert.strictEqual(artifactRetryB.part.artifact.status, 'draft');
+
+    // 05-5 retry 清掉 A 后，stale finish/fail/abort(A) 均不得碰 B 的 user + assistant。
+    {
+      const retryUsers = useChatStore.getState().messages.filter((m) => m.role === 'user');
+      assert.strictEqual(retryUsers.length, 1, 'retry 后应仅剩复用 user + 新 assistant');
+      const retryUserId = (retryUsers[0] as ChatMsg).id;
+      const snapshotBefore = JSON.stringify(useChatStore.getState().messages);
+      finish(retryA);
+      assert.strictEqual(JSON.stringify(useChatStore.getState().messages), snapshotBefore, 'stale finish(A) 不得碰 B');
+      failAttempt(retryA, 'stale-boom');
+      assert.strictEqual(JSON.stringify(useChatStore.getState().messages), snapshotBefore, 'stale fail(A) 不得碰 B');
+      abortAttempt(retryA, 'stale-aborted');
+      assert.strictEqual(JSON.stringify(useChatStore.getState().messages), snapshotBefore, 'stale abort(A) 不得碰 B');
+      const retryUserAfter = getMessage(retryUserId) as ChatMsg;
+      const retryAssistantAfter = getMessage(retryB) as ChatMsg;
+      assert.strictEqual(retryUserAfter.status, 'sending', 'stale terminal 不得改 B user');
+      assert.strictEqual(retryAssistantAfter.status, 'sending', 'stale terminal 不得改 B assistant');
+      const retryArtifactAfter = getArtifact(retryB);
+      assert.strictEqual(retryArtifactAfter.part.artifact.status, 'draft', 'stale terminal 不得改 B Artifact');
+      console.log('PASS: M4-02-05-5 retry stale terminal isolation');
+    }
+
+    // 05-6 静态守卫：三 terminal 共用同一 paired helper，不再按最后一条 sending user 修改。
+    {
+      const storePath = path.resolve(process.cwd(), 'stores/chatStore.ts');
+      const storeContent = fs.readFileSync(storePath, 'utf8');
+      assert.ok(
+        storeContent.includes('const findUserIndexForAssistant'),
+        '必须新增 findUserIndexForAssistant helper',
+      );
+      const helperUses = storeContent.split('findUserIndexForAssistant').length - 1;
+      assert.ok(helperUses >= 4, `三 handler 必须共用同一 helper（定义+3处调用，实得 ${helperUses}）`);
+      const legacyLastUserRe = /findLastIndex\([^)]*role\s*===\s*['"]user['"][^)]*sending/;
+      assert.strictEqual(
+        legacyLastUserRe.test(storeContent),
+        false,
+        'terminal 不得再按最后一条 sending user 修改（必须只改 paired user）',
+      );
+      console.log('PASS: M4-02-05-6 shared helper guard');
+    }
     console.log('PASS: M4-02-05 stale isolation');
   }
 

@@ -889,6 +889,18 @@ cases:
     executable_ids: [exec-library-list-read-ui]
     fixtures: []
     owner: story-library
+  - case_id: library-list-lifecycle-undo
+    display_name_zh: Library 列表生命周期与 Undo
+    legacy_aliases: [E2E-07-12]
+    journey_id: story-library
+    user_goal: 故事库列表支持收藏切换、软删除与串行安全撤销、回收站恢复与二次确认永久删除，严格保护 opaque cursor 无限缓存不被脏注入。
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-work, library, optimistic-cache, undo-race, serial-restore, permanent-delete-confirm, cache-invariants]
+    spec_path: docs/e2e/07-故事库与作品资产/12-Library列表生命周期与Undo.md
+    executable_ids: [exec-library-list-lifecycle-undo]
+    fixtures: []
+    owner: story-library
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1100,6 +1112,10 @@ executables:
     display_name_zh: Library列表读取UI与时间分组
     layer: L1
     path: ./tests/unit/persistence-config/library-list-read-ui.unit.test.ts
+  - executable_id: exec-library-list-lifecycle-undo
+    display_name_zh: Library列表生命周期与Undo
+    layer: L1
+    path: ./tests/unit/persistence-config/library-list-lifecycle-undo.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

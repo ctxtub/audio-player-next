@@ -790,7 +790,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-work, library, create, idempotency, retention]
     spec_path: docs/e2e/07-故事库与作品资产/03-StoryWork创作入库与幂等.md
-    executable_ids: [exec-story-work-create]
+    executable_ids: [exec-story-work-create, exec-story-artifact-contract]
     fixtures: []
     owner: story-library
   - case_id: story-work-lifecycle-mutations
@@ -1160,6 +1160,10 @@ executables:
     display_name_zh: StoryWork详情变更与跨缓存一致性
     layer: L1
     path: ./tests/unit/persistence-config/library-detail-mutations.unit.test.ts
+  - executable_id: exec-story-artifact-contract
+    display_name_zh: Chat Artifact 领域契约与状态机
+    layer: L1
+    path: ./tests/unit/creation-chat/story-artifact-contract.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

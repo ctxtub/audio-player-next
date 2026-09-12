@@ -54,13 +54,13 @@ import {
   libraryListOutputSchema,
 } from '../../../lib/trpc/schemas/library';
 import {
-  fetchLibraryList,
-  fetchLibraryDetail,
-  createStoryWork,
-  renameStoryWork,
-  setStoryWorkFavorite,
+  list,
+  get,
+  create,
+  rename,
+  setFavorite,
   moveToTrash,
-  restoreStoryWork,
+  restore,
   deletePermanently,
   libraryClient,
 } from '../../../lib/client/library';
@@ -638,8 +638,8 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
   // 通过 internal factory 创建测试 facade 实例（无全局 mutable state）
   const testFacade = createLibraryFacade(mockTrpcClient);
 
-  // 7.1 fetchLibraryList & libraryClient.list
-  const listRes1 = await testFacade.fetchLibraryList({ view: 'favorites', limit: 15 });
+  // 7.1 list & libraryClient.list (结构体入参)
+  const listRes1 = await testFacade.list({ view: 'favorites', limit: 15 });
   assert.strictEqual(listRes1, mockListDto);
   assert.deepStrictEqual(callsRecorded.list[0], { view: 'favorites', limit: 15 });
 
@@ -647,63 +647,86 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
   assert.strictEqual(listRes2, mockListDto);
   assert.deepStrictEqual(callsRecorded.list[1], {});
 
-  // 7.2 fetchLibraryDetail: number vs object
-  await testFacade.fetchLibraryDetail(101);
+  // 7.2 get & libraryClient.get (纯结构体入参，无裸 number)
+  await testFacade.get({ id: 101 });
   assert.deepStrictEqual(callsRecorded.get[0], { id: 101 });
   await testFacade.libraryClient.get({ id: 102 });
   assert.deepStrictEqual(callsRecorded.get[1], { id: 102 });
 
-  // 7.3 createStoryWork
+  // 7.3 create & libraryClient.create (纯结构体入参)
   const createPayload = { prompt: 'cp', storyText: 'ct' };
-  await testFacade.createStoryWork(createPayload);
+  await testFacade.create(createPayload);
   assert.deepStrictEqual(callsRecorded.create[0], createPayload);
   await testFacade.libraryClient.create(createPayload);
   assert.deepStrictEqual(callsRecorded.create[1], createPayload);
 
-  // 7.4 renameStoryWork: 纯结构体入参
-  await testFacade.renameStoryWork({ id: 101, title: 'Title A' });
+  // 7.4 rename & libraryClient.rename (纯结构体入参)
+  await testFacade.rename({ id: 101, title: 'Title A' });
   assert.deepStrictEqual(callsRecorded.rename[0], { id: 101, title: 'Title A' });
   await testFacade.libraryClient.rename({ id: 102, title: 'Title B' });
   assert.deepStrictEqual(callsRecorded.rename[1], { id: 102, title: 'Title B' });
 
-  // 7.5 setStoryWorkFavorite: 纯结构体入参
-  await testFacade.setStoryWorkFavorite({ id: 101, favorite: true });
+  // 7.5 setFavorite & libraryClient.setFavorite (纯结构体入参)
+  await testFacade.setFavorite({ id: 101, favorite: true });
   assert.deepStrictEqual(callsRecorded.setFavorite[0], { id: 101, favorite: true });
   await testFacade.libraryClient.setFavorite({ id: 102, favorite: false });
   assert.deepStrictEqual(callsRecorded.setFavorite[1], { id: 102, favorite: false });
 
-  // 7.6 moveToTrash: number vs object
-  await testFacade.moveToTrash(101);
+  // 7.6 moveToTrash & libraryClient.moveToTrash (纯结构体入参，无裸 number)
+  await testFacade.moveToTrash({ id: 101 });
   assert.deepStrictEqual(callsRecorded.moveToTrash[0], { id: 101 });
   await testFacade.libraryClient.moveToTrash({ id: 102 });
   assert.deepStrictEqual(callsRecorded.moveToTrash[1], { id: 102 });
 
-  // 7.7 restoreStoryWork: number vs object
-  await testFacade.restoreStoryWork(101);
+  // 7.7 restore & libraryClient.restore (纯结构体入参，无裸 number)
+  await testFacade.restore({ id: 101 });
   assert.deepStrictEqual(callsRecorded.restore[0], { id: 101 });
   await testFacade.libraryClient.restore({ id: 102 });
   assert.deepStrictEqual(callsRecorded.restore[1], { id: 102 });
 
-  // 7.8 deletePermanently: number vs object
-  const delRes1 = await testFacade.deletePermanently(101);
+  // 7.8 deletePermanently & libraryClient.deletePermanently (纯结构体入参，无裸 number)
+  const delRes1 = await testFacade.deletePermanently({ id: 101 });
   assert.strictEqual(delRes1.success, true);
   assert.deepStrictEqual(callsRecorded.deletePermanently[0], { id: 101 });
   const delRes2 = await testFacade.libraryClient.deletePermanently({ id: 102 });
   assert.strictEqual(delRes2.id, 101);
   assert.deepStrictEqual(callsRecorded.deletePermanently[1], { id: 102 });
 
-  // 7.9 生产导出门面对象完整性校验
-  assert.strictEqual(typeof fetchLibraryList, 'function');
-  assert.strictEqual(typeof fetchLibraryDetail, 'function');
-  assert.strictEqual(typeof createStoryWork, 'function');
-  assert.strictEqual(typeof renameStoryWork, 'function');
-  assert.strictEqual(typeof setStoryWorkFavorite, 'function');
+  // 7.9 生产导出门面对象完整性校验（Canonical 8 方法 + 结构体-only）
+  assert.strictEqual(typeof list, 'function');
+  assert.strictEqual(typeof get, 'function');
+  assert.strictEqual(typeof create, 'function');
+  assert.strictEqual(typeof rename, 'function');
+  assert.strictEqual(typeof setFavorite, 'function');
   assert.strictEqual(typeof moveToTrash, 'function');
-  assert.strictEqual(typeof restoreStoryWork, 'function');
+  assert.strictEqual(typeof restore, 'function');
   assert.strictEqual(typeof deletePermanently, 'function');
+
+  assert.strictEqual(typeof libraryClient.list, 'function');
+  assert.strictEqual(typeof libraryClient.get, 'function');
+  assert.strictEqual(typeof libraryClient.create, 'function');
+  assert.strictEqual(typeof libraryClient.rename, 'function');
+  assert.strictEqual(typeof libraryClient.setFavorite, 'function');
   assert.strictEqual(typeof libraryClient.moveToTrash, 'function');
+  assert.strictEqual(typeof libraryClient.restore, 'function');
   assert.strictEqual(typeof libraryClient.deletePermanently, 'function');
-  console.log('PASS: 7. Client Facade 与 Factory 8 个 Canonical Procedure 委托与结构体入参校验通过');
+
+  const expectedClientMethods = [
+    'create',
+    'deletePermanently',
+    'get',
+    'list',
+    'moveToTrash',
+    'rename',
+    'restore',
+    'setFavorite',
+  ].sort();
+  assert.deepStrictEqual(
+    Object.keys(libraryClient).sort(),
+    expectedClientMethods,
+    'libraryClient 仅包含 8 个 canonical procedure 方法'
+  );
+  console.log('PASS: 7. Client Facade 与 Factory 8 个 Canonical Procedure 纯结构体入参委托校验通过');
 
   console.log('=== 8. 静态契约与测试接缝隔离审计 ===');
   // 8.1 严禁在 tRPC input schema、client facade、public contract 中出现 __testBeforeMutationHook
@@ -723,7 +746,32 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
   assert.ok(!trpcClientFile.includes('__testBeforeMutationHook'), 'trpc/client.ts 严禁出现 __testBeforeMutationHook');
   assert.ok(!trpcClientFile.includes('libraryClient'), 'trpc/client.ts 严禁反向 re-export libraryClient (循环依赖)');
 
-  // 8.2 router 仅冻结暴露指定的 8 个 canonical procedure
+  // 8.2 生产代码（lib/client/ 下）严禁出现旧别名（trashStoryWork、permanentDeleteStoryWork 等）
+  const obsoleteClientKeywords = [
+    'trashStoryWork',
+    'permanentDeleteStoryWork',
+    'deletePermanentlyStoryWork',
+    'listStoryWorks',
+    'getStoryWork',
+    'fetchLibraryList',
+    'fetchLibraryDetail',
+    'createStoryWork',
+    'renameStoryWork',
+    'setStoryWorkFavorite',
+    'restoreStoryWork',
+  ];
+  for (const kw of obsoleteClientKeywords) {
+    assert.ok(
+      !clientFile.includes(kw),
+      `lib/client/library.ts 严禁出现淘汰方法名或别名: ${kw}`
+    );
+    assert.ok(
+      !factoryFile.includes(kw),
+      `lib/client/internal/libraryFacadeFactory.ts 严禁出现淘汰方法名或别名: ${kw}`
+    );
+  }
+
+  // 8.3 router 仅冻结暴露指定的 8 个 canonical procedure
   const libraryProcedures = Object.keys((libraryRouter as unknown as { _def: { procedures: Record<string, unknown> } })._def.procedures).sort();
   const expectedProcedures = [
     'create',
@@ -741,11 +789,11 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
     'libraryRouter 只能且必须暴露已冻结的 8 个 canonical procedure'
   );
 
-  // 8.3 全部入口统一使用 guardedProcedure + resolveSubject
+  // 8.4 全部入口统一使用 guardedProcedure + resolveSubject
   assert.ok(routerFile.includes('guardedProcedure'), 'router 必须使用 guardedProcedure');
   assert.ok(!routerFile.includes('publicProcedure'), 'library router 严禁使用 publicProcedure');
   assert.ok(routerFile.includes('resolveSubject'), 'router 必须使用 resolveSubject');
-  console.log('PASS: 8. 静态契约审计与测试接缝隔离验证通过');
+  console.log('PASS: 8. 静态契约审计、淘汰别名清除与测试接缝隔离验证通过');
 
   console.log('\nALL STORYWORK ROUTER & FACADE INTEGRATION TESTS PASSED SUCCESSFULLY');
 }

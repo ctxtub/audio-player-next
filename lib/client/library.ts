@@ -6,7 +6,8 @@
  * 1. 仅通过类型安全 tRPC Client 调用已冻结的 8 个 canonical Procedure；
  * 2. 严禁包含任何 server-internal 实现细节与数据模型；
  * 3. 绝对不包含也不暴露测试接缝或全局可变状态；
- * 4. 纯净依赖，不引入 TanStack Query（由 M3 UI 组件层按需结合）。
+ * 4. 纯净依赖，不引入 TanStack Query（由 M3 UI 组件层按需结合）；
+ * 5. 纯结构体入参（Struct-only），无旧名兼容别名与裸 number convenience。
  */
 
 import { trpc } from '@/lib/trpc/client';
@@ -32,20 +33,13 @@ export type {
 
 const defaultFacade = createLibraryFacade(trpc);
 
-export const fetchLibraryList = defaultFacade.fetchLibraryList;
-export const fetchLibraryDetail = defaultFacade.fetchLibraryDetail;
-export const createStoryWork = defaultFacade.createStoryWork;
-export const renameStoryWork = defaultFacade.renameStoryWork;
-export const setStoryWorkFavorite = defaultFacade.setStoryWorkFavorite;
+export const list = defaultFacade.list;
+export const get = defaultFacade.get;
+export const create = defaultFacade.create;
+export const rename = defaultFacade.rename;
+export const setFavorite = defaultFacade.setFavorite;
 export const moveToTrash = defaultFacade.moveToTrash;
-export const restoreStoryWork = defaultFacade.restoreStoryWork;
+export const restore = defaultFacade.restore;
 export const deletePermanently = defaultFacade.deletePermanently;
-
-// 别名
-export const listStoryWorks = defaultFacade.listStoryWorks;
-export const getStoryWork = defaultFacade.getStoryWork;
-export const trashStoryWork = defaultFacade.trashStoryWork;
-export const permanentDeleteStoryWork = defaultFacade.permanentDeleteStoryWork;
-export const deletePermanentlyStoryWork = defaultFacade.deletePermanentlyStoryWork;
 
 export const libraryClient = defaultFacade.libraryClient;

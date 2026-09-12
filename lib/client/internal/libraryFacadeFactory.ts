@@ -55,111 +55,100 @@ export interface MinimalLibraryTrpcClient {
  */
 export function createLibraryFacade<TClient extends MinimalLibraryTrpcClient>(client: TClient) {
   /**
-   * 查询故事作品分页列表
+   * 查询故事作品分页列表（纯结构体入参）
    */
-  const fetchLibraryList = async (
+  const list = async (
     input?: Partial<LibraryListInput>
   ): Promise<LibraryListOutput> => {
     return client.library.list.query(input ?? {});
   };
 
   /**
-   * 获取单个故事作品详情
+   * 获取单个故事作品详情（纯结构体入参）
    */
-  const fetchLibraryDetail = async (
-    input: LibraryGetInput | number
+  const get = async (
+    input: LibraryGetInput
   ): Promise<StoryWorkDetailDTO> => {
-    const payload: LibraryGetInput = typeof input === 'number' ? { id: input } : input;
-    return client.library.get.query(payload);
+    return client.library.get.query(input);
   };
 
   /**
-   * 创作故事作品入库
+   * 创作故事作品入库（纯结构体入参）
    */
-  const createStoryWork = async (
+  const create = async (
     input: LibraryCreateInput
   ): Promise<StoryWorkDetailDTO> => {
     return client.library.create.mutate(input);
   };
 
   /**
-   * 重命名故事作品标题（收窄为纯结构体入参，避免悬空重载）
+   * 重命名故事作品标题（纯结构体入参）
    */
-  const renameStoryWork = async (
+  const rename = async (
     input: LibraryRenameInput
   ): Promise<StoryWorkDetailDTO> => {
     return client.library.rename.mutate(input);
   };
 
   /**
-   * 切换故事作品收藏状态（收窄为纯结构体入参，避免悬空重载）
+   * 切换故事作品收藏状态（纯结构体入参）
    */
-  const setStoryWorkFavorite = async (
+  const setFavorite = async (
     input: LibrarySetFavoriteInput
   ): Promise<StoryWorkDetailDTO> => {
     return client.library.setFavorite.mutate(input);
   };
 
   /**
-   * 将故事作品移入回收站（软删除，canonical 命名）
+   * 将故事作品移入回收站（软删除，纯结构体入参，canonical 命名）
    */
   const moveToTrash = async (
-    input: LibraryTrashInput | number
+    input: LibraryTrashInput
   ): Promise<StoryWorkDetailDTO> => {
-    const payload: LibraryTrashInput = typeof input === 'number' ? { id: input } : input;
-    return client.library.moveToTrash.mutate(payload);
+    return client.library.moveToTrash.mutate(input);
   };
 
   /**
-   * 从回收站恢复故事作品
+   * 从回收站恢复故事作品（纯结构体入参，canonical 命名）
    */
-  const restoreStoryWork = async (
-    input: LibraryRestoreInput | number
+  const restore = async (
+    input: LibraryRestoreInput
   ): Promise<StoryWorkDetailDTO> => {
-    const payload: LibraryRestoreInput = typeof input === 'number' ? { id: input } : input;
-    return client.library.restore.mutate(payload);
+    return client.library.restore.mutate(input);
   };
 
   /**
-   * 永久物理删除故事作品（仅限处于回收站中的作品，canonical 命名）
+   * 永久物理删除故事作品（仅限处于回收站中的作品，纯结构体入参，canonical 命名）
    */
   const deletePermanently = async (
-    input: LibraryDeletePermanentlyInput | number
+    input: LibraryDeletePermanentlyInput
   ): Promise<LibraryDeletePermanentlyOutput> => {
-    const payload: LibraryDeletePermanentlyInput =
-      typeof input === 'number' ? { id: input } : input;
-    return client.library.deletePermanently.mutate(payload);
+    return client.library.deletePermanently.mutate(input);
   };
 
   /**
-   * 聚合 Client 对象（8 个 Procedure 入口）
+   * 聚合 Client 对象（8 个 Canonical Procedure 入口）
    */
   const libraryClient = {
-    list: fetchLibraryList,
-    get: fetchLibraryDetail,
-    create: createStoryWork,
-    rename: renameStoryWork,
-    setFavorite: setStoryWorkFavorite,
+    list,
+    get,
+    create,
+    rename,
+    setFavorite,
     moveToTrash,
-    restore: restoreStoryWork,
+    restore,
     deletePermanently,
   };
 
   return {
-    fetchLibraryList,
-    fetchLibraryDetail,
-    createStoryWork,
-    renameStoryWork,
-    setStoryWorkFavorite,
+    list,
+    get,
+    create,
+    rename,
+    setFavorite,
     moveToTrash,
-    restoreStoryWork,
+    restore,
     deletePermanently,
-    // 兼容别名
-    listStoryWorks: fetchLibraryList,
-    getStoryWork: fetchLibraryDetail,
-    trashStoryWork: moveToTrash,
-    permanentDeleteStoryWork: deletePermanently,
-    deletePermanentlyStoryWork: deletePermanently,
     libraryClient,
   };
 }

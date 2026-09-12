@@ -1,10 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useContext } from 'react';
 import Link from 'next/link';
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { useLibraryDetailQuery } from '@/lib/client/libraryQueries';
 import { composeLibraryDetailViewModel } from '@/lib/client/libraryViewModel';
+import { useLibraryMutationsSafe } from '@/lib/client/libraryMutations';
 import { StoryDetail } from '@/components/Library/StoryDetail';
 import { LibraryUnavailable, isUnavailableError } from '@/components/Library/LibraryUnavailable';
 import styles from './index.module.scss';
@@ -14,22 +16,45 @@ export interface StoryDetailPageProps {
 }
 
 /**
- * 故事详情页客户端 Shell 组件（M3-06）
+ * 故事详情页客户端 Shell 组件（M3-07）
  *
  * 核心生命周期与状态：
  * 1. loading：展示骨架占位态；
  * 2. unavailable：NOT_FOUND / UNAUTHORIZED / foreign-owned / trashed / 缺失，渲染统一不可用视图（LibraryUnavailable）；
  * 3. error：非不可用的系统级/网络级瞬态异常，展示重试机制；
- * 4. success：由 composeLibraryDetailViewModel 包装注入 progress=null 缝隙，纯只读渲染 StoryDetail。
+ * 4. success：由 composeLibraryDetailViewModel 包装注入 progress=null 缝隙，纯净呈现 StoryDetail；
+ * 5. mutations：接入详情侧 Rename / Favorite / Move to Trash，共享 M3-05 mutation 引擎与跨缓存一致性。
  *
  * 严格防护与边界约束：
  * - 绝不发起针对回收站视图的列表或额外探测查询；
- * - 纯只读接入，绝不提前引入任何 Rename / Favorite / Trash 等变更操作；
+ * - 仅支持 Rename / Favorite / Move to Trash，严禁在详情暴露 Restore / Permanent Delete；
  * - progress 经由 VM seam 严格注入为 null，为 M5 留出干净接入点。
  */
 const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id }) => {
   const numericId = Number.parseInt(id, 10);
   const isValidId = !Number.isNaN(numericId) && numericId > 0;
+
+  const router = useContext(AppRouterContext);
+
+  const mutations = useLibraryMutationsSafe();
+
+  const handleRename = async (workId: number, title: string) => {
+    if (!mutations) return;
+    await mutations.rename({ id: workId, title });
+  };
+
+  const handleToggleFavorite = async (workId: number, favorite: boolean) => {
+    if (!mutations) return;
+    await mutations.toggleFavorite({ id: workId, favorite });
+  };
+
+  const handleMoveToTrash = async (workId: number, title: string) => {
+    if (!mutations) return;
+    await mutations.moveToTrash({ id: workId, title });
+    if (router) {
+      router.push('/library');
+    }
+  };
 
   const {
     data,
@@ -107,10 +132,17 @@ const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id }) => {
     return <LibraryUnavailable />;
   }
 
-  // 4. 正常详情：经 VM Seam 保持 progress=null 纯只读渲染
+  // 4. 正常详情：经 VM Seam 保持 progress=null 纯净渲染
   const viewModel = composeLibraryDetailViewModel(data, null);
 
-  return <StoryDetail work={viewModel} />;
+  return (
+    <StoryDetail
+      work={viewModel}
+      onRename={handleRename}
+      onToggleFavorite={handleToggleFavorite}
+      onMoveToTrash={handleMoveToTrash}
+    />
+  );
 };
 
 export default StoryDetailPage;

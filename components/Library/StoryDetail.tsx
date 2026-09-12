@@ -1,13 +1,28 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Clock, Mic, FileText, Hash, Bookmark, Sparkles } from 'lucide-react';
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
+import {
+  ArrowLeft,
+  Clock,
+  Mic,
+  FileText,
+  Hash,
+  Bookmark,
+  Sparkles,
+  Pencil,
+  Trash2,
+} from 'lucide-react';
 import type { LibraryDetailViewModel } from '@/lib/client/libraryViewModel';
+import { useLibraryMutationsSafe } from '@/lib/client/libraryMutations';
 import styles from './storyDetail.module.scss';
 
 export interface StoryDetailProps {
   work: LibraryDetailViewModel;
+  onRename?: (id: number, newTitle: string) => Promise<void>;
+  onToggleFavorite?: (id: number, favorite: boolean) => Promise<void>;
+  onMoveToTrash?: (id: number, title: string) => Promise<void>;
 }
 
 /**
@@ -41,14 +56,113 @@ function formatDateTime(isoString: string): string {
 }
 
 /**
- * 故事作品详情展示组件（M3-06 纯只读）
+ * 故事作品详情展示与变更组件（M3-07）
  *
  * 核心边界规范：
- * 1. 纯只读展示：不暴露任何 Rename / Favorite / Trash / Restore / Permanent Delete mutation 行为（归 M3-07 接管）；
- * 2. 字段保真：严格仅读取 StoryWorkDetail 已有字段，绝不跨越读取生成历史、播放进度或音频内部表；
- * 3. 播放进度缝隙：严格保持 work.progress === null（等待 M5 进度系统接入）。
+ * 1. 仅暴露 Rename / Favorite / Move to Trash 操作；
+ * 2. 严禁暴露 Restore / Permanent Delete（回收站作品不可进入详情）；
+ * 3. 字段保真：严格仅读取 StoryWorkDetail 已有字段，绝不跨越读取生成历史、播放进度或音频内部表；
+ * 4. 播放进度缝隙：严格保持 work.progress === null（等待 M5 进度系统接入）。
  */
-export const StoryDetail: React.FC<StoryDetailProps> = ({ work }) => {
+export const StoryDetail: React.FC<StoryDetailProps> = ({
+  work,
+  onRename,
+  onToggleFavorite,
+  onMoveToTrash,
+}) => {
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(work.title);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+  const [isMovingToTrash, setIsMovingToTrash] = useState(false);
+
+  const router = useContext(AppRouterContext);
+
+  const mutations = useLibraryMutationsSafe();
+
+  useEffect(() => {
+    setTitleDraft(work.title);
+  }, [work.title]);
+
+  const handleOpenRename = () => {
+    setTitleDraft(work.title);
+    setRenameError(null);
+    setIsEditingTitle(true);
+  };
+
+  const handleCancelRename = () => {
+    setTitleDraft(work.title);
+    setRenameError(null);
+    setIsEditingTitle(false);
+  };
+
+  const handleSaveRename = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
+    const trimmed = titleDraft.trim();
+    if (!trimmed) {
+      setRenameError('标题不能为空');
+      return;
+    }
+    if (trimmed === work.title) {
+      setIsEditingTitle(false);
+      return;
+    }
+
+    try {
+      setIsRenaming(true);
+      setRenameError(null);
+      if (onRename) {
+        await onRename(work.id, trimmed);
+      } else if (mutations) {
+        await mutations.rename({ id: work.id, title: trimmed });
+      }
+      setIsEditingTitle(false);
+    } catch (err) {
+      setRenameError(err instanceof Error ? err.message : '重命名失败');
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    try {
+      setIsTogglingFavorite(true);
+      const nextFavorite = !work.favoritedAt;
+      if (onToggleFavorite) {
+        await onToggleFavorite(work.id, nextFavorite);
+      } else if (mutations) {
+        await mutations.toggleFavorite({ id: work.id, favorite: nextFavorite });
+      }
+    } catch (err) {
+      console.error('Toggle favorite failed:', err);
+    } finally {
+      setIsTogglingFavorite(false);
+    }
+  };
+
+  const handleMoveToTrash = async () => {
+    try {
+      setIsMovingToTrash(true);
+      if (onMoveToTrash) {
+        await onMoveToTrash(work.id, work.title);
+      } else if (mutations) {
+        await mutations.moveToTrash({ id: work.id, title: work.title });
+        if (router) {
+          router.push('/library');
+        }
+      }
+    } catch (err) {
+      console.error('Move to trash failed:', err);
+      // 失败时留在详情页且数据由 mutation engine 局部 rollback
+    } finally {
+      setIsMovingToTrash(false);
+    }
+  };
+
   return (
     <div
       className={styles.detailContainer}
@@ -74,19 +188,103 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({ work }) => {
       {/* 标题与元信息 Hero */}
       <header className={styles.detailHero}>
         <div className={styles.titleRow}>
-          <h1 className={styles.title} data-testid="story-detail-title">
-            {work.title}
-          </h1>
-          {work.favoritedAt ? (
-            <span
-              className={styles.favoriteBadge}
-              data-testid="story-detail-favorite-badge"
-              title={`收藏于 ${formatDateTime(work.favoritedAt)}`}
+          {isEditingTitle ? (
+            <form
+              className={styles.renameForm}
+              onSubmit={handleSaveRename}
+              data-testid="story-detail-rename-form"
             >
-              <Bookmark size={14} />
-              <span>已收藏</span>
-            </span>
-          ) : null}
+              <input
+                className={styles.renameInput}
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                data-testid="story-detail-rename-input"
+                autoFocus
+                maxLength={100}
+                disabled={isRenaming}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    handleCancelRename();
+                  }
+                }}
+              />
+              <div className={styles.renameActions}>
+                <button
+                  type="submit"
+                  className={styles.saveRenameBtn}
+                  data-testid="story-detail-rename-save-btn"
+                  disabled={isRenaming || !titleDraft.trim()}
+                >
+                  {isRenaming ? '保存中...' : '保存'}
+                </button>
+                <button
+                  type="button"
+                  className={styles.cancelRenameBtn}
+                  onClick={handleCancelRename}
+                  data-testid="story-detail-rename-cancel-btn"
+                  disabled={isRenaming}
+                >
+                  取消
+                </button>
+              </div>
+              {renameError ? (
+                <span className={styles.renameError} data-testid="story-detail-rename-error">
+                  {renameError}
+                </span>
+              ) : null}
+            </form>
+          ) : (
+            <div className={styles.titleWrapper}>
+              <h1 className={styles.title} data-testid="story-detail-title">
+                {work.title}
+              </h1>
+              {work.favoritedAt ? (
+                <span
+                  className={styles.favoriteBadge}
+                  data-testid="story-detail-favorite-badge"
+                  title={`收藏于 ${formatDateTime(work.favoritedAt)}`}
+                >
+                  <Bookmark size={14} />
+                  <span>已收藏</span>
+                </span>
+              ) : null}
+              <button
+                type="button"
+                className={styles.renameButton}
+                onClick={handleOpenRename}
+                data-testid="story-detail-rename-btn"
+                title="重命名故事标题"
+              >
+                <Pencil size={15} />
+                <span>重命名</span>
+              </button>
+            </div>
+          )}
+
+          <div className={styles.actionsGroup}>
+            <button
+              type="button"
+              className={work.favoritedAt ? styles.favoriteBtnActive : styles.favoriteBtn}
+              onClick={handleToggleFavorite}
+              data-testid="story-detail-favorite-btn"
+              disabled={isTogglingFavorite}
+              title={work.favoritedAt ? '取消收藏' : '添加收藏'}
+            >
+              <Bookmark size={15} />
+              <span>{work.favoritedAt ? '已收藏' : '收藏'}</span>
+            </button>
+            <button
+              type="button"
+              className={styles.trashBtn}
+              onClick={handleMoveToTrash}
+              data-testid="story-detail-trash-btn"
+              disabled={isMovingToTrash}
+              title="移入回收站"
+            >
+              <Trash2 size={15} />
+              <span>{isMovingToTrash ? '处理中...' : '移入回收站'}</span>
+            </button>
+          </div>
         </div>
 
         {/* 元数据标签组 */}

@@ -584,11 +584,8 @@ async function runLibraryDetailReadUnitTests() {
     ];
 
     const forbiddenMutationKeywords = [
-      'mutateRename',
-      'mutateMoveToTrash',
       'mutateRestore',
       'mutateDeletePermanently',
-      'useLibraryMutations',
       'deletePermanently',
       'libraryStore',
     ];

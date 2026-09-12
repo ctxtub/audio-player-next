@@ -114,6 +114,53 @@ export function patchItemFavoriteInInfiniteData(
 }
 
 /**
+ * 在 InfiniteData 中更新指定 ID 作品的标题。
+ * 严格保持各页 nextCursor、hasMore、排序位置及 data.pageParams 绝对不变。
+ */
+export function patchItemTitleInInfiniteData(
+  data: InfiniteData<LibraryListOutput, string | undefined>,
+  id: number,
+  title: string,
+  updatedAt?: string
+): InfiniteData<LibraryListOutput, string | undefined> {
+  let changed = false;
+  const newPages = data.pages.map((page) => {
+    let pageChanged = false;
+    const newItems = page.items.map((item) => {
+      if (item.id === id) {
+        pageChanged = true;
+        changed = true;
+        return {
+          ...item,
+          title,
+          updatedAt: updatedAt ?? new Date().toISOString(),
+        };
+      }
+      return item;
+    });
+
+    if (!pageChanged) {
+      return page;
+    }
+
+    return {
+      ...page,
+      items: newItems,
+    };
+  });
+
+  if (!changed) {
+    return data;
+  }
+
+  return {
+    ...data,
+    pages: newPages,
+    pageParams: [...data.pageParams],
+  };
+}
+
+/**
  * 在 InfiniteData 中用服务端最新返回的 DTO 对齐已存在项。
  * 严格只更新已存在的项，绝不向列表 append 新项。
  */
@@ -171,6 +218,7 @@ export function reconcileItemInInfiniteData(
 
 export type ListMutationAction =
   | { type: 'patch_favorite'; favoritedAt: string | null }
+  | { type: 'patch_title'; title: string }
   | { type: 'remove' }
   | { type: 'none' };
 
@@ -180,6 +228,7 @@ export type ListMutationAction =
  * - Favorite=false：active→patch favoritedAt=null；favorites→remove existing；trash→untouched
  * - MoveToTrash：active/favorites→remove existing；trash→untouched
  * - Restore：trash→remove existing；active/favorites→untouched
+ * - Rename：各视图已加载项仅 patch title，绝对不影响分页与游标
  */
 export function determineListMutationAction(
   view: LibraryView,
@@ -187,7 +236,12 @@ export function determineListMutationAction(
     | { kind: 'favorite'; favorite: boolean; favoritedAt: string | null }
     | { kind: 'trash' }
     | { kind: 'restore' }
+    | { kind: 'rename'; title: string }
 ): ListMutationAction {
+  if (operation.kind === 'rename') {
+    return { type: 'patch_title', title: operation.title };
+  }
+
   if (operation.kind === 'trash') {
     if (view === 'active' || view === 'favorites') {
       return { type: 'remove' };
@@ -251,7 +305,7 @@ export interface MutationJournalEntry {
   view: LibraryView;
   pageIndex: number;
   itemIndex: number;
-  type: 'removed' | 'patched';
+  type: 'removed' | 'patched' | 'patched_title';
   originalItem: StoryWorkSummaryDTO;
 }
 
@@ -270,6 +324,7 @@ export function applyOptimisticMutationToQueries(
     | { kind: 'favorite'; favorite: boolean; favoritedAt: string | null }
     | { kind: 'trash' }
     | { kind: 'restore' }
+    | { kind: 'rename'; title: string }
 ): MutationJournal {
   const journal: MutationJournal = [];
   const listQueries = queryClient.getQueriesData<
@@ -330,6 +385,29 @@ export function applyOptimisticMutationToQueries(
         newItems[itemIndex] = {
           ...originalItem,
           favoritedAt: action.favoritedAt,
+          updatedAt: new Date().toISOString(),
+        };
+
+        return {
+          ...page,
+          items: newItems,
+        };
+      }
+
+      if (action.type === 'patch_title') {
+        journal.push({
+          queryKey,
+          view,
+          pageIndex,
+          itemIndex,
+          type: 'patched_title',
+          originalItem,
+        });
+
+        const newItems = [...page.items];
+        newItems[itemIndex] = {
+          ...originalItem,
+          title: action.title,
           updatedAt: new Date().toISOString(),
         };
 
@@ -413,6 +491,15 @@ export function rollbackMutationJournal(
             newItems[existingIdx] = {
               ...newItems[existingIdx],
               favoritedAt: entry.originalItem.favoritedAt,
+              updatedAt: entry.originalItem.updatedAt,
+            };
+          }
+        } else if (entry.type === 'patched_title') {
+          const existingIdx = newItems.findIndex((it) => it.id === entry.originalItem.id);
+          if (existingIdx !== -1) {
+            newItems[existingIdx] = {
+              ...newItems[existingIdx],
+              title: entry.originalItem.title,
               updatedAt: entry.originalItem.updatedAt,
             };
           }
@@ -516,6 +603,82 @@ export async function mutateToggleFavorite(
   }
 }
 
+export interface RenameOptions {
+  id: number;
+  title: string;
+}
+
+/**
+ * 重命名作品标题：
+ * - 采用 view-aware 变更规划与局部逆向回滚补丁 (Journal-based Inverse Patch)；
+ * - 成功：detail cache 更新为服务端完整 DTO；所有已加载 list cache 仅更新同 id 的 title，绝对保持分页位置、nextCursor 及 pageParams 原样；
+ * - 失败：仅对受影响的特定 item 进行局部逆向回滚，绝不整份覆盖快照；
+ * - 失效：仅失效相关 detail 缓存。
+ */
+export async function mutateRename(
+  queryClient: QueryClient,
+  options: RenameOptions
+): Promise<StoryWorkDetailDTO> {
+  const { id, title } = options;
+
+  // 1. 取消在途列表与详情查询
+  await queryClient.cancelQueries({ queryKey: libraryKeys.lists() });
+  await queryClient.cancelQueries({ queryKey: libraryKeys.detail(id) });
+
+  // 2. 截取详情快照（单个对象安全回滚）
+  const previousDetail = queryClient.getQueryData<StoryWorkDetailDTO>(
+    libraryKeys.detail(id)
+  );
+
+  // 3. 应用 view-aware 乐观更新并生成局部日志
+  const journal = applyOptimisticMutationToQueries(queryClient, id, {
+    kind: 'rename',
+    title,
+  });
+
+  if (previousDetail) {
+    queryClient.setQueryData<StoryWorkDetailDTO>(libraryKeys.detail(id), {
+      ...previousDetail,
+      title,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  // 4. 发起 RPC
+  try {
+    const updated = await libraryClient.rename({ id, title });
+
+    // onSuccess: detail cache 更新为服务端返回的完整最新 DTO
+    queryClient.setQueryData<StoryWorkDetailDTO>(libraryKeys.detail(id), updated);
+
+    // 所有已加载 list cache 中同 id 只 patch title，绝对不改变分页位置 / pageParams / cursor
+    const listQueries = queryClient.getQueriesData<
+      InfiniteData<LibraryListOutput, string | undefined>
+    >({ queryKey: libraryKeys.lists() });
+
+    for (const [queryKey, oldData] of listQueries) {
+      if (oldData) {
+        queryClient.setQueryData(
+          queryKey,
+          patchItemTitleInInfiniteData(oldData, id, updated.title, updated.updatedAt)
+        );
+      }
+    }
+
+    return updated;
+  } catch (error) {
+    // onError: 执行局部逆向回滚（item-local，严禁整份 snapshot 覆盖）
+    rollbackMutationJournal(queryClient, journal);
+    if (previousDetail !== undefined) {
+      queryClient.setQueryData(libraryKeys.detail(id), previousDetail);
+    }
+    throw error;
+  } finally {
+    // onSettled: 仅失效详情缓存
+    await queryClient.invalidateQueries({ queryKey: libraryKeys.detail(id) });
+  }
+}
+
 export interface MoveToTrashOptions {
   id: number;
   workTitle?: string;
@@ -571,9 +734,10 @@ export async function mutateMoveToTrash(
 
   try {
     const result = await movePromise;
-    // 成功后失效受影响列表与详情
+    // 成功后失效受影响列表与详情，并移除 detail 缓存避免展示已软删除作品
     await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
     await queryClient.invalidateQueries({ queryKey: libraryKeys.detail(id) });
+    queryClient.removeQueries({ queryKey: libraryKeys.detail(id) });
     return result;
   } catch (error) {
     // 局部逆向回滚
@@ -681,6 +845,7 @@ export async function mutateDeletePermanently(
 // ==========================================
 
 export interface LibraryMutations {
+  rename: (options: RenameOptions) => Promise<StoryWorkDetailDTO>;
   toggleFavorite: (options: ToggleFavoriteOptions) => Promise<StoryWorkDetailDTO>;
   moveToTrash: (options: { id: number; title: string }) => Promise<StoryWorkDetailDTO>;
   restore: (options: RestoreOptions) => Promise<StoryWorkDetailDTO>;
@@ -698,6 +863,11 @@ export function useLibraryMutations(): LibraryMutations {
     throw new Error('No QueryClient set, use QueryClientProvider to set one');
   }
   const undo = useLibraryUndo();
+
+  const rename = useCallback(
+    (options: RenameOptions) => mutateRename(queryClient, options),
+    [queryClient]
+  );
 
   const toggleFavorite = useCallback(
     (options: ToggleFavoriteOptions) => mutateToggleFavorite(queryClient, options),
@@ -741,6 +911,7 @@ export function useLibraryMutations(): LibraryMutations {
   );
 
   return {
+    rename,
     toggleFavorite,
     moveToTrash,
     restore,
@@ -754,6 +925,14 @@ export function useLibraryMutations(): LibraryMutations {
 export function useLibraryMutationsSafe(): LibraryMutations | null {
   const queryClient = useContext(QueryClientContext);
   const undo = useLibraryUndo();
+
+  const rename = useCallback(
+    (options: RenameOptions) => {
+      if (!queryClient) throw new Error('QueryClient is required for library mutations');
+      return mutateRename(queryClient, options);
+    },
+    [queryClient]
+  );
 
   const toggleFavorite = useCallback(
     (options: ToggleFavoriteOptions) => {
@@ -810,6 +989,7 @@ export function useLibraryMutationsSafe(): LibraryMutations | null {
   }
 
   return {
+    rename,
     toggleFavorite,
     moveToTrash,
     restore,

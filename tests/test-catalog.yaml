@@ -961,6 +961,18 @@ cases:
     executable_ids: [exec-story-complete-decoupling]
     fixtures: []
     owner: creation-artifact
+  - case_id: story-artifact-promotion-adapter
+    display_name_zh: Story Artifact Promotion Adapter 与幂等消费
+    legacy_aliases: [E2E-08-03]
+    journey_id: creation-artifact
+    user_goal: Chat Artifact 经唯一薄通道正确映射并消费 M2 幂等保障落盘为作品，快照冻结可用且非法内容 fail-fast
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [chat, artifact, promotion, idempotency, snapshot]
+    spec_path: docs/e2e/08-创作Artifact/03-StoryArtifactPromotionAdapter与幂等.md
+    executable_ids: [exec-story-artifact-promotion]
+    fixtures: []
+    owner: creation-artifact
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1192,6 +1204,10 @@ executables:
     display_name_zh: stream 完成与 Artifact 完成解耦
     layer: L1
     path: ./tests/unit/creation-chat/story-complete-decoupling.unit.test.ts
+  - executable_id: exec-story-artifact-promotion
+    display_name_zh: Story Artifact Promotion Adapter 与幂等消费
+    layer: L1
+    path: ./tests/unit/creation-chat/story-artifact-promotion.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

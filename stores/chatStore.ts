@@ -60,8 +60,12 @@ export const isPreloadUserMessage = (message: ChatMessage): boolean => {
 
 export type ChatStoreAction =
   // 用户触发
-  | { type: 'user.submit'; content: string; origin?: ChatMessageOrigin } // 提交新消息
-  | { type: 'user.retry' }                   // 重试上一条失败消息
+  // M4-03 快照冻结：submit 可携带生成开始时的 prompt/voice 快照（chatFlow 显式传入）；
+  // 缺省时 prompt 回退为本次 action.content，voice 回退为 undefined（由 chatFlow 负责传入真实快照）。
+  | { type: 'user.submit'; content: string; origin?: ChatMessageOrigin; promptSnapshot?: string; voiceSnapshot?: string } // 提交新消息
+  // M4-03 快照冻结：retry 必须重建新 assistant/sourceMessageId，且新 attempt 携带本次实际使用的 prompt/voice 快照；
+  // 缺省时 prompt 回退为配对失败 user 内容，voice 回退为 undefined（由 chatFlow 负责传入真实快照）。
+  | { type: 'user.retry'; promptSnapshot?: string; voiceSnapshot?: string }                   // 重试上一条失败消息
   // 流式更新
   | { type: 'stream.delta'; content: string; messageId?: string }          // 追加内容
   | { type: 'stream.intent'; intent: 'Story' | 'Chat' | 'Guidance'; messageId?: string } // 更新意图
@@ -507,7 +511,18 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           const assistantBase = createAssistantPlaceholder();
           // M4-02 冻结语义：assistant message 创建 → message.id = X → createDraftArtifact({ sourceMessageId: X })。
           // 每个 attempt（assistant 消息）自带独立 draft，后续 chunk/complete 均按此 id 身份定位。
-          const draft = createDraftArtifact({ sourceMessageId: assistantBase.id });
+          // M4-03 快照冻结：同一 draft 内冻结本次生成开始时的 prompt 与 voice 快照；
+          // prompt 缺省回退为本次 action.content；voice 由 chatFlow 传入实际生成请求所用 voice，缺省为 undefined。
+          // promotion 时严禁重读 Settings，只消费此处冻结值；本步不自动触发 promotion。
+          const submitPromptSnapshot =
+            typeof action.promptSnapshot === 'string' ? action.promptSnapshot : action.content;
+          const submitVoiceSnapshot =
+            typeof action.voiceSnapshot === 'string' ? action.voiceSnapshot : undefined;
+          const draft = createDraftArtifact({
+            sourceMessageId: assistantBase.id,
+            prompt: submitPromptSnapshot,
+            voiceId: submitVoiceSnapshot,
+          });
           const draftPart: StoryArtifactPart = { type: 'storyArtifact', artifact: draft };
           const assistantMsg = withPersona({
             ...assistantBase,
@@ -545,8 +560,21 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           // 为了安全，我们只处理末尾的情况。如果 lastIndex 不是倒数第一/第二，可能需要更复杂的逻辑。
           // 简化：追加一个新的助手占位
           // M4-02：新 Attempt B 拥有全新 assistant id 与全新 draft；stale Attempt A 事件按旧 id 定位，绝不覆盖 B。
+          // M4-03 快照冻结：retry 重建新 assistant/sourceMessageId，但 prompt 与本次实际使用的 voice 快照必须正确进入新 attempt；
+          // prompt 缺省回退为配对失败 user 内容，voice 由 chatFlow 传入本次实际生成所用 voice；绝不等到 promotion 时再读 setting store。
+          // 本步不自动触发 promotion。
+          const retryPairedContent =
+            typeof messages[lastIndex].content === 'string' ? messages[lastIndex].content : '';
+          const retryPromptSnapshot =
+            typeof action.promptSnapshot === 'string' ? action.promptSnapshot : retryPairedContent;
+          const retryVoiceSnapshot =
+            typeof action.voiceSnapshot === 'string' ? action.voiceSnapshot : undefined;
           const assistantBase = createAssistantPlaceholder();
-          const draft = createDraftArtifact({ sourceMessageId: assistantBase.id });
+          const draft = createDraftArtifact({
+            sourceMessageId: assistantBase.id,
+            prompt: retryPromptSnapshot,
+            voiceId: retryVoiceSnapshot,
+          });
           const draftPart: StoryArtifactPart = { type: 'storyArtifact', artifact: draft };
           const assistantMsg = withPersona({
             ...assistantBase,

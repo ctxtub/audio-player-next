@@ -46,6 +46,7 @@ const executeChatStream = async (
   context: ChatConversationMessage[],
   recordHistory: boolean,
   assistantMessageId: string,
+  frozenVoiceId?: string,
 ): Promise<{ audioUrl: string; content: string }> => {
   const generationStore = useGenerationStore.getState();
 
@@ -79,7 +80,10 @@ const executeChatStream = async (
     generationStore.setPhase('generating_text');
 
     // 获取当前配置
-    const { speed, voiceId } = useConfigStore.getState().apiConfig;
+    // M4-03 快照冻结：实际生成请求所使用的 voice 即 frozenVoiceId（由 begin/retry 在 dispatch 前单次捕获并同时写入 draft）；
+    // 此处优先使用传入快照，缺省才回读 Settings，确保 draft 冻结值与真实请求用值恒等，且 promotion 绝不重读 Settings。
+    const { speed } = useConfigStore.getState().apiConfig;
+    const voiceId = typeof frozenVoiceId === 'string' ? frozenVoiceId : useConfigStore.getState().apiConfig.voiceId;
     const agentConfig = {
       audio: {
         speed,
@@ -202,8 +206,17 @@ export const beginChatStream = async (
   content: string,
   options?: { recordHistory?: boolean; origin?: ChatMessageOrigin },
 ): Promise<{ messageId: string; audioUrl: string; content: string }> => {
-  // 1. 提交用户消息
-  useChatStore.getState().dispatch({ type: 'user.submit', content, origin: options?.origin });
+  // M4-03 快照冻结：在生成开始前单次捕获实际请求所用 voice，并与 prompt 一同冻结进 draft；
+  // 同一快照透传给 executeChatStream，确保 draft 冻结值与真实请求用值恒等；promotion 严禁重读 Settings。
+  const frozenVoiceId = useConfigStore.getState().apiConfig.voiceId;
+  // 1. 提交用户消息（含本次 prompt/voice 快照）
+  useChatStore.getState().dispatch({
+    type: 'user.submit',
+    content,
+    origin: options?.origin,
+    promptSnapshot: content,
+    voiceSnapshot: frozenVoiceId,
+  });
 
   // 2. 获取上下文消息列表
   const context = useChatStore.getState().selectors.conversationMessages();
@@ -217,6 +230,7 @@ export const beginChatStream = async (
       context,
       options?.recordHistory ?? true,
       assistantMsgId,
+      frozenVoiceId,
     );
     return { messageId: assistantMsgId, audioUrl, content: generatedContent };
   }
@@ -232,8 +246,22 @@ export const retryChatStream = async (): Promise<void> => {
     throw new Error('当前没有需要重试的消息');
   }
 
-  // 1. 触发重试 Action
-  useChatStore.getState().dispatch({ type: 'user.retry' });
+  // M4-03 快照冻结：retry 重建新 assistant/sourceMessageId，但本次实际使用的 prompt/voice 必须进入新 attempt；
+  // voice 在 dispatch 前单次捕获，prompt 取配对失败 user 内容（与 chatStore 回退一致），二者显式传入，不等 promotion 时再读 store。
+  const failedMessages = useChatStore.getState().messages;
+  const lastFailedUser = [...failedMessages]
+    .reverse()
+    .find((m) => m.role === 'user' && m.status === 'failed');
+  const retryPromptSnapshot =
+    typeof lastFailedUser?.content === 'string' ? lastFailedUser.content : undefined;
+  const retryVoiceSnapshot = useConfigStore.getState().apiConfig.voiceId;
+
+  // 1. 触发重试 Action（含本次 prompt/voice 快照）
+  useChatStore.getState().dispatch({
+    type: 'user.retry',
+    promptSnapshot: retryPromptSnapshot,
+    voiceSnapshot: retryVoiceSnapshot,
+  });
 
   // 2. 获取上下文
   const context = useChatStore.getState().selectors.conversationMessages();
@@ -243,5 +271,5 @@ export const retryChatStream = async (): Promise<void> => {
   if (!retryAssistantId) {
     throw new Error('Failed to create assistant message');
   }
-  await executeChatStream(context, true, retryAssistantId);
+  await executeChatStream(context, true, retryAssistantId, retryVoiceSnapshot);
 };

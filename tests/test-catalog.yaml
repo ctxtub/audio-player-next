@@ -69,7 +69,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [auth, guard]
     spec_path: docs/e2e/01-基础冒烟与页面基线/06-路由守卫与重定向安全.md#e2e-01-06-01
-    executable_ids: [exec-session-roundtrip]
+    executable_ids: [exec-session-roundtrip, exec-main-navigation]
     fixtures: []
     owner: smoke-baseline
   - case_id: authed-reverse-guard-from-backjump
@@ -900,6 +900,10 @@ executables:
     display_name_zh: 段落切分
     layer: L1
     path: ./tests/unit/playback/paragraph-segmentation.unit.test.ts
+  - executable_id: exec-main-navigation
+    display_name_zh: 主导航路由契约
+    layer: L1
+    path: ./tests/unit/navigation/main-navigation.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

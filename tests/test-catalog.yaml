@@ -802,7 +802,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-work, library, mutation, lifecycle, trash]
     spec_path: docs/e2e/07-故事库与作品资产/04-StoryWork生命周期操作.md
-    executable_ids: [exec-story-work-lifecycle]
+    executable_ids: [exec-story-work-lifecycle, exec-story-work-retention]
     fixtures: []
     owner: story-library
   - case_id: library-public-api-facade
@@ -1004,6 +1004,10 @@ executables:
     display_name_zh: StoryWork生命周期操作
     layer: L2
     path: ./tests/integration/persistence-config/story-work-lifecycle.integration.test.ts
+  - executable_id: exec-story-work-retention
+    display_name_zh: StoryWork数据保留与GC清理
+    layer: L2
+    path: ./tests/integration/persistence-config/story-work-retention.integration.test.ts
   - executable_id: exec-story-work-router-facade
     display_name_zh: StoryWork tRPC路由与客户端门面
     layer: L2

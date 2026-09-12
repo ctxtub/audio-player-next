@@ -757,6 +757,18 @@ cases:
     fixtures: []
     owner: error-rate-limit
     manual_reason: 需要人工在真实浏览器确认往返缓存恢复
+  - case_id: story-work-domain-contract
+    display_name_zh: StoryWork 领域契约与派生算法
+    legacy_aliases: [E2E-07-01]
+    journey_id: story-library
+    user_goal: 作品内容身份、展示元数据、列表游标与 DTO 契约保持稳定一致
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-work, library, contract]
+    spec_path: docs/e2e/07-故事库与作品资产/01-StoryWork领域契约与派生算法.md
+    executable_ids: [exec-story-work-domain]
+    fixtures: []
+    owner: story-library
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码

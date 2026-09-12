@@ -36,7 +36,7 @@ export interface ShowUndoParams {
 export interface LibraryUndoContextValue {
   activeUndo: ActiveUndoState | null;
   showUndo: (params: ShowUndoParams) => number;
-  dismissUndo: (token?: number) => void;
+  dismissUndo: (token: number) => void;
   triggerUndo: () => Promise<void>;
 }
 
@@ -79,8 +79,10 @@ export const LibraryUndoProvider: React.FC<LibraryUndoProviderProps> = ({
   const sessionCounterRef = useRef<number>(0);
   const autoDismissTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const dismissUndo = useCallback((token?: number) => {
-    if (token === undefined || currentSessionRef.current?.token === token) {
+  const dismissUndo = useCallback((token: number) => {
+    // 必须提供有效数字 token，且仅当与当前 session 的 token 严格一致时才关闭；
+    // 严禁无条件清除，彻底防止旧操作失败误杀新 Undo 会话。
+    if (typeof token === 'number' && currentSessionRef.current?.token === token) {
       if (autoDismissTimerRef.current) {
         clearTimeout(autoDismissTimerRef.current);
         autoDismissTimerRef.current = null;

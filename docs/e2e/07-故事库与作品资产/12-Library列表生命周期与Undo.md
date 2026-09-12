@@ -24,18 +24,18 @@
 
 3. **移入回收站与串行 Undo 防竞态 (Move to Trash & Serial Undo)**：
    - 移入回收站无需二次确认；
-   - 乐观更新：从 `active` / `favorites` 的各页缓存中移除该项（绝不追加到 trash 缓存）；
-   - 发起 `moveToTrash` RPC，并在 Undo Provider 中注册当前 session（携带在途 `movePromise` 与独立 `token`）；
+   - 乐观更新：采用 view-aware 变更算子，仅从 `active` / `favorites` 的已加载缓存中移除该项（绝不追加到 trash 缓存）；
+   - 发起 `moveToTrash` RPC，并在 Undo Provider 中注册当前 session，返回独立递增 `token`；
    - **Undo 核心竞态防御**：当用户在 move RPC 仍在进行（pending）时点击「撤销」，**严格禁止立即调用 restore(id)**，必须严格串行：`await movePromise → then restore(id)`，彻底避免 restore 遭遇 409 CONFLICT 导致作品最终误入回收站的致命竞态；
-   - 若 move RPC 失败：立即执行快照回滚，且不展示（或立即关闭）Undo 悬浮条；
-   - 旧 move promise 的 resolve/reject 通过递增 `token` 隔离，绝不污染随后触发的新 Undo 会话；
+   - **Token-aware 失败清理（B1）**：move 失败时严格通过 `dismissUndo(token)` 清除当前会话，若期间已发起新的 move 会话（token 已递增），旧失败清理视为 no-op，严禁无条件清除冲掉新 Undo；
+   - **局部逆向回滚（B3）**：失败时仅对本 mutation 修改过的特定条目执行逆向局部回滚，严禁使用全量 snapshot 覆盖，防止覆盖并发的其他作品操作；
    - Undo 成功后不要本地 splice 回 active 列表，由 `invalidateQueries` 重新安全同步。
 
 4. **回收站恢复 (Restore)**：
    - 回收站内点击恢复无需二次确认；
    - 乐观从 trash 列表中移除该项；
    - **核心不变性**：绝对禁止本地向 active 列表追加该项；
-   - 成功后触发 active/favorites/trash 相关查询失效；失败则根据快照回滚。
+   - 成功后触发 active/favorites/trash 相关查询失效；失败则根据局部日志逆向回滚。
 
 5. **永久删除与二次确认 (Permanent Delete)**：
    - **必须强制二次确认**；未确认前严格执行**零 RPC 调用**；
@@ -44,9 +44,10 @@
    - 不展示 Undo，严禁在网络成功前执行危险的乐观删除。
 
 6. **缓存不变性与 Opaque Cursor 防护 (Cache Invariants)**：
-   - 乐观更新与移除仅允许针对当前 loaded items 进行；
-   - 严格禁止任何根据客户端臆测向另一个无限列表注入或追加 item 的行为；
-   - 各页的 `nextCursor`、`hasMore` 以及 `data.pageParams` 在任何 patch/remove 操作后必须保持严格一致与原样不变。
+   - **View-aware 视图隔离（B2）**：每个 list query 独立从自身 queryKey 读取 `view`（active/favorites/trash）并执行对应操作，绝不将全局当前视图作为统一布尔盲目应用于所有缓存；
+   - 乐观更新与移除仅允许针对当前 loaded items 进行，严格禁止凭客户端臆测向另一个无限列表注入或追加 item；
+   - 各页的 `nextCursor`、`hasMore` 以及 `data.pageParams` 在任何 patch/remove 或 rollback 操作后必须保持严格一致与原样不变；
+   - **局部逆向回滚一致性（B3）**：Favorite、MoveToTrash、Restore 均复用统一的 Mutation Journal 逆向局部补丁机制，彻底避免三套并发回滚语义冲突。
 
 ## 关联实现与测试
 

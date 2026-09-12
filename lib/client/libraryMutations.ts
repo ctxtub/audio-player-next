@@ -166,6 +166,244 @@ export function reconcileItemInInfiniteData(
 }
 
 // ==========================================
+// View-aware 变更规划与局部回滚日志系统 (Journal-based Inverse Patch)
+// ==========================================
+
+export type ListMutationAction =
+  | { type: 'patch_favorite'; favoritedAt: string | null }
+  | { type: 'remove' }
+  | { type: 'none' };
+
+/**
+ * 根据 queryKey 自身声明的 view 决定对该 list query 应用何种变更（按视图隔离）：
+ * - Favorite=true：active→patch existing；favorites→patch existing only（绝不 append）；trash→untouched
+ * - Favorite=false：active→patch favoritedAt=null；favorites→remove existing；trash→untouched
+ * - MoveToTrash：active/favorites→remove existing；trash→untouched
+ * - Restore：trash→remove existing；active/favorites→untouched
+ */
+export function determineListMutationAction(
+  view: LibraryView,
+  operation:
+    | { kind: 'favorite'; favorite: boolean; favoritedAt: string | null }
+    | { kind: 'trash' }
+    | { kind: 'restore' }
+): ListMutationAction {
+  if (operation.kind === 'trash') {
+    if (view === 'active' || view === 'favorites') {
+      return { type: 'remove' };
+    }
+    return { type: 'none' };
+  }
+
+  if (operation.kind === 'restore') {
+    if (view === 'trash') {
+      return { type: 'remove' };
+    }
+    return { type: 'none' };
+  }
+
+  if (operation.kind === 'favorite') {
+    if (view === 'trash') {
+      return { type: 'none' };
+    }
+    if (operation.favorite) {
+      return { type: 'patch_favorite', favoritedAt: operation.favoritedAt };
+    } else {
+      if (view === 'favorites') {
+        return { type: 'remove' };
+      }
+      return { type: 'patch_favorite', favoritedAt: null };
+    }
+  }
+
+  return { type: 'none' };
+}
+
+export interface MutationJournalEntry {
+  queryKey: readonly unknown[];
+  pageIndex: number;
+  itemIndex: number;
+  type: 'removed' | 'patched';
+  originalItem: StoryWorkSummaryDTO;
+}
+
+export type MutationJournal = MutationJournalEntry[];
+
+/**
+ * 应用 view-aware 乐观更新并生成局部逆向回滚补丁日志 (Journal)：
+ * - 绝不整份覆盖 snapshot；
+ * - 仅记录并修改命中 targetId 的具体页面与位置；
+ * - 绝对保持 nextCursor, hasMore, pageParams 原样不变。
+ */
+export function applyOptimisticMutationToQueries(
+  queryClient: QueryClient,
+  targetId: number,
+  operation:
+    | { kind: 'favorite'; favorite: boolean; favoritedAt: string | null }
+    | { kind: 'trash' }
+    | { kind: 'restore' }
+): MutationJournal {
+  const journal: MutationJournal = [];
+  const listQueries = queryClient.getQueriesData<
+    InfiniteData<LibraryListOutput, string | undefined>
+  >({ queryKey: libraryKeys.lists() });
+
+  for (const [queryKey, oldData] of listQueries) {
+    if (!oldData || !oldData.pages || oldData.pages.length === 0) {
+      continue;
+    }
+
+    // 从每个 query key 自身读取对应的视图契约 ['library','list',{view,query}]
+    const filter = queryKey[2] as { view?: LibraryView; query?: string } | undefined;
+    const view: LibraryView = filter?.view ?? 'active';
+
+    const action = determineListMutationAction(view, operation);
+    if (action.type === 'none') {
+      continue;
+    }
+
+    let queryChanged = false;
+    const newPages = oldData.pages.map((page, pageIndex) => {
+      const itemIndex = page.items.findIndex((item) => item.id === targetId);
+      if (itemIndex === -1) {
+        return page;
+      }
+
+      queryChanged = true;
+      const originalItem = { ...page.items[itemIndex] };
+
+      if (action.type === 'remove') {
+        journal.push({
+          queryKey,
+          pageIndex,
+          itemIndex,
+          type: 'removed',
+          originalItem,
+        });
+
+        return {
+          ...page,
+          items: page.items.filter((item) => item.id !== targetId),
+        };
+      }
+
+      if (action.type === 'patch_favorite') {
+        journal.push({
+          queryKey,
+          pageIndex,
+          itemIndex,
+          type: 'patched',
+          originalItem,
+        });
+
+        const newItems = [...page.items];
+        newItems[itemIndex] = {
+          ...originalItem,
+          favoritedAt: action.favoritedAt,
+          updatedAt: new Date().toISOString(),
+        };
+
+        return {
+          ...page,
+          items: newItems,
+        };
+      }
+
+      return page;
+    });
+
+    if (queryChanged) {
+      queryClient.setQueryData(queryKey, {
+        ...oldData,
+        pages: newPages,
+        pageParams: [...oldData.pageParams],
+      });
+    }
+  }
+
+  return journal;
+}
+
+/**
+ * 执行局部逆向回滚补丁 (Mutation-local Inverse Patch)：
+ * - 仅恢复被本 mutation 修改过的特定 item；
+ * - 绝不覆盖 mutation 期间并发产生的其他项变更；
+ * - 绝不改动 pageParams / nextCursor / hasMore。
+ */
+export function rollbackMutationJournal(
+  queryClient: QueryClient,
+  journal: MutationJournal
+): void {
+  const entriesByQuery = new Map<
+    string,
+    { queryKey: readonly unknown[]; entries: MutationJournalEntry[] }
+  >();
+
+  for (const entry of journal) {
+    const keyString = JSON.stringify(entry.queryKey);
+    let group = entriesByQuery.get(keyString);
+    if (!group) {
+      group = { queryKey: entry.queryKey, entries: [] };
+      entriesByQuery.set(keyString, group);
+    }
+    group.entries.push(entry);
+  }
+
+  for (const { queryKey, entries } of entriesByQuery.values()) {
+    const currentData = queryClient.getQueryData<
+      InfiniteData<LibraryListOutput, string | undefined>
+    >(queryKey);
+
+    if (!currentData || !currentData.pages) {
+      continue;
+    }
+
+    let queryChanged = false;
+    const newPages = currentData.pages.map((page, pageIndex) => {
+      const pageEntries = entries.filter((e) => e.pageIndex === pageIndex);
+      if (pageEntries.length === 0) {
+        return page;
+      }
+
+      queryChanged = true;
+      const newItems = [...page.items];
+
+      for (const entry of pageEntries) {
+        if (entry.type === 'removed') {
+          const existingIdx = newItems.findIndex((it) => it.id === entry.originalItem.id);
+          if (existingIdx === -1) {
+            const insertIdx = Math.min(entry.itemIndex, newItems.length);
+            newItems.splice(insertIdx, 0, entry.originalItem);
+          }
+        } else if (entry.type === 'patched') {
+          const existingIdx = newItems.findIndex((it) => it.id === entry.originalItem.id);
+          if (existingIdx !== -1) {
+            newItems[existingIdx] = {
+              ...newItems[existingIdx],
+              favoritedAt: entry.originalItem.favoritedAt,
+              updatedAt: entry.originalItem.updatedAt,
+            };
+          }
+        }
+      }
+
+      return {
+        ...page,
+        items: newItems,
+      };
+    });
+
+    if (queryChanged) {
+      queryClient.setQueryData(queryKey, {
+        ...currentData,
+        pages: newPages,
+        pageParams: [...currentData.pageParams],
+      });
+    }
+  }
+}
+
+// ==========================================
 // 核心变更算子 (Functional Mutation Operators)
 // ==========================================
 
@@ -177,45 +415,32 @@ export interface ToggleFavoriteOptions {
 
 /**
  * 收藏 / 取消收藏切换：
- * - 乐观：取消在途查询 → 截取快照 → patch 当前 item favoritedAt（若在 favorites 视图且取消收藏则从列表移除）
- * - 收藏 active item 时严格禁止直接 append 到已有 favorites 缓存；
- * - 失败：快照回滚；
- * - 成功：reconcile 服务端 DTO；
- * - 完结：invalidate 相关列表与详情。
+ * - 采用 view-aware 变更规划与局部回滚机制；
+ * - 失败：仅对受影响的特定 item 进行逆向局部回滚，绝不覆盖整份缓存；
+ * - 成功：reconcile 服务端 DTO 并统一 invalidate。
  */
 export async function mutateToggleFavorite(
   queryClient: QueryClient,
   options: ToggleFavoriteOptions
 ): Promise<StoryWorkDetailDTO> {
-  const { id, favorite, currentView } = options;
+  const { id, favorite } = options;
 
   // 1. 取消在途列表与详情查询
   await queryClient.cancelQueries({ queryKey: libraryKeys.lists() });
   await queryClient.cancelQueries({ queryKey: libraryKeys.detail(id) });
 
-  // 2. 截取快照
-  const previousLists = queryClient.getQueriesData<
-    InfiniteData<LibraryListOutput, string | undefined>
-  >({ queryKey: libraryKeys.lists() });
+  // 2. 截取详情快照（单个对象安全回滚）
   const previousDetail = queryClient.getQueryData<StoryWorkDetailDTO>(
     libraryKeys.detail(id)
   );
 
-  // 3. 乐观更新
+  // 3. 应用 view-aware 乐观更新并生成局部日志
   const optimisticFavoritedAt = favorite ? new Date().toISOString() : null;
-
-  queryClient.setQueriesData<InfiniteData<LibraryListOutput, string | undefined>>(
-    { queryKey: libraryKeys.lists() },
-    (oldData) => {
-      if (!oldData) return oldData;
-      return patchItemFavoriteInInfiniteData(
-        oldData,
-        id,
-        optimisticFavoritedAt,
-        currentView === 'favorites'
-      );
-    }
-  );
+  const journal = applyOptimisticMutationToQueries(queryClient, id, {
+    kind: 'favorite',
+    favorite,
+    favoritedAt: optimisticFavoritedAt,
+  });
 
   if (previousDetail) {
     queryClient.setQueryData<StoryWorkDetailDTO>(libraryKeys.detail(id), {
@@ -228,22 +453,22 @@ export async function mutateToggleFavorite(
   try {
     const updated = await libraryClient.setFavorite({ id, favorite });
 
-    // onSuccess: 服务端 DTO 对齐
-    queryClient.setQueriesData<InfiniteData<LibraryListOutput, string | undefined>>(
-      { queryKey: libraryKeys.lists() },
-      (oldData) => {
-        if (!oldData) return oldData;
-        return reconcileItemInInfiniteData(oldData, updated);
+    // onSuccess: 服务端 DTO 对齐已存在项
+    const listQueries = queryClient.getQueriesData<
+      InfiniteData<LibraryListOutput, string | undefined>
+    >({ queryKey: libraryKeys.lists() });
+
+    for (const [queryKey, oldData] of listQueries) {
+      if (oldData) {
+        queryClient.setQueryData(queryKey, reconcileItemInInfiniteData(oldData, updated));
       }
-    );
+    }
     queryClient.setQueryData<StoryWorkDetailDTO>(libraryKeys.detail(id), updated);
 
     return updated;
   } catch (error) {
-    // onError: 回滚快照
-    for (const [queryKey, oldData] of previousLists) {
-      queryClient.setQueryData(queryKey, oldData);
-    }
+    // onError: 执行局部逆向回滚
+    rollbackMutationJournal(queryClient, journal);
     if (previousDetail !== undefined) {
       queryClient.setQueryData(libraryKeys.detail(id), previousDetail);
     }
@@ -262,18 +487,15 @@ export interface MoveToTrashOptions {
     workId: number;
     workTitle: string;
     movePromise: Promise<StoryWorkDetailDTO>;
-  }) => void;
-  onMoveFailed?: (error: unknown) => void;
+  }) => number | void;
+  onMoveFailed?: (error: unknown, token?: number) => void;
 }
 
 /**
  * 移入回收站：
- * - 无二次确认；
- * - 乐观：从 active/favorites 已加载缓存移除（绝不凭猜测追加到 trash 列表）；
- * - 注册 Undo 句柄并提供在途 movePromise，保障 move pending 时点击 Undo 严格串行；
- * - 成功：展示 Undo；invalidate 受影响列表与详情；
- * - 失败：快照回滚；不展示 Undo；
- * - Undo 成功后不要 splice 回 active，invalidate active/favorites/trash。
+ * - 采用 view-aware 变更规划与局部回滚机制；
+ * - 注册 Undo 句柄并捕获 token，失败时 token-aware 清理；
+ * - 失败时执行局部逆向回滚，绝不冲掉并发的其他 item 操作。
  */
 export async function mutateMoveToTrash(
   queryClient: QueryClient,
@@ -285,50 +507,46 @@ export async function mutateMoveToTrash(
   await queryClient.cancelQueries({ queryKey: libraryKeys.lists() });
   await queryClient.cancelQueries({ queryKey: libraryKeys.detail(id) });
 
-  // 2. 截取快照
-  const previousLists = queryClient.getQueriesData<
-    InfiniteData<LibraryListOutput, string | undefined>
-  >({ queryKey: libraryKeys.lists() });
+  // 2. 截取详情快照
   const previousDetail = queryClient.getQueryData<StoryWorkDetailDTO>(
     libraryKeys.detail(id)
   );
 
-  // 3. 乐观从已加载列表移除（保护 opaque cursor，绝不插入 trash 列表）
-  queryClient.setQueriesData<InfiniteData<LibraryListOutput, string | undefined>>(
-    { queryKey: libraryKeys.lists() },
-    (oldData) => {
-      if (!oldData) return oldData;
-      return removeItemFromInfiniteData(oldData, id);
-    }
-  );
+  // 3. 应用 view-aware 乐观更新并生成局部日志
+  const journal = applyOptimisticMutationToQueries(queryClient, id, {
+    kind: 'trash',
+  });
 
   // 4. 发起 RPC
   const movePromise = libraryClient.moveToTrash({ id });
 
-  // 5. 注册 Undo 句柄（提供在途 movePromise 用于后续串行保证）
+  // 5. 注册 Undo 句柄并保存 token
+  let registeredToken: number | undefined;
   if (onUndoRegistered) {
-    onUndoRegistered({
+    const res = onUndoRegistered({
       workId: id,
       workTitle,
       movePromise,
     });
+    if (typeof res === 'number') {
+      registeredToken = res;
+    }
   }
 
   try {
     const result = await movePromise;
-    // 成功后失效受影响列表（active, favorites, trash）与详情
+    // 成功后失效受影响列表与详情
     await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
     await queryClient.invalidateQueries({ queryKey: libraryKeys.detail(id) });
     return result;
   } catch (error) {
-    // 失败回滚
-    for (const [queryKey, oldData] of previousLists) {
-      queryClient.setQueryData(queryKey, oldData);
-    }
+    // 局部逆向回滚
+    rollbackMutationJournal(queryClient, journal);
     if (previousDetail !== undefined) {
       queryClient.setQueryData(libraryKeys.detail(id), previousDetail);
     }
-    onMoveFailed?.(error);
+    // 携带 token 通知失败，防止清除新 session
+    onMoveFailed?.(error, registeredToken);
     throw error;
   }
 }
@@ -339,11 +557,9 @@ export interface RestoreOptions {
 
 /**
  * 从回收站恢复：
- * - 无确认；
- * - 乐观：从 trash 列表中移除；
- * - 绝不在本地向 active 列表 append；
- * - 成功：invalidate active/favorites/trash；
- * - 失败：快照回滚。
+ * - 采用 view-aware 变更规划与局部回滚机制（与 Move/Favorite 复用同一套局部回滚算子）；
+ * - 绝不在本地向 active/favorites 列表 append；
+ * - 失败时局部回滚。
  */
 export async function mutateRestore(
   queryClient: QueryClient,
@@ -355,35 +571,25 @@ export async function mutateRestore(
   await queryClient.cancelQueries({ queryKey: libraryKeys.lists() });
   await queryClient.cancelQueries({ queryKey: libraryKeys.detail(id) });
 
-  // 2. 截取快照
-  const previousLists = queryClient.getQueriesData<
-    InfiniteData<LibraryListOutput, string | undefined>
-  >({ queryKey: libraryKeys.lists() });
+  // 2. 截取详情快照
   const previousDetail = queryClient.getQueryData<StoryWorkDetailDTO>(
     libraryKeys.detail(id)
   );
 
-  // 3. 乐观从回收站列表移除（绝不本地 append 到 active 列表！）
-  queryClient.setQueriesData<InfiniteData<LibraryListOutput, string | undefined>>(
-    { queryKey: libraryKeys.lists() },
-    (oldData) => {
-      if (!oldData) return oldData;
-      return removeItemFromInfiniteData(oldData, id);
-    }
-  );
+  // 3. 应用 view-aware 乐观更新并生成局部日志
+  const journal = applyOptimisticMutationToQueries(queryClient, id, {
+    kind: 'restore',
+  });
 
   // 4. 发起 RPC
   try {
     const result = await libraryClient.restore({ id });
-    // 成功后失效 active/favorites/trash 与详情
     await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
     await queryClient.invalidateQueries({ queryKey: libraryKeys.detail(id) });
     return result;
   } catch (error) {
-    // 失败回滚
-    for (const [queryKey, oldData] of previousLists) {
-      queryClient.setQueryData(queryKey, oldData);
-    }
+    // 局部逆向回滚
+    rollbackMutationJournal(queryClient, journal);
     if (previousDetail !== undefined) {
       queryClient.setQueryData(libraryKeys.detail(id), previousDetail);
     }
@@ -418,13 +624,15 @@ export async function mutateDeletePermanently(
   const result = await libraryClient.deletePermanently({ id });
 
   // 成功后从已加载列表中移除
-  queryClient.setQueriesData<InfiniteData<LibraryListOutput, string | undefined>>(
-    { queryKey: libraryKeys.lists() },
-    (oldData) => {
-      if (!oldData) return oldData;
-      return removeItemFromInfiniteData(oldData, id);
+  const listQueries = queryClient.getQueriesData<
+    InfiniteData<LibraryListOutput, string | undefined>
+  >({ queryKey: libraryKeys.lists() });
+
+  for (const [queryKey, oldData] of listQueries) {
+    if (oldData) {
+      queryClient.setQueryData(queryKey, removeItemFromInfiniteData(oldData, id));
     }
-  );
+  }
 
   await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
   queryClient.removeQueries({ queryKey: libraryKeys.detail(id) });
@@ -461,21 +669,27 @@ export function useLibraryMutations(): LibraryMutations {
   );
 
   const moveToTrash = useCallback(
-    (options: { id: number; title: string }) =>
-      mutateMoveToTrash(queryClient, {
+    (options: { id: number; title: string }) => {
+      let registeredToken: number | undefined;
+      return mutateMoveToTrash(queryClient, {
         id: options.id,
         workTitle: options.title,
         onUndoRegistered: (session) => {
-          undo.showUndo({
+          registeredToken = undo.showUndo({
             workId: session.workId,
             workTitle: session.workTitle,
             movePromise: session.movePromise,
           });
+          return registeredToken;
         },
-        onMoveFailed: () => {
-          undo.dismissUndo();
+        onMoveFailed: (_error, token) => {
+          const tokenToDismiss = token ?? registeredToken;
+          if (typeof tokenToDismiss === 'number') {
+            undo.dismissUndo(tokenToDismiss);
+          }
         },
-      }),
+      });
+    },
     [queryClient, undo]
   );
 
@@ -516,18 +730,23 @@ export function useLibraryMutationsSafe(): LibraryMutations | null {
   const moveToTrash = useCallback(
     (options: { id: number; title: string }) => {
       if (!queryClient) throw new Error('QueryClient is required for library mutations');
+      let registeredToken: number | undefined;
       return mutateMoveToTrash(queryClient, {
         id: options.id,
         workTitle: options.title,
         onUndoRegistered: (session) => {
-          undo.showUndo({
+          registeredToken = undo.showUndo({
             workId: session.workId,
             workTitle: session.workTitle,
             movePromise: session.movePromise,
           });
+          return registeredToken;
         },
-        onMoveFailed: () => {
-          undo.dismissUndo();
+        onMoveFailed: (_error, token) => {
+          const tokenToDismiss = token ?? registeredToken;
+          if (typeof tokenToDismiss === 'number') {
+            undo.dismissUndo(tokenToDismiss);
+          }
         },
       });
     },

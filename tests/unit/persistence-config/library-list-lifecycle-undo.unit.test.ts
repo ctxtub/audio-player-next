@@ -132,6 +132,7 @@ const {
   determineListMutationAction,
   applyOptimisticMutationToQueries,
   rollbackMutationJournal,
+  compareStoryWorkItems,
   mutateToggleFavorite,
   mutateMoveToTrash,
   mutateRestore,
@@ -437,8 +438,14 @@ async function runLifecycleUndoUnitTests() {
   {
     const queryClient = new QueryClient();
     const activeCacheKey = libraryKeys.list({ view: 'active' });
-    const item201 = createMockItem(201, { title: '待删除作品' });
-    const item202 = createMockItem(202, { title: '留存作品' });
+    const item201 = createMockItem(201, {
+      title: '待删除作品',
+      createdAt: '2026-09-12T11:00:00.000Z',
+    });
+    const item202 = createMockItem(202, {
+      title: '留存作品',
+      createdAt: '2026-09-12T10:00:00.000Z',
+    });
     queryClient.setQueryData(activeCacheKey, createMockInfiniteData([[item201, item202]], [null]));
 
     // 初始快照项验证
@@ -873,15 +880,24 @@ async function runLifecycleUndoUnitTests() {
     console.log('PASS: Regression B2 通过（View-aware 视图隔离多缓存变更精确控制）');
   }
 
-  console.log('=== Regression B3: 局部逆向回滚（Mutation Journal）并发回滚无僵尸数据 ===');
+  console.log('=== Regression B3: 局部逆向回滚（Mutation Journal）并发回滚无僵尸数据与稳定排序 ===');
   {
     const queryClient = new QueryClient();
     const activeKey = libraryKeys.list({ view: 'active' });
 
-    // 初始列表具有 3 个项目：A (3001), B (3002), C (3003)
-    const itemA = createMockItem(3001, { title: '作品 A' });
-    const itemB = createMockItem(3002, { title: '作品 B' });
-    const itemC = createMockItem(3003, { title: '作品 C' });
+    // 初始列表具有 3 个项目，按 createdAt DESC 排列：A (3001), B (3002), C (3003)
+    const itemA = createMockItem(3001, {
+      title: '作品 A',
+      createdAt: '2026-09-12T12:00:00.000Z',
+    });
+    const itemB = createMockItem(3002, {
+      title: '作品 B',
+      createdAt: '2026-09-12T11:00:00.000Z',
+    });
+    const itemC = createMockItem(3003, {
+      title: '作品 C',
+      createdAt: '2026-09-12T10:00:00.000Z',
+    });
 
     // 3.1 场景一：A 失败回滚，B 成功。验证 A 恢复，B 保持移除，绝不复活僵尸数据！
     queryClient.setQueryData(
@@ -929,11 +945,13 @@ async function runLifecycleUndoUnitTests() {
     // 核心断言：
     // A 局部回滚后插回列表；
     // B 依然处于移除状态（绝对没有被 A 的回滚复活成僵尸数据！）
+    // 列表保持稳定排序 [3001, 3003]
     const cachedAfterAFailure = queryClient.getQueryData<any>(activeKey)!;
-    const itemIdsAfterAFail = cachedAfterAFailure.pages[0].items.map((i: any) => i.id);
-    assert.ok(itemIdsAfterAFail.includes(3001), 'A 必须被局部逆向回滚恢复');
-    assert.ok(!itemIdsAfterAFail.includes(3002), 'B 必须保持移除，绝不能因全量快照回滚而被错误复活（无僵尸数据！）');
-    assert.ok(itemIdsAfterAFail.includes(3003), 'C 必须安然无恙');
+    assert.deepStrictEqual(
+      cachedAfterAFailure.pages[0].items.map((i: any) => i.id),
+      [3001, 3003],
+      'A 恢复后必须严格保持 M2 稳定排序 [3001, 3003]'
+    );
     assert.strictEqual(cachedAfterAFailure.pages[0].nextCursor, 'cursor_page_1', 'nextCursor 保持原样');
     assert.strictEqual(cachedAfterAFailure.pages[0].hasMore, true, 'hasMore 保持原样');
 
@@ -942,12 +960,13 @@ async function runLifecycleUndoUnitTests() {
     await taskB;
 
     const cachedAfterBSuccess = queryClient.getQueryData<any>(activeKey)!;
-    const itemIdsAfterBSuccess = cachedAfterBSuccess.pages[0].items.map((i: any) => i.id);
-    assert.ok(itemIdsAfterBSuccess.includes(3001), 'A 仍存在');
-    assert.ok(!itemIdsAfterBSuccess.includes(3002), 'B 最终被成功移出');
-    assert.ok(itemIdsAfterBSuccess.includes(3003), 'C 存在');
+    assert.deepStrictEqual(
+      cachedAfterBSuccess.pages[0].items.map((i: any) => i.id),
+      [3001, 3003],
+      'B 成功后作品保持 [3001, 3003]，B 最终被移出'
+    );
 
-    // 3.2 场景二：A 和 B 并发移动，两者均失败。验证局部回滚均能精确原位恢复！
+    // 3.2 场景二：A 和 B 并发移动，两者均失败（A 先失败，B 后失败）。验证局部回滚恢复精确原序！
     queryClient.setQueryData(
       activeKey,
       createMockInfiniteData([[itemA, itemB, itemC]], ['cursor_page_2'])
@@ -989,16 +1008,153 @@ async function runLifecycleUndoUnitTests() {
 
     const cachedAfterBothFailed = queryClient.getQueryData<any>(activeKey)!;
     const itemsBoth = cachedAfterBothFailed.pages[0].items;
-    assert.strictEqual(itemsBoth.length, 3, '两者均失败后，所有 3 项均应恢复');
-    const idsBoth = itemsBoth.map((i: any) => i.id);
-    assert.ok(idsBoth.includes(3001));
-    assert.ok(idsBoth.includes(3002));
-    assert.ok(idsBoth.includes(3003));
+    assert.deepStrictEqual(
+      itemsBoth.map((i: any) => i.id),
+      [3001, 3002, 3003],
+      'A 先失败 B 后失败：两者均失败后必须精确恢复初始 M2 顺序 [3001, 3002, 3003]'
+    );
     assert.strictEqual(cachedAfterBothFailed.pages[0].nextCursor, 'cursor_page_2', 'nextCursor 保持');
+
+    // 3.3 场景三：反向失败顺序（B 先失败，A 后失败）
+    queryClient.setQueryData(
+      activeKey,
+      createMockInfiniteData([[itemA, itemB, itemC]], ['cursor_page_3'])
+    );
+
+    let rejectA3!: (err: any) => void;
+    const promiseA3 = new Promise((_resolve, reject) => {
+      rejectA3 = reject;
+    });
+
+    let rejectB3!: (err: any) => void;
+    const promiseB3 = new Promise((_resolve, reject) => {
+      rejectB3 = reject;
+    });
+
+    innerJiti('./lib/client/library.ts').libraryClient.moveToTrash = async ({ id }: any) => {
+      if (id === 3001) {
+        await promiseA3;
+      } else if (id === 3002) {
+        await promiseB3;
+      }
+      throw new Error(`模拟反向失败: ${id}`);
+    };
+
+    const taskA3 = mutateMoveToTrash(queryClient, { id: 3001 }).catch((e: unknown) => e);
+    const taskB3 = mutateMoveToTrash(queryClient, { id: 3002 }).catch((e: unknown) => e);
+
+    await new Promise((r) => setTimeout(r, 10));
+    assert.strictEqual(queryClient.getQueryData<any>(activeKey)!.pages[0].items.length, 1);
+
+    // B 先失败！
+    rejectB3(new Error('B 失败'));
+    await taskB3;
+    assert.strictEqual(queryClient.getQueryData<any>(activeKey)!.pages[0].items.length, 2);
+
+    // A 后失败！
+    rejectA3(new Error('A 失败'));
+    await taskA3;
+
+    const cachedAfterReverseFailed = queryClient.getQueryData<any>(activeKey)!;
+    assert.deepStrictEqual(
+      cachedAfterReverseFailed.pages[0].items.map((i: any) => i.id),
+      [3001, 3002, 3003],
+      'B 先失败 A 后失败：必须同样精确恢复相同 M2 服务端顺序 [3001, 3002, 3003]'
+    );
+
+    // 3.4 场景四：createdAt 相同、依赖 id DESC tie-break 的 Fixture（直接锁定 M2 comparator 契约）
+    const itemTieX = createMockItem(4002, {
+      title: '作品 4002 (更高 id)',
+      createdAt: '2026-09-12T09:00:00.000Z',
+    });
+    const itemTieY = createMockItem(4001, {
+      title: '作品 4001 (更低 id)',
+      createdAt: '2026-09-12T09:00:00.000Z',
+    });
+
+    queryClient.setQueryData(
+      activeKey,
+      createMockInfiniteData([[itemTieX, itemTieY]], [null])
+    );
+
+    let rejectTieX!: (err: any) => void;
+    const promiseTieX = new Promise((_resolve, reject) => {
+      rejectTieX = reject;
+    });
+
+    let rejectTieY!: (err: any) => void;
+    const promiseTieY = new Promise((_resolve, reject) => {
+      rejectTieY = reject;
+    });
+
+    innerJiti('./lib/client/library.ts').libraryClient.moveToTrash = async ({ id }: any) => {
+      if (id === 4002) {
+        await promiseTieX;
+      } else if (id === 4001) {
+        await promiseTieY;
+      }
+      throw new Error(`Tie-break 模拟失败: ${id}`);
+    };
+
+    const taskTieX = mutateMoveToTrash(queryClient, { id: 4002 }).catch((e: unknown) => e);
+    const taskTieY = mutateMoveToTrash(queryClient, { id: 4001 }).catch((e: unknown) => e);
+
+    await new Promise((r) => setTimeout(r, 10));
+    assert.strictEqual(queryClient.getQueryData<any>(activeKey)!.pages[0].items.length, 0);
+
+    // Y (4001) 先失败，X (4002) 后失败
+    rejectTieY(new Error('Y 失败'));
+    await taskTieY;
+    rejectTieX(new Error('X 失败'));
+    await taskTieX;
+
+    const cachedTieBreak = queryClient.getQueryData<any>(activeKey)!;
+    assert.deepStrictEqual(
+      cachedTieBreak.pages[0].items.map((i: any) => i.id),
+      [4002, 4001],
+      'createdAt 相同时，必须基于 id DESC 产生确定性排序 [4002, 4001]'
+    );
+
+    // 3.5 纯函数单元断言：compareStoryWorkItems 覆盖 active 与 trash 视图
+    // active 视图：createdAt DESC → id DESC
+    assert.ok(
+      compareStoryWorkItems(
+        createMockItem(10, { createdAt: '2026-09-12T12:00:00.000Z' }),
+        createMockItem(20, { createdAt: '2026-09-12T11:00:00.000Z' }),
+        'active'
+      ) < 0,
+      '时间较新的项排在前面'
+    );
+    assert.ok(
+      compareStoryWorkItems(
+        createMockItem(20, { createdAt: '2026-09-12T10:00:00.000Z' }),
+        createMockItem(10, { createdAt: '2026-09-12T10:00:00.000Z' }),
+        'active'
+      ) < 0,
+      '时间相同时，id 较大的排在前面'
+    );
+
+    // trash 视图：deletedAt DESC → id DESC
+    assert.ok(
+      compareStoryWorkItems(
+        createMockItem(10, { deletedAt: '2026-09-12T15:00:00.000Z' }),
+        createMockItem(20, { deletedAt: '2026-09-12T14:00:00.000Z' }),
+        'trash'
+      ) < 0,
+      '回收站视图下，删除时间较新的排在前面'
+    );
+    assert.ok(
+      compareStoryWorkItems(
+        createMockItem(30, { deletedAt: '2026-09-12T14:00:00.000Z' }),
+        createMockItem(15, { deletedAt: '2026-09-12T14:00:00.000Z' }),
+        'trash'
+      ) < 0,
+      '回收站删除时间相同时，id 较大的排在前面'
+    );
 
     innerJiti('./lib/client/library.ts').libraryClient.moveToTrash = originalMoveToTrash;
     queryClient.clear();
-    console.log('PASS: Regression B3 通过（局部逆向回滚精确生效，无僵尸数据复活）');
+    console.log('PASS: Regression B3 通过（局部逆向回滚精确生效，无僵尸数据复活，M2 稳定排序保证）');
   }
 
   console.log('=== Regression 6: Permanent Delete 未确认时零 RPC，确认后才调用 ===');
@@ -1121,7 +1277,6 @@ async function runLifecycleUndoUnitTests() {
     const updated = await mutateToggleFavorite(queryClient, {
       id: 701,
       favorite: true,
-      currentView: 'active',
     });
 
     assert.strictEqual(updated.favoritedAt, '2026-09-12T15:00:00.000Z');
@@ -1138,7 +1293,6 @@ async function runLifecycleUndoUnitTests() {
       await mutateToggleFavorite(queryClient, {
         id: 701,
         favorite: false,
-        currentView: 'active',
       });
     } catch {
       errorCaught = true;

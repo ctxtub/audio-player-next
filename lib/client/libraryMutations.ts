@@ -2,7 +2,7 @@
  * Library (StoryWork) Mutations
  *
  * M3-05 统一列表生命周期变更模块：
- * 统一管理乐观缓存补丁 (optimistic cache patch)、异常回滚 (snapshot rollback)、
+ * 统一管理乐观缓存补丁 (optimistic cache patch)、局部逆向回滚 (journal inverse patch)、
  * 服务端 DTO 对齐 (server reconciliation) 与查询失效 (invalidation)。
  *
  * 核心缓存不变性约束 (Cache Invariants)：
@@ -219,8 +219,36 @@ export function determineListMutationAction(
   return { type: 'none' };
 }
 
+/**
+ * M2 冻结作品列表稳定排序比较器 (Deterministic Stable Sort Comparator)
+ * - active / favorites: createdAt DESC, id DESC
+ * - trash: deletedAt DESC, id DESC
+ */
+export function compareStoryWorkItems(
+  a: StoryWorkSummaryDTO,
+  b: StoryWorkSummaryDTO,
+  view: LibraryView
+): number {
+  if (view === 'trash') {
+    const timeA = a.deletedAt ? new Date(a.deletedAt).getTime() : 0;
+    const timeB = b.deletedAt ? new Date(b.deletedAt).getTime() : 0;
+    if (timeA !== timeB) {
+      return timeB - timeA;
+    }
+    return b.id - a.id;
+  }
+
+  const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+  const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+  if (timeA !== timeB) {
+    return timeB - timeA;
+  }
+  return b.id - a.id;
+}
+
 export interface MutationJournalEntry {
   queryKey: readonly unknown[];
+  view: LibraryView;
   pageIndex: number;
   itemIndex: number;
   type: 'removed' | 'patched';
@@ -275,6 +303,7 @@ export function applyOptimisticMutationToQueries(
       if (action.type === 'remove') {
         journal.push({
           queryKey,
+          view,
           pageIndex,
           itemIndex,
           type: 'removed',
@@ -290,6 +319,7 @@ export function applyOptimisticMutationToQueries(
       if (action.type === 'patch_favorite') {
         journal.push({
           queryKey,
+          view,
           pageIndex,
           itemIndex,
           type: 'patched',
@@ -327,6 +357,7 @@ export function applyOptimisticMutationToQueries(
 /**
  * 执行局部逆向回滚补丁 (Mutation-local Inverse Patch)：
  * - 仅恢复被本 mutation 修改过的特定 item；
+ * - 恢复 removed 项时基于 M2 冻结比较器（createdAt/deletedAt DESC, id DESC）执行稳定排序；
  * - 绝不覆盖 mutation 期间并发产生的其他项变更；
  * - 绝不改动 pageParams / nextCursor / hasMore。
  */
@@ -367,13 +398,14 @@ export function rollbackMutationJournal(
 
       queryChanged = true;
       const newItems = [...page.items];
+      let hasRestoredRemoved = false;
 
       for (const entry of pageEntries) {
         if (entry.type === 'removed') {
           const existingIdx = newItems.findIndex((it) => it.id === entry.originalItem.id);
           if (existingIdx === -1) {
-            const insertIdx = Math.min(entry.itemIndex, newItems.length);
-            newItems.splice(insertIdx, 0, entry.originalItem);
+            newItems.push(entry.originalItem);
+            hasRestoredRemoved = true;
           }
         } else if (entry.type === 'patched') {
           const existingIdx = newItems.findIndex((it) => it.id === entry.originalItem.id);
@@ -385,6 +417,11 @@ export function rollbackMutationJournal(
             };
           }
         }
+      }
+
+      if (hasRestoredRemoved) {
+        const view = pageEntries[0]?.view ?? 'active';
+        newItems.sort((a, b) => compareStoryWorkItems(a, b, view));
       }
 
       return {
@@ -410,7 +447,6 @@ export function rollbackMutationJournal(
 export interface ToggleFavoriteOptions {
   id: number;
   favorite: boolean;
-  currentView?: LibraryView;
 }
 
 /**

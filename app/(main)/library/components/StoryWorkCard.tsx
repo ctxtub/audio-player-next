@@ -87,7 +87,6 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
         await mutations.toggleFavorite({
           id: work.id,
           favorite: !work.favoritedAt,
-          currentView: view,
         });
       }
     } catch (err) {

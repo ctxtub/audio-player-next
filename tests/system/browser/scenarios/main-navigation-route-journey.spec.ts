@@ -4,6 +4,7 @@
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";
 import { dismissOnboarding } from "./helpers/guest";
+import { createStoryWorkByPage } from "./helpers/library";
 
 /**
  * 主导航路由契约与页面旅程（E2E-01-09，L3 产品覆盖层真场景）。
@@ -95,7 +96,7 @@ test("主导航路由契约与页面旅程", async ({ page, harnessEnv, evidence
     await expect(libraryTab).toHaveAttribute("aria-selected", "true");
     await expect(chatTab).toHaveAttribute("aria-selected", "false");
     await expect(settingTab).toHaveAttribute("aria-selected", "false");
-    await expect(page.getByTestId("library-page-shell")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("library-page")).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("heading", { name: "故事库", level: 1 })).toBeVisible({ timeout: 15000 });
     recorder.step("切至故事库主页", page.url());
 
@@ -136,23 +137,30 @@ test("主导航路由契约与页面旅程", async ({ page, harnessEnv, evidence
     await page.waitForURL("**/library", { timeout: 15000 });
     expect(new URL(page.url()).pathname).toBe("/library");
     await expect(libraryTab).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByTestId("library-page-shell")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("library-page")).toBeVisible({ timeout: 15000 });
     recorder.step("从设置页回退故事库主页", page.url());
 
-    // 7. /library → 访问合法 ID 的故事详情页 /library/1
-    await page.goto(`${harnessEnv.appUrl}/library/1`, { waitUntil: "domcontentloaded", timeout: 30000 });
-    expect(new URL(page.url()).pathname).toBe("/library/1");
+    // 创建真实 Subject-owned 故事作品获取真实 ID（彻底清除写死 /library/1 历史债）
+    const createdWork = await createStoryWorkByPage(page, {
+        title: "主导航验证故事",
+        prompt: "测试主导航详情跳转提示词",
+        storyText: "这是主导航详情跳转测试故事正文内容...",
+    });
+
+    // 7. /library → 访问真实 ID 的故事详情页 /library/{id}
+    await page.goto(`${harnessEnv.appUrl}/library/${createdWork.id}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    expect(new URL(page.url()).pathname).toBe(`/library/${createdWork.id}`);
     await expect(libraryTab).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByTestId("story-detail-shell")).toBeVisible({ timeout: 15000 });
-    await expect(page.getByRole("heading", { name: "故事 #1", level: 1 })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("story-detail-container")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("story-detail-title")).toHaveText(createdWork.title);
     recorder.step("进入故事详情页", page.url());
 
-    // 8. 从 /library/1 执行 Browser Back → 回到 /library
+    // 8. 从 /library/{id} 执行 Browser Back → 回到 /library
     await page.goBack();
     await page.waitForURL("**/library", { timeout: 15000 });
     expect(new URL(page.url()).pathname).toBe("/library");
     await expect(libraryTab).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByTestId("library-page-shell")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("library-page")).toBeVisible({ timeout: 15000 });
     recorder.step("从故事详情回退故事库主页", page.url());
 
     // 9. Compatibility journey：直接进入 /player
@@ -176,7 +184,7 @@ test("主导航路由契约与页面旅程", async ({ page, harnessEnv, evidence
     await page.waitForURL("**/library", { timeout: 15000 });
     expect(new URL(page.url()).pathname).toBe("/library");
     await expect(libraryTab).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByTestId("library-page-shell")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("library-page")).toBeVisible({ timeout: 15000 });
     recorder.step("从/player点击故事库Tab切换", page.url());
 
     // 11. 执行 Browser Back → 回到 /player

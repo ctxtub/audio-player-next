@@ -925,6 +925,18 @@ cases:
     executable_ids: [exec-library-detail-mutations]
     fixtures: []
     owner: story-library
+  - case_id: library-lifecycle-journey
+    display_name_zh: 故事库完整生命周期旅程
+    legacy_aliases: [E2E-07-15]
+    journey_id: story-library
+    user_goal: 用户在真实浏览器中完整经历故事库全生命周期：海量作品分页滚动加载、关键词搜索过滤、进入详情页、标题重命名跨缓存同步、收藏状态切换与列表呈现、详情软删除离开与撤销恢复、回收站安全隔离与无详情入口、从回收站恢复、二次软删除与永久删除二次确认流、跨视图彻底消失。
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-work, library, l3-journey, pagination, search, rename, favorite, trash, undo, restore, permanent-delete]
+    spec_path: docs/e2e/07-故事库与作品资产/15-故事库完整生命周期旅程.md
+    executable_ids: [exec-l3-library-lifecycle-journey]
+    fixtures: []
+    owner: story-library
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1168,3 +1180,7 @@ executables:
     display_name_zh: L3主导航路由旅程
     layer: L3
     path: ./tests/system/browser/scenarios/main-navigation-route-journey.spec.ts
+  - executable_id: exec-l3-library-lifecycle-journey
+    display_name_zh: L3故事库完整生命周期旅程
+    layer: L3
+    path: ./tests/system/browser/scenarios/library-lifecycle-journey.spec.ts

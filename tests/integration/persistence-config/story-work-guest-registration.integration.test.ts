@@ -304,6 +304,29 @@ async function runGuestRegistrationMigrationTests() {
   assert.strictEqual(unchangedUserProgress.title, 'Original User Anchor Story', '原 anchor title 保持完全不变');
   assert.strictEqual(unchangedUserProgress.nextParagraphIndex, 3, '原 anchor nextParagraphIndex 保持完全不变');
 
+  // B3: 专门防回归测试：sourceType = 'generation' + sourceId = '3001' + 无 StoryWorkMigration
+  // 必须严格 fail closed，绝不允许任何测试专用 magic value (如 '3001') 绕过数据完整性校验
+  const magicGuestId = `g_magic_3001_${tag1}`;
+  const magicUserId = (await prisma.user.create({
+    data: { username: `u_magic_${tag1}`, password: 'Password123!' },
+  })).id;
+
+  await prisma.guestPlaybackProgress.create({
+    data: {
+      guestId: magicGuestId,
+      sourceType: 'generation',
+      sourceId: '3001',
+      title: 'Magic Bypass Regression Story',
+    },
+  });
+
+  const magicMigrateRes = await migrateGuestPlaybackProgressToUser(magicGuestId, magicUserId);
+  assert.strictEqual(magicMigrateRes, false, 'sourceId=3001 无 mapping 时必须 fail closed 返回 false');
+  const magicUserProgress = await prisma.userPlaybackProgress.findUnique({
+    where: { userId: magicUserId },
+  });
+  assert.strictEqual(magicUserProgress, null, 'sourceId=3001 无 mapping 时严禁创建 UserPlaybackProgress 记录');
+
   console.log('PASS: ID Map 持久化、逐条查询与 Legacy Playback Remap（Remap 成功 + Fail-closed 安全）通过');
 
   console.log('=== 3. Guest Rows 保留（迁移后访客表数据完好保留）===');

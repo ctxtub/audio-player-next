@@ -201,9 +201,19 @@ async function runParagraphResumeTests() {
     const guestId5 = `g_reg_${Date.now()}`;
     const callerGuest5 = playbackRouter.createCaller({ session: null, guestId: guestId5, isGuest: true, clientIp: '127.0.0.1' });
 
+    const guestWork5 = await prisma.guestStoryWork.create({
+        data: {
+            guestId: guestId5,
+            prompt: '待迁移故事提示词',
+            storyText: '待迁移故事正文',
+            title: '访客待迁移故事',
+            contentHash: 'hashmig12345',
+        },
+    });
+
     await callerGuest5.saveProgress({
         sourceType: 'generation',
-        sourceId: '3001',
+        sourceId: String(guestWork5.id),
         title: '访客待迁移故事',
         contentHash: 'hashmig12345',
         segmentationVersion: SEGMENTATION_VERSION,
@@ -245,7 +255,16 @@ async function runParagraphResumeTests() {
         where: { userId: newUser.id },
     });
     assert(migratedProgress !== null, 'UserPlaybackProgress must be migrated');
-    assert.strictEqual(migratedProgress.sourceId, '3001');
+    const expectedMigration = await prisma.storyWorkMigration.findUnique({
+        where: {
+            guestId_guestStoryWorkId: {
+                guestId: guestId5,
+                guestStoryWorkId: guestWork5.id,
+            },
+        },
+    });
+    assert.ok(expectedMigration !== null, 'StoryWorkMigration must exist');
+    assert.strictEqual(migratedProgress.sourceId, String(expectedMigration.userStoryWorkId));
     assert.strictEqual(migratedProgress.nextParagraphIndex, 2);
     assert.strictEqual(migratedProgress.contentHash, 'hashmig12345');
 

@@ -255,9 +255,6 @@ export async function migrateGuestPlaybackProgressToUser(
 
         if (userWorkId !== undefined) {
             mappedSourceId = String(userWorkId);
-        } else if (guestProgress.sourceId === '3001') {
-            // 兼容遗留集成测试 TC-P2-05 (exec-paragraph-resume-mixed-legacy)
-            mappedSourceId = guestProgress.sourceId;
         } else {
             // Fail closed: 不创建、不更新用户 playback anchor，并返回 false（保持原 anchor 完全不变）
             return false;

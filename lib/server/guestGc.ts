@@ -5,6 +5,7 @@
  */
 
 import { prisma } from '@/lib/db';
+import { executeStoryWorkPhysicalDelete } from '@/lib/server/storyWork';
 
 export const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -26,7 +27,11 @@ export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeRes
     const [configs, messages, generations, prompts, playback] = await Promise.all([
         prisma.guestConfig.deleteMany({ where: { updatedAt: { lt: threshold } } }),
         prisma.guestChatMessage.deleteMany({ where: { updatedAt: { lt: threshold } } }),
-        prisma.guestStoryWork.deleteMany({ where: { updatedAt: { lt: threshold } } }),
+        executeStoryWorkPhysicalDelete({
+            target: 'guest',
+            reason: 'retention',
+            where: { updatedAt: { lt: threshold } },
+        }),
         prisma.guestPromptHistory.deleteMany({ where: { updatedAt: { lt: threshold } } }),
         prisma.guestPlaybackProgress.deleteMany({ where: { updatedAt: { lt: threshold } } }),
     ]);

@@ -18,6 +18,8 @@
  */
 
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
 import { TRPCError } from '@trpc/server';
 import { prisma } from '../../../lib/db';
 import type { Subject } from '../../../lib/server/subject';
@@ -282,7 +284,18 @@ async function runStoryWorkRetentionTests() {
 
   const checkUser1TrashAfterGuestGc = await prisma.storyWork.findUnique({ where: { id: trashWork29d.id } });
   assert.ok(checkUser1TrashAfterGuestGc !== null, '用户回收站作品不受 Guest GC 任何影响');
-  console.log('PASS: Guest 数据 per-row 30 天语义回归（29d 保留 / 31d 删，User 数据不受影响）验证通过');
+
+  // 3.6 源码静态守卫：lib/server/guestGc.ts 严禁直接调用 prisma.guestStoryWork.delete/deleteMany
+  const repoRoot = process.cwd();
+  const guestGcPath = path.join(repoRoot, 'lib/server/guestGc.ts');
+  assert.ok(fs.existsSync(guestGcPath), `文件必须存在：${guestGcPath}`);
+  const guestGcContent = fs.readFileSync(guestGcPath, 'utf-8');
+  assert.ok(
+    !guestGcContent.includes('prisma.guestStoryWork.delete') &&
+    !guestGcContent.includes('prisma.guestStoryWork.deleteMany'),
+    'lib/server/guestGc.ts 严禁直接调用 prisma.guestStoryWork.delete / deleteMany，必须经由 executeStoryWorkPhysicalDelete 唯一 seam'
+  );
+  console.log('PASS: Guest 数据 per-row 30 天语义回归（29d 保留 / 31d 删，User 数据不受影响）与源码静态守卫验证通过');
 
   console.log('=== 4. 无数量 cap：批量 >100/150 条路径不触发任何删除 ===');
   // 创建拥有 160 条活跃作品的用户
@@ -426,7 +439,58 @@ async function runStoryWorkRetentionTests() {
 
   const checkSeamWorkDeleted = await prisma.storyWork.findUnique({ where: { id: activeWorkForSeam.id } });
   assert.strictEqual(checkSeamWorkDeleted, null, '回收站作品经统一 primitive 彻底物理清理');
-  console.log('PASS: 统一物理删除 primitive (executeStoryWorkPhysicalDelete / M8 Seam) 契约验证通过');
+
+  // 6.3 Guest manual trash 形态通过 executeStoryWorkPhysicalDelete 删除
+  const guestSeamWork1 = await prisma.guestStoryWork.create({
+    data: {
+      guestId: `g_seam_${tag}`,
+      prompt: 'Guest seam trash prompt',
+      storyText: 'Guest seam trash text',
+      title: 'Guest Seam Trash',
+      contentHash: `hash_g_seam_1_${tag}`,
+      deletedAt: new Date(),
+    },
+  });
+  const delGuestTrashRes = await executeStoryWorkPhysicalDelete({
+    target: 'guest',
+    reason: 'trash',
+    where: {
+      id: guestSeamWork1.id,
+      guestId: `g_seam_${tag}`,
+      deletedAt: { not: null },
+    },
+  });
+  assert.strictEqual(delGuestTrashRes.count, 1);
+  const checkGuestSeam1 = await prisma.guestStoryWork.findUnique({ where: { id: guestSeamWork1.id } });
+  assert.strictEqual(checkGuestSeam1, null, 'Guest 回收站作品经 reason: trash 物理清理');
+
+  // 6.4 Guest retention 形态通过 executeStoryWorkPhysicalDelete 删除
+  const guestSeamWork2 = await prisma.guestStoryWork.create({
+    data: {
+      guestId: `g_seam_${tag}`,
+      prompt: 'Guest seam retention prompt',
+      storyText: 'Guest seam retention text',
+      title: 'Guest Seam Retention',
+      contentHash: `hash_g_seam_2_${tag}`,
+      createdAt: thirtyFiveDaysAgo,
+      updatedAt: thirtyFiveDaysAgo,
+      deletedAt: null,
+    },
+  });
+  const delGuestRetRes = await executeStoryWorkPhysicalDelete({
+    target: 'guest',
+    reason: 'retention',
+    where: {
+      id: guestSeamWork2.id,
+      guestId: `g_seam_${tag}`,
+      updatedAt: { lt: guestCutoff },
+    },
+  });
+  assert.strictEqual(delGuestRetRes.count, 1);
+  const checkGuestSeam2 = await prisma.guestStoryWork.findUnique({ where: { id: guestSeamWork2.id } });
+  assert.strictEqual(checkGuestSeam2, null, 'Guest 过期作品经 reason: retention 物理清理');
+
+  console.log('PASS: 统一物理删除 primitive (executeStoryWorkPhysicalDelete / M8 Seam) 3 种契约形态验证通过');
 
   console.log('=== 7. 边界条件与幂等性校验 ===');
   // 7.1 重复调用 purgeExpiredUserTrash

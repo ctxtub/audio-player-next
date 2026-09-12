@@ -1155,34 +1155,78 @@ export async function restoreStoryWorkForSubject(
 }
 
 /**
+ * StoryWork 物理删除参数契约（显式 Discriminated Union 窄契约）
+ *
+ * 仅允许三类合法物理删除形态：
+ * 1. target: 'user',  reason: 'trash'     => 用户永久删除或回收站 30 天清理，仅允许删除 deletedAt IS NOT NULL (且可选 lt: threshold) 的回收站作品；
+ * 2. target: 'guest', reason: 'trash'     => 访客手动永久删除，仅允许删除 deletedAt IS NOT NULL 的回收站作品；
+ * 3. target: 'guest', reason: 'retention' => 访客 30 天 GC 清理，按 updatedAt < threshold 清理（含 active 与 trash 临时作品）。
+ */
+export type PhysicalDeleteStoryWorkOptions =
+  | {
+      target: 'user';
+      reason?: 'trash';
+      where: {
+        id?: number;
+        userId?: number;
+        deletedAt: {
+          not: null;
+          lt?: Date;
+        };
+      };
+      testHooks?: StoryWorkMutationTestHooks;
+    }
+  | {
+      target: 'guest';
+      reason: 'trash';
+      where: {
+        id?: number;
+        guestId?: string;
+        deletedAt: {
+          not: null;
+          lt?: Date;
+        };
+      };
+      testHooks?: StoryWorkMutationTestHooks;
+    }
+  | {
+      target: 'guest';
+      reason: 'retention';
+      where: {
+        id?: number;
+        guestId?: string;
+        updatedAt: {
+          lt: Date;
+        };
+      };
+      testHooks?: StoryWorkMutationTestHooks;
+    };
+
+/**
  * StoryWork 物理删除唯一合法底层执行点（Server-Internal Primitive / M8 Audio Seam 唯一挂载点）
  *
  * 架构说明与安全约束：
- * 1. 物理删除唯一执行点：无论是用户主动永久删除（permanentlyDeleteStoryWorkForSubject）
- *    还是定时回收站清理（purgeExpiredUserTrash），对 User/Guest 作品的物理删除都必须统一通过本 primitive 执行，
- *    严禁在其他模块直接裸调 prisma.storyWork.delete / deleteMany。
+ * 1. 物理删除唯一执行点：无论是用户主动永久删除、定时回收站清理（purgeExpiredUserTrash），
+ *    还是访客数据 GC（purgeExpiredGuestData），对 User/Guest 作品资产的物理删除都必须统一通过本 primitive 执行，
+ *    严禁在其他模块直接裸调 prisma.storyWork.delete/deleteMany 或 prisma.guestStoryWork.delete/deleteMany。
  * 2. M8 音频清理唯一挂载点：后续 M8 在执行永久删除时，将在此处使用 DB 事务完成 Audio tombstone 记录与 Work 物理删除，
  *    并在 DB 事务提交后触发外部异步对象存储音频文件清理，保证 Audio tombstone 仅需在此一处维护。
- * 3. 并发安全与条件删除：严格强制 deletedAt IS NOT NULL 条件，杜绝任何对 active 作品的误删。
+ * 3. 安全规则与显式 Discriminated Contract：
+ *    - User 物理删除只能来自 Trash（deletedAt IS NOT NULL）；
+ *    - Guest manual delete 只能来自 Trash（deletedAt IS NOT NULL）；
+ *    - Guest retention GC 严格按 updatedAt < threshold 清理；
+ *    三者最终都经此同一 M8 tombstone seam 唯一挂载点执行。
+ *    contract 保持窄契约，绝不接受任意自由 Prisma where，杜绝退化为危险的通用 delete helper。
  */
-export async function executeStoryWorkPhysicalDelete(options: {
-  target: 'user' | 'guest';
-  where: {
-    id?: number;
-    userId?: number;
-    guestId?: string;
-    deletedAt: {
-      not: null;
-      lt?: Date;
-    };
-  };
-  testHooks?: StoryWorkMutationTestHooks;
-}): Promise<{ count: number }> {
+export async function executeStoryWorkPhysicalDelete(
+  options: PhysicalDeleteStoryWorkOptions
+): Promise<{ count: number }> {
   if (options.testHooks?.__testBeforeMutationHook) {
     await options.testHooks.__testBeforeMutationHook();
   }
 
   if (options.target === 'user') {
+    // User 作品物理删除仅支持 reason: 'trash'
     const deleteResult = await prisma.storyWork.deleteMany({
       where: {
         ...(options.where.id !== undefined ? { id: options.where.id } : {}),
@@ -1192,14 +1236,27 @@ export async function executeStoryWorkPhysicalDelete(options: {
     });
     return { count: deleteResult.count };
   } else {
-    const deleteResult = await prisma.guestStoryWork.deleteMany({
-      where: {
-        ...(options.where.id !== undefined ? { id: options.where.id } : {}),
-        ...(options.where.guestId !== undefined ? { guestId: options.where.guestId } : {}),
-        deletedAt: options.where.deletedAt,
-      },
-    });
-    return { count: deleteResult.count };
+    // Guest 作品物理删除：区分 manual trash 与 retention GC
+    if (options.reason === 'trash') {
+      const deleteResult = await prisma.guestStoryWork.deleteMany({
+        where: {
+          ...(options.where.id !== undefined ? { id: options.where.id } : {}),
+          ...(options.where.guestId !== undefined ? { guestId: options.where.guestId } : {}),
+          deletedAt: options.where.deletedAt,
+        },
+      });
+      return { count: deleteResult.count };
+    } else {
+      // reason === 'retention'
+      const deleteResult = await prisma.guestStoryWork.deleteMany({
+        where: {
+          ...(options.where.id !== undefined ? { id: options.where.id } : {}),
+          ...(options.where.guestId !== undefined ? { guestId: options.where.guestId } : {}),
+          updatedAt: options.where.updatedAt,
+        },
+      });
+      return { count: deleteResult.count };
+    }
   }
 }
 
@@ -1231,6 +1288,7 @@ export async function permanentlyDeleteStoryWorkForSubject(
     // 1. 通过统一物理删除 primitive 执行原子删除（仅匹配回收站中的作品：deletedAt IS NOT NULL）
     const deleteRes = await executeStoryWorkPhysicalDelete({
       target: 'user',
+      reason: 'trash',
       where: {
         id: validId,
         userId: subject.id,
@@ -1269,6 +1327,7 @@ export async function permanentlyDeleteStoryWorkForSubject(
     // 1. 通过统一物理删除 primitive 执行原子删除（仅匹配回收站中的作品：deletedAt IS NOT NULL）
     const deleteRes = await executeStoryWorkPhysicalDelete({
       target: 'guest',
+      reason: 'trash',
       where: {
         id: validId,
         guestId: subject.id,

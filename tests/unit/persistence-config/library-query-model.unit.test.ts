@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   libraryKeys,
   libraryListInfiniteQueryOptions,
+  useLibraryListInfiniteQuery,
   libraryDetailQueryOptions,
   DEFAULT_LIBRARY_LIMIT,
 } from '../../../lib/client/libraryQueries';
@@ -23,11 +24,11 @@ import type {
  * M3-02: Library Query Model / ViewModel Boundary 单元测试套件。
  *
  * 核心验证：
- * 1. query keys 规范与结构（list key 绝不含 cursor；detail 映射正确）；
- * 2. getNextPageParam 契约（hasMore=true+nextCursor → 返回 nextCursor；hasMore=false → undefined；nextCursor=null → undefined）；
+ * 1. query keys 规范与结构（list key 绝无 cursor；detail 映射正确）；
+ * 2. Infinite Query 契约与 getNextPageParam 全边界断言（limit 固定为 20，签名级无 override）；
  * 3. Detail Query 契约（queryKey 与 queryFn 委托）；
- * 4. ViewModel 合成边界（M5 progress null/injection 缝隙；audio 形状与元数据完全保持）；
- * 5. 静态守卫断言（源码扫描：严禁任何禁用 import 泄漏）。
+ * 4. ViewModel 合成边界（M5 progress 缝隙与 M8 audio 结构保真）；
+ * 5. 静态守卫断言（源码扫描：严禁禁用 import 泄漏）。
  */
 async function runLibraryQueryModelUnitTests() {
   console.log('=== 1. query keys 结构与规范断言（list 绝无 cursor；detail 键正确）===');
@@ -74,9 +75,40 @@ async function runLibraryQueryModelUnitTests() {
     console.log('PASS: 1. query keys 结构与规范断言通过');
   }
 
-  console.log('=== 2. Infinite Query 契约与 getNextPageParam 全边界断言 ===');
+  console.log('=== 2. Infinite Query 契约与 getNextPageParam 全边界断言（冻结 limit=20）===');
   {
     assert.strictEqual(DEFAULT_LIBRARY_LIMIT, 20, '默认分页大小契约必须固定为 20');
+
+    // 2.0 签名级回归断言：production query API 不存在 limit override
+    assert.strictEqual(
+      libraryListInfiniteQueryOptions.length <= 1,
+      true,
+      'libraryListInfiniteQueryOptions 签名形参个数必须 <= 1（仅接受 filters，无 options/limit）'
+    );
+    assert.strictEqual(
+      typeof useLibraryListInfiniteQuery,
+      'function',
+      'useLibraryListInfiniteQuery 必须导出为有效 hook 函数'
+    );
+
+    const queriesFilePath = path.join(process.cwd(), 'lib/client/libraryQueries.ts');
+    const queriesSource = fs.readFileSync(queriesFilePath, 'utf-8');
+    assert.ok(
+      /export\s+function\s+libraryListInfiniteQueryOptions\s*\(\s*filters:\s*LibraryListFilters\s*=\s*\{\}\s*\)/.test(
+        queriesSource
+      ),
+      '源码签名断言：libraryListInfiniteQueryOptions 参数仅为 filters，严禁 options/limit'
+    );
+    assert.ok(
+      !/useLibraryListInfiniteQuery\([^)]*limit/.test(queriesSource),
+      '源码签名断言：useLibraryListInfiniteQuery 签名中严禁出现 limit 参数'
+    );
+    assert.ok(
+      /export\s+function\s+useLibraryListInfiniteQuery\s*\(\s*filters:\s*LibraryListFilters\s*=\s*\{\},\s*options\?:\s*\{\s*enabled\?:\s*boolean\s*\}\s*\)/.test(
+        queriesSource
+      ),
+      '源码签名断言：useLibraryListInfiniteQuery 的 options 严格仅保留 { enabled?: boolean }'
+    );
 
     const queryOpts = libraryListInfiniteQueryOptions({ view: 'active', query: 'test' });
     assert.strictEqual(queryOpts.initialPageParam, undefined, 'initialPageParam 必须固定为 undefined');
@@ -133,7 +165,7 @@ async function runLibraryQueryModelUnitTests() {
       'nextCursor 为 null 时必须返回 undefined'
     );
 
-    // 2.2 queryFn 代理入参验证
+    // 2.2 queryFn 代理入参验证（queryFn 永远发送 limit: 20）
     let capturedListInput: unknown = null;
     const origList = libraryClient.list;
     (libraryClient as { list: unknown }).list = async (input: unknown) => {
@@ -157,11 +189,30 @@ async function runLibraryQueryModelUnitTests() {
         },
         'queryFn 必须将 pageParam 映射为 cursor，并携带 view, query 与 limit=20'
       );
+
+      // 防御性回归断言：即使有旧调用方式传入伪造参数，queryFn 永远发送 limit: 20
+      const forgedOpts = (libraryListInfiniteQueryOptions as (f?: unknown, extra?: unknown) => typeof queryOpts)(
+        { view: 'trash' },
+        { limit: 50 }
+      );
+      await (forgedOpts.queryFn as (ctx: { pageParam?: string }) => Promise<unknown>)({
+        pageParam: undefined,
+      });
+      assert.deepStrictEqual(
+        capturedListInput,
+        {
+          view: 'trash',
+          query: undefined,
+          cursor: undefined,
+          limit: 20,
+        },
+        '核心回归：queryFn 永远发送 limit: 20，绝不允许外部 limit override'
+      );
     } finally {
       (libraryClient as { list: unknown }).list = origList;
     }
 
-    console.log('PASS: 2. Infinite Query 契约与 getNextPageParam 全边界断言通过');
+    console.log('PASS: 2. Infinite Query 契约与 getNextPageParam 全边界断言通过（冻结 limit=20）');
   }
 
   console.log('=== 3. Detail Query 契约断言（queryKey 与 queryFn 委托）===');

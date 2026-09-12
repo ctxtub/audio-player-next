@@ -49,14 +49,16 @@ export const libraryKeys = {
 
 /**
  * 构造作品列表无限滚动查询选项 (Infinite Query Options)
+ *
+ * 核心契约：
+ * - limit 严格冻结为 DEFAULT_LIBRARY_LIMIT（20 条），不允许外部 override；
+ * - cursor 仅作为 pageParam 传入，绝不写入 query key。
  */
 export function libraryListInfiniteQueryOptions(
-  filters: LibraryListFilters = {},
-  options?: { limit?: number }
+  filters: LibraryListFilters = {}
 ) {
   const view: LibraryView = filters.view ?? 'active';
   const query = filters.query;
-  const limit = options?.limit ?? DEFAULT_LIBRARY_LIMIT;
 
   return infiniteQueryOptions<
     LibraryListOutput,
@@ -71,7 +73,7 @@ export function libraryListInfiniteQueryOptions(
         view,
         query,
         cursor: pageParam,
-        limit,
+        limit: DEFAULT_LIBRARY_LIMIT,
       });
     },
     initialPageParam: undefined,
@@ -105,9 +107,9 @@ export function libraryDetailQueryOptions(id: number) {
  */
 export function useLibraryListInfiniteQuery(
   filters: LibraryListFilters = {},
-  options?: { limit?: number; enabled?: boolean }
+  options?: { enabled?: boolean }
 ) {
-  const queryOpts = libraryListInfiniteQueryOptions(filters, { limit: options?.limit });
+  const queryOpts = libraryListInfiniteQueryOptions(filters);
   return useInfiniteQuery({
     ...queryOpts,
     enabled: options?.enabled,

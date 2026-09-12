@@ -850,7 +850,19 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-work, library, server-state, react-query, identity, isolation]
     spec_path: docs/e2e/07-故事库与作品资产/08-Library-Server-State身份隔离.md
-    executable_ids: [exec-server-state-identity-isolation, exec-library-query-model]
+    executable_ids: [exec-server-state-identity-isolation]
+    fixtures: []
+    owner: story-library
+  - case_id: library-query-model-viewmodel
+    display_name_zh: Library 列表查询模型与 ViewModel 边界
+    legacy_aliases: [E2E-07-09]
+    journey_id: story-library
+    user_goal: Library 前端通过冻结的 Client Facade 建立稳定的列表/详情查询模型，列表使用固定 20 条的 opaque-cursor 无限分页，并在 UI ViewModel 层预留 Progress 与 Audio 合成边界，不复制或绕过服务端状态契约。
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-work, library, react-query, infinite-query, viewmodel, progress, boundary]
+    spec_path: docs/e2e/07-故事库与作品资产/09-Library列表查询模型与ViewModel边界.md
+    executable_ids: [exec-library-query-model]
     fixtures: []
     owner: story-library
 executables:

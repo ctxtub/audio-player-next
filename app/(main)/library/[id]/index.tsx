@@ -1,5 +1,3 @@
-'use client';
-
 import React from 'react';
 import styles from './index.module.scss';
 
@@ -18,12 +16,12 @@ const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id }) => {
     <div className={styles.storyDetailPage} data-testid="story-detail-shell">
       <header className={styles.detailHero}>
         <p className={styles.heroLabel}>Story Detail</p>
-        <h1 className={styles.heroTitle}>故事 #{id}</h1>
+        <h1 className={styles.heroTitle}>{`故事 #${id}`}</h1>
       </header>
       <main className={styles.detailContent}>
         {/* M1 阶段仅建立 Route Shell，真实详情数据与播放交互由 M3 接管 */}
         <div className={styles.shellPlaceholder} data-testid="story-detail-placeholder">
-          <p className={styles.placeholderText}>故事 #{id} 详情加载中...</p>
+          <p className={styles.placeholderText}>{`故事 #${id} 详情加载中...`}</p>
         </div>
       </main>
     </div>

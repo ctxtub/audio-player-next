@@ -36,6 +36,7 @@ import {
   createMissingAudioProjection,
   DEFAULT_AUDIO_PROJECTION,
   libraryListInputSchema,
+  libraryListOutputSchema,
   storyAudioProjectionSchema,
   storyWorkDetailDtoSchema,
   storyWorkSummaryDtoSchema,
@@ -361,9 +362,25 @@ async function runStoryWorkDomainTests(): Promise<void> {
   assert.strictEqual(parsedDetail.prompt, '提示词');
   assert.strictEqual(parsedDetail.storyText, '正文');
   assert.deepStrictEqual(parsedDetail.audio, { status: 'missing', durationMs: null });
+
+  // 对 Summary DTO，传入 audio: null 必须解析失败（取消 nullable 约束）
+  assert.throws(() => {
+    storyWorkSummaryDtoSchema.parse({
+      ...sampleSummary,
+      audio: null,
+    });
+  }, /Expected object, received null|Expected type 'object', received 'null'|invalid/i, 'Summary DTO audio 不得为 null，必须保持稳定对象投影');
+
+  // 对 Detail DTO，传入 audio: null 亦必须解析失败
+  assert.throws(() => {
+    storyWorkDetailDtoSchema.parse({
+      ...sampleDetail,
+      audio: null,
+    });
+  }, /Expected object, received null|Expected type 'object', received 'null'|invalid/i, 'Detail DTO audio 不得为 null');
   console.log('PASS: audio missing projection 缺省结构验证通过');
 
-  console.log('=== 5. limit 默认值 (20) 与最大值 (50) 契约 ===');
+  console.log('=== 5. limit 默认值 (20) 与最大值 (50) 契约及 List Output 契约 ===');
   const defaultParsed = libraryListInputSchema.parse({});
   assert.strictEqual(defaultParsed.limit, LIBRARY_PAGE_DEFAULT_LIMIT, '未传 limit 时默认 20');
   assert.strictEqual(defaultParsed.view, 'active', '未传 view 时默认 active');
@@ -386,7 +403,51 @@ async function runStoryWorkDomainTests(): Promise<void> {
   assert.throws(() => {
     libraryListInputSchema.parse({ limit: -1 });
   }, /至少 1 条/, '负数条数必须拒绝');
-  console.log('PASS: limit 默认值与边界校验通过');
+
+  // list output schema 正反测试与 hasMore 强约束契约
+  const validOutputWithMore = {
+    items: [sampleSummary],
+    nextCursor: 'valid-cursor-token',
+    hasMore: true,
+  };
+  const parsedOutputWithMore = libraryListOutputSchema.parse(validOutputWithMore);
+  assert.strictEqual(parsedOutputWithMore.hasMore, true);
+  assert.strictEqual(
+    parsedOutputWithMore.hasMore === (parsedOutputWithMore.nextCursor !== null),
+    true,
+    '契约规则锁定：hasMore === (nextCursor !== null)'
+  );
+
+  const validOutputNoMore = {
+    items: [sampleSummary],
+    nextCursor: null,
+    hasMore: false,
+  };
+  const parsedOutputNoMore = libraryListOutputSchema.parse(validOutputNoMore);
+  assert.strictEqual(parsedOutputNoMore.hasMore, false);
+  assert.strictEqual(
+    parsedOutputNoMore.hasMore === (parsedOutputNoMore.nextCursor !== null),
+    true,
+    '契约规则锁定：hasMore === (nextCursor !== null)'
+  );
+
+  // 缺少 hasMore 必须解析失败（required）
+  assert.throws(() => {
+    libraryListOutputSchema.parse({
+      items: [sampleSummary],
+      nextCursor: null,
+    });
+  }, /hasMore|required|invalid/i, '缺少 hasMore 字段必须解析失败');
+
+  // hasMore 为非布尔必须解析失败
+  assert.throws(() => {
+    libraryListOutputSchema.parse({
+      items: [sampleSummary],
+      nextCursor: null,
+      hasMore: null,
+    });
+  }, /hasMore|expected boolean|invalid/i, 'hasMore 为 null 必须解析失败');
+  console.log('PASS: limit 默认值与 List Output 契约校验通过');
 
   console.log('=== 6. query normalization 规整 ===');
   assert.strictEqual(normalizeQuery('  月球故事  '), '月球故事');

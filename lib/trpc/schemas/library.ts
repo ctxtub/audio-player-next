@@ -64,7 +64,7 @@ export const storyWorkSummaryDtoSchema = z.object({
   deletedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
-  audio: storyAudioProjectionSchema.nullable(),
+  audio: storyAudioProjectionSchema,
 });
 export type StoryWorkSummaryDTO = z.infer<typeof storyWorkSummaryDtoSchema>;
 
@@ -108,7 +108,7 @@ export type LibraryListInput = z.infer<typeof libraryListInputSchema>;
 export const libraryListOutputSchema = z.object({
   items: z.array(storyWorkSummaryDtoSchema),
   nextCursor: z.string().nullable(),
-  hasMore: z.boolean().optional(),
+  hasMore: z.boolean(),
 });
 export type LibraryListOutput = z.infer<typeof libraryListOutputSchema>;
 

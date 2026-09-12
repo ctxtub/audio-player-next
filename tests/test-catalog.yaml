@@ -261,7 +261,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [history, replay]
     spec_path: docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md#e2e-02-11-02
-    executable_ids: [exec-l3-generation-history-play-once, exec-story-work-domain]
+    executable_ids: [exec-l3-generation-history-play-once]
     fixtures: []
     owner: history-reuse-playback
   - case_id: tts-voice-fallback-browser-behavior

@@ -16,6 +16,7 @@
     "test:catalog": "node scripts/check-test-catalog.mjs --require-full-spec-coverage",
     "test:runner-database-safety": "node scripts/suite-worker.mjs ./tests/tooling/db-guard/runner-database-path-safety.tooling.test.ts",
     "test:browser": "playwright test --config tests/system/browser/playwright.config.ts tests/system/browser --project=chromium --project=webkit",
+    "test:browser:smoke": "PW_DIAGNOSTIC_SMOKE=1 playwright test --config tests/system/browser/playwright.config.ts tests/system/browser/smoke.spec.ts --project=chromium --project=webkit",
     "test:browser:diagnostics": "PW_DIAGNOSTIC_SMOKE=1 playwright test --config tests/system/browser/playwright.config.ts tests/system/browser/smoke.spec.ts --project=chromium --project=webkit",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up",

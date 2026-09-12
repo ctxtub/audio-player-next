@@ -901,6 +901,18 @@ cases:
     executable_ids: [exec-library-list-lifecycle-undo]
     fixtures: []
     owner: story-library
+  - case_id: library-detail-read
+    display_name_zh: StoryWork 详情读取与统一不可用语义
+    legacy_aliases: [E2E-07-13]
+    journey_id: story-library
+    user_goal: 故事作品详情页仅做纯只读读取，严格遵循统一不可用语义反探测设计，保持播放进度接入缝隙为 null，严禁发起额外探测查询。
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-work, library, detail-read, unavailable-semantics, anti-probing, vm-seam]
+    spec_path: docs/e2e/07-故事库与作品资产/13-StoryWork详情读取与访问语义.md
+    executable_ids: [exec-library-detail-read]
+    fixtures: []
+    owner: story-library
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1116,6 +1128,10 @@ executables:
     display_name_zh: Library列表生命周期与Undo
     layer: L1
     path: ./tests/unit/persistence-config/library-list-lifecycle-undo.unit.test.ts
+  - executable_id: exec-library-detail-read
+    display_name_zh: StoryWork详情读取与统一不可用语义
+    layer: L1
+    path: ./tests/unit/persistence-config/library-detail-read.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

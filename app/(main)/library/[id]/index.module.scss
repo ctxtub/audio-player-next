@@ -1,38 +1,55 @@
-/* 故事详情页路由 Shell 与 Not Found — M1-02 骨架 */
+/* 故事详情页路由 Shell 与错误/骨架样式 — M3-06 */
 
 .storyDetailPage {
-  padding: var(--page-padding);
+  padding: var(--page-padding, 24px);
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  max-width: 860px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .detailHero {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  margin-bottom: var(--space-5);
+  gap: var(--space-2, 8px);
+  margin-bottom: var(--space-5, 20px);
 }
 
-.heroLabel {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--accent-400);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+.skeletonLabel {
+  width: 100px;
+  height: 14px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--border-default) 60%, transparent);
+  animation: pulse 1.5s infinite ease-in-out;
 }
 
-.heroTitle {
-  font-family: var(--font-display, var(--font-sans));
-  font-style: italic;
-  font-size: var(--text-2xl);
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  background: var(--gradient-brand);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+.skeletonTitle {
+  width: 60%;
+  height: 32px;
+  border-radius: var(--radius-md, 6px);
+  background: color-mix(in srgb, var(--border-default) 70%, transparent);
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.skeletonBlock {
+  width: 100%;
+  height: 120px;
+  border-radius: var(--radius-lg, 12px);
+  background: color-mix(in srgb, var(--border-default) 40%, transparent);
+  margin-bottom: var(--space-4, 16px);
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.25;
+  }
 }
 
 .detailContent {
@@ -42,41 +59,87 @@
   min-height: 0;
 }
 
-.shellPlaceholder {
+.errorContainer {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
-  padding: var(--space-8) var(--space-4);
-  border-radius: var(--radius-lg);
-  border: 1px dashed var(--border-default);
-  background-color: var(--glass-bg);
+  text-align: center;
+  padding: var(--space-10, 40px) var(--space-4, 16px);
+  margin: var(--space-8, 32px) auto;
+  max-width: 480px;
+  width: 100%;
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border-default);
+  background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
 }
 
-.placeholderText {
+.errorIconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+  color: #ef4444;
+  margin-bottom: var(--space-3, 12px);
+}
+
+.errorTitle {
+  font-size: var(--text-lg, 18px);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-2, 8px) 0;
+}
+
+.errorMessage {
+  font-size: var(--text-sm, 14px);
   color: var(--text-secondary);
-  font-size: var(--text-sm);
-  margin: 0;
-  text-align: center;
+  line-height: 1.5;
+  margin: 0 0 var(--space-5, 20px) 0;
+}
+
+.errorActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+}
+
+.retryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
+  font-size: var(--text-sm, 14px);
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity var(--duration-fast, 150ms) ease;
+
+  &:hover {
+    opacity: 0.88;
+  }
 }
 
 .backLink {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-md);
-  background-color: var(--accent-primary);
-  color: var(--text-on-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
+  padding: var(--space-2, 8px) var(--space-4, 16px);
+  border-radius: var(--radius-full, 9999px);
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  font-size: var(--text-sm, 14px);
   text-decoration: none;
-  transition: opacity var(--duration-fast) var(--ease-default);
+  transition: color var(--duration-fast, 150ms) ease;
 
   &:hover {
-    opacity: 0.88;
+    color: var(--text-primary);
   }
 }

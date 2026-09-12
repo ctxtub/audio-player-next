@@ -37,6 +37,7 @@ import {
   DEFAULT_AUDIO_PROJECTION,
   libraryListInputSchema,
   libraryListOutputSchema,
+  libraryCreateInputSchema,
   storyAudioProjectionSchema,
   storyWorkDetailDtoSchema,
   storyWorkSummaryDtoSchema,
@@ -675,6 +676,61 @@ async function runStoryWorkDomainTests(): Promise<void> {
     '修改 storyText 正文内容必须导致 contentHash 改变'
   );
   console.log('PASS: 元数据变更不影响 contentHash 的领域不变性严格证明通过');
+
+  console.log('=== 9. libraryCreateInputSchema 入参契约边界与字段类型 ===');
+  // 9.1 全量合法字段解析
+  const fullValid = libraryCreateInputSchema.parse({
+    title: '故事标题',
+    prompt: '故事提示词',
+    storyText: '故事正文内容',
+    voiceId: 'alloy',
+    sourceMessageId: 'msg_001',
+  });
+  assert.strictEqual(fullValid.title, '故事标题');
+  assert.strictEqual(fullValid.prompt, '故事提示词');
+  assert.strictEqual(fullValid.storyText, '故事正文内容');
+  assert.strictEqual(fullValid.voiceId, 'alloy');
+  assert.strictEqual(fullValid.sourceMessageId, 'msg_001');
+
+  // 9.2 最小合法载荷（仅必填 prompt + storyText）
+  const minimalValid = libraryCreateInputSchema.parse({
+    prompt: '仅提示词',
+    storyText: '仅正文',
+  });
+  assert.strictEqual(minimalValid.prompt, '仅提示词');
+  assert.strictEqual(minimalValid.storyText, '仅正文');
+  assert.strictEqual(minimalValid.title, undefined);
+  assert.strictEqual(minimalValid.voiceId, undefined);
+  assert.strictEqual(minimalValid.sourceMessageId, undefined);
+
+  // 9.3 可选字段显式传入 null
+  const nullishValid = libraryCreateInputSchema.parse({
+    title: null,
+    prompt: '提示词',
+    storyText: '正文',
+    voiceId: null,
+    sourceMessageId: null,
+  });
+  assert.strictEqual(nullishValid.title, null);
+  assert.strictEqual(nullishValid.voiceId, null);
+  assert.strictEqual(nullishValid.sourceMessageId, null);
+
+  // 9.4 客户端传入伪造字段被 strip / 忽略
+  const stripped = libraryCreateInputSchema.parse({
+    prompt: '提示词',
+    storyText: '正文',
+    contentHash: 'fake_hash',
+    excerpt: 'fake_excerpt',
+  });
+  assert.strictEqual((stripped as Record<string, unknown>).contentHash, undefined);
+  assert.strictEqual((stripped as Record<string, unknown>).excerpt, undefined);
+
+  // 9.5 边界拒绝
+  assert.throws(() => libraryCreateInputSchema.parse({ prompt: '', storyText: '正文' }), /提示词不能为空/);
+  assert.throws(() => libraryCreateInputSchema.parse({ prompt: '提示词', storyText: '' }), /故事正文不能为空/);
+  assert.throws(() => libraryCreateInputSchema.parse({ prompt: 'A'.repeat(2001), storyText: '正文' }), /提示词过长/);
+  assert.throws(() => libraryCreateInputSchema.parse({ prompt: '提示词', storyText: 'B'.repeat(20001) }), /故事正文过长/);
+  console.log('PASS: libraryCreateInputSchema 入参边界与不可信字段剥离校验通过');
 
   console.log('\nALL STORYWORK DOMAIN CONTRACT UNIT TESTS PASSED SUCCESSFULLY!');
 }

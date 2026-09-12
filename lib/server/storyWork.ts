@@ -19,8 +19,10 @@ import { TRPCError } from '@trpc/server';
 import type { Subject } from '@/lib/server/subject';
 import {
   libraryListInputSchema,
+  libraryCreateInputSchema,
   type LibraryListInput,
   type LibraryListOutput,
+  type LibraryCreateInput,
   type StoryWorkDetailDTO,
   type StoryWorkSummaryDTO,
   createMissingAudioProjection,
@@ -411,4 +413,194 @@ export async function getStoryWorkForSubject(
   }
 
   return toDetailDto(row);
+}
+
+/**
+ * 故事作品入库（Library Create，M2-04）
+ *
+ * M4 将来调用的正式资产创建服务，负责：
+ * 1. 严格校验输入（prompt、storyText、voiceId?、sourceMessageId?、explicit title?）；
+ * 2. 文本规范化与元数据派生：统一由 Server 调用 M2-02 canonical 算法生成
+ *    resolveStoryTitle / buildStoryExcerpt / computeStoryContentHash，绝不信任调用方传入的 hash/excerpt；
+ * 3. 来源消息幂等处理（sourceMessageId 非 null 时）：
+ *    - 同 Subject + 同 sourceMessageId + contentHash 一致 → 返回已有 Work（不 INSERT、不新增行）；
+ *    - 同 Subject + 同 sourceMessageId + contentHash 不一致 → 抛明确 CONFLICT 领域异常，禁止覆盖旧正文；
+ *    - sourceMessageId 为 null → 不参与幂等，允许多次创建独立作品；
+ * 4. 彻底废除新 Library 写路径上的任何 KEEP_LIMIT / delete-oldest / take-100 裁剪行为，资产永久保留；
+ * 5. User / Guest 两种主体行为严格对称一致。
+ *
+ * @param subject 身份主体（User / Guest）
+ * @param rawInput 创作入参
+ */
+export async function createStoryWorkForSubject(
+  subject: Subject,
+  rawInput: LibraryCreateInput | Record<string, unknown>
+): Promise<StoryWorkDetailDTO> {
+  const parseResult = libraryCreateInputSchema.safeParse(rawInput);
+  if (!parseResult.success) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: parseResult.error.issues[0]?.message ?? '参数校验失败',
+    });
+  }
+
+  const {
+    title: proposedTitle,
+    prompt,
+    storyText,
+    voiceId: rawVoiceId,
+    sourceMessageId: rawSourceMessageId,
+  } = parseResult.data;
+
+  // 1. 服务端权威派生元数据（严禁信任客户端传入）
+  const explicitTitle =
+    proposedTitle && proposedTitle.trim().length > 0 ? proposedTitle : undefined;
+  const title = resolveStoryTitle({
+    proposedTitle: explicitTitle,
+    title: explicitTitle,
+    storyText,
+    prompt,
+  });
+  const excerpt = buildStoryExcerpt(storyText);
+  const contentHash = computeStoryContentHash(storyText);
+  const voiceId =
+    rawVoiceId && rawVoiceId.trim().length > 0 ? rawVoiceId.trim() : '';
+  const sourceMessageId =
+    rawSourceMessageId && rawSourceMessageId.trim().length > 0
+      ? rawSourceMessageId.trim()
+      : null;
+
+  // 2. 来源消息幂等消解（sourceMessageId 非 null 时参与）
+  if (sourceMessageId !== null) {
+    if (subject.type === 'user') {
+      const existing = await prisma.storyWork.findUnique({
+        where: {
+          userId_sourceMessageId: {
+            userId: subject.id,
+            sourceMessageId,
+          },
+        },
+      });
+
+      if (existing) {
+        if (existing.contentHash === contentHash) {
+          return toDetailDto(existing);
+        }
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: '来源消息已绑定不同内容的故事作品，禁止覆盖',
+        });
+      }
+    } else {
+      const existing = await prisma.guestStoryWork.findUnique({
+        where: {
+          guestId_sourceMessageId: {
+            guestId: subject.id,
+            sourceMessageId,
+          },
+        },
+      });
+
+      if (existing) {
+        if (existing.contentHash === contentHash) {
+          return toDetailDto(existing);
+        }
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: '来源消息已绑定不同内容的故事作品，禁止覆盖',
+        });
+      }
+    }
+  }
+
+  // 3. 执行持久化写入（彻底摒弃旧写路径上的数量裁剪 KEEP_LIMIT）
+  if (subject.type === 'user') {
+    try {
+      const created = await prisma.storyWork.create({
+        data: {
+          userId: subject.id,
+          prompt,
+          storyText,
+          voiceId,
+          title,
+          excerpt,
+          contentHash,
+          sourceMessageId,
+        },
+      });
+      return toDetailDto(created);
+    } catch (error) {
+      // 并发竞态冲突防御（兜底 UNIQUE 约束碰撞）
+      if (
+        sourceMessageId !== null &&
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code: unknown }).code === 'P2002'
+      ) {
+        const existing = await prisma.storyWork.findUnique({
+          where: {
+            userId_sourceMessageId: {
+              userId: subject.id,
+              sourceMessageId,
+            },
+          },
+        });
+        if (existing) {
+          if (existing.contentHash === contentHash) {
+            return toDetailDto(existing);
+          }
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: '来源消息已绑定不同内容的故事作品，禁止覆盖',
+          });
+        }
+      }
+      throw error;
+    }
+  } else {
+    try {
+      const created = await prisma.guestStoryWork.create({
+        data: {
+          guestId: subject.id,
+          prompt,
+          storyText,
+          voiceId,
+          title,
+          excerpt,
+          contentHash,
+          sourceMessageId,
+        },
+      });
+      return toDetailDto(created);
+    } catch (error) {
+      // 并发竞态冲突防御（兜底 UNIQUE 约束碰撞）
+      if (
+        sourceMessageId !== null &&
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code: unknown }).code === 'P2002'
+      ) {
+        const existing = await prisma.guestStoryWork.findUnique({
+          where: {
+            guestId_sourceMessageId: {
+              guestId: subject.id,
+              sourceMessageId,
+            },
+          },
+        });
+        if (existing) {
+          if (existing.contentHash === contentHash) {
+            return toDetailDto(existing);
+          }
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: '来源消息已绑定不同内容的故事作品，禁止覆盖',
+          });
+        }
+      }
+      throw error;
+    }
+  }
 }

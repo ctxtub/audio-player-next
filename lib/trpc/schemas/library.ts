@@ -130,7 +130,10 @@ export type LibraryGetInput = z.infer<typeof libraryGetInputSchema>;
  * library.create 入参契约（供 M4 等创作者使用）
  */
 export const libraryCreateInputSchema = z.object({
-  title: z.string().max(STORY_TITLE_MAX_LENGTH, `标题最多 ${STORY_TITLE_MAX_LENGTH} 字符`).optional(),
+  title: z
+    .string()
+    .max(STORY_TITLE_MAX_LENGTH, `标题最多 ${STORY_TITLE_MAX_LENGTH} 字符`)
+    .nullish(),
   prompt: z
     .string()
     .min(STORY_PROMPT_MIN_LENGTH, '提示词不能为空')
@@ -139,8 +142,8 @@ export const libraryCreateInputSchema = z.object({
     .string()
     .min(STORY_TEXT_MIN_LENGTH, '故事正文不能为空')
     .max(STORY_TEXT_MAX_LENGTH, `故事正文过长（最多 ${STORY_TEXT_MAX_LENGTH} 字符）`),
-  voiceId: z.string().max(STORY_VOICE_ID_MAX_LENGTH).optional(),
-  sourceMessageId: z.string().max(STORY_SOURCE_MESSAGE_ID_MAX_LENGTH).optional(),
+  voiceId: z.string().max(STORY_VOICE_ID_MAX_LENGTH).nullish(),
+  sourceMessageId: z.string().max(STORY_SOURCE_MESSAGE_ID_MAX_LENGTH).nullish(),
 });
 export type LibraryCreateInput = z.infer<typeof libraryCreateInputSchema>;
 

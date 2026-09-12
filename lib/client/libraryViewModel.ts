@@ -67,3 +67,10 @@ export function composeLibraryItemListViewModel<TProgress = null>(
     )
   );
 }
+
+export {
+  groupStoryWorksByTime,
+  getTimeGroupLabel,
+  type TimeGroupLabel,
+  type StoryWorkTimeGroup,
+} from './libraryGrouping';

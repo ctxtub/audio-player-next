@@ -877,6 +877,18 @@ cases:
     executable_ids: [exec-library-url-filters, exec-library-search-input]
     fixtures: []
     owner: story-library
+  - case_id: library-list-read-ui
+    display_name_zh: Library 列表读取UI与时间分组
+    legacy_aliases: [E2E-07-11]
+    journey_id: story-library
+    user_goal: 故事库提供跨页打平的统一时间分组、三视图切换、无限滚动加载与无 Detail Link 的回收站卡片只读浏览体验。
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-work, library, list-ui, time-grouping, infinite-scroll, trash-guard]
+    spec_path: docs/e2e/07-故事库与作品资产/11-Library列表读取UI与时间分组.md
+    executable_ids: [exec-library-list-read-ui]
+    fixtures: []
+    owner: story-library
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1084,6 +1096,10 @@ executables:
     display_name_zh: Library搜索输入防抖与IME状态机
     layer: L1
     path: ./tests/unit/persistence-config/library-search-input.unit.test.ts
+  - executable_id: exec-library-list-read-ui
+    display_name_zh: Library列表读取UI与时间分组
+    layer: L1
+    path: ./tests/unit/persistence-config/library-list-read-ui.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

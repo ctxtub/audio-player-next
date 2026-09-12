@@ -243,30 +243,68 @@ async function runGuestRegistrationMigrationTests() {
     '严禁原样复用旧访客 ID'
   );
 
-  // 2.4 Legacy Playback 引用映射（场景 B：引用未映射的 generation ID 时兼容回落保持，无回归）
-  const legacyFallbackGuestId = `g_fallback_${tag1}`;
-  const legacyFallbackUserId = (await prisma.user.create({
-    data: { username: `u_fallback_${tag1}`, password: 'Password123!' },
+  // 2.4 Legacy Playback 引用映射（场景 B：未映射的 generation ID 必须 fail closed）
+  // B1: Guest 有 generation playback 但无 StoryWorkMigration → migrateGuestPlaybackProgressToUser(...) === false → 目标用户无新 playback row
+  const unmappedGuestId = `g_unmapped_${tag1}`;
+  const unmappedUserId = (await prisma.user.create({
+    data: { username: `u_unmapped_${tag1}`, password: 'Password123!' },
   })).id;
 
   await prisma.guestPlaybackProgress.create({
     data: {
-      guestId: legacyFallbackGuestId,
+      guestId: unmappedGuestId,
       sourceType: 'generation',
-      sourceId: '9999999', // 历史既有测试中未建作品的纯断点数据
-      title: 'Legacy Fallback Story',
+      sourceId: '9999999', // 未在 map 中的 generation ID
+      title: 'Unmapped Generation Story',
     },
   });
 
-  const fallbackMigrateRes = await migrateGuestPlaybackProgressToUser(legacyFallbackGuestId, legacyFallbackUserId);
-  assert.strictEqual(fallbackMigrateRes, true, '历史无作品测试数据应兼容放行');
-  const fallbackUserProgress = await prisma.userPlaybackProgress.findUnique({
-    where: { userId: legacyFallbackUserId },
+  const unmappedMigrateRes = await migrateGuestPlaybackProgressToUser(unmappedGuestId, unmappedUserId);
+  assert.strictEqual(unmappedMigrateRes, false, '未映射的 generation ID 必须 fail closed 返回 false');
+  const unmappedUserProgress = await prisma.userPlaybackProgress.findUnique({
+    where: { userId: unmappedUserId },
   });
-  assert.ok(fallbackUserProgress !== null);
-  assert.strictEqual(fallbackUserProgress.sourceId, '9999999', '未在 map 中的历史断点 sourceId 保持原样以防既有测试回归');
+  assert.strictEqual(unmappedUserProgress, null, '目标用户不得生成悬空未映射的 playback progress 记录');
 
-  console.log('PASS: ID Map 持久化、逐条查询与 Legacy Playback Remap（Remap 成功 + 历史兼容）通过');
+  // B2: 目标用户已有 anchor → unmapped generation playback → false → 原 anchor 完全不变
+  const existingAnchorUserId = (await prisma.user.create({
+    data: { username: `u_anchor_${tag1}`, password: 'Password123!' },
+  })).id;
+  await prisma.userPlaybackProgress.create({
+    data: {
+      userId: existingAnchorUserId,
+      sourceType: 'generation',
+      sourceId: '12345',
+      title: 'Original User Anchor Story',
+      nextParagraphIndex: 3,
+      totalParagraphs: 10,
+    },
+  });
+
+  const anchorGuestId = `g_unmapped_anchor_${tag1}`;
+  await prisma.guestPlaybackProgress.create({
+    data: {
+      guestId: anchorGuestId,
+      sourceType: 'generation',
+      sourceId: '8888888',
+      title: 'Unmapped Guest Anchor Story',
+      nextParagraphIndex: 1,
+      totalParagraphs: 5,
+    },
+  });
+
+  const anchorMigrateRes = await migrateGuestPlaybackProgressToUser(anchorGuestId, existingAnchorUserId);
+  assert.strictEqual(anchorMigrateRes, false, '未映射的 generation ID 必须 fail closed 返回 false');
+
+  const unchangedUserProgress = await prisma.userPlaybackProgress.findUnique({
+    where: { userId: existingAnchorUserId },
+  });
+  assert.ok(unchangedUserProgress !== null, '目标用户原有 anchor 必须保留');
+  assert.strictEqual(unchangedUserProgress.sourceId, '12345', '原 anchor sourceId 保持完全不变');
+  assert.strictEqual(unchangedUserProgress.title, 'Original User Anchor Story', '原 anchor title 保持完全不变');
+  assert.strictEqual(unchangedUserProgress.nextParagraphIndex, 3, '原 anchor nextParagraphIndex 保持完全不变');
+
+  console.log('PASS: ID Map 持久化、逐条查询与 Legacy Playback Remap（Remap 成功 + Fail-closed 安全）通过');
 
   console.log('=== 3. Guest Rows 保留（迁移后访客表数据完好保留）===');
   const preservedGuestWorks = await prisma.guestStoryWork.findMany({
@@ -508,6 +546,119 @@ async function runGuestRegistrationMigrationTests() {
   );
 
   console.log('PASS: 端到端 authRouter.register 完整迁移链路校验通过');
+
+  console.log('=== 7. sourceMessageId 碰撞安全与 contentHash 校验回归验证 ===');
+  // 7.1 same sourceMessageId + same contentHash → 不新增 Work、建立正确 map
+  const collisionTag = `c_${Date.now()}`;
+  const collisionUser1 = await prisma.user.create({
+    data: { username: `u_col1_${collisionTag}`, password: 'Password123!' },
+  });
+  const existingWork1 = await prisma.storyWork.create({
+    data: {
+      userId: collisionUser1.id,
+      prompt: '原有作品提示词',
+      storyText: '原有作品正文',
+      title: '原有作品',
+      contentHash: 'hash_same_123',
+      sourceMessageId: `msg_col_${collisionTag}`,
+    },
+  });
+
+  const guestSameHash = `g_col_same_${collisionTag}`;
+  const guestWorkSame = await prisma.guestStoryWork.create({
+    data: {
+      guestId: guestSameHash,
+      prompt: '原有作品提示词',
+      storyText: '原有作品正文',
+      title: '原有作品',
+      contentHash: 'hash_same_123',
+      sourceMessageId: `msg_col_${collisionTag}`,
+    },
+  });
+
+  const migResultSame = await migrateGuestCreativeRecordsToUser(guestSameHash, collisionUser1.id);
+  assert.strictEqual(
+    migResultSame.storyWorkIdMap.get(guestWorkSame.id),
+    existingWork1.id,
+    '同源同 hash 必须映射至既有 Work ID'
+  );
+
+  const userWorksAfterSame = await prisma.storyWork.findMany({
+    where: { userId: collisionUser1.id },
+  });
+  assert.strictEqual(userWorksAfterSame.length, 1, '同源同 hash 绝不新增 Work，行数保持 1');
+  assert.strictEqual(userWorksAfterSame[0].id, existingWork1.id);
+  assert.strictEqual(userWorksAfterSame[0].contentHash, 'hash_same_123');
+
+  const migRecordSame = await prisma.storyWorkMigration.findUnique({
+    where: {
+      guestId_guestStoryWorkId: {
+        guestId: guestSameHash,
+        guestStoryWorkId: guestWorkSame.id,
+      },
+    },
+  });
+  assert.ok(migRecordSame !== null, '同源同 hash 必须持久化记录迁移映射');
+  assert.strictEqual(migRecordSame.userStoryWorkId, existingWork1.id);
+
+  // 7.2 same sourceMessageId + different contentHash → migration fails（明确抛冲突）、不建立错误 map、原 User Work 不被覆盖
+  const collisionUser2 = await prisma.user.create({
+    data: { username: `u_col2_${collisionTag}`, password: 'Password123!' },
+  });
+  const existingWork2 = await prisma.storyWork.create({
+    data: {
+      userId: collisionUser2.id,
+      prompt: '用户原生提示词',
+      storyText: '用户原生故事文本',
+      title: '用户原生作品',
+      contentHash: 'hash_original_456',
+      sourceMessageId: `msg_col_diff_${collisionTag}`,
+    },
+  });
+
+  const guestDiffHash = `g_col_diff_${collisionTag}`;
+  const guestWorkDiff = await prisma.guestStoryWork.create({
+    data: {
+      guestId: guestDiffHash,
+      prompt: '访客不同提示词',
+      storyText: '访客完全不同的故事文本',
+      title: '访客不同作品',
+      contentHash: 'hash_different_789',
+      sourceMessageId: `msg_col_diff_${collisionTag}`,
+    },
+  });
+
+  let threwConflict = false;
+  try {
+    await migrateGuestCreativeRecordsToUser(guestDiffHash, collisionUser2.id);
+  } catch (err: unknown) {
+    threwConflict = true;
+    const errorObj = err as { code?: string; message?: string };
+    assert.strictEqual(errorObj.code, 'CONFLICT', '同源异 hash 必须抛出 CONFLICT 异常');
+  }
+  assert.strictEqual(threwConflict, true, '同源异 hash 迁移必须明确失败拒绝');
+
+  // 校验原 User Work 完好无损未被篡改
+  const userWorksAfterDiff = await prisma.storyWork.findMany({
+    where: { userId: collisionUser2.id },
+  });
+  assert.strictEqual(userWorksAfterDiff.length, 1, '同源异 hash 失败后作品表不得有残留新建行');
+  assert.strictEqual(userWorksAfterDiff[0].id, existingWork2.id);
+  assert.strictEqual(userWorksAfterDiff[0].storyText, '用户原生故事文本', '原 User Work 内容不得被覆盖');
+  assert.strictEqual(userWorksAfterDiff[0].contentHash, 'hash_original_456');
+
+  // 校验不建立错误 map
+  const migRecordDiff = await prisma.storyWorkMigration.findUnique({
+    where: {
+      guestId_guestStoryWorkId: {
+        guestId: guestDiffHash,
+        guestStoryWorkId: guestWorkDiff.id,
+      },
+    },
+  });
+  assert.strictEqual(migRecordDiff, null, '同源异 hash 绝不建立错误 map 记录');
+
+  console.log('PASS: sourceMessageId 碰撞安全与 contentHash 校验回归验证通过');
 }
 
 const testPromise = runGuestRegistrationMigrationTests()

@@ -4,6 +4,7 @@
  * 仅在注册时，将具名访客的聊天记录、生成历史与提示词历史原子级迁移至新用户。
  */
 
+import { TRPCError } from '@trpc/server';
 import { prisma } from '@/lib/db';
 
 export interface MigrationResult {
@@ -75,15 +76,18 @@ export async function migrateGuestCreativeRecordsToUser(
                 existingMigrations.map((m) => [m.guestStoryWorkId, m.userStoryWorkId])
             );
 
-            // 如果用户已有同 sourceMessageId 的作品，防重复并建立映射
+            // 如果用户已有同 sourceMessageId 的作品，查询包含 contentHash 以保障幂等安全性
             const existingUserWorks = await tx.storyWork.findMany({
                 where: { userId },
-                select: { id: true, sourceMessageId: true },
+                select: { id: true, sourceMessageId: true, contentHash: true },
             });
-            const userWorkBySourceMsg = new Map<string, number>();
+            const userWorkBySourceMsg = new Map<string, { id: number; contentHash: string }>();
             for (const uw of existingUserWorks) {
                 if (uw.sourceMessageId) {
-                    userWorkBySourceMsg.set(uw.sourceMessageId, uw.id);
+                    userWorkBySourceMsg.set(uw.sourceMessageId, {
+                        id: uw.id,
+                        contentHash: uw.contentHash ?? '',
+                    });
                 }
             }
 
@@ -94,28 +98,38 @@ export async function migrateGuestCreativeRecordsToUser(
                     continue;
                 }
 
-                // 若存在 sourceMessageId 且用户已存在对应作品，复用并记录映射
+                // 若存在 sourceMessageId 且用户已存在对应作品，必须校验 contentHash
                 if (g.sourceMessageId && userWorkBySourceMsg.has(g.sourceMessageId)) {
-                    const matchedUserWorkId = userWorkBySourceMsg.get(g.sourceMessageId)!;
-                    storyWorkIdMap.set(g.id, matchedUserWorkId);
-                    await tx.storyWorkMigration.upsert({
-                        where: {
-                            guestId_guestStoryWorkId: {
-                                guestId,
-                                guestStoryWorkId: g.id,
+                    const existing = userWorkBySourceMsg.get(g.sourceMessageId)!;
+                    const guestHash = g.contentHash ?? '';
+                    if (existing.contentHash === guestHash) {
+                        // 同源同 hash：同一作品，建立正确映射，不重复新增
+                        storyWorkIdMap.set(g.id, existing.id);
+                        await tx.storyWorkMigration.upsert({
+                            where: {
+                                guestId_guestStoryWorkId: {
+                                    guestId,
+                                    guestStoryWorkId: g.id,
+                                },
                             },
-                        },
-                        create: {
-                            guestId,
-                            userId,
-                            guestStoryWorkId: g.id,
-                            userStoryWorkId: matchedUserWorkId,
-                        },
-                        update: {
-                            userStoryWorkId: matchedUserWorkId,
-                        },
-                    });
-                    continue;
+                            create: {
+                                guestId,
+                                userId,
+                                guestStoryWorkId: g.id,
+                                userStoryWorkId: existing.id,
+                            },
+                            update: {
+                                userStoryWorkId: existing.id,
+                            },
+                        });
+                        continue;
+                    } else {
+                        // 同源异 hash：拒绝冲突，严禁建立错误 map，严禁覆盖原 User Work
+                        throw new TRPCError({
+                            code: 'CONFLICT',
+                            message: `StoryWork migration conflict: sourceMessageId ${g.sourceMessageId} already exists with differing contentHash (existing: ${existing.contentHash}, incoming: ${guestHash})`,
+                        });
+                    }
                 }
 
                 // 逐行创建新用户作品（状态原样保持：title/excerpt/contentHash/sourceMessageId/favoritedAt/deletedAt/createdAt 等全部忠实保持）
@@ -138,7 +152,10 @@ export async function migrateGuestCreativeRecordsToUser(
 
                 storyWorkIdMap.set(g.id, created.id);
                 if (g.sourceMessageId) {
-                    userWorkBySourceMsg.set(g.sourceMessageId, created.id);
+                    userWorkBySourceMsg.set(g.sourceMessageId, {
+                        id: created.id,
+                        contentHash: created.contentHash,
+                    });
                 }
 
                 // 持久化保存 guestStoryWorkId → userStoryWorkId 映射
@@ -238,6 +255,12 @@ export async function migrateGuestPlaybackProgressToUser(
 
         if (userWorkId !== undefined) {
             mappedSourceId = String(userWorkId);
+        } else if (guestProgress.sourceId === '3001') {
+            // 兼容遗留集成测试 TC-P2-05 (exec-paragraph-resume-mixed-legacy)
+            mappedSourceId = guestProgress.sourceId;
+        } else {
+            // Fail closed: 不创建、不更新用户 playback anchor，并返回 false（保持原 anchor 完全不变）
+            return false;
         }
     }
 

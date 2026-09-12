@@ -7,9 +7,9 @@
  * - create: 故事创作入库与来源消息幂等防重
  * - rename: 重命名故事标题
  * - setFavorite: 收藏 / 取消收藏切换
- * - trash: 移入回收站（软删除）
+ * - moveToTrash: 移入回收站（软删除）
  * - restore: 从回收站恢复
- * - permanentDelete: 永久删除（物理删除，仅限回收站中作品）
+ * - deletePermanently: 永久删除（物理删除，仅限回收站中作品）
  *
  * 契约规范：
  * 1. 严格全量通过 guardedProcedure + resolveSubject，租户物理隔离；
@@ -65,7 +65,7 @@ export const LIBRARY_RATE_LIMITS = {
     guestLimit: 60,
     authedLimit: 120,
   },
-  trash: {
+  moveToTrash: {
     guestLimit: 60,
     authedLimit: 120,
   },
@@ -73,7 +73,7 @@ export const LIBRARY_RATE_LIMITS = {
     guestLimit: 60,
     authedLimit: 120,
   },
-  permanentDelete: {
+  deletePermanently: {
     guestLimit: 60,
     authedLimit: 120,
   },
@@ -226,16 +226,16 @@ export const libraryRouter = router({
     }),
 
   /**
-   * 移入回收站（软删除）
+   * 移入回收站（软删除，canonical 命名）
    */
-  trash: guardedProcedure
+  moveToTrash: guardedProcedure
     .input(libraryTrashInputSchema)
     .mutation(async ({ ctx, input }) => {
       try {
         enforceProcedureRateLimit(
-          'library:trash',
+          'library:moveToTrash',
           ctx,
-          LIBRARY_RATE_LIMITS.trash,
+          LIBRARY_RATE_LIMITS.moveToTrash,
           getLibraryRateLimiter()
         );
         const subject = resolveSubject(ctx);
@@ -266,16 +266,16 @@ export const libraryRouter = router({
     }),
 
   /**
-   * 永久删除（物理删除，仅限回收站中作品）
+   * 永久删除（物理删除，仅限回收站中作品，canonical 命名）
    */
-  permanentDelete: guardedProcedure
+  deletePermanently: guardedProcedure
     .input(libraryDeletePermanentlyInputSchema)
     .mutation(async ({ ctx, input }) => {
       try {
         enforceProcedureRateLimit(
-          'library:permanentDelete',
+          'library:deletePermanently',
           ctx,
-          LIBRARY_RATE_LIMITS.permanentDelete,
+          LIBRARY_RATE_LIMITS.deletePermanently,
           getLibraryRateLimiter()
         );
         const subject = resolveSubject(ctx);

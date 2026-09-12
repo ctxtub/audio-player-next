@@ -7,17 +7,17 @@
  *    - 具名访客与已登录用户通过验证，租户物理隔离。
  * 2. 8 个 Procedure 的入参校验（BAD_REQUEST 路径）：
  *    - list: limit 越界（<1 或 >50）拒绝；
- *    - get / trash / restore / permanentDelete: 非正整数 ID 拒绝；
+ *    - get / moveToTrash / restore / deletePermanently: 非正整数 ID 拒绝；
  *    - create: prompt/storyText 为空或超长拒绝；
  *    - rename: title 为空或超长拒绝；
  *    - setFavorite: 非布尔类型拒绝。
  * 3. 8 个 Procedure 的成功路径：
  *    - 全链路通过 appRouter.createCaller 执行；
  *    - 返回值严格符合 DTO 契约（包含 missing audio 投影，无 Prisma 内部模型泄漏）；
- *    - create 幂等性、list 视图隔离与游标、rename/favorite 状态变更、trash/restore/permanentDelete 正确持久化。
+ *    - create 幂等性、list 视图隔离与游标、rename/favorite 状态变更、moveToTrash/restore/deletePermanently 正确持久化。
  * 4. NOT_FOUND 与 CONFLICT 领域错误码透出：
  *    - nonexistent / foreign id 统一透出 NOT_FOUND；
- *    - active 状态下 restore / permanentDelete 统一透出 CONFLICT；
+ *    - active 状态下 restore / deletePermanently 统一透出 CONFLICT；
  *    - 同源异正文创建统一透出 CONFLICT。
  * 5. 错误脱敏与 Prisma 内部细节防护：
  *    - 模拟/捕获异常时，断言绝不向上暴露任何 Prisma 原始错误、字段名或 P2002/P2025 细节；
@@ -27,10 +27,11 @@
  *    - 窗口滑动或 reset 后恢复正常访问。
  * 7. Client Facade 消费入口校验：
  *    - 全部 8 个 API 可通过 facade 函数及 libraryClient 对象正常调用；
- *    - 入参重载（ID 数值与入参对象）均规范化透传；
+ *    - 入参收窄为结构体，消灭悬空重载；
+ *    - 内部 factory 模式支持纯净依赖注入测试，production facade 零全局 mutable state；
  *    - 绝对不含 __testBeforeMutationHook 等 server-internal 细节。
  * 8. 静态契约审计：
- *    - 冻结仅 8 个 procedure，无未冻结旁路；
+ *    - 冻结仅 8 个 canonical procedure（moveToTrash / deletePermanently），无未冻结旁路；
  *    - 契约文件绝无 __testBeforeMutationHook 污染。
  */
 
@@ -58,14 +59,15 @@ import {
   createStoryWork,
   renameStoryWork,
   setStoryWorkFavorite,
-  trashStoryWork,
+  moveToTrash,
   restoreStoryWork,
-  permanentDeleteStoryWork,
+  deletePermanently,
   libraryClient,
-  setLibraryTrpcClient,
-  resetLibraryTrpcClient,
 } from '../../../lib/client/library';
-import { trpc } from '../../../lib/trpc/client';
+import {
+  createLibraryFacade,
+  type MinimalLibraryTrpcClient,
+} from '../../../lib/client/internal/libraryFacadeFactory';
 import { SlidingWindowRateLimiter } from '../../../lib/server/rateLimit';
 
 async function runStoryWorkRouterFacadeTests(): Promise<void> {
@@ -139,9 +141,9 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
     'Anonymous calling library.setFavorite must throw UNAUTHORIZED'
   );
   await assert.rejects(
-    async () => { await anonCaller.library.trash({ id: 1 }); },
+    async () => { await anonCaller.library.moveToTrash({ id: 1 }); },
     (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
-    'Anonymous calling library.trash must throw UNAUTHORIZED'
+    'Anonymous calling library.moveToTrash must throw UNAUTHORIZED'
   );
   await assert.rejects(
     async () => { await anonCaller.library.restore({ id: 1 }); },
@@ -149,9 +151,9 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
     'Anonymous calling library.restore must throw UNAUTHORIZED'
   );
   await assert.rejects(
-    async () => { await anonCaller.library.permanentDelete({ id: 1 }); },
+    async () => { await anonCaller.library.deletePermanently({ id: 1 }); },
     (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
-    'Anonymous calling library.permanentDelete must throw UNAUTHORIZED'
+    'Anonymous calling library.deletePermanently must throw UNAUTHORIZED'
   );
   console.log('PASS: 1. 匿名访问 8 个 procedure 均被安全拦截为 UNAUTHORIZED (401)');
 
@@ -233,11 +235,11 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
     'setFavorite non-bool favorite must be BAD_REQUEST'
   );
 
-  // trash / restore / permanentDelete ID bounds
+  // moveToTrash / restore / deletePermanently ID bounds
   await assert.rejects(
-    async () => { await userCaller.library.trash({ id: -2 }); },
+    async () => { await userCaller.library.moveToTrash({ id: -2 }); },
     (err: unknown) => err instanceof TRPCError && err.code === 'BAD_REQUEST',
-    'trash negative id must be BAD_REQUEST'
+    'moveToTrash negative id must be BAD_REQUEST'
   );
   await assert.rejects(
     async () => { await userCaller.library.restore({ id: 0 }); },
@@ -245,9 +247,9 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
     'restore id: 0 must be BAD_REQUEST'
   );
   await assert.rejects(
-    async () => { await userCaller.library.permanentDelete({ id: -10 }); },
+    async () => { await userCaller.library.deletePermanently({ id: -10 }); },
     (err: unknown) => err instanceof TRPCError && err.code === 'BAD_REQUEST',
-    'permanentDelete id: -10 must be BAD_REQUEST'
+    'deletePermanently id: -10 must be BAD_REQUEST'
   );
   console.log('PASS: 2. 全部 8 个 Procedure 的入参非法拦截（BAD_REQUEST）校验通过');
 
@@ -326,9 +328,9 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
   });
   assert.strictEqual(unfavedWork.favoritedAt, null, '取消收藏后 favoritedAt 必须为 null');
 
-  // 3.7 trash
-  const trashedWork = await userCaller.library.trash({ id: createdWork1.id });
-  assert.ok(trashedWork.deletedAt !== null, 'trash 后 deletedAt 必须有值');
+  // 3.7 moveToTrash
+  const trashedWork = await userCaller.library.moveToTrash({ id: createdWork1.id });
+  assert.ok(trashedWork.deletedAt !== null, 'moveToTrash 后 deletedAt 必须有值');
 
   const activeListAfterTrash = await userCaller.library.list({ view: 'active' });
   assert.ok(
@@ -352,9 +354,9 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
     'active 视图在 restore 后必须重新包含该作品'
   );
 
-  // 3.9 permanentDelete (物理删除，必须在 trash 之后)
-  await userCaller.library.trash({ id: createdWork1.id });
-  const deleteResult = await userCaller.library.permanentDelete({ id: createdWork1.id });
+  // 3.9 deletePermanently (物理删除，必须在 moveToTrash 之后)
+  await userCaller.library.moveToTrash({ id: createdWork1.id });
+  const deleteResult = await userCaller.library.deletePermanently({ id: createdWork1.id });
   assert.strictEqual(deleteResult.success, true);
   assert.strictEqual(deleteResult.id, createdWork1.id);
 
@@ -399,9 +401,9 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
     'setFavorite nonexistent id must throw NOT_FOUND'
   );
   await assert.rejects(
-    async () => { await userCaller.library.trash({ id: 99999999 }); },
+    async () => { await userCaller.library.moveToTrash({ id: 99999999 }); },
     (err: unknown) => err instanceof TRPCError && err.code === 'NOT_FOUND',
-    'trash nonexistent id must throw NOT_FOUND'
+    'moveToTrash nonexistent id must throw NOT_FOUND'
   );
   await assert.rejects(
     async () => { await userCaller.library.restore({ id: 99999999 }); },
@@ -409,9 +411,9 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
     'restore nonexistent id must throw NOT_FOUND'
   );
   await assert.rejects(
-    async () => { await userCaller.library.permanentDelete({ id: 99999999 }); },
+    async () => { await userCaller.library.deletePermanently({ id: 99999999 }); },
     (err: unknown) => err instanceof TRPCError && err.code === 'NOT_FOUND',
-    'permanentDelete nonexistent id must throw NOT_FOUND'
+    'deletePermanently nonexistent id must throw NOT_FOUND'
   );
 
   // 4.3 CONFLICT: restore on active work
@@ -426,11 +428,11 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
     'restore on active work must throw CONFLICT'
   );
 
-  // 4.4 CONFLICT: permanentDelete on active work
+  // 4.4 CONFLICT: deletePermanently on active work
   await assert.rejects(
-    async () => { await userCaller.library.permanentDelete({ id: activeWorkForConflict.id }); },
+    async () => { await userCaller.library.deletePermanently({ id: activeWorkForConflict.id }); },
     (err: unknown) => err instanceof TRPCError && err.code === 'CONFLICT',
-    'permanentDelete on active work must throw CONFLICT'
+    'deletePermanently on active work must throw CONFLICT'
   );
 
   // 4.5 CONFLICT: create with same sourceMessageId but different content
@@ -546,16 +548,16 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
   }
   console.log('PASS: 6. Rate limit 滑动窗口确定性限流与恢复验证通过');
 
-  console.log('=== 7. Client Facade 消费入口与入参重载校验 ===');
+  console.log('=== 7. Client Facade 消费入口与 Factory 模式校验 ===');
   const callsRecorded: Record<string, unknown[]> = {
     list: [],
     get: [],
     create: [],
     rename: [],
     setFavorite: [],
-    trash: [],
+    moveToTrash: [],
     restore: [],
-    permanentDelete: [],
+    deletePermanently: [],
   };
 
   const mockDetailDto = {
@@ -580,119 +582,128 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
     hasMore: false,
   };
 
-  const mockTrpcClient = {
+  const mockTrpcClient: MinimalLibraryTrpcClient = {
     library: {
       list: {
-        query: async (input: unknown) => {
+        query: async (input) => {
           callsRecorded.list.push(input);
           return mockListDto;
         },
       },
       get: {
-        query: async (input: unknown) => {
+        query: async (input) => {
           callsRecorded.get.push(input);
           return mockDetailDto;
         },
       },
       create: {
-        mutate: async (input: unknown) => {
+        mutate: async (input) => {
           callsRecorded.create.push(input);
           return mockDetailDto;
         },
       },
       rename: {
-        mutate: async (input: unknown) => {
+        mutate: async (input) => {
           callsRecorded.rename.push(input);
           return mockDetailDto;
         },
       },
       setFavorite: {
-        mutate: async (input: unknown) => {
+        mutate: async (input) => {
           callsRecorded.setFavorite.push(input);
           return mockDetailDto;
         },
       },
-      trash: {
-        mutate: async (input: unknown) => {
-          callsRecorded.trash.push(input);
+      moveToTrash: {
+        mutate: async (input) => {
+          callsRecorded.moveToTrash.push(input);
           return mockDetailDto;
         },
       },
       restore: {
-        mutate: async (input: unknown) => {
+        mutate: async (input) => {
           callsRecorded.restore.push(input);
           return mockDetailDto;
         },
       },
-      permanentDelete: {
-        mutate: async (input: unknown) => {
-          callsRecorded.permanentDelete.push(input);
+      deletePermanently: {
+        mutate: async (input) => {
+          callsRecorded.deletePermanently.push(input);
           return { success: true as const, id: 101 };
         },
       },
     },
-  } as unknown as typeof trpc;
+  };
 
-  setLibraryTrpcClient(mockTrpcClient);
+  // 通过 internal factory 创建测试 facade 实例（无全局 mutable state）
+  const testFacade = createLibraryFacade(mockTrpcClient);
 
-  try {
-    // 7.1 fetchLibraryList & libraryClient.list
-    const listRes1 = await fetchLibraryList({ view: 'favorites', limit: 15 });
-    assert.strictEqual(listRes1, mockListDto);
-    assert.deepStrictEqual(callsRecorded.list[0], { view: 'favorites', limit: 15 });
+  // 7.1 fetchLibraryList & libraryClient.list
+  const listRes1 = await testFacade.fetchLibraryList({ view: 'favorites', limit: 15 });
+  assert.strictEqual(listRes1, mockListDto);
+  assert.deepStrictEqual(callsRecorded.list[0], { view: 'favorites', limit: 15 });
 
-    const listRes2 = await libraryClient.list();
-    assert.strictEqual(listRes2, mockListDto);
-    assert.deepStrictEqual(callsRecorded.list[1], {});
+  const listRes2 = await testFacade.libraryClient.list();
+  assert.strictEqual(listRes2, mockListDto);
+  assert.deepStrictEqual(callsRecorded.list[1], {});
 
-    // 7.2 fetchLibraryDetail: number vs object
-    await fetchLibraryDetail(101);
-    assert.deepStrictEqual(callsRecorded.get[0], { id: 101 });
-    await libraryClient.get({ id: 102 });
-    assert.deepStrictEqual(callsRecorded.get[1], { id: 102 });
+  // 7.2 fetchLibraryDetail: number vs object
+  await testFacade.fetchLibraryDetail(101);
+  assert.deepStrictEqual(callsRecorded.get[0], { id: 101 });
+  await testFacade.libraryClient.get({ id: 102 });
+  assert.deepStrictEqual(callsRecorded.get[1], { id: 102 });
 
-    // 7.3 createStoryWork
-    const createPayload = { prompt: 'cp', storyText: 'ct' };
-    await createStoryWork(createPayload);
-    assert.deepStrictEqual(callsRecorded.create[0], createPayload);
-    await libraryClient.create(createPayload);
-    assert.deepStrictEqual(callsRecorded.create[1], createPayload);
+  // 7.3 createStoryWork
+  const createPayload = { prompt: 'cp', storyText: 'ct' };
+  await testFacade.createStoryWork(createPayload);
+  assert.deepStrictEqual(callsRecorded.create[0], createPayload);
+  await testFacade.libraryClient.create(createPayload);
+  assert.deepStrictEqual(callsRecorded.create[1], createPayload);
 
-    // 7.4 renameStoryWork: (id, title) vs object
-    await renameStoryWork(101, 'Title A');
-    assert.deepStrictEqual(callsRecorded.rename[0], { id: 101, title: 'Title A' });
-    await libraryClient.rename({ id: 102, title: 'Title B' });
-    assert.deepStrictEqual(callsRecorded.rename[1], { id: 102, title: 'Title B' });
+  // 7.4 renameStoryWork: 纯结构体入参
+  await testFacade.renameStoryWork({ id: 101, title: 'Title A' });
+  assert.deepStrictEqual(callsRecorded.rename[0], { id: 101, title: 'Title A' });
+  await testFacade.libraryClient.rename({ id: 102, title: 'Title B' });
+  assert.deepStrictEqual(callsRecorded.rename[1], { id: 102, title: 'Title B' });
 
-    // 7.5 setStoryWorkFavorite: (id, bool) vs object
-    await setStoryWorkFavorite(101, true);
-    assert.deepStrictEqual(callsRecorded.setFavorite[0], { id: 101, favorite: true });
-    await libraryClient.setFavorite({ id: 102, favorite: false });
-    assert.deepStrictEqual(callsRecorded.setFavorite[1], { id: 102, favorite: false });
+  // 7.5 setStoryWorkFavorite: 纯结构体入参
+  await testFacade.setStoryWorkFavorite({ id: 101, favorite: true });
+  assert.deepStrictEqual(callsRecorded.setFavorite[0], { id: 101, favorite: true });
+  await testFacade.libraryClient.setFavorite({ id: 102, favorite: false });
+  assert.deepStrictEqual(callsRecorded.setFavorite[1], { id: 102, favorite: false });
 
-    // 7.6 trashStoryWork: number vs object
-    await trashStoryWork(101);
-    assert.deepStrictEqual(callsRecorded.trash[0], { id: 101 });
-    await libraryClient.trash({ id: 102 });
-    assert.deepStrictEqual(callsRecorded.trash[1], { id: 102 });
+  // 7.6 moveToTrash: number vs object
+  await testFacade.moveToTrash(101);
+  assert.deepStrictEqual(callsRecorded.moveToTrash[0], { id: 101 });
+  await testFacade.libraryClient.moveToTrash({ id: 102 });
+  assert.deepStrictEqual(callsRecorded.moveToTrash[1], { id: 102 });
 
-    // 7.7 restoreStoryWork: number vs object
-    await restoreStoryWork(101);
-    assert.deepStrictEqual(callsRecorded.restore[0], { id: 101 });
-    await libraryClient.restore({ id: 102 });
-    assert.deepStrictEqual(callsRecorded.restore[1], { id: 102 });
+  // 7.7 restoreStoryWork: number vs object
+  await testFacade.restoreStoryWork(101);
+  assert.deepStrictEqual(callsRecorded.restore[0], { id: 101 });
+  await testFacade.libraryClient.restore({ id: 102 });
+  assert.deepStrictEqual(callsRecorded.restore[1], { id: 102 });
 
-    // 7.8 permanentDeleteStoryWork: number vs object
-    const delRes1 = await permanentDeleteStoryWork(101);
-    assert.strictEqual(delRes1.success, true);
-    assert.deepStrictEqual(callsRecorded.permanentDelete[0], { id: 101 });
-    const delRes2 = await libraryClient.permanentDelete({ id: 102 });
-    assert.strictEqual(delRes2.id, 101);
-    assert.deepStrictEqual(callsRecorded.permanentDelete[1], { id: 102 });
-  } finally {
-    resetLibraryTrpcClient();
-  }
-  console.log('PASS: 7. Client Facade 与 libraryClient 8 个 Procedure 调用与重载校验通过');
+  // 7.8 deletePermanently: number vs object
+  const delRes1 = await testFacade.deletePermanently(101);
+  assert.strictEqual(delRes1.success, true);
+  assert.deepStrictEqual(callsRecorded.deletePermanently[0], { id: 101 });
+  const delRes2 = await testFacade.libraryClient.deletePermanently({ id: 102 });
+  assert.strictEqual(delRes2.id, 101);
+  assert.deepStrictEqual(callsRecorded.deletePermanently[1], { id: 102 });
+
+  // 7.9 生产导出门面对象完整性校验
+  assert.strictEqual(typeof fetchLibraryList, 'function');
+  assert.strictEqual(typeof fetchLibraryDetail, 'function');
+  assert.strictEqual(typeof createStoryWork, 'function');
+  assert.strictEqual(typeof renameStoryWork, 'function');
+  assert.strictEqual(typeof setStoryWorkFavorite, 'function');
+  assert.strictEqual(typeof moveToTrash, 'function');
+  assert.strictEqual(typeof restoreStoryWork, 'function');
+  assert.strictEqual(typeof deletePermanently, 'function');
+  assert.strictEqual(typeof libraryClient.moveToTrash, 'function');
+  assert.strictEqual(typeof libraryClient.deletePermanently, 'function');
+  console.log('PASS: 7. Client Facade 与 Factory 8 个 Canonical Procedure 委托与结构体入参校验通过');
 
   console.log('=== 8. 静态契约与测试接缝隔离审计 ===');
   // 8.1 严禁在 tRPC input schema、client facade、public contract 中出现 __testBeforeMutationHook
@@ -705,25 +716,29 @@ async function runStoryWorkRouterFacadeTests(): Promise<void> {
   const clientFile = fs.readFileSync('lib/client/library.ts', 'utf-8');
   assert.ok(!clientFile.includes('__testBeforeMutationHook'), 'client/library.ts 严禁出现 __testBeforeMutationHook');
 
+  const factoryFile = fs.readFileSync('lib/client/internal/libraryFacadeFactory.ts', 'utf-8');
+  assert.ok(!factoryFile.includes('__testBeforeMutationHook'), 'libraryFacadeFactory.ts 严禁出现 __testBeforeMutationHook');
+
   const trpcClientFile = fs.readFileSync('lib/trpc/client.ts', 'utf-8');
   assert.ok(!trpcClientFile.includes('__testBeforeMutationHook'), 'trpc/client.ts 严禁出现 __testBeforeMutationHook');
+  assert.ok(!trpcClientFile.includes('libraryClient'), 'trpc/client.ts 严禁反向 re-export libraryClient (循环依赖)');
 
-  // 8.2 router 仅冻结暴露指定的 8 个 procedure
+  // 8.2 router 仅冻结暴露指定的 8 个 canonical procedure
   const libraryProcedures = Object.keys((libraryRouter as unknown as { _def: { procedures: Record<string, unknown> } })._def.procedures).sort();
   const expectedProcedures = [
     'create',
+    'deletePermanently',
     'get',
     'list',
-    'permanentDelete',
+    'moveToTrash',
     'rename',
     'restore',
     'setFavorite',
-    'trash',
   ].sort();
   assert.deepStrictEqual(
     libraryProcedures,
     expectedProcedures,
-    'libraryRouter 只能且必须暴露已冻结的 8 个 procedure'
+    'libraryRouter 只能且必须暴露已冻结的 8 个 canonical procedure'
   );
 
   // 8.3 全部入口统一使用 guardedProcedure + resolveSubject

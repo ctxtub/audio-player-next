@@ -50,6 +50,7 @@ export async function purgeExpiredUserTrash(
   // 组装时间谓词，通过统一物理删除 primitive 执行批量条件删除
   const deleteResult = await executeStoryWorkPhysicalDelete({
     target: 'user',
+    reason: 'trash',
     where: {
       deletedAt: {
         not: null,

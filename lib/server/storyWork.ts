@@ -1165,7 +1165,7 @@ export async function restoreStoryWorkForSubject(
 export type PhysicalDeleteStoryWorkOptions =
   | {
       target: 'user';
-      reason?: 'trash';
+      reason: 'trash';
       where: {
         id?: number;
         userId?: number;

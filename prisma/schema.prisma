@@ -22,7 +22,8 @@ model User {
   promptHistory    PromptHistory[]
   storyWorks       StoryWork[]
   chatMessages     ChatMessage[]
-  playbackProgress UserPlaybackProgress?
+  playbackProgress    UserPlaybackProgress?
+  storyWorkMigrations StoryWorkMigration[]
 }
 
 /// 用户当前聊天会话的消息（单会话快照），与 User 多对一关联。
@@ -278,4 +279,23 @@ model GuestPlaybackProgress {
 
   @@index([guestId])
   @@index([updatedAt])
+}
+
+/// 访客作品注册迁移记录表（映射 guestStoryWorkId → userStoryWorkId，供 legacy playback 引用映射及持久追溯）
+model StoryWorkMigration {
+  id               Int      @id @default(autoincrement())
+  guestId          String
+  userId           Int
+  guestStoryWorkId Int
+  userStoryWorkId  Int
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([guestId, guestStoryWorkId])
+  @@index([guestId])
+  @@index([userId])
+  @@index([guestStoryWorkId])
+  @@index([userStoryWorkId])
+  @@map("StoryWorkMigration")
 }

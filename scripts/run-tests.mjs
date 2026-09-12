@@ -20,6 +20,7 @@ const EXPECTED_TABLES = [
     'GuestPromptHistory',
     'UserPlaybackProgress',
     'GuestPlaybackProgress',
+    'StoryWorkMigration',
 ];
 // 中文注释：单 suite 执行上限毫秒（180 秒，超时 exit 4）。
 const SUITE_TIMEOUT_MS = 180000;
@@ -83,6 +84,7 @@ const SUITES = [
     { id: 'story-work-lifecycle', path: './tests/integration/persistence-config/story-work-lifecycle.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-router-facade', path: './tests/integration/persistence-config/story-work-router-facade.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'legacy-generation-history-cutover', path: './tests/integration/persistence-config/legacy-generation-history-cutover.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'story-work-guest-registration', path: './tests/integration/persistence-config/story-work-guest-registration.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'runner-group-split', path: './tests/tooling/runner/runner-group-split.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'catalog-checker', path: './tests/tooling/catalog/catalog-checker.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'evidence-schema', path: './tests/tooling/evidence/evidence-schema.tooling.test.ts', group: 'tooling', needs_db: false },

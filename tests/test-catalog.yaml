@@ -549,7 +549,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [auth, migrate]
     spec_path: docs/e2e/05-认证授权与会话生命周期/01-访客注册三步迁移与数据保真.md
-    executable_ids: [exec-guest-creative-sync]
+    executable_ids: [exec-guest-creative-sync, exec-story-work-guest-registration]
     fixtures: []
     owner: auth-session
   - case_id: register-interrupt-orphan-rollback
@@ -1012,6 +1012,10 @@ executables:
     display_name_zh: Legacy生成历史兼容切换
     layer: L2
     path: ./tests/integration/persistence-config/legacy-generation-history-cutover.integration.test.ts
+  - executable_id: exec-story-work-guest-registration
+    display_name_zh: StoryWork访客注册迁移与ID映射
+    layer: L2
+    path: ./tests/integration/persistence-config/story-work-guest-registration.integration.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

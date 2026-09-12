@@ -13,7 +13,7 @@ import { createStoryWorkByPage } from "./helpers/library";
  * 1. 完整 Route/Navigation Journey：
  *    - / → 自动重定向到 /chat
  *    - /chat → 点击主导航"故事库" → /library
- *    - /library → 导航至 /library/1（有效正整数 id）→ Browser Back → /library
+ *    - /library → 导航至 /library/{真实id}（真实创建有效正整数 id）→ Browser Back → /library
  *    - /library → 点击"设置" → /setting → Browser Back → /library
  * 2. Compatibility Journey：
  *    - /player 直接进入 → Legacy Player 渲染 → 故事库 Tab 保持 selected (compatibility active alias)

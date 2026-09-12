@@ -34,6 +34,14 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
         step: (name: string, detail?: unknown) => void;
     };
 
+    let allowExpected404 = false;
+    let deletePermanentlyRequestCount = 0;
+    page.on("request", (req) => {
+        if (req.url().includes("library.deletePermanently")) {
+            deletePermanentlyRequestCount += 1;
+        }
+    });
+
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
     page.on("console", (msg) => {
@@ -41,9 +49,11 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
             const text = msg.text().slice(0, 300);
             if (
                 text.includes("Failed to fetch RSC payload") ||
-                text.includes("Falling back to browser navigation") ||
-                text.includes("status of 404 (Not Found)")
+                text.includes("Falling back to browser navigation")
             ) {
+                return;
+            }
+            if (allowExpected404 && text.includes("status of 404 (Not Found)")) {
                 return;
             }
             consoleErrors.push(text);
@@ -215,12 +225,17 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
     const trashCard = page.getByTestId(`story-work-card-${targetWork.id}`);
     await expect(trashCard.locator("a")).toHaveCount(0);
 
-    // 直接在浏览器地址栏强制访问该 trashed 作品详情，必须触发统一不可用保护
-    await page.goto(`${harnessEnv.appUrl}/library/${targetWork.id}`, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId("story-detail-container")).toBeHidden();
-    await page.getByTestId("back-to-library-link").click();
-    await page.waitForURL("**/library", { timeout: 15000 });
+    // 直接在浏览器地址栏强制访问该 trashed 作品详情，必须触发统一不可用保护（预期 404 响应，局域临时允许资源 404 日志）
+    allowExpected404 = true;
+    try {
+        await page.goto(`${harnessEnv.appUrl}/library/${targetWork.id}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId("story-detail-container")).toBeHidden();
+        await page.getByTestId("back-to-library-link").click();
+        await page.waitForURL("**/library", { timeout: 15000 });
+    } finally {
+        allowExpected404 = false;
+    }
     recorder.step("回收站卡片无详情入口且直接访问被统一不可用拦截", { id: targetWork.id });
 
     // 14. Restore（从 trash 恢复）
@@ -245,14 +260,21 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
     await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeVisible({ timeout: 15000 });
     recorder.step("第三次移入回收站准备永久删除", { id: targetWork.id });
 
-    // 16. Permanent Delete（二次确认流）
+    // 16. Permanent Delete（二次确认流与零 RPC 守卫）
+    expect(deletePermanentlyRequestCount).toBe(0);
     await page.getByTestId(`story-card-delete-permanently-btn-${targetWork.id}`).click();
     const deleteDialog = page.getByTestId(`permanent-delete-dialog-${targetWork.id}`);
     await expect(deleteDialog).toBeVisible({ timeout: 15000 });
+    // 未确认前严格零 RPC
+    expect(deletePermanentlyRequestCount).toBe(0);
+    recorder.step("永久删除未确认前零RPC", { rpcCount: 0 });
+
     await page.getByTestId("permanent-delete-confirm-btn").click();
     await expect(deleteDialog).toBeHidden({ timeout: 15000 });
     await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeHidden({ timeout: 15000 });
-    recorder.step("永久删除二次确认流执行完成", { id: targetWork.id });
+    // 确认后恰好触发 1 次永久删除 RPC
+    expect(deletePermanentlyRequestCount).toBe(1);
+    recorder.step("永久删除二次确认流执行完成", { id: targetWork.id, rpcCount: 1 });
 
     // 17. 最终消失（列表/trash 均无此作品，直接访问不可用）
     // 回收站中无
@@ -263,10 +285,15 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
     // 收藏列表中无
     await page.getByTestId("view-tab-favorites").click();
     await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeHidden();
-    // 直接访问详情无
-    await page.goto(`${harnessEnv.appUrl}/library/${targetWork.id}`, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId("story-detail-container")).toBeHidden();
+    // 直接访问详情无（预期 404 响应，局域临时允许资源 404 日志）
+    allowExpected404 = true;
+    try {
+        await page.goto(`${harnessEnv.appUrl}/library/${targetWork.id}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId("story-detail-container")).toBeHidden();
+    } finally {
+        allowExpected404 = false;
+    }
     recorder.step("作品全维度彻底消失验证完毕", { id: targetWork.id });
 
     // 全程零控制台与页面未捕获错误

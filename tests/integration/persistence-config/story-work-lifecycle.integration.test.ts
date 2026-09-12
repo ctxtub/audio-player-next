@@ -22,12 +22,13 @@
  *    - 对活跃作品（deletedAt === null）调用以明确领域错误 CONFLICT 拒绝；
  * 5. permanentlyDeleteStoryWorkForSubject：
  *    - 仅允许目标处于回收站（deletedAt !== null）；对 active 作品调用以明确 CONFLICT 拒绝；
- *    - 物理删除唯一执行点（统一 Service Seam）；验证内部调用 audio 清理 hook（M8 tombstone 扩展口）；
+ *    - 物理删除唯一执行点（统一 Service Seam，预留作为 M8 Audio tombstone 扩展点）；
  *    - 执行后数据行彻底从数据库中移除；
  * 6. 统一 NOT_FOUND：
  *    - nonexistent id / foreign id / invalid id 对全部 5 个 mutation 统一抛出 NOT_FOUND（作品不存在）；
  *    - 对回收站中作品调用 rename / setFavorite 统一抛出 NOT_FOUND；
- * 7. User / Guest 两种主体行为完全一致且数据物理隔离。
+ * 7. User / Guest 两种主体行为完全一致且数据物理隔离；
+ * 8. 并发状态原子性与 TOCTOU 竞态回归（条件写拦截、状态转移冲突断言、Guest 对称保护）。
  */
 
 import assert from 'node:assert';
@@ -43,7 +44,6 @@ import {
   trashStoryWorkForSubject,
   restoreStoryWorkForSubject,
   permanentlyDeleteStoryWorkForSubject,
-  registerStoryWorkAudioCleanupHook,
 } from '../../../lib/server/storyWork';
 import { storyWorkDetailDtoSchema } from '../../../lib/trpc/schemas/library';
 
@@ -253,30 +253,14 @@ async function runStoryWorkLifecycleTests() {
   const dbWork3StillThere = await prisma.storyWork.findUnique({ where: { id: work3.id } });
   assert(dbWork3StillThere !== null, '拒绝后活跃作品必须完好在库');
 
-  // 5.2 移入回收站后允许永久删除，并断言统一 Service Seam hook 被调用
+  // 5.2 移入回收站后允许永久删除
   await trashStoryWorkForSubject(userSubject, work3.id);
-
-  let seamHookCalled = false;
-  let seamSubjectPassed: Subject | null = null;
-  let seamWorkIdPassed: number | null = null;
-
-  registerStoryWorkAudioCleanupHook(async (subject, workId) => {
-    seamHookCalled = true;
-    seamSubjectPassed = subject;
-    seamWorkIdPassed = workId;
-  });
 
   const countBeforePermanent = await prisma.storyWork.count({ where: { userId: testUser.id } });
   const deleteResult = await permanentlyDeleteStoryWorkForSubject(userSubject, work3.id);
 
   assert.strictEqual(deleteResult.success, true);
   assert.strictEqual(deleteResult.id, work3.id);
-  assert.strictEqual(seamHookCalled, true, '物理删除必须触发音频清理统一 Service Seam');
-  assert.deepStrictEqual(seamSubjectPassed, userSubject, 'Seam 必须收到当前 Subject');
-  assert.strictEqual(seamWorkIdPassed, work3.id, 'Seam 必须收到目标 workId');
-
-  // 清理 hook 桩
-  registerStoryWorkAudioCleanupHook(null);
 
   // 数据库物理行必须彻底消失
   const countAfterPermanent = await prisma.storyWork.count({ where: { userId: testUser.id } });
@@ -442,16 +426,9 @@ async function runStoryWorkLifecycleTests() {
 
   // 7.7 Guest Trash 后永久删除
   await trashStoryWorkForSubject(guestSubjectA, guestWork.id);
-  let guestSeamCalled = false;
-  registerStoryWorkAudioCleanupHook(async (subject, workId) => {
-    guestSeamCalled = true;
-    assert.deepStrictEqual(subject, guestSubjectA);
-    assert.strictEqual(workId, guestWork.id);
-  });
   const guestPermanentRes = await permanentlyDeleteStoryWorkForSubject(guestSubjectA, guestWork.id);
   assert.strictEqual(guestPermanentRes.success, true);
-  assert.strictEqual(guestSeamCalled, true);
-  registerStoryWorkAudioCleanupHook(null);
+  assert.strictEqual(guestPermanentRes.id, guestWork.id);
 
   const guestDbDeleted = await prisma.guestStoryWork.findUnique({ where: { id: guestWork.id } });
   assert.strictEqual(guestDbDeleted, null, '访客永久删除后物理记录不存在');
@@ -492,6 +469,162 @@ async function runStoryWorkLifecycleTests() {
     );
   }
   console.log('PASS: 7. User / Guest 对称性与物理隔离全面验证通过');
+
+  console.log('=== 8. Concurrency Race & Atomic Conditional Write Regressions (TOCTOU 防御) ===');
+
+  // 8.1 核心 TOCTOU 竞态：permanent-delete vs concurrent restore
+  // 场景：作品在回收站中，调用者发起永久删除，但在 deleteMany 条件写执行前并发发生了 restore。
+  // 原子性保障：deleteMany 带有 deletedAt IS NOT NULL 条件，恢复后的 active 作品不能被物理删除，且永久删除抛出 CONFLICT。
+  const raceWork1 = await createStoryWorkForSubject(userSubject, {
+    prompt: 'TOCTOU 竞态测试作品 1',
+    storyText: '# 竞态测试故事 1\n测试永久删除与恢复的并发竞态……',
+  });
+  await trashStoryWorkForSubject(userSubject, raceWork1.id);
+
+  let restoreExecuted = false;
+  await assert.rejects(
+    async () =>
+      permanentlyDeleteStoryWorkForSubject(userSubject, raceWork1.id, {
+        __testBeforeMutationHook: async () => {
+          // 模拟并发先行一步完成 restore
+          await restoreStoryWorkForSubject(userSubject, raceWork1.id);
+          restoreExecuted = true;
+        },
+      }),
+    (err: unknown) =>
+      err instanceof TRPCError &&
+      err.code === 'CONFLICT' &&
+      err.message === '仅允许对回收站中的作品执行永久删除',
+    '当永久删除与恢复发生竞态时，原子条件写必须保证已恢复的活跃作品不被删除并抛出 CONFLICT'
+  );
+  assert.strictEqual(restoreExecuted, true, '并发注入 hook 必须已执行');
+
+  // 确证作品依然在库且处于活跃状态（deletedAt === null）
+  const raceWork1Row = await prisma.storyWork.findUnique({ where: { id: raceWork1.id } });
+  assert(raceWork1Row !== null, '竞态发生后活跃作品必须依然存在于数据库');
+  assert.strictEqual(raceWork1Row.deletedAt, null, '活跃作品 deletedAt 必须保持为 null');
+
+  // 8.2 TOCTOU 竞态：rename vs concurrent trash
+  // 场景：活跃作品在 rename 执行 updateMany 条件写前被并发移入回收站。
+  // 原子性保障：rename updateMany 带有 deletedAt: null 条件，匹配 0 行，抛出 NOT_FOUND，标题不被篡改。
+  const raceWork2 = await createStoryWorkForSubject(userSubject, {
+    prompt: 'TOCTOU 竞态测试作品 2',
+    storyText: '# 竞态测试故事 2\n测试重命名与移入回收站的并发竞态……',
+  });
+  let renameTrashExecuted = false;
+  await assert.rejects(
+    async () =>
+      renameStoryWorkForSubject(
+        userSubject,
+        raceWork2.id,
+        '尝试在并发放入回收站时改名',
+        {
+          __testBeforeMutationHook: async () => {
+            await trashStoryWorkForSubject(userSubject, raceWork2.id);
+            renameTrashExecuted = true;
+          },
+        }
+      ),
+    (err: unknown) =>
+      err instanceof TRPCError &&
+      err.code === 'NOT_FOUND' &&
+      err.message === '作品不存在',
+    '当重命名执行前作品被并发移入回收站，原子条件写必须命中 0 行并抛出 NOT_FOUND'
+  );
+  assert.strictEqual(renameTrashExecuted, true);
+
+  const raceWork2Row = await prisma.storyWork.findUnique({ where: { id: raceWork2.id } });
+  assert(raceWork2Row !== null);
+  assert.notStrictEqual(raceWork2Row.title, '尝试在并发放入回收站时改名', '标题绝对不得被改写');
+  assert(raceWork2Row.deletedAt !== null, '作品必须处于回收站');
+
+  // 8.3 TOCTOU 竞态：favorite vs concurrent trash
+  // 场景：活跃作品在 setFavorite 执行 updateMany 前被并发移入回收站。
+  // 原子性保障：updateMany 匹配 0 行，检查 row 发现已处于回收站，统一抛出 NOT_FOUND，favoritedAt 不被设置。
+  const raceWork3 = await createStoryWorkForSubject(userSubject, {
+    prompt: 'TOCTOU 竞态测试作品 3',
+    storyText: '# 竞态测试故事 3\n测试收藏与移入回收站的并发竞态……',
+  });
+  let favTrashExecuted = false;
+  await assert.rejects(
+    async () =>
+      setStoryWorkFavoriteForSubject(userSubject, raceWork3.id, true, {
+        __testBeforeMutationHook: async () => {
+          await trashStoryWorkForSubject(userSubject, raceWork3.id);
+          favTrashExecuted = true;
+        },
+      }),
+    (err: unknown) =>
+      err instanceof TRPCError &&
+      err.code === 'NOT_FOUND' &&
+      err.message === '作品不存在',
+    '当收藏操作执行前作品被移入回收站，必须抛出 NOT_FOUND 且 favoritedAt 不得被修改'
+  );
+  assert.strictEqual(favTrashExecuted, true);
+
+  const raceWork3Row = await prisma.storyWork.findUnique({ where: { id: raceWork3.id } });
+  assert(raceWork3Row !== null);
+  assert.strictEqual(raceWork3Row.favoritedAt, null, 'favoritedAt 严禁被写入');
+  assert(raceWork3Row.deletedAt !== null, '作品必须处于回收站');
+
+  // 8.4 TOCTOU 竞态：restore vs concurrent restore（并发重复恢复）
+  // 场景：两路并发发起 restore，第一路完成清空 deletedAt，第二路由于 deletedAt IS NOT NULL 条件落空，抛出 CONFLICT。
+  const raceWork4 = await createStoryWorkForSubject(userSubject, {
+    prompt: 'TOCTOU 竞态测试作品 4',
+    storyText: '# 竞态测试故事 4\n测试并发重复恢复……',
+  });
+  await trashStoryWorkForSubject(userSubject, raceWork4.id);
+
+  let concurrentRestoreExecuted = false;
+  await assert.rejects(
+    async () =>
+      restoreStoryWorkForSubject(userSubject, raceWork4.id, {
+        __testBeforeMutationHook: async () => {
+          await restoreStoryWorkForSubject(userSubject, raceWork4.id);
+          concurrentRestoreExecuted = true;
+        },
+      }),
+    (err: unknown) =>
+      err instanceof TRPCError &&
+      err.code === 'CONFLICT' &&
+      err.message === '作品未处于回收站中，无需恢复',
+    '当恢复操作检测到已被并发恢复时，原子条件写落空并抛出 CONFLICT'
+  );
+  assert.strictEqual(concurrentRestoreExecuted, true);
+
+  const raceWork4Row = await prisma.storyWork.findUnique({ where: { id: raceWork4.id } });
+  assert(raceWork4Row !== null);
+  assert.strictEqual(raceWork4Row.deletedAt, null, '作品必须处于恢复后的活跃状态');
+
+  // 8.5 Guest 对称性：Guest 主体下的 permanent-delete vs concurrent restore 竞态回归
+  const guestRaceWork = await createStoryWorkForSubject(guestSubjectA, {
+    prompt: 'Guest 竞态测试作品',
+    storyText: '# 访客竞态测试故事\n访客永久删除与恢复竞态……',
+  });
+  await trashStoryWorkForSubject(guestSubjectA, guestRaceWork.id);
+
+  let guestRestoreExecuted = false;
+  await assert.rejects(
+    async () =>
+      permanentlyDeleteStoryWorkForSubject(guestSubjectA, guestRaceWork.id, {
+        __testBeforeMutationHook: async () => {
+          await restoreStoryWorkForSubject(guestSubjectA, guestRaceWork.id);
+          guestRestoreExecuted = true;
+        },
+      }),
+    (err: unknown) =>
+      err instanceof TRPCError &&
+      err.code === 'CONFLICT' &&
+      err.message === '仅允许对回收站中的作品执行永久删除',
+    'Guest 主体下发生永久删除与恢复竞态时同样必须以 CONFLICT 拒绝并保留活跃数据'
+  );
+  assert.strictEqual(guestRestoreExecuted, true);
+
+  const guestRaceRow = await prisma.guestStoryWork.findUnique({ where: { id: guestRaceWork.id } });
+  assert(guestRaceRow !== null, 'Guest 活跃作品绝对不能被误删');
+  assert.strictEqual(guestRaceRow.deletedAt, null);
+
+  console.log('PASS: 8. 并发状态原子性与 TOCTOU 竞态回归全面通过');
 }
 
 const testPromise = runStoryWorkLifecycleTests()

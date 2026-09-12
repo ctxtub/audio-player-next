@@ -44,7 +44,8 @@
 ### 5. 永久删除 (permanentlyDeleteStoryWorkForSubject)
 - **仅允许对处于回收站中的作品（`deletedAt !== null`）执行物理删除**。
 - 对活跃作品调用以明确领域错误 `CONFLICT` 拒绝，防止客户端或 UI 绕过回收站保护。
-- 物理删除必须收敛于此单一 Service Seam，并预留调用音频清理 Hook（`performStoryWorkAudioCleanupHook`），为 M8 Audio tombstone 预留接口。
+- 物理删除必须收敛于此单一 Service Seam，并预留作为 M8 Audio tombstone 的唯一收敛点（M8 将使用 DB 事务联动 tombstone 并在事务提交后异步清理对象存储，不依赖全局可变 hook）。
+- 施加原子条件写（SQL `deletedAt IS NOT NULL` 谓词），杜绝 TOCTOU 并发竞态。
 - 执行后数据库行彻底移除。
 - 不存在或跨主体作品统一返回 `NOT_FOUND`。
 
@@ -54,6 +55,7 @@
 
 ## 关联实现与测试
 
-- 核心服务：`lib/server/storyWork.ts` (`renameStoryWorkForSubject`, `setStoryWorkFavoriteForSubject`, `trashStoryWorkForSubject`, `restoreStoryWorkForSubject`, `permanentlyDeleteStoryWorkForSubject`, `registerStoryWorkAudioCleanupHook`, `performStoryWorkAudioCleanupHook`)
+- 核心服务：`lib/server/storyWork.ts` (`renameStoryWorkForSubject`, `setStoryWorkFavoriteForSubject`, `trashStoryWorkForSubject`, `restoreStoryWorkForSubject`, `permanentlyDeleteStoryWorkForSubject`)
 - 数据契约：`lib/trpc/schemas/library.ts`
 - 验证套件：`tests/integration/persistence-config/story-work-lifecycle.integration.test.ts` (`exec-story-work-lifecycle`)
+

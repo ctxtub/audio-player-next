@@ -16,6 +16,10 @@ export interface AgentStreamCallbacks {
      */
     onIntentDetected?: (intent: "Story" | "Chat" | "Guidance") => void;
     /**
+     * 故事正文生成完成 (M4-02 显式 story_complete 事件)。
+     */
+    onStoryComplete?: (storyText: string) => void;
+    /**
      * 流式传输完成。
      */
     onComplete: () => void;
@@ -59,6 +63,8 @@ export const interactWithAgent = async (
                 callbacks.onTextDelta(event.content);
             } else if (event.type === 'meta') {
                 callbacks.onIntentDetected?.(event.intent as "Story" | "Chat" | "Guidance");
+            } else if (event.type === 'story_complete') {
+                callbacks.onStoryComplete?.(event.content);
             } else if (event.type === 'audio_start') {
                 callbacks.onAudioStart?.();
             } else if (event.type === 'audio') {

@@ -4,6 +4,7 @@ import type { FC } from 'react';
 import type { MessagePart } from '@/types/chat';
 import TextPartRenderer from './TextPart';
 import StoryCardPartRenderer from './StoryCardPart';
+import StoryArtifactPartRenderer from './StoryArtifactPart';
 import { GuidancePartComponent } from './GuidancePart';
 import SummaryPartRenderer from './SummaryPart';
 
@@ -32,6 +33,8 @@ const MessagePartRenderer: FC<PartRendererProps> = ({ part, messageId, onPlaySto
             return <TextPartRenderer part={part} onPlayStory={onPlayStory} />;
         case 'storyCard':
             return <StoryCardPartRenderer part={part} messageId={messageId} onPlayStory={onPlayStory} />;
+        case 'storyArtifact':
+            return <StoryArtifactPartRenderer part={part} messageId={messageId} onPlayStory={onPlayStory} />;
         case 'guidance':
             return <GuidancePartComponent part={part} />;
         case 'summary':

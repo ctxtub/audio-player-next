@@ -7,8 +7,20 @@ import type {
   ChatMessageRole,
   ChatStreamDoneEvent,
   MessagePart,
+  StoryArtifactPart,
+  // Legacy 只读：选择器/快照仍需识别历史 storyCard（M4-02 新写链已不再创建，正式 cutover 放 M4-08）。
   StoryCardPart,
 } from '@/types/chat';
+import {
+  createDraftArtifact,
+  appendDraftChunk,
+  completeArtifact,
+  interruptArtifact,
+} from '@/lib/client/chatArtifactState';
+import {
+  isDraftArtifact,
+  isCompleteArtifact,
+} from '@/types/chatArtifact';
 import type { AgentType } from '@/types/agent';
 import {
   createAssistantPlaceholder,
@@ -51,11 +63,12 @@ export type ChatStoreAction =
   | { type: 'user.submit'; content: string; origin?: ChatMessageOrigin } // 提交新消息
   | { type: 'user.retry' }                   // 重试上一条失败消息
   // 流式更新
-  | { type: 'stream.delta'; content: string }          // 追加内容
-  | { type: 'stream.intent'; intent: 'Story' | 'Chat' | 'Guidance' } // 更新意图
-  | { type: 'stream.finish'; payload: ChatStreamDoneEvent } // 普通对话完成
-  | { type: 'stream.story_finish'; storyText: string; audioUrl: string } // 故事生成完成
-  | { type: 'stream.fail'; error?: string }            // 失败
+  | { type: 'stream.delta'; content: string; messageId?: string }          // 追加内容
+  | { type: 'stream.intent'; intent: 'Story' | 'Chat' | 'Guidance'; messageId?: string } // 更新意图
+  | { type: 'stream.story_complete'; messageId: string; storyText?: string; title?: string } // 故事正文终端完成（M4-02）
+  | { type: 'stream.finish'; payload?: ChatStreamDoneEvent; messageId?: string } // 普通对话或流传输完成
+  | { type: 'stream.fail'; error?: string; messageId?: string }            // 失败
+  | { type: 'stream.abort'; messageId?: string; reason?: string }          // 中断
   | {
     type: 'summary.update';
     summaryText: string;
@@ -181,6 +194,41 @@ const mergeConversation = (
   const appended = local.filter((message) => !serverIds.has(message.id));
   return [...server, ...appended];
 };
+
+/**
+ * M4-02 身份定位辅助：按 assistant message id 精确定位，不再以「最后一条」归属异步回调。
+ * messageId 明确时严格按 id 查找；缺失时（legacy 兼容）才回退到最后一条 sending 助手消息。
+ * @param messages 当前消息列表。
+ * @param messageId 目标助手消息 id（attempt 身份）。
+ * @returns 目标下标，未找到返回 -1。
+ */
+const findAssistantIndexById = (
+  messages: ChatMessage[],
+  messageId: string | undefined,
+): number => {
+  if (messageId) {
+    return messages.findIndex((m) => m.id === messageId && m.role === 'assistant');
+  }
+  return messages.findLastIndex((m) => m.role === 'assistant' && m.status === 'sending');
+};
+
+/**
+ * 取消息内 Modern Artifact 片段（有且仅有一个）。
+ */
+const getStoryArtifactPart = (msg: ChatMessage): StoryArtifactPart | undefined =>
+  msg.parts?.find((p): p is StoryArtifactPart => p.type === 'storyArtifact');
+
+/**
+ * 将 Artifact 写回消息（同步 content 与 parts，保持单源真相）。
+ */
+const withArtifact = (msg: ChatMessage, artifact: StoryArtifactPart['artifact']): ChatMessage => ({
+  ...msg,
+  content: artifact.storyText,
+  parts: [
+    ...(msg.parts?.filter((p) => p.type !== 'storyArtifact') ?? []),
+    { type: 'storyArtifact', artifact } as StoryArtifactPart,
+  ],
+});
 
 const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   /** 防抖保存定时器。 */
@@ -433,8 +481,14 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             metadata: { origin: submitOrigin } as ChatMessage['metadata'],
           });
           const assistantBase = createAssistantPlaceholder();
+          // M4-02 冻结语义：assistant message 创建 → message.id = X → createDraftArtifact({ sourceMessageId: X })。
+          // 每个 attempt（assistant 消息）自带独立 draft，后续 chunk/complete 均按此 id 身份定位。
+          const draft = createDraftArtifact({ sourceMessageId: assistantBase.id });
+          const draftPart: StoryArtifactPart = { type: 'storyArtifact', artifact: draft };
           const assistantMsg = withPersona({
             ...assistantBase,
+            content: '',
+            parts: [draftPart],
             metadata: { ...assistantBase.metadata, origin: submitOrigin } as ChatMessage['metadata'],
           });
           if (submitOrigin === CHAT_PRELOAD_ORIGIN) {
@@ -466,7 +520,15 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           // 但如果要保留历史（例如中间夹杂了其他），这里我们假设重试总是针对对话流的末尾
           // 为了安全，我们只处理末尾的情况。如果 lastIndex 不是倒数第一/第二，可能需要更复杂的逻辑。
           // 简化：追加一个新的助手占位
-          const assistantMsg = withPersona(createAssistantPlaceholder());
+          // M4-02：新 Attempt B 拥有全新 assistant id 与全新 draft；stale Attempt A 事件按旧 id 定位，绝不覆盖 B。
+          const assistantBase = createAssistantPlaceholder();
+          const draft = createDraftArtifact({ sourceMessageId: assistantBase.id });
+          const draftPart: StoryArtifactPart = { type: 'storyArtifact', artifact: draft };
+          const assistantMsg = withPersona({
+            ...assistantBase,
+            content: '',
+            parts: [draftPart],
+          });
 
           // 清理 lastIndex 之后的所有消息（假设它们是之前的失败尝试产生的垃圾）
           const newMessages = messages.slice(0, lastIndex + 1);
@@ -477,24 +539,37 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           };
         }
         case 'stream.delta': {
-          // 找到最后一条助手消息（应该处于 sending 状态）
-          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
-          if (lastAssistantIndex === -1) return state;
+          // M4-02：按 attempt 身份定位；messageId 缺失时才回退最后一条 sending（legacy 兼容）。
+          // stale/已清空（id 找不到）一律忽略，绝不复活、不污染其它 attempt。
+          const targetIndex = findAssistantIndexById(messages, action.messageId);
+          if (targetIndex === -1) return state;
 
-          const msg = messages[lastAssistantIndex];
+          const msg = messages[targetIndex];
+          const existingPart = getStoryArtifactPart(msg);
+          if (existingPart) {
+            // Modern 故事流：仅 draft 可追加；complete/interrupted 等终态忽略后续 delta（幂等）。
+            if (!isDraftArtifact(existingPart.artifact)) {
+              return state;
+            }
+            try {
+              const updated = appendDraftChunk(existingPart.artifact, action.content);
+              messages[targetIndex] = withArtifact(msg, updated);
+            } catch {
+              return state;
+            }
+            return { messages };
+          }
+
           const newContent = msg.content + action.content;
-
           let newParts = msg.parts;
           if (newParts && newParts.length > 0) {
             const firstPart = newParts[0];
-            if (firstPart.type === 'storyCard') {
-              newParts = [{ ...firstPart, storyText: newContent }, ...newParts.slice(1)];
-            } else if (firstPart.type === 'guidance') {
+            if (firstPart.type === 'guidance') {
               newParts = [{ ...firstPart, content: newContent }, ...newParts.slice(1)];
             }
           }
 
-          messages[lastAssistantIndex] = {
+          messages[targetIndex] = {
             ...msg,
             content: newContent,
             parts: newParts,
@@ -502,92 +577,146 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           return { messages };
         }
         case 'stream.intent': {
-          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
-          if (lastAssistantIndex === -1) return state;
+          const targetIndex = findAssistantIndexById(messages, action.messageId);
+          if (targetIndex === -1) return state;
 
-          const msg = messages[lastAssistantIndex];
+          const msg = messages[targetIndex];
           const currentContent = msg.content;
-          let newParts = msg.parts;
 
           let agentType: AgentType | undefined;
           switch (action.intent) {
             case 'Story':
               agentType = 'story_agent';
-              // 转换消息片段为 StoryCardPart
-              newParts = [{
-                type: 'storyCard',
-                storyText: currentContent,
-                audioUrl: '', // 初始为空
-              }];
+              // M4-02：Story 意图确保 Modern draft 存在；绝不再创建 Legacy StoryCard。
+              {
+                const existing = getStoryArtifactPart(msg);
+                if (!existing) {
+                  // 历史 legacy 卡片只读保留：若已含 storyCard 则不覆盖，仅标记 agentType。
+                  const hasLegacyCard = msg.parts?.some((p) => p.type === 'storyCard');
+                  if (!hasLegacyCard) {
+                    const draft = createDraftArtifact({
+                      sourceMessageId: msg.id,
+                      initialText: currentContent,
+                    });
+                    messages[targetIndex] = {
+                      ...msg,
+                      parts: [{ type: 'storyArtifact', artifact: draft } as StoryArtifactPart],
+                      metadata: { ...msg.metadata, agentType },
+                    };
+                    return { messages };
+                  }
+                }
+              }
               break;
             case 'Chat':
               agentType = 'chat_agent';
               break;
             case 'Guidance':
               agentType = 'guidance_agent';
-              // 转换消息片段为 GuidancePart
-              newParts = [{
-                type: 'guidance',
-                content: currentContent,
-              } as any];
               break;
           }
 
-          if (agentType) {
-            messages[lastAssistantIndex] = {
+          if (agentType === 'story_agent') {
+            messages[targetIndex] = {
               ...msg,
-              parts: newParts,
-              metadata: {
-                ...msg.metadata,
-                agentType,
-              },
+              metadata: { ...msg.metadata, agentType },
             };
+            return { messages };
+          }
+          if (agentType === 'chat_agent') {
+            // 非故事不持有 draft：清理空草稿，避免 Chat 污染 Artifact 视图。
+            const filtered = msg.parts?.filter((p) => p.type !== 'storyArtifact');
+            messages[targetIndex] = {
+              ...msg,
+              parts: filtered && filtered.length > 0 ? filtered : undefined,
+              metadata: { ...msg.metadata, agentType },
+            };
+            return { messages };
+          }
+          if (agentType === 'guidance_agent') {
+            const filtered = msg.parts?.filter((p) => p.type !== 'storyArtifact');
+            const guidanceParts: MessagePart[] = [{
+              type: 'guidance',
+              content: currentContent,
+            } as unknown as MessagePart];
+            messages[targetIndex] = {
+              ...msg,
+              parts: [...guidanceParts, ...(filtered?.filter((p) => p.type !== 'guidance') ?? [])],
+              metadata: { ...msg.metadata, agentType },
+            };
+            return { messages };
+          }
+          return { messages };
+        }
+        case 'stream.story_complete': {
+          // M4-02 冻结语义：story_complete 仅表示故事正文 terminal（draft→complete）。
+          // ≠ StoryWork created ≠ audio ready ≠ promotion started；done ≠ implicit promotion。
+          // 严格按 messageId 身份定位；找不到（stale/已清空）直接忽略，绝不复活。
+          const targetIndex = messages.findIndex(
+            (m) => m.id === action.messageId && m.role === 'assistant',
+          );
+          if (targetIndex === -1) return state;
+          const msg = messages[targetIndex];
+          const authoritativeText = (action.storyText ?? '').trim()
+            ? (action.storyText as string)
+            : (getStoryArtifactPart(msg)?.artifact.storyText ?? msg.content);
+          if (!authoritativeText.trim()) return state;
+
+          const existing = getStoryArtifactPart(msg);
+          if (existing) {
+            if (isCompleteArtifact(existing.artifact)) {
+              // duplicate story_complete：同一 attempt 只发生一次 draft→complete，重复到达幂等忽略。
+              return state;
+            }
+            if (!isDraftArtifact(existing.artifact)) {
+              // interrupted 等终态不接受 complete 覆盖。
+              return state;
+            }
+            try {
+              const completed = completeArtifact(existing.artifact, {
+                finalStoryText: authoritativeText,
+                title: action.title,
+              });
+              // 终态仍保持发送中/已送达原样，不在此标记 delivered（delivery 归 stream.finish）。
+              messages[targetIndex] = withArtifact(msg, completed);
+            } catch {
+              return state;
+            }
+            return { messages };
+          }
+          // 无 Artifact 兜底：按同一 sourceMessageId 重建 draft→complete（仍不触达 promotion/audio）。
+          try {
+            const draft = createDraftArtifact({
+              sourceMessageId: msg.id,
+              initialText: msg.content,
+            });
+            const completed = completeArtifact(draft, {
+              finalStoryText: authoritativeText,
+              title: action.title,
+            });
+            messages[targetIndex] = withArtifact(msg, completed);
+          } catch {
+            return state;
           }
           return { messages };
         }
         case 'stream.finish': {
-          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
-          // 逻辑说明：stream.finish 仅标记流结束。
-          // 若之前处于 sending 状态，则更新为 delivered，并记录结束原因与 Token 用量。
+          // M4-02：done 仅标记传输结束（sending→delivered），绝不隐式 complete/promotion/ready。
+          // story_complete→done 仍是同一个 complete；done→story_complete 仍可随后 complete（不因 done 提前制造 ready）。
+          const targetIndex = action.messageId
+            ? messages.findIndex((m) => m.id === action.messageId && m.role === 'assistant')
+            : messages.findLastIndex((m) => m.role === 'assistant' && m.status === 'sending');
+          if (targetIndex === -1) return state;
 
-          if (lastAssistantIndex !== -1) {
-            messages[lastAssistantIndex] = {
-              ...messages[lastAssistantIndex],
-              status: 'delivered',
-              metadata: {
-                ...messages[lastAssistantIndex].metadata,
-                finishReason: action.payload.finishReason,
-                usage: action.payload.usage,
-              },
-            };
-          }
-
-          // 确保最近的 User 消息也是 delivered
-          const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
-          if (lastUserIndex !== -1) {
-            messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'delivered' };
-          }
-
-          return {
-            messages,
-            hasUnviewedResponse: true,
+          const payload = action.payload as ChatStreamDoneEvent | undefined;
+          messages[targetIndex] = {
+            ...messages[targetIndex],
+            status: messages[targetIndex].status === 'sending' ? 'delivered' : messages[targetIndex].status,
+            metadata: {
+              ...messages[targetIndex].metadata,
+              ...(payload ? { finishReason: payload.finishReason, usage: payload.usage } : {}),
+            },
           };
-        }
-        case 'stream.story_finish': {
-          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
-          if (lastAssistantIndex !== -1) {
-            const storyPart: StoryCardPart = {
-              type: 'storyCard',
-              storyText: action.storyText,
-              audioUrl: action.audioUrl,
-            };
-            messages[lastAssistantIndex] = {
-              ...messages[lastAssistantIndex],
-              content: action.storyText,
-              parts: [storyPart],
-              status: 'delivered',
-            };
-          }
 
           // 确保最近的 User 消息也是 delivered
           const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
@@ -601,14 +730,29 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           };
         }
         case 'stream.fail': {
-          // 标记最后正在发送的消息为失败
-          // 通常是助手消息和用户消息
-          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
-          if (lastAssistantIndex !== -1) {
-            messages[lastAssistantIndex] = { ...messages[lastAssistantIndex], status: 'failed' }; // 或者直接移除助手占位？通常保留显示失败
-            // 逻辑说明：将最后一条正在发送的 Assistant 消息移除（避免展示空气泡），
-            // 并将最后一条 User 消息标记为 failed，以便用户可以点击重试。
-            messages.splice(lastAssistantIndex, 1);
+          // M4-02：error/abort → draft→interrupted，不出现 complete；按 id 定位，stale 直接忽略。
+          const targetIndex = action.messageId
+            ? messages.findIndex((m) => m.id === action.messageId && m.role === 'assistant')
+            : messages.findLastIndex((m) => m.role === 'assistant' && m.status === 'sending');
+          if (targetIndex !== -1) {
+            const msg = messages[targetIndex];
+            const existing = getStoryArtifactPart(msg);
+            if (existing && isDraftArtifact(existing.artifact)) {
+              try {
+                const interrupted = interruptArtifact(existing.artifact, { reason: action.error ?? 'stream_error' });
+                messages[targetIndex] = {
+                  ...withArtifact(msg, interrupted),
+                  status: 'failed',
+                };
+              } catch {
+                messages[targetIndex] = { ...msg, status: 'failed' };
+              }
+            } else {
+              messages[targetIndex] = { ...msg, status: 'failed' };
+            }
+          } else if (action.messageId) {
+            // 带 id 却找不到：stale/已清空，绝不复活、不误伤其它 attempt。
+            return state;
           }
 
           const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
@@ -616,6 +760,35 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'failed' };
           }
 
+          return { messages };
+        }
+        case 'stream.abort': {
+          const targetIndex = action.messageId
+            ? messages.findIndex((m) => m.id === action.messageId && m.role === 'assistant')
+            : messages.findLastIndex((m) => m.role === 'assistant' && m.status === 'sending');
+          if (targetIndex !== -1) {
+            const msg = messages[targetIndex];
+            const existing = getStoryArtifactPart(msg);
+            if (existing && isDraftArtifact(existing.artifact)) {
+              try {
+                const interrupted = interruptArtifact(existing.artifact, { reason: action.reason ?? 'aborted' });
+                messages[targetIndex] = {
+                  ...withArtifact(msg, interrupted),
+                  status: 'failed',
+                };
+              } catch {
+                messages[targetIndex] = { ...msg, status: 'failed' };
+              }
+            } else {
+              messages[targetIndex] = { ...msg, status: 'failed' };
+            }
+          } else if (action.messageId) {
+            return state;
+          }
+          const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
+          if (lastUserIndex !== -1) {
+            messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'failed' };
+          }
           return { messages };
         }
         case 'summary.update': {
@@ -808,7 +981,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       const messages = get().messages;
       for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
-        if (msg.role === 'assistant' && msg.parts?.some(p => p.type === 'storyCard')) {
+        // Legacy 读 + Modern 读：历史 storyCard 与新 storyArtifact 均视为故事消息（只读，不新写）。
+        if (msg.role === 'assistant' && msg.parts?.some((p) => p.type === 'storyCard' || p.type === 'storyArtifact')) {
           return msg.id === id;
         }
       }
@@ -822,7 +996,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         return null;
       }
 
-      // 从当前消息的下一条开始查找助手消息（包含故事卡片）
+      // 从当前消息的下一条开始查找助手消息（包含历史故事卡片；M4-02 起 Modern Artifact 无 audioUrl，天然返回 null）。
+      // Legacy 只读保留，正式 cutover 放 M4-08。
       for (let i = currentIndex + 1; i < messages.length; i++) {
         const msg = messages[i];
         if (msg.role === 'assistant' && msg.parts) {
@@ -882,6 +1057,13 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     },
     hasStoryMessages: (excludeMessageId) => {
       const messages = get().messages;
+      // Legacy 读 + Modern 读：storyCard 历史与 storyArtifact（非空正文）均计为故事存在性（只读）。
+      const isStoryMsg = (msg: (typeof messages)[number]) =>
+        msg.role === 'assistant' &&
+        (msg.parts?.some((p) => p.type === 'storyCard') ||
+          msg.parts?.some(
+            (p) => p.type === 'storyArtifact' && (p as StoryArtifactPart).artifact.storyText.trim() !== '',
+          ));
       const targetIndex = excludeMessageId
         ? messages.findIndex((m) => m.id === excludeMessageId)
         : messages.length;
@@ -889,15 +1071,11 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       if (targetIndex === -1) {
         // 如果没找到排除的消息，说明它可能还没加入列表，或者 ID 传错了。
         // 无妨，搜索整个列表。
-        return messages.some((msg) =>
-          msg.role === 'assistant' && msg.parts?.some((p) => p.type === 'storyCard')
-        );
+        return messages.some(isStoryMsg);
       }
 
       // Search in messages before targetIndex
-      return messages.slice(0, targetIndex).some((msg) =>
-        msg.role === 'assistant' && msg.parts?.some((p) => p.type === 'storyCard')
-      );
+      return messages.slice(0, targetIndex).some(isStoryMsg);
     },
   },
   };

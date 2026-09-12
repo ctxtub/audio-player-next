@@ -114,10 +114,15 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
   /** 发送中助手消息的占位内容，避免空白气泡。 */
   const isEmptyAssistant = useMemo(() => {
     if (roleKey === 'assistant' && isSending) {
-      // 检查是否有实质内容
+      // 检查是否有实质内容（兼容 text/guidance/summary 的 content、storyCard 的 storyText、storyArtifact 的 artifact.storyText）
       const hasContent = messageParts.some((part) => {
         if ('content' in part && typeof part.content === 'string') return part.content.trim().length > 0;
-        if ('storyText' in part) return part.storyText.trim().length > 0;
+        if ('storyText' in part && typeof (part as { storyText?: unknown }).storyText === 'string') {
+          return ((part as { storyText: string }).storyText ?? '').trim().length > 0;
+        }
+        if (part.type === 'storyArtifact') {
+          return (part.artifact.storyText ?? '').trim().length > 0;
+        }
         return false;
       });
       return !hasContent;
@@ -128,7 +133,7 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
   /** 是否为卡片类视图（Story/Guidance/Summary），此类视图不展示气泡背景 */
   const isCardView = useMemo(() => {
     return messageParts.some((part) =>
-      ['storyCard', 'guidance', 'summary'].includes(part.type)
+      ['storyCard', 'storyArtifact', 'guidance', 'summary'].includes(part.type)
     );
   }, [messageParts]);
 

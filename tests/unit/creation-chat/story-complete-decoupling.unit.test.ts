@@ -1,0 +1,302 @@
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+
+// 中文注释：M4-02 解耦回归——stream complete 与 Artifact completion 解耦（draft→complete 仅由 story_complete 驱动）。
+// 全程内存打桩，不建 socket、不绑端口，不碰 prisma/dev.db。
+
+const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
+
+// 中文注释：先占桩——GlassToast / 会话落库 / Agent 交互，必须在 require chatStore 之前占位。
+const glassToastPath = path.resolve(process.cwd(), 'components/ui/GlassToast.tsx');
+nodeRequire.cache[glassToastPath] = {
+  id: glassToastPath,
+  filename: glassToastPath,
+  loaded: true,
+  exports: { default: { show: () => {}, clear: () => {} } },
+} as unknown as NodeModule;
+
+const chatConversationPath = path.resolve(process.cwd(), 'lib/client/chatConversation.ts');
+nodeRequire.cache[chatConversationPath] = {
+  id: chatConversationPath,
+  filename: chatConversationPath,
+  loaded: true,
+  exports: {
+    fetchMyConversation: async () => [],
+    saveMyConversation: async () => ({ ok: true }),
+  },
+} as unknown as NodeModule;
+
+const agentFlowPath = path.resolve(process.cwd(), 'app/services/agentFlow.ts');
+nodeRequire.cache[agentFlowPath] = {
+  id: agentFlowPath,
+  filename: agentFlowPath,
+  loaded: true,
+  exports: {
+    interactWithAgent: async () => {},
+    summarizeContext: async () => '探针摘要-M402',
+  },
+} as unknown as NodeModule;
+
+const { useChatStore } = nodeRequire('../../../stores/chatStore') as {
+  useChatStore: typeof import('../../../stores/chatStore').useChatStore;
+};
+
+type DispatchArg = Parameters<ReturnType<typeof useChatStore.getState>['dispatch']>[0];
+type ChatMsg = ReturnType<typeof useChatStore.getState>['messages'][number];
+
+function resetBaseline(): void {
+  useChatStore.getState().reset();
+  useChatStore.setState({ syncEnabled: false });
+}
+
+function submitAndGetAssistantId(content = '讲个睡前故事'): string {
+  useChatStore.getState().dispatch({ type: 'user.submit', content } as DispatchArg);
+  const assistantId = useChatStore.getState().selectors.latestAssistantMessage()?.id;
+  assert.ok(assistantId, 'assistant 占位必须存在');
+  return assistantId as string;
+}
+
+function getMessage(id: string): ChatMsg | undefined {
+  return useChatStore.getState().messages.find((m) => m.id === id);
+}
+
+function getArtifact(id: string) {
+  const msg = getMessage(id);
+  assert.ok(msg, `消息必须存在: ${id}`);
+  const part = (msg as ChatMsg).parts?.find((p) => p.type === 'storyArtifact') as
+    | { type: 'storyArtifact'; artifact: { status: string; sourceMessageId: string; storyText: string; storyWorkId?: unknown } }
+    | undefined;
+  assert.ok(part, `消息必须持有 storyArtifact: ${id}`);
+  return { msg: msg as ChatMsg, part };
+}
+
+function intentStory(id: string): void {
+  useChatStore.getState().dispatch({ type: 'stream.intent', intent: 'Story', messageId: id } as DispatchArg);
+}
+
+function delta(id: string, content: string): void {
+  useChatStore.getState().dispatch({ type: 'stream.delta', content, messageId: id } as DispatchArg);
+}
+
+function storyComplete(id: string, storyText: string): void {
+  useChatStore.getState().dispatch({ type: 'stream.story_complete', messageId: id, storyText } as DispatchArg);
+}
+
+function finish(id: string): void {
+  useChatStore.getState().dispatch({
+    type: 'stream.finish',
+    payload: { type: 'done', finishReason: 'stop' },
+    messageId: id,
+  } as DispatchArg);
+}
+
+async function main(): Promise<void> {
+  console.log('=== M4-02-01: sourceMessageId === assistantMessage.id ===');
+  {
+    resetBaseline();
+    const assistantId = submitAndGetAssistantId();
+    const { part } = getArtifact(assistantId);
+    assert.strictEqual(part.artifact.sourceMessageId, assistantId, 'sourceMessageId 必须恒为 assistant message id');
+    assert.strictEqual(part.artifact.status, 'draft', '新建即 draft');
+    console.log('PASS: M4-02-01 source identity');
+  }
+
+  console.log('=== M4-02-02: duplicate story_complete 同一 attempt 仅一次 draft→complete ===');
+  {
+    resetBaseline();
+    const assistantId = submitAndGetAssistantId();
+    intentStory(assistantId);
+    delta(assistantId, '从前');
+    storyComplete(assistantId, '从前有座山');
+    const first = getArtifact(assistantId);
+    assert.strictEqual(first.part.artifact.status, 'complete');
+    assert.strictEqual(first.part.artifact.storyText, '从前有座山');
+    // 重复到达：幂等忽略，不抛错、不新写、不改文本。
+    storyComplete(assistantId, '从前有座山');
+    const second = getArtifact(assistantId);
+    assert.strictEqual(second.part.artifact.status, 'complete');
+    assert.strictEqual(second.part.artifact.storyText, '从前有座山');
+    assert.strictEqual(
+      (second.msg.parts ?? []).filter((p) => p.type === 'storyArtifact').length,
+      1,
+      '不得增殖 Artifact 片段',
+    );
+    console.log('PASS: M4-02-02 duplicate idempotent');
+  }
+
+  console.log('=== M4-02-03: story_complete → done 仍是同一个 complete ===');
+  {
+    resetBaseline();
+    const assistantId = submitAndGetAssistantId();
+    intentStory(assistantId);
+    storyComplete(assistantId, '完整故事正文-03');
+    const before = getArtifact(assistantId);
+    finish(assistantId);
+    const after = getArtifact(assistantId);
+    assert.strictEqual(after.part.artifact.status, 'complete', 'done 不得改变 Artifact 状态');
+    assert.strictEqual(after.part.artifact.storyText, before.part.artifact.storyText, 'done 不得改写正文');
+    assert.strictEqual(after.part.artifact.sourceMessageId, assistantId);
+    assert.strictEqual(after.msg.status, 'delivered', 'done 标记 delivered');
+    assert.strictEqual((after.part.artifact as { storyWorkId?: unknown }).storyWorkId, undefined);
+    console.log('PASS: M4-02-03 complete stable across done');
+  }
+
+  console.log('=== M4-02-04: done → story_complete 不因 done 提前制造 ready/StoryWork ===');
+  {
+    resetBaseline();
+    const assistantId = submitAndGetAssistantId();
+    intentStory(assistantId);
+    delta(assistantId, '草稿片段');
+    finish(assistantId);
+    const mid = getArtifact(assistantId);
+    assert.strictEqual(mid.part.artifact.status, 'draft', 'done 不得隐式 complete');
+    assert.strictEqual(mid.msg.status, 'delivered');
+    assert.strictEqual((mid.part.artifact as { storyWorkId?: unknown }).storyWorkId, undefined);
+    // 随后 story_complete 仍可完成，但绝不直接 ready。
+    storyComplete(assistantId, '草稿片段完整版');
+    const after = getArtifact(assistantId);
+    assert.strictEqual(after.part.artifact.status, 'complete');
+    assert.strictEqual((after.part.artifact as { storyWorkId?: unknown }).storyWorkId, undefined);
+    assert.ok(!('storyWorkId' in after.part.artifact) || after.part.artifact.storyWorkId === undefined);
+    console.log('PASS: M4-02-04 done-first no premature ready');
+  }
+
+  console.log('=== M4-02-05: stale Attempt A complete 在 B 后到达绝不覆盖 B ===');
+  {
+    resetBaseline();
+    // 并发双 attempt：A 先建，B 后建；stale A complete 不得污染 B。
+    const idA = submitAndGetAssistantId('第一问-A');
+    intentStory(idA);
+    delta(idA, 'A-草稿');
+    const idB = submitAndGetAssistantId('第二问-B');
+    assert.notStrictEqual(idA, idB, '不同 attempt 必须不同 id');
+    intentStory(idB);
+    delta(idB, 'B-草稿');
+    storyComplete(idA, 'A-完整正文-stale');
+    const artifactA = getArtifact(idA);
+    const artifactB = getArtifact(idB);
+    assert.strictEqual(artifactA.part.artifact.status, 'complete');
+    assert.strictEqual(artifactA.part.artifact.storyText, 'A-完整正文-stale');
+    assert.strictEqual(artifactB.part.artifact.status, 'draft', 'stale A 不得推进 B');
+    assert.strictEqual(artifactB.part.artifact.storyText, 'B-草稿');
+    assert.strictEqual(artifactB.part.artifact.sourceMessageId, idB);
+
+    // retry 分支：A 失败被清理后，stale A 事件不得复活、不得碰 B。
+    resetBaseline();
+    const retryA = submitAndGetAssistantId('重试前-A');
+    intentStory(retryA);
+    useChatStore.getState().dispatch({ type: 'stream.fail', error: 'boom', messageId: retryA } as DispatchArg);
+    useChatStore.getState().dispatch({ type: 'user.retry' } as DispatchArg);
+    const retryB = useChatStore.getState().selectors.latestAssistantMessage()?.id as string;
+    assert.ok(retryB && retryB !== retryA, 'retry 必须产生新 attempt id');
+    storyComplete(retryA, 'stale-A-必须忽略');
+    assert.strictEqual(getMessage(retryA), undefined, '已清理的 A 不得复活');
+    const artifactRetryB = getArtifact(retryB);
+    assert.strictEqual(artifactRetryB.part.artifact.status, 'draft');
+    console.log('PASS: M4-02-05 stale isolation');
+  }
+
+  console.log('=== M4-02-06: resetChat/clear 后旧 complete 到达绝不复活 ===');
+  {
+    resetBaseline();
+    const assistantId = submitAndGetAssistantId();
+    intentStory(assistantId);
+    storyComplete(assistantId, '旧故事-06');
+    finish(assistantId);
+    useChatStore.getState().resetChat();
+    assert.strictEqual(useChatStore.getState().messages.length, 0, '清空后应为空');
+    storyComplete(assistantId, '旧故事-06-stale');
+    finish(assistantId);
+    assert.strictEqual(useChatStore.getState().messages.length, 0, '旧事件不得复活 Artifact');
+    console.log('PASS: M4-02-06 clear no resurrection');
+  }
+
+  console.log('=== M4-02-07: stream error/abort → interrupted，不出现 complete ===');
+  {
+    resetBaseline();
+    const failId = submitAndGetAssistantId('失败用例');
+    intentStory(failId);
+    delta(failId, '未完成草稿');
+    useChatStore.getState().dispatch({ type: 'stream.fail', error: 'net', messageId: failId } as DispatchArg);
+    const failed = getArtifact(failId);
+    assert.strictEqual(failed.part.artifact.status, 'interrupted', 'error 必须 draft→interrupted');
+    // 随后 complete 不得覆盖 interrupted。
+    storyComplete(failId, '迟到正文-不得覆盖');
+    const stillFailed = getArtifact(failId);
+    assert.strictEqual(stillFailed.part.artifact.status, 'interrupted');
+
+    resetBaseline();
+    const abortId = submitAndGetAssistantId('中断用例');
+    intentStory(abortId);
+    delta(abortId, '未完成草稿-abort');
+    useChatStore.getState().dispatch({ type: 'stream.abort', messageId: abortId, reason: 'aborted' } as DispatchArg);
+    const aborted = getArtifact(abortId);
+    assert.strictEqual(aborted.part.artifact.status, 'interrupted', 'abort 必须 draft→interrupted');
+    storyComplete(abortId, '迟到正文-abort-不得覆盖');
+    const stillAborted = getArtifact(abortId);
+    assert.strictEqual(stillAborted.part.artifact.status, 'interrupted');
+    console.log('PASS: M4-02-07 interrupted terminal');
+  }
+
+  console.log('=== M4-02-08: 新生成路径静态/运行时守卫（StoryCard 0 / audioUrl 0 / library.create 0）===');
+  {
+    // 静态：旧写入路径已拆除（新生成链不再新写 StoryCardPart；legacy 读保留）。
+    const storePath = path.resolve(process.cwd(), 'stores/chatStore.ts');
+    const flowPath = path.resolve(process.cwd(), 'app/services/chatFlow.ts');
+    const storeContent = fs.readFileSync(storePath, 'utf8');
+    const flowContent = fs.readFileSync(flowPath, 'utf8');
+    assert.strictEqual(storeContent.includes('stream.story_finish'), false, 'chatStore 不得再含旧 stream.story_finish');
+    assert.strictEqual(flowContent.includes('stream.story_finish'), false, 'chatFlow 不得再派发旧 stream.story_finish');
+    const storyCardWriteRe = /type:\s*['"]storyCard['"]/;
+    assert.strictEqual(storyCardWriteRe.test(storeContent), false, 'chatStore 新生成链 StoryCardPart write 必须为 0');
+    assert.strictEqual(storyCardWriteRe.test(flowContent), false, 'chatFlow StoryCardPart write 必须为 0');
+    assert.strictEqual(storeContent.includes('library.create'), false, 'chatStore 不得直调 library.create（promotion 留 M4-03/04）');
+    assert.strictEqual(flowContent.includes('library.create'), false, 'chatFlow 不得直调 library.create（promotion 留 M4-03/04）');
+    // audioUrl 静态：新完成处理器内不得出现 audioUrl 写入语义。
+    const completeHandlerSlice = (() => {
+      const start = storeContent.indexOf("case 'stream.story_complete'");
+      assert.ok(start >= 0, '必须存在 story_complete 处理器');
+      const end = storeContent.indexOf("case 'stream.finish'", start);
+      return storeContent.slice(start, end >= 0 ? end : start + 4000);
+    })();
+    assert.strictEqual(completeHandlerSlice.includes('audioUrl'), false, 'story_complete 处理器不得写入 audioUrl');
+
+    // 运行时：完整新链无 StoryCard、无 audioUrl、无 StoryWork。
+    resetBaseline();
+    const assistantId = submitAndGetAssistantId();
+    intentStory(assistantId);
+    delta(assistantId, '运行时');
+    delta(assistantId, '正文');
+    storyComplete(assistantId, '运行时正文完整版');
+    finish(assistantId);
+    const state = useChatStore.getState();
+    const flat = JSON.stringify(state.messages);
+    assert.ok(!flat.includes('"type":"storyCard"'), '运行时不得新写 StoryCardPart');
+    assert.ok(!flat.includes('storyCard'), '运行时不得出现 storyCard 写入');
+    assert.ok(!flat.includes('audioUrl'), '运行时不得写入 audioUrl（Modern Artifact 无该字段）');
+    assert.ok(!flat.includes('storyWorkId'), '运行时不得出现 StoryWork（complete ≠ ready，promotion 留后续）');
+    assert.ok(!flat.includes('library.create'), '运行时不得触发 library.create');
+    const { part } = getArtifact(assistantId);
+    assert.strictEqual(part.artifact.status, 'complete');
+    assert.strictEqual('audioUrl' in (part.artifact as Record<string, unknown>), false);
+    console.log('PASS: M4-02-08 static+runtime guards');
+  }
+
+  console.log('\nALL STORY COMPLETE DECOUPLING TESTS PASSED SUCCESSFULLY');
+}
+
+const testPromise = main()
+  .then(() => {
+    console.log('ALL STORY COMPLETE DECOUPLING TESTS PASSED SUCCESSFULLY!');
+  })
+  .catch((err) => {
+    console.error('TEST FAILED:', err);
+    process.exit(1);
+  })
+  .finally(() => {
+    useChatStore.getState().reset();
+  });
+
+export default testPromise;

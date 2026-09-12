@@ -95,6 +95,7 @@ const SUITES = [
     { id: 'library-detail-read', path: './tests/unit/persistence-config/library-detail-read.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'library-detail-mutations', path: './tests/unit/persistence-config/library-detail-mutations.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'story-artifact-contract', path: './tests/unit/creation-chat/story-artifact-contract.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'story-complete-decoupling', path: './tests/unit/creation-chat/story-complete-decoupling.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'runner-group-split', path: './tests/tooling/runner/runner-group-split.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'catalog-checker', path: './tests/tooling/catalog/catalog-checker.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'evidence-schema', path: './tests/tooling/evidence/evidence-schema.tooling.test.ts', group: 'tooling', needs_db: false },

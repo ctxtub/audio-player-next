@@ -71,6 +71,24 @@ export const agentRouter = router({
                         }
                     }
 
+                    // on_chain_end: StoryAgent 故事文本完成 (M4-02 显式 story_complete 事件)
+                    if (event.event === "on_chain_end" && event.name === "StoryAgent") {
+                        const output = event.data.output as { messages?: Array<{ content?: unknown }> } | undefined;
+                        const outputMessages = output?.messages;
+                        const lastMsg = Array.isArray(outputMessages) ? outputMessages[outputMessages.length - 1] : null;
+                        const storyText = typeof lastMsg?.content === 'string'
+                            ? lastMsg.content
+                            : Array.isArray(lastMsg?.content)
+                                ? (lastMsg.content as Array<unknown>).map((c) => typeof c === 'string' ? c : (c as { text?: string })?.text || '').join('')
+                                : '';
+                        if (storyText.trim()) {
+                            yield {
+                                type: "story_complete",
+                                content: storyText,
+                            };
+                        }
+                    }
+
                     // on_chain_start: AudioGenerator 开始生成
                     if (event.event === "on_chain_start" && event.name === "AudioGenerator") {
                         yield {

@@ -850,7 +850,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-work, library, server-state, react-query, identity, isolation]
     spec_path: docs/e2e/07-故事库与作品资产/08-Library-Server-State身份隔离.md
-    executable_ids: [exec-server-state-identity-isolation]
+    executable_ids: [exec-server-state-identity-isolation, exec-library-query-model]
     fixtures: []
     owner: story-library
 executables:
@@ -1048,6 +1048,10 @@ executables:
     display_name_zh: Server State与身份隔离
     layer: L2
     path: ./tests/integration/persistence-config/server-state-identity-isolation.integration.test.ts
+  - executable_id: exec-library-query-model
+    display_name_zh: Library查询模型与ViewModel边界
+    layer: L1
+    path: ./tests/unit/persistence-config/library-query-model.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

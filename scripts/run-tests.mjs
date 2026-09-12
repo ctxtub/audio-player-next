@@ -87,6 +87,7 @@ const SUITES = [
     { id: 'story-work-guest-registration', path: './tests/integration/persistence-config/story-work-guest-registration.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-retention', path: './tests/integration/persistence-config/story-work-retention.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'server-state-identity-isolation', path: './tests/integration/persistence-config/server-state-identity-isolation.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'library-query-model', path: './tests/unit/persistence-config/library-query-model.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'runner-group-split', path: './tests/tooling/runner/runner-group-split.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'catalog-checker', path: './tests/tooling/catalog/catalog-checker.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'evidence-schema', path: './tests/tooling/evidence/evidence-schema.tooling.test.ts', group: 'tooling', needs_db: false },

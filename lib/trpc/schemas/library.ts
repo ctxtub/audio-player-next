@@ -195,3 +195,15 @@ export const libraryDeletePermanentlyOutputSchema = z.object({
 });
 export type LibraryDeletePermanentlyOutput = z.infer<typeof libraryDeletePermanentlyOutputSchema>;
 
+/**
+ * library.permanentDelete 入参契约（等价别名，对接 M2-06 procedure 命名）
+ */
+export const libraryPermanentDeleteInputSchema = libraryDeletePermanentlyInputSchema;
+export type LibraryPermanentDeleteInput = LibraryDeletePermanentlyInput;
+
+/**
+ * library.permanentDelete 出参契约（等价别名，对接 M2-06 procedure 命名）
+ */
+export const libraryPermanentDeleteOutputSchema = libraryDeletePermanentlyOutputSchema;
+export type LibraryPermanentDeleteOutput = LibraryDeletePermanentlyOutput;
+

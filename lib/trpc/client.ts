@@ -87,3 +87,5 @@ export const trpc = createTRPCClient<AppRouter>({
  * 便捷的类型导出。
  */
 export type { AppRouter };
+
+export { libraryClient } from '@/lib/client/library';

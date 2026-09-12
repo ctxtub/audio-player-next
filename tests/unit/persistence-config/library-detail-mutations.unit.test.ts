@@ -194,6 +194,7 @@ function createMockDetail(id: number, overrides: Record<string, unknown> = {}) {
 
 async function runLibraryDetailMutationsUnitTests(): Promise<void> {
   const libraryClient = innerJiti('./lib/client/library.ts').libraryClient;
+  const originalGet = libraryClient.get;
   const originalRename = libraryClient.rename;
   const originalSetFavorite = libraryClient.setFavorite;
   const originalMoveToTrash = libraryClient.moveToTrash;
@@ -303,7 +304,78 @@ async function runLibraryDetailMutationsUnitTests(): Promise<void> {
     );
     assert.strictEqual(rolledBackActiveList.pages[0].items[1].title, '更新后的新故事标题 101', 'Active List 必须局部回滚');
 
-    console.log('PASS: Regression 1 通过（Detail Rename 跨缓存同步、分页元数据不变与局部回滚）');
+    // 1.3 B1 核心 Regression：Rename 与搜索列表一致性断言
+    // 场景 A: q="cat" 缓存中存在 id=101（因原 title="cat story" 命中）
+    const catQueryKey = libraryKeys.list({ view: 'active', query: 'cat' });
+    queryClient.setQueryData(catQueryKey, {
+      pages: [
+        {
+          items: [createMockItem(101, { title: 'cat story' })],
+          nextCursor: null,
+          hasMore: false,
+        },
+      ],
+      pageParams: [undefined],
+    });
+
+    // 场景 B: q="dog" 缓存中只存在 id=202（id=101 尚未命名为 dog，不在集合中）
+    const dogQueryKey = libraryKeys.list({ view: 'active', query: 'dog' });
+    queryClient.setQueryData(dogQueryKey, {
+      pages: [
+        {
+          items: [createMockItem(202, { title: 'dog story 202' })],
+          nextCursor: null,
+          hasMore: false,
+        },
+      ],
+      pageParams: [undefined],
+    });
+
+    libraryClient.rename = async ({ id, title }: { id: number; title: string }) => {
+      return createMockDetail(id, {
+        title,
+        updatedAt: '2026-09-12T18:10:00.000Z',
+      });
+    };
+
+    // 重命名 id=101 从 "cat story" -> "dog story"
+    await mutateRename(queryClient, {
+      id: 101,
+      title: 'dog story',
+    });
+
+    // 断言 B1.1: 已存在项仅就地 patch title
+    const patchedCatList = queryClient.getQueryData<any>(catQueryKey);
+    assert.strictEqual(patchedCatList.pages[0].items[0].title, 'dog story');
+
+    // 断言 B1.2: 反向场景：绝不本地 append 到 dogQueryKey（保护 opaque cursor 不变性）
+    const untouchedDogList = queryClient.getQueryData<any>(dogQueryKey);
+    assert.strictEqual(untouchedDogList.pages[0].items.length, 1, '绝不本地猜测 append 到未命中列表');
+    assert.strictEqual(untouchedDogList.pages[0].items[0].id, 202, 'dogQueryKey 仅保留原项');
+
+    // 断言 B1.3: 所有 list 集合必须被标记为 invalidated (isInvalidated=true)，由服务端 refetch 决定最终成员资格
+    assert.strictEqual(
+      queryClient.getQueryState(catQueryKey)?.isInvalidated,
+      true,
+      'q=cat 列表必须被 invalidate，以便服务端 refetch 剔除'
+    );
+    assert.strictEqual(
+      queryClient.getQueryState(dogQueryKey)?.isInvalidated,
+      true,
+      'q=dog 列表必须被 invalidate，以便服务端 refetch 包含'
+    );
+    assert.strictEqual(
+      queryClient.getQueryState(libraryKeys.list({ view: 'active', query: undefined }))?.isInvalidated,
+      true,
+      '主列表必须被 invalidate'
+    );
+    assert.strictEqual(
+      queryClient.getQueryState(libraryKeys.detail(101))?.isInvalidated,
+      true,
+      'detail 必须被 invalidate'
+    );
+
+    console.log('PASS: Regression 1 通过（Detail Rename 跨缓存同步、分页元数据不变、搜索一致性与局部回滚）');
   }
 
   console.log('=== Regression 2: Detail Favorite 与 List Favorite 使用同一 mutation policy ===');
@@ -452,7 +524,7 @@ async function runLibraryDetailMutationsUnitTests(): Promise<void> {
     console.log('PASS: Regression 3 通过（Move pending/失败时严格留在详情页且数据安全回滚）');
   }
 
-  console.log('=== Regression 4: Move 成功后详情 route 离开、detail cache 不继续展示旧 active work ===');
+  console.log('=== Regression 4: Move 成功后详情 route 离开、detail cache 移除且严禁 refetch trashed detail ===');
   {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -460,6 +532,25 @@ async function runLibraryDetailMutationsUnitTests(): Promise<void> {
 
     const initialDetail = createMockDetail(101);
     queryClient.setQueryData(libraryKeys.detail(101), initialDetail);
+
+    // B2 核心加强：挂 active QueryObserver 模拟详情页挂载中的 useLibraryDetailQuery
+    let detailRefetchCount = 0;
+    const { QueryObserver } = innerJiti('@tanstack/react-query');
+    const observer = new QueryObserver(queryClient, {
+      queryKey: libraryKeys.detail(101),
+      queryFn: async () => {
+        detailRefetchCount++;
+        return libraryClient.get({ id: 101 });
+      },
+      staleTime: 60000,
+    });
+    const unsubscribeObserver = observer.subscribe(() => {});
+
+    let libraryGetCallCount = 0;
+    libraryClient.get = async ({ id }: { id: number }) => {
+      libraryGetCallCount++;
+      return createMockDetail(id);
+    };
 
     const pushedRoutes: string[] = [];
     const mockRouter = {
@@ -476,7 +567,10 @@ async function runLibraryDetailMutationsUnitTests(): Promise<void> {
     });
     mockRouter.push('/library');
 
-    // 4.1 断言 route 离开
+    // 等待微任务/异步调度确保任何潜在的 background refetch 均有机会执行
+    await new Promise((r) => setTimeout(r, 20));
+
+    // 4.1 断言 route 离开且未被任何 detail refetch 阻塞
     assert.strictEqual(pushedRoutes.length, 1);
     assert.strictEqual(pushedRoutes[0], '/library', 'Move 成功后必须导航离开当前详情页跳转到 /library');
 
@@ -484,7 +578,13 @@ async function runLibraryDetailMutationsUnitTests(): Promise<void> {
     const cachedDetail = queryClient.getQueryData(libraryKeys.detail(101));
     assert.strictEqual(cachedDetail, undefined, 'Move 成功后详情缓存必须被彻底清除 (removeQueries)');
 
-    console.log('PASS: Regression 4 通过（Move 成功后路由离开且 detail cache 彻底清除）');
+    // 4.3 核心 Regression B2: Move success 后对已进入 Trash 的 detail 严禁发起 refetch（次数 = 0）
+    assert.strictEqual(detailRefetchCount, 0, '挂 active observer 时 Move 成功后 detail refetch 次数必须为 0');
+    assert.strictEqual(libraryGetCallCount, 0, 'Move 成功后 libraryClient.get 次数必须为 0');
+
+    unsubscribeObserver();
+
+    console.log('PASS: Regression 4 通过（Move 成功后路由离开且彻底禁止 refetch trashed detail）');
   }
 
   console.log('=== Regression 5: 离开 Detail 后 Undo 仍存在并能 restore ===');
@@ -664,6 +764,7 @@ async function runLibraryDetailMutationsUnitTests(): Promise<void> {
   }
 
   // 恢复桩函数
+  libraryClient.get = originalGet;
   libraryClient.rename = originalRename;
   libraryClient.setFavorite = originalSetFavorite;
   libraryClient.moveToTrash = originalMoveToTrash;

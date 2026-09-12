@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import {
   ArrowLeft,
   Clock,
@@ -15,7 +14,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { LibraryDetailViewModel } from '@/lib/client/libraryViewModel';
-import { useLibraryMutationsSafe } from '@/lib/client/libraryMutations';
 import styles from './storyDetail.module.scss';
 
 export interface StoryDetailProps {
@@ -56,10 +54,10 @@ function formatDateTime(isoString: string): string {
 }
 
 /**
- * 故事作品详情展示与变更组件（M3-07）
+ * 故事作品详情展示与变更组件（M3-07 / 纯展示与事件驱动组件）
  *
  * 核心边界规范：
- * 1. 仅暴露 Rename / Favorite / Move to Trash 操作；
+ * 1. 仅暴露 Rename / Favorite / Move to Trash 事件入口，mutation ownership 全归属 Page；
  * 2. 严禁暴露 Restore / Permanent Delete（回收站作品不可进入详情）；
  * 3. 字段保真：严格仅读取 StoryWorkDetail 已有字段，绝不跨越读取生成历史、播放进度或音频内部表；
  * 4. 播放进度缝隙：严格保持 work.progress === null（等待 M5 进度系统接入）。
@@ -77,10 +75,6 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
 
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [isMovingToTrash, setIsMovingToTrash] = useState(false);
-
-  const router = useContext(AppRouterContext);
-
-  const mutations = useLibraryMutationsSafe();
 
   useEffect(() => {
     setTitleDraft(work.title);
@@ -117,8 +111,6 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
       setRenameError(null);
       if (onRename) {
         await onRename(work.id, trimmed);
-      } else if (mutations) {
-        await mutations.rename({ id: work.id, title: trimmed });
       }
       setIsEditingTitle(false);
     } catch (err) {
@@ -134,8 +126,6 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
       const nextFavorite = !work.favoritedAt;
       if (onToggleFavorite) {
         await onToggleFavorite(work.id, nextFavorite);
-      } else if (mutations) {
-        await mutations.toggleFavorite({ id: work.id, favorite: nextFavorite });
       }
     } catch (err) {
       console.error('Toggle favorite failed:', err);
@@ -149,11 +139,6 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
       setIsMovingToTrash(true);
       if (onMoveToTrash) {
         await onMoveToTrash(work.id, work.title);
-      } else if (mutations) {
-        await mutations.moveToTrash({ id: work.id, title: work.title });
-        if (router) {
-          router.push('/library');
-        }
       }
     } catch (err) {
       console.error('Move to trash failed:', err);

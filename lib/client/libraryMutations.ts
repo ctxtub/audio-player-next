@@ -674,7 +674,8 @@ export async function mutateRename(
     }
     throw error;
   } finally {
-    // onSettled: 仅失效详情缓存
+    // onSettled: 失效列表与详情缓存，由服务端 refetch 决定搜索与集合成员资格 (membership)
+    await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
     await queryClient.invalidateQueries({ queryKey: libraryKeys.detail(id) });
   }
 }
@@ -734,10 +735,9 @@ export async function mutateMoveToTrash(
 
   try {
     const result = await movePromise;
-    // 成功后失效受影响列表与详情，并移除 detail 缓存避免展示已软删除作品
-    await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
-    await queryClient.invalidateQueries({ queryKey: libraryKeys.detail(id) });
+    // move RPC success: 立即清除 active detail 缓存（严禁 invalidate detail(id)，避免对已进 Trash 的作品发起注定 404 的 refetch）
     queryClient.removeQueries({ queryKey: libraryKeys.detail(id) });
+    await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
     return result;
   } catch (error) {
     // 局部逆向回滚

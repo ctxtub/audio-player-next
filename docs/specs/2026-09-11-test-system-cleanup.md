@@ -1,8 +1,10 @@
 # 产品大改版前测试体系清理方案（spec）
 
+> **勘误 / 执行结果**：本文正文条目保留为 2026-09-11 当日快照（`## [ ] P0-xx / P1-xx / P2-xx` 不再勾选改写），执行结果以结项 `docs/changes/2026-09-12-test-system-cleanup.md` 为准。P2-01 最终裁定为 **KEEP / DEFERRED（保留 `tests/system/browser/smoke.spec.ts` 手工环境诊断入口）**，不再执行删除。
+
 - 日期：2026-09-11
 - change-id：`test-system-cleanup-20260911`
-- 状态：proposed（待执行；按块提交、外部评审通过后推进）
+- 状态：已完成（18/18 项交付并经外部评审通过，已合入 `main@ebae35b`；执行结果与遗留见结项 `docs/changes/2026-09-12-test-system-cleanup.md`）
 - 类型：测试体系清理方案（只清理、不重建）
 - 基线：`main@5fc99a7`
 - 来源：外部评审（ChatGPT GPT-5.6 Sol，最高思考档）+ 本地逐条核实修订（R1–R6 已并入）

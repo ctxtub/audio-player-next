@@ -1,71 +1,53 @@
 'use client';
 
 import React, { useCallback, useEffect } from 'react';
-import { MessageCircle, Disc3, Settings } from 'lucide-react';
+import { MessageCircle, LibraryBig, Settings } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useChatStore } from '@/stores/chatStore';
+import {
+  MAIN_TABS,
+  type MainTabKey,
+  resolveMainTabKey,
+} from '@/lib/navigation/mainNavigation';
 import styles from './index.module.scss';
 
 /**
- * 底部标签配置，定义导航目标与图标。
+ * 底部标签图标映射。
+ */
+const TAB_ICONS: Record<
+  MainTabKey,
+  React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>
+> = {
+  chat: MessageCircle,
+  library: LibraryBig,
+  setting: Settings,
+};
+
+/**
+ * 底部标签项配置定义。
  */
 type TabConfig = {
-  /** 标签唯一 key。 */
-  key: 'chat' | 'player' | 'setting';
-  /** 标签展示名称。 */
-  title: string;
-  /** 对应的路由路径。 */
-  path: string;
-  /** 图标组件。 */
-  icon: React.FC<{ size?: number; strokeWidth?: number; className?: string }>;
-  /** 自定义激活判断逻辑。 */
-  isActive?: (pathname: string) => boolean;
+  readonly key: MainTabKey;
+  readonly title: string;
+  readonly path: string;
+  readonly icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 };
 
 /**
- * 底部标签配置数组，提供渲染与路由跳转信息。
+ * 底部标签配置列表，数据源由 lib/navigation/mainNavigation 统一定义（创作、故事库、设置）。
  */
-const TABS: readonly TabConfig[] = [
-  {
-    key: 'chat',
-    title: '创作',
-    icon: MessageCircle,
-    path: '/chat',
-    isActive: pathname => pathname === '/' || pathname.startsWith('/chat'),
-  },
-  {
-    key: 'player',
-    title: '播放器',
-    icon: Disc3,
-    path: '/player',
-    isActive: pathname => pathname === '/player',
-  },
-  {
-    key: 'setting',
-    title: '设置',
-    icon: Settings,
-    path: '/setting',
-    isActive: pathname => pathname.startsWith('/setting'),
-  },
-];
+const TABS: readonly TabConfig[] = MAIN_TABS.map(tab => ({
+  ...tab,
+  icon: TAB_ICONS[tab.key],
+}));
 
 /**
- * 根据路径解析激活的标签键。
- * @param pathname 当前路由路径
- * @returns 对应的标签 key
- */
-const resolveActiveKey = (pathname: string): TabConfig['key'] => {
-  const matchedTab = TABS.find(tab => tab.isActive?.(pathname));
-  return matchedTab?.key ?? 'chat';
-};
-
-/**
- * 底部主导航栏组件，负责页面间跳转。
+ * 底部主导航栏组件，负责页面间跳转与全局导航指示。
  */
 const MainTabBar: React.FC = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const activeKey = resolveActiveKey(pathname);
+  const activeKey = resolveMainTabKey(pathname);
 
   useEffect(() => {
     TABS.forEach(tab => {
@@ -74,9 +56,11 @@ const MainTabBar: React.FC = () => {
   }, [router]);
 
   const handleTabClick = useCallback(
-    (key: string) => {
+    (key: MainTabKey) => {
       const target = TABS.find(tab => tab.key === key);
       if (!target) return;
+      // 当在 /player 时，虽然 activeKey 为 'library'（compatibility alias），
+      // 但 target.path (/library) !== pathname (/player)，仍必须真正执行导航到 /library
       if (target.path !== pathname) {
         router.push(target.path);
       }
@@ -108,6 +92,8 @@ const MainTabBar: React.FC = () => {
         const nextTab = TABS[nextIndex];
         if (nextTab) {
           router.push(nextTab.path);
+          const buttons = e.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="tab"]');
+          buttons[nextIndex]?.focus();
         }
       }
     },

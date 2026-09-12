@@ -369,7 +369,7 @@ cases:
     lifecycle_status: PLANNED
     risk_tags: [playback, router]
     spec_path: docs/e2e/03-播放状态与内核一致性/09-客户端路由导航播放连续性.md
-    executable_ids: []
+    executable_ids: [exec-main-navigation]
     fixtures: []
     owner: playback-kernel
   - case_id: history-restore-card-resynth

@@ -9,7 +9,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [smoke, cold-start]
     spec_path: docs/e2e/01-基础冒烟与页面基线/01-访客冷启动首屏渲染.md
-    executable_ids: [exec-l3-guest-cold-start-first-screen, exec-main-navigation]
+    executable_ids: [exec-l3-guest-cold-start-first-screen]
     fixtures: []
     owner: smoke-baseline
   - case_id: guest-identity-cookie-upgrade

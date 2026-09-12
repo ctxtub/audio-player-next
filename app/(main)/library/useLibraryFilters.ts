@@ -24,7 +24,6 @@ export {
 
 export interface UseLibraryFiltersOptions {
   basePath?: string;
-  debounceMs?: number;
 }
 
 export interface UseLibraryFiltersResult {
@@ -49,7 +48,7 @@ export interface UseLibraryFiltersResult {
  * 4. 搜索防抖提交使用 router.replace（避免每次敲字污染浏览器前进后退历史）；
  * 5. 切 view 默认保留当前有效搜索词；
  * 6. IME 拼音输入期间完全挂起防抖，组合结束后以最终结果重新倒计时 300ms；
- * 7. 浏览器 Back/Forward 外部变更时，input draft 自动同步，且不产生任何额外路由操作。
+ * 7. 浏览器 Back/Forward 外部变更时，input draft 自动同步，且立即取消旧 timer，不产生任何额外路由操作。
  */
 export function useLibraryFilters(
   options: UseLibraryFiltersOptions = {}
@@ -58,7 +57,8 @@ export function useLibraryFilters(
   const searchParams = useSearchParams();
   const pathname = usePathname() || '/library';
   const basePath = options.basePath ?? pathname;
-  const debounceMs = options.debounceMs ?? SEARCH_DEBOUNCE_MS;
+  // 契约严格冻结为 300ms，不允许外部 override
+  const debounceMs = SEARCH_DEBOUNCE_MS;
 
   // 1. 从权威 URL 响应式读取当前 view 与 canonical q
   const rawView = searchParams?.get('view') ?? null;
@@ -90,12 +90,16 @@ export function useLibraryFilters(
     };
   }, [clearTimer]);
 
-  // 3. 响应浏览器前进/后退（URL 中的 q 或 view 外部变更），同步更新输入框草稿
+  // 3. 响应浏览器前进/后退（URL 权威变更）：外部 URL 成为新权威状态，清除旧的 pending search timer 并同步草稿
   useEffect(() => {
+    // 外部 URL 已成为新的 authoritative state：所有基于旧 URL 建立的 pending search commit 全部失效
+    clearTimer();
     if (!isComposingRef.current) {
-      setDraftQState(q ?? '');
+      const nextDraft = q ?? '';
+      setDraftQState(nextDraft);
+      draftQRef.current = nextDraft;
     }
-  }, [q]);
+  }, [q, view, clearTimer]);
 
   // 4. 将规整后的 canonical q 提交至 URL（使用 router.replace）
   const commitCanonicalQuery = useCallback(

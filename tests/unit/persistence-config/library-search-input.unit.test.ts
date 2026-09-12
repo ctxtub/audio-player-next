@@ -1,9 +1,51 @@
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import React from 'react';
+import { renderHook, act } from '@testing-library/react';
+import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
+import {
+  SearchParamsContext,
+  PathnameContext,
+} from 'next/dist/shared/lib/hooks-client-context.shared-runtime';
+
+// 初始化 JSDOM 全局环境（供 React Hook 与 DOM 事件使用）
+const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
+const { JSDOM } = nodeRequire('jsdom') as {
+  JSDOM: new (html: string, opts?: Record<string, unknown>) => { window: Record<string, unknown> };
+};
+
+if (typeof window === 'undefined') {
+  const dom = new JSDOM('<!doctype html><html><body></body></html>', {
+    url: 'http://localhost/',
+    pretendToBeVisual: true,
+  });
+  const win = dom.window as unknown as Record<string, unknown>;
+  const g = globalThis as unknown as Record<string, unknown>;
+  try {
+    Object.defineProperty(g, 'window', { value: win, writable: true, configurable: true });
+  } catch {
+    g.window = win;
+  }
+  try {
+    Object.defineProperty(g, 'document', { value: win.document, writable: true, configurable: true });
+  } catch {
+    g.document = win.document;
+  }
+  try {
+    Object.defineProperty(g, 'navigator', { value: win.navigator, writable: true, configurable: true });
+  } catch {
+    g.navigator = win.navigator;
+  }
+}
+
 import {
   LibrarySearchController,
   SEARCH_DEBOUNCE_MS,
   type RouterLike,
 } from '../../../lib/client/libraryFilters';
+import { useLibraryFilters } from '../../../app/(main)/library/useLibraryFilters';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -13,14 +55,15 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * 核心验证：
  * 1. 300ms 防抖契约：300ms 前零调用；300ms 后恰好一次调用；
  * 2. 多次打字连续输入防抖抑制：仅最后一次输入在 300ms 后生效；
- * 3. 搜索提交历史契约：必须使用 router.replace（杜绝打字污染前进后退历史）；
- * 4. 空白与 Canonical 规整：空格自动 trim，纯空白自动移除 q；
- * 5. IME 组合状态锁：
+ * 3. 搜索词 canonical 规整：空格 trim 与纯空白移除 q；
+ * 4. IME 组合状态锁：
  *    - compositionstart 立即挂起防抖，组合期间零调用；
  *    - compositionend 以最终值重新开始完整 300ms 计时，期满后仅调用一次；
- * 6. 浏览器前进/后退 (Back/Forward) 草稿同步：
- *    - URL 外部变更时，draftQ 重新与 URL 同步；
- *    - 绝不产生额外的 router.push/replace 调用（零历史污染）。
+ * 5. 纯控制器 Back/Forward 草稿同步与零历史污染；
+ * 6. B2 冻结 300ms 签名回归：UseLibraryFiltersOptions 不允许 debounceMs override，内部固定 300ms；
+ * 7. B1 Production Hook 生命周期回归（真实驱动 useLibraryFilters）：
+ *    a) pending search -> Back 到不同 q/view -> 等超 300ms -> router 零调用 -> draft/view/q 同步为 Back 后 URL；
+ *    b) 易漏版：pending search -> Back 只改变 view、q 不变 -> 等超 300ms -> 绝不触发 stale replace。
  */
 async function runLibrarySearchInputUnitTests(): Promise<void> {
   console.log('=== 1. 300ms 防抖契约：300ms 前零调用，300ms 后恰好一次调用 ===');
@@ -197,7 +240,7 @@ async function runLibrarySearchInputUnitTests(): Promise<void> {
     console.log('PASS: 4. IME 组合状态锁与重新开始防抖断言通过');
   }
 
-  console.log('=== 5. 浏览器前进/后退 (Back/Forward) 同步草稿，零历史污染 ===');
+  console.log('=== 5. 纯控制器 Back/Forward 同步草稿，零历史污染 ===');
   {
     const replacedUrls: string[] = [];
     const pushedUrls: string[] = [];
@@ -219,10 +262,6 @@ async function runLibrarySearchInputUnitTests(): Promise<void> {
     // 此时浏览器发生 popstate（用户点击了 Back，回到 URL /library?view=favorites&q=previous）
     controller.syncFromUrl('/library?view=favorites&q=previous');
 
-    // 契约断言：
-    // 1. draftQ 必须重新被权威 URL 纠偏同步为 'previous'；
-    // 2. view 同步为 'favorites'；
-    // 3. 绝不产生任何 push 或 replace（防止历史栈回流污染）。
     assert.strictEqual(controller.getState().draftQ, 'previous', 'Back/Forward 时 input draft 必须重新与 URL 同步');
     assert.strictEqual(controller.getState().view, 'favorites');
     assert.strictEqual(controller.getState().q, 'previous');
@@ -238,7 +277,173 @@ async function runLibrarySearchInputUnitTests(): Promise<void> {
     assert.strictEqual(replacedUrls.length, 0);
 
     controller.destroy();
-    console.log('PASS: 5. Back/Forward 草稿同步与零历史污染断言通过');
+    console.log('PASS: 5. 纯控制器 Back/Forward 草稿同步断言通过');
+  }
+
+  console.log('=== 6. B2 冻结 300ms 签名回归（UseLibraryFiltersOptions 绝无 debounceMs）===');
+  {
+    const hookSourcePath = path.join(process.cwd(), 'app/(main)/library/useLibraryFilters.ts');
+    const hookSource = fs.readFileSync(hookSourcePath, 'utf-8');
+
+    // 6.1 验证 UseLibraryFiltersOptions 仅包含 basePath，绝对无 debounceMs 字段
+    assert.ok(
+      /export\s+interface\s+UseLibraryFiltersOptions\s*\{\s*basePath\?:\s*string;\s*\}/.test(hookSource),
+      'UseLibraryFiltersOptions 必须仅允许 basePath，严禁暴露 debounceMs'
+    );
+    assert.strictEqual(
+      hookSource.includes('debounceMs?:'),
+      false,
+      'production hook 严禁声明可被外部改写的 debounceMs 配置'
+    );
+
+    // 6.2 验证内部恒定绑定 SEARCH_DEBOUNCE_MS
+    assert.ok(
+      /const\s+debounceMs\s*=\s*SEARCH_DEBOUNCE_MS/.test(hookSource),
+      'production hook 内部必须恒定使用 SEARCH_DEBOUNCE_MS 冻结常量'
+    );
+
+    console.log('PASS: 6. B2 冻结 300ms 签名回归断言通过');
+  }
+
+  console.log('=== 7. B1 Production Hook 生命周期回归（真实驱动 useLibraryFilters）===');
+  {
+    // 7.1 Scenario A: pending search -> Back 到不同 q/view -> 等超 300ms -> router 零调用
+    console.log('--- 7.1 Scenario A: pending search -> Back 到不同 q/view ---');
+    {
+      let currentSearchParams = new URLSearchParams('view=active&q=original');
+      const replaces: string[] = [];
+      const pushes: string[] = [];
+      const mockRouter = {
+        push: (href: string) => pushes.push(href),
+        replace: (href: string) => replaces.push(href),
+        prefetch: () => {},
+        back: () => {},
+        forward: () => {},
+        refresh: () => {},
+      };
+
+      const wrapper = ({ children }: { children?: React.ReactNode }) =>
+        React.createElement(
+          AppRouterContext.Provider,
+          { value: mockRouter as any },
+          React.createElement(
+            PathnameContext.Provider,
+            { value: '/library' },
+            React.createElement(
+              SearchParamsContext.Provider,
+              { value: currentSearchParams },
+              children
+            )
+          )
+        );
+
+      const { result, rerender } = renderHook(() => useLibraryFilters(), { wrapper });
+      assert.strictEqual(result.current.draftQ, 'original');
+      assert.strictEqual(result.current.view, 'active');
+      assert.strictEqual(result.current.q, 'original');
+
+      // 用户输入草稿 'hero'（启动 300ms debounce timer）
+      act(() => {
+        result.current.setDraftQ('hero');
+      });
+      assert.strictEqual(result.current.draftQ, 'hero');
+      assert.strictEqual(replaces.length, 0);
+
+      // 100ms 时浏览器发生 Back，切到不同 q/view：/library?view=favorites&q=back_query
+      await sleep(100);
+      act(() => {
+        currentSearchParams = new URLSearchParams('view=favorites&q=back_query');
+        rerender();
+      });
+
+      // 验证草稿与 URL 立即同步
+      assert.strictEqual(result.current.view, 'favorites');
+      assert.strictEqual(result.current.q, 'back_query');
+      assert.strictEqual(result.current.draftQ, 'back_query');
+
+      // 等待超过 300ms（等待 400ms）
+      await sleep(400);
+
+      // 核心断言：旧 timer 必须被清除，replace 调用次数仍为 0，旧草稿绝不复活覆盖新 URL
+      assert.strictEqual(replaces.length, 0, 'Scenario A: 旧 timer 必须被清除，router.replace 必须零调用');
+      assert.strictEqual(pushes.length, 0);
+      assert.strictEqual(result.current.view, 'favorites');
+      assert.strictEqual(result.current.q, 'back_query');
+      assert.strictEqual(result.current.draftQ, 'back_query');
+      console.log('PASS: 7.1 Scenario A 通过');
+    }
+
+    // 7.2 Scenario B (易漏版): pending search -> Back 只改变 view、q 不变 -> 等超 300ms -> 不得发生 stale replace
+    console.log('--- 7.2 Scenario B: pending search -> Back 只改变 view、q 不变 ---');
+    {
+      let currentSearchParams = new URLSearchParams('view=active&q=same_query');
+      const replaces: string[] = [];
+      const pushes: string[] = [];
+      const mockRouter = {
+        push: (href: string) => pushes.push(href),
+        replace: (href: string) => replaces.push(href),
+        prefetch: () => {},
+        back: () => {},
+        forward: () => {},
+        refresh: () => {},
+      };
+
+      const wrapper = ({ children }: { children?: React.ReactNode }) =>
+        React.createElement(
+          AppRouterContext.Provider,
+          { value: mockRouter as any },
+          React.createElement(
+            PathnameContext.Provider,
+            { value: '/library' },
+            React.createElement(
+              SearchParamsContext.Provider,
+              { value: currentSearchParams },
+              children
+            )
+          )
+        );
+
+      const { result, rerender } = renderHook(() => useLibraryFilters(), { wrapper });
+      assert.strictEqual(result.current.view, 'active');
+      assert.strictEqual(result.current.q, 'same_query');
+      assert.strictEqual(result.current.draftQ, 'same_query');
+
+      // 用户输入草稿 'same_query_editing'（启动 300ms debounce timer）
+      act(() => {
+        result.current.setDraftQ('same_query_editing');
+      });
+      assert.strictEqual(result.current.draftQ, 'same_query_editing');
+      assert.strictEqual(replaces.length, 0);
+
+      // 100ms 时浏览器发生 Back：仅改变 view=trash，q 仍然是 'same_query'！
+      await sleep(100);
+      act(() => {
+        currentSearchParams = new URLSearchParams('view=trash&q=same_query');
+        rerender();
+      });
+
+      // 验证草稿与 view 立即同步为 Back 后的内容
+      assert.strictEqual(result.current.view, 'trash');
+      assert.strictEqual(result.current.q, 'same_query');
+      assert.strictEqual(result.current.draftQ, 'same_query');
+
+      // 等待超过 300ms（等待 400ms）
+      await sleep(400);
+
+      // 核心断言：绝对不得发生 stale replace！
+      assert.strictEqual(
+        replaces.length,
+        0,
+        'Scenario B: Back 仅改变 view 时旧 timer 必须被清除，不得发生 stale replace'
+      );
+      assert.strictEqual(pushes.length, 0);
+      assert.strictEqual(result.current.view, 'trash');
+      assert.strictEqual(result.current.q, 'same_query');
+      assert.strictEqual(result.current.draftQ, 'same_query');
+      console.log('PASS: 7.2 Scenario B 通过');
+    }
+
+    console.log('PASS: 7. B1 Production Hook 生命周期回归断言全部通过');
   }
 
   console.log('ALL LIBRARY SEARCH INPUT UNIT TESTS PASSED SUCCESSFULLY');

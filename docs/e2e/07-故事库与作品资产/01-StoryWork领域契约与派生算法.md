@@ -28,9 +28,9 @@
 
 ### 2. 标题派生链 (title resolution)
 - 按照明确的四级优先级流水线解析：
-  1. **显式指定标题 (explicit proposedTitle)**：若提供有效非空标题则直接使用。
-  2. **正文首行严格一级标题 (strict heading)**：正文若以 Markdown `# 标题` 格式开头，提取该行文本并清理前缀；非 `# ` 开头的段落直接跳过，不作模糊匹配。
-  3. **提示词回退 (prompt fallback)**：从生成提示词截取前 20 字符作为备用标题。
+  1. **显式指定标题 (explicit proposedTitle / title)**：若提供有效非空标题则直接使用（实现保留 title 兼容入口）。
+  2. **正文首行严格标题 (strict heading)**：只检查正文第一条非空行；支持 Markdown `#`～`######`、《标题》、【标题】三类严格标记；第一条非空行不匹配立即返回 null、不继续扫描后文。
+  3. **提示词回退 (prompt fallback)**：最多 32 code points（超长结果为 31 + …）。
   4. **默认备选 (fallback literal)**：若以上均为空，统一回退为字面量 `"未命名故事"`。
 - 标题超长截断与清洗：限制最大存储字符数，去除首尾空白。
 
@@ -52,12 +52,10 @@
   - `view` 过滤视图默认为 `'active'`（支持 `'active' | 'favorites' | 'trash'`）。
 - **列表输出 (`libraryListOutputSchema`)**：
   - 必须包含 `hasMore: boolean` 字段（必填，非 optional）。
-  - 严格保持契约恒等式：`hasMore === (nextCursor !== null)`。
+  - 覆盖声明与恒等式契约：M2-02 L1 仅锁定字段必填（required）与规范样例；**M2-03 Read Service 必须从 nextCursor 派生 hasMore，并用 service regression 强制恒等式 `hasMore === (nextCursor !== null)`**（该恒等式继续作为最终 Library contract）。
 
 ### 7. 查询关键词规整 (query normalization)
-- 输入关键词进行两端修剪（`trim()`）。
-- 空字符串规整为 `undefined`。
-- 多余空白进行合理规范化，避免空查询污染后端条件过滤。
+- 去除首尾空白；空/缺省查询在 cursor fingerprint 层规范为 `''`；内部空白保持不变。
 
 ### 8. 不透明分页游标编解码 (opaque cursor)
 - 游标使用 base64url 安全编码，对外隐藏内部持久化 ID。

@@ -6,12 +6,13 @@
 
 import { prisma } from '@/lib/db';
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+export const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface PurgeResult {
     configsDeleted: number;
     messagesDeleted: number;
     generationsDeleted: number;
+    storyWorksDeleted?: number;
     promptsDeleted: number;
     playbackProgressDeleted: number;
 }
@@ -34,6 +35,7 @@ export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeRes
         configsDeleted: configs.count,
         messagesDeleted: messages.count,
         generationsDeleted: generations.count,
+        storyWorksDeleted: generations.count,
         promptsDeleted: prompts.count,
         playbackProgressDeleted: playback.count,
     };

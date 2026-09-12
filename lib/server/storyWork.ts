@@ -1155,15 +1155,64 @@ export async function restoreStoryWorkForSubject(
 }
 
 /**
- * 永久物理删除故事作品（M2-05）
+ * StoryWork 物理删除唯一合法底层执行点（Server-Internal Primitive / M8 Audio Seam 唯一挂载点）
+ *
+ * 架构说明与安全约束：
+ * 1. 物理删除唯一执行点：无论是用户主动永久删除（permanentlyDeleteStoryWorkForSubject）
+ *    还是定时回收站清理（purgeExpiredUserTrash），对 User/Guest 作品的物理删除都必须统一通过本 primitive 执行，
+ *    严禁在其他模块直接裸调 prisma.storyWork.delete / deleteMany。
+ * 2. M8 音频清理唯一挂载点：后续 M8 在执行永久删除时，将在此处使用 DB 事务完成 Audio tombstone 记录与 Work 物理删除，
+ *    并在 DB 事务提交后触发外部异步对象存储音频文件清理，保证 Audio tombstone 仅需在此一处维护。
+ * 3. 并发安全与条件删除：严格强制 deletedAt IS NOT NULL 条件，杜绝任何对 active 作品的误删。
+ */
+export async function executeStoryWorkPhysicalDelete(options: {
+  target: 'user' | 'guest';
+  where: {
+    id?: number;
+    userId?: number;
+    guestId?: string;
+    deletedAt: {
+      not: null;
+      lt?: Date;
+    };
+  };
+  testHooks?: StoryWorkMutationTestHooks;
+}): Promise<{ count: number }> {
+  if (options.testHooks?.__testBeforeMutationHook) {
+    await options.testHooks.__testBeforeMutationHook();
+  }
+
+  if (options.target === 'user') {
+    const deleteResult = await prisma.storyWork.deleteMany({
+      where: {
+        ...(options.where.id !== undefined ? { id: options.where.id } : {}),
+        ...(options.where.userId !== undefined ? { userId: options.where.userId } : {}),
+        deletedAt: options.where.deletedAt,
+      },
+    });
+    return { count: deleteResult.count };
+  } else {
+    const deleteResult = await prisma.guestStoryWork.deleteMany({
+      where: {
+        ...(options.where.id !== undefined ? { id: options.where.id } : {}),
+        ...(options.where.guestId !== undefined ? { guestId: options.where.guestId } : {}),
+        deletedAt: options.where.deletedAt,
+      },
+    });
+    return { count: deleteResult.count };
+  }
+}
+
+/**
+ * 永久物理删除处于回收站中的作品（Mutation 5/5）
  *
  * 严格语义：
  * 1. 仅允许目标处于回收站（deletedAt !== null）；对 active 作品调用明确以 CONFLICT 拒绝；
- * 2. 物理删除唯一合法执行点（作为 M8 音频清理的唯一 Service Seam）；
+ * 2. 物理删除通过统一底层 primitive executeStoryWorkPhysicalDelete 执行（作为 M8 音频清理的唯一 Service Seam 挂载点）；
  *    - 架构说明（M8 Audio Seam）：
- *      后续 M8 在执行永久删除时，将在此处使用 DB 事务完成 Audio tombstone 记录与 Work 物理删除，
- *      并在 DB 事务提交后触发外部异步对象存储音频文件清理，避免引入全局可变回调状态。
- * 3. 并发原子性：使用 deleteMany 条件写直接施加 deletedAt IS NOT NULL 谓词，杜绝 TOCTOU 竞态；
+ *      永久删除统一收敛于 executeStoryWorkPhysicalDelete，后续 M8 将在基底 primitive 内使用 DB 事务
+ *      完成 Audio tombstone 记录与 Work 物理删除，并在 DB 事务提交后触发外部异步对象存储音频文件清理。
+ * 3. 并发原子性：在底层 primitive 施加 deletedAt IS NOT NULL 谓词，杜绝 TOCTOU 竞态；
  * 4. 不存在或属于其他主体的作品统一抛出 NOT_FOUND；
  * 5. User / Guest 两表严格同构对称。
  *
@@ -1178,18 +1227,16 @@ export async function permanentlyDeleteStoryWorkForSubject(
 ): Promise<{ success: true; id: number }> {
   const validId = assertValidWorkId(workId);
 
-  if (testHooks?.__testBeforeMutationHook) {
-    await testHooks.__testBeforeMutationHook();
-  }
-
   if (subject.type === 'user') {
-    // 1. 原子删除：仅匹配回收站中的作品（deletedAt IS NOT NULL）
-    const deleteRes = await prisma.storyWork.deleteMany({
+    // 1. 通过统一物理删除 primitive 执行原子删除（仅匹配回收站中的作品：deletedAt IS NOT NULL）
+    const deleteRes = await executeStoryWorkPhysicalDelete({
+      target: 'user',
       where: {
         id: validId,
         userId: subject.id,
         deletedAt: { not: null },
       },
+      testHooks,
     });
 
     if (deleteRes.count > 0) {
@@ -1219,12 +1266,15 @@ export async function permanentlyDeleteStoryWorkForSubject(
       message: '作品不存在',
     });
   } else {
-    const deleteRes = await prisma.guestStoryWork.deleteMany({
+    // 1. 通过统一物理删除 primitive 执行原子删除（仅匹配回收站中的作品：deletedAt IS NOT NULL）
+    const deleteRes = await executeStoryWorkPhysicalDelete({
+      target: 'guest',
       where: {
         id: validId,
         guestId: subject.id,
         deletedAt: { not: null },
       },
+      testHooks,
     });
 
     if (deleteRes.count > 0) {

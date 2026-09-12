@@ -1,29 +1,37 @@
 /**
- * StoryWork Retention 与垃圾回收 (GC) 集成测试（M2-09）
+ * StoryWork Retention 与垃圾回收 (GC) 集成测试（M2-09 FIXUP）
  *
  * 验收矩阵：
  * 1. User active 老作品（远早于 30 天，例如 60 天前）在 purge 后完好保留，严禁自动删除；
  * 2. User Trash 仅按 30 天窗口条件删除：未到期（29 天）不删，到期（31 天）彻底物理删除；
- * 3. Guest inactivity：活跃 guest（30 天内有任一交互）即使拥有 >30d 作品也不 GC；
- *    不活跃 guest（>30d 无交互）整体 GC 清理其作品及关联数据；User 数据绝对不受影响；
+ * 3. Guest 数据 per-row 30 天语义回归：
+ *    - Guest StoryWork：29d 保留 / 31d 删；
+ *    - Guest Chat / Prompt / Config / Playback：保持各自既有 updatedAt < 30d 规则；
+ *    - User 数据完全不受影响；
  * 4. 无数量 cap：批量 >100/150 条（例如 160 条）路径不触发任何删除或容量裁剪；
  * 5. 并发安全（高风险）：purge 与 restore 竞争——通过 __testBeforeMutationHook 确定性注入，
  *    恢复后的 active 作品绝对不被误删；
- * 6. 边界与幂等性：空数据调用、重复调用安全幂等。
+ * 6. 统一物理删除 primitive (M8 Audio Seam) 验证：
+ *    - manual permanentlyDeleteStoryWorkForSubject 与 retention purgeExpiredUserTrash 共用同一内部底层执行点；
+ *    - active 作品禁止物理删除（CONFLICT）；
+ * 7. 边界与幂等性：空数据调用、重复调用安全幂等。
  */
 
 import assert from 'node:assert';
+import { TRPCError } from '@trpc/server';
 import { prisma } from '../../../lib/db';
 import type { Subject } from '../../../lib/server/subject';
 import {
   purgeExpiredUserTrash,
-  gcInactiveGuests,
+  purgeExpiredGuestData,
   THIRTY_DAYS_MS,
 } from '../../../lib/server/retention';
 import {
   createStoryWorkForSubject,
   trashStoryWorkForSubject,
   restoreStoryWorkForSubject,
+  permanentlyDeleteStoryWorkForSubject,
+  executeStoryWorkPhysicalDelete,
 } from '../../../lib/server/storyWork';
 
 async function runStoryWorkRetentionTests() {
@@ -117,102 +125,164 @@ async function runStoryWorkRetentionTests() {
   assert.strictEqual(checkTrash31d, null, '已到期（31天）回收站作品必须彻底物理清理');
   console.log('PASS: Trash 未到期（29 天）不删；到期（31 天）删除验证通过');
 
-  console.log('=== 3. Guest inactivity：活跃 guest 不 GC；不活跃（>30d）GC；User 数据不受影响 ===');
-  const guestActiveId = `g_act_${tag}`;
-  const guestInactiveId = `g_inact_${tag}`;
-  const fortyFiveDaysAgo = new Date(baseTime.getTime() - 45 * 24 * 60 * 60 * 1000);
-  const twoDaysAgo = new Date(baseTime.getTime() - 2 * 24 * 60 * 60 * 1000);
+  console.log('=== 3. Guest 数据 per-row 30 天语义回归（29d 保留 / 31d 删，User 数据不受影响） ===');
+  const guestAId = `g_a_${tag}`;
+  const guestBId = `g_b_${tag}`;
 
-  // 3.1 活跃访客（拥有 45 天前的作品，但 2 天前有聊天记录活跃交互）
-  const guestActiveWork = await prisma.guestStoryWork.create({
+  // 3.1 Guest StoryWork: 一条 29d（保留），一条 31d（删除）
+  const guestWork29d = await prisma.guestStoryWork.create({
     data: {
-      guestId: guestActiveId,
-      prompt: '活跃访客的老作品',
-      storyText: '活跃访客在 45 天前创作的故事……',
-      title: '活跃访客老作品',
-      contentHash: `hash_act_guest_${tag}`,
-      createdAt: fortyFiveDaysAgo,
-      updatedAt: fortyFiveDaysAgo,
+      guestId: guestAId,
+      prompt: '29天访客作品提示词',
+      storyText: '29天访客作品正文……',
+      title: '29天未到期访客作品',
+      contentHash: `hash_guest_29d_${tag}`,
+      createdAt: twentyNineDaysAgo,
+      updatedAt: twentyNineDaysAgo,
     },
   });
-  await prisma.guestChatMessage.create({
+  const guestWork31d = await prisma.guestStoryWork.create({
     data: {
-      guestId: guestActiveId,
+      guestId: guestAId,
+      prompt: '31天访客作品提示词',
+      storyText: '31天访客作品正文……',
+      title: '31天到期应清理访客作品',
+      contentHash: `hash_guest_31d_${tag}`,
+      createdAt: thirtyOneDaysAgo,
+      updatedAt: thirtyOneDaysAgo,
+    },
+  });
+
+  // 3.2 Guest ChatMessage: 一条 29d（保留），一条 31d（删除）
+  const guestMsg29d = await prisma.guestChatMessage.create({
+    data: {
+      guestId: guestAId,
       position: 0,
-      messageId: `msg_act_${tag}`,
+      messageId: `msg_29d_${tag}`,
       role: 'user',
-      content: '活跃访客近期发送的消息',
-      createdAt: twoDaysAgo.toISOString(),
-      updatedAt: twoDaysAgo,
+      content: '29天消息内容',
+      createdAt: twentyNineDaysAgo.toISOString(),
+      updatedAt: twentyNineDaysAgo,
     },
   });
-
-  // 3.2 不活跃访客（拥有 2 部作品，所有数据更新时间均在 45 天前）
-  const guestInactiveWork1 = await prisma.guestStoryWork.create({
+  const guestMsg31d = await prisma.guestChatMessage.create({
     data: {
-      guestId: guestInactiveId,
-      prompt: '不活跃访客作品 1',
-      storyText: '不活跃访客作品 1 正文……',
-      title: '不活跃作品 1',
-      contentHash: `hash_inact_guest_1_${tag}`,
-      createdAt: fortyFiveDaysAgo,
-      updatedAt: fortyFiveDaysAgo,
-    },
-  });
-  const guestInactiveWork2 = await prisma.guestStoryWork.create({
-    data: {
-      guestId: guestInactiveId,
-      prompt: '不活跃访客作品 2',
-      storyText: '不活跃访客作品 2 正文……',
-      title: '不活跃作品 2',
-      contentHash: `hash_inact_guest_2_${tag}`,
-      createdAt: fortyFiveDaysAgo,
-      updatedAt: fortyFiveDaysAgo,
-    },
-  });
-  await prisma.guestChatMessage.create({
-    data: {
-      guestId: guestInactiveId,
-      position: 0,
-      messageId: `msg_inact_${tag}`,
+      guestId: guestAId,
+      position: 1,
+      messageId: `msg_31d_${tag}`,
       role: 'user',
-      content: '不活跃访客远期消息',
-      createdAt: fortyFiveDaysAgo.toISOString(),
-      updatedAt: fortyFiveDaysAgo,
+      content: '31天消息内容',
+      createdAt: thirtyOneDaysAgo.toISOString(),
+      updatedAt: thirtyOneDaysAgo,
     },
   });
 
-  // 3.3 执行 Guest Inactivity GC
-  const gcResult = await gcInactiveGuests(baseTime);
-  assert.strictEqual(gcResult.purgedGuests, 1, '应准确判定并清理 1 位不活跃访客');
-  assert.strictEqual(gcResult.purgedWorks, 2, '应清理不活跃访客的全部 2 部作品');
+  // 3.3 Guest PromptHistory: 一条 29d（保留），一条 31d（删除）
+  const guestPrompt29d = await prisma.guestPromptHistory.create({
+    data: {
+      guestId: guestBId,
+      prompt: '29天提示词历史',
+      lastUsed: twentyNineDaysAgo,
+      updatedAt: twentyNineDaysAgo,
+    },
+  });
+  const guestPrompt31d = await prisma.guestPromptHistory.create({
+    data: {
+      guestId: guestBId,
+      prompt: '31天提示词历史',
+      lastUsed: thirtyOneDaysAgo,
+      updatedAt: thirtyOneDaysAgo,
+    },
+  });
 
-  // 3.4 校验活跃访客作品安然无恙（活跃 guest 不因作品老而被裁剪）
-  const checkGuestActiveWork = await prisma.guestStoryWork.findUnique({
-    where: { id: guestActiveWork.id },
+  // 3.4 Guest Config: 一条 29d（保留），一条 31d（删除）
+  const guestCfg29d = await prisma.guestConfig.create({
+    data: {
+      guestId: `g_cfg_29d_${tag}`,
+      voiceId: 'voice_1',
+      createdAt: twentyNineDaysAgo,
+      updatedAt: twentyNineDaysAgo,
+    },
   });
-  assert.ok(checkGuestActiveWork !== null, '活跃访客的 45 天老作品绝对不被 GC 清理');
+  const guestCfg31d = await prisma.guestConfig.create({
+    data: {
+      guestId: `g_cfg_31d_${tag}`,
+      voiceId: 'voice_2',
+      createdAt: thirtyOneDaysAgo,
+      updatedAt: thirtyOneDaysAgo,
+    },
+  });
 
-  // 3.5 校验不活跃访客作品与数据被彻底清理
-  const checkGuestInactiveWork1 = await prisma.guestStoryWork.findUnique({
-    where: { id: guestInactiveWork1.id },
+  // 3.5 Guest PlaybackProgress: 一条 29d（保留），一条 31d（删除）
+  const guestPlay29d = await prisma.guestPlaybackProgress.create({
+    data: {
+      guestId: `g_play_29d_${tag}`,
+      sourceType: 'chat',
+      sourceId: '90001',
+      title: '29天播放进度',
+      createdAt: twentyNineDaysAgo,
+      updatedAt: twentyNineDaysAgo,
+    },
   });
-  const checkGuestInactiveWork2 = await prisma.guestStoryWork.findUnique({
-    where: { id: guestInactiveWork2.id },
+  const guestPlay31d = await prisma.guestPlaybackProgress.create({
+    data: {
+      guestId: `g_play_31d_${tag}`,
+      sourceType: 'chat',
+      sourceId: '90002',
+      title: '31天播放进度',
+      createdAt: thirtyOneDaysAgo,
+      updatedAt: thirtyOneDaysAgo,
+    },
   });
-  assert.strictEqual(checkGuestInactiveWork1, null, '不活跃访客作品 1 必须已彻底物理清理');
-  assert.strictEqual(checkGuestInactiveWork2, null, '不活跃访客作品 2 必须已彻底物理清理');
 
-  // 3.6 校验 User 数据绝对不受 Guest GC 任何影响
-  const checkUser1Active = await prisma.storyWork.findUnique({
-    where: { id: activeOldWork.id },
-  });
-  const checkUser1Trash = await prisma.storyWork.findUnique({
-    where: { id: trashWork29d.id },
-  });
-  assert.ok(checkUser1Active !== null, '用户活跃作品不受 Guest GC 任何影响');
-  assert.ok(checkUser1Trash !== null, '用户回收站作品不受 Guest GC 任何影响');
-  console.log('PASS: Guest inactivity：活跃 guest 不 GC；不活跃（>30d）GC；User 数据不受影响通过');
+  // 执行基于行语义的 Guest GC 清理（传入 30 天分界时间点）
+  const guestCutoff = new Date(baseTime.getTime() - THIRTY_DAYS_MS);
+  const guestGcRes = await purgeExpiredGuestData(guestCutoff);
+  assert.ok(guestGcRes.generationsDeleted >= 1, '31天的 Guest StoryWork 应被清理');
+  assert.ok(guestGcRes.messagesDeleted >= 1, '31天的 Guest Chat 应被清理');
+  assert.ok(guestGcRes.promptsDeleted >= 1, '31天的 Guest Prompt 应被清理');
+  assert.ok(guestGcRes.configsDeleted >= 1, '31天的 Guest Config 应被清理');
+  assert.ok(guestGcRes.playbackProgressDeleted >= 1, '31天的 Guest Playback 应被清理');
+
+  // 校验 29d 记录严格保留
+  const checkGuestWork29d = await prisma.guestStoryWork.findUnique({ where: { id: guestWork29d.id } });
+  assert.ok(checkGuestWork29d !== null, '29天的 Guest StoryWork 必须保留');
+
+  const checkGuestMsg29d = await prisma.guestChatMessage.findUnique({ where: { id: guestMsg29d.id } });
+  assert.ok(checkGuestMsg29d !== null, '29天的 Guest Chat 必须保留');
+
+  const checkGuestPrompt29d = await prisma.guestPromptHistory.findUnique({ where: { id: guestPrompt29d.id } });
+  assert.ok(checkGuestPrompt29d !== null, '29天的 Guest Prompt 必须保留');
+
+  const checkGuestCfg29d = await prisma.guestConfig.findUnique({ where: { id: guestCfg29d.id } });
+  assert.ok(checkGuestCfg29d !== null, '29天的 Guest Config 必须保留');
+
+  const checkGuestPlay29d = await prisma.guestPlaybackProgress.findUnique({ where: { id: guestPlay29d.id } });
+  assert.ok(checkGuestPlay29d !== null, '29天的 Guest Playback 必须保留');
+
+  // 校验 31d 记录确凿被物理删除
+  const checkGuestWork31d = await prisma.guestStoryWork.findUnique({ where: { id: guestWork31d.id } });
+  assert.strictEqual(checkGuestWork31d, null, '31天的 Guest StoryWork 必须被删除');
+
+  const checkGuestMsg31d = await prisma.guestChatMessage.findUnique({ where: { id: guestMsg31d.id } });
+  assert.strictEqual(checkGuestMsg31d, null, '31天的 Guest Chat 必须被删除');
+
+  const checkGuestPrompt31d = await prisma.guestPromptHistory.findUnique({ where: { id: guestPrompt31d.id } });
+  assert.strictEqual(checkGuestPrompt31d, null, '31天的 Guest Prompt 必须被删除');
+
+  const checkGuestCfg31d = await prisma.guestConfig.findUnique({ where: { id: guestCfg31d.id } });
+  assert.strictEqual(checkGuestCfg31d, null, '31天的 Guest Config 必须被删除');
+
+  const checkGuestPlay31d = await prisma.guestPlaybackProgress.findUnique({ where: { id: guestPlay31d.id } });
+  assert.strictEqual(checkGuestPlay31d, null, '31天的 Guest Playback 必须被删除');
+
+  // 校验 User 数据绝不受 Guest GC 任何影响
+  const checkUser1ActiveAfterGuestGc = await prisma.storyWork.findUnique({ where: { id: activeOldWork.id } });
+  assert.ok(checkUser1ActiveAfterGuestGc !== null, '用户活跃作品不受 Guest GC 任何影响');
+
+  const checkUser1TrashAfterGuestGc = await prisma.storyWork.findUnique({ where: { id: trashWork29d.id } });
+  assert.ok(checkUser1TrashAfterGuestGc !== null, '用户回收站作品不受 Guest GC 任何影响');
+  console.log('PASS: Guest 数据 per-row 30 天语义回归（29d 保留 / 31d 删，User 数据不受影响）验证通过');
 
   console.log('=== 4. 无数量 cap：批量 >100/150 条路径不触发任何删除 ===');
   // 创建拥有 160 条活跃作品的用户
@@ -239,7 +309,7 @@ async function runStoryWorkRetentionTests() {
   }
   await prisma.storyWork.createMany({ data: userWorksData });
 
-  // 创建拥有 160 条作品的活跃访客（带 1 天前活跃会话）
+  // 创建拥有 160 条 29d 作品的访客
   const guestCapId = `g_cap_${tag}`;
   const guestWorksData = [];
   for (let i = 0; i < totalBulk; i++) {
@@ -249,28 +319,17 @@ async function runStoryWorkRetentionTests() {
       storyText: `访客批量正文内容 ${i}`,
       title: `访客批量作品 ${i}`,
       contentHash: `hash_guest_bulk_${tag}_${i}`,
-      createdAt: sixtyDaysAgo,
-      updatedAt: sixtyDaysAgo,
+      createdAt: twentyNineDaysAgo,
+      updatedAt: twentyNineDaysAgo,
     });
   }
   await prisma.guestStoryWork.createMany({ data: guestWorksData });
-  await prisma.guestChatMessage.create({
-    data: {
-      guestId: guestCapId,
-      position: 0,
-      messageId: `msg_cap_${tag}`,
-      role: 'user',
-      content: '访客批量测试近期活跃消息',
-      createdAt: twoDaysAgo.toISOString(),
-      updatedAt: twoDaysAgo,
-    },
-  });
 
   // 执行 Retention 与 GC 服务
   const capPurgeRes = await purgeExpiredUserTrash(baseTime);
-  const capGcRes = await gcInactiveGuests(baseTime);
+  const capGcRes = await purgeExpiredGuestData(guestCutoff);
   assert.strictEqual(capPurgeRes.purged, 0, '活跃批量作品绝不被 purge');
-  assert.strictEqual(capGcRes.purgedWorks, 0, '活跃访客批量作品绝不被 GC');
+  assert.strictEqual(capGcRes.generationsDeleted, 0, '未过期访客批量作品绝不被 GC');
 
   // 严格验证总行数与首尾 ID 保留（严禁出现淘汰旧作的 KEEP_LIMIT / 100 裁剪行为）
   const userWorksAfter = await prisma.storyWork.findMany({
@@ -291,9 +350,6 @@ async function runStoryWorkRetentionTests() {
   console.log('PASS: 无数量 cap：批量 >100/150 条路径不触发任何删除通过');
 
   console.log('=== 5. 竞态 regression：purge 与 restore 竞争——恢复后 active 作品不被删除 ===');
-  // 场景：某作品原本处于已过期的回收站中（deletedAt 为 35 天前）。
-  // 在 purgeExpiredUserTrash 即将执行原子 deleteMany 瞬间，用户并发点击 restore 将其恢复为 active。
-  // 原子条件写保障：deleteMany 带有 deletedAt: { not: null, lt: threshold } 谓词，绝不误删刚恢复的作品。
   const userRace = await prisma.user.create({
     data: {
       username: `u_race_${tag}`,
@@ -337,18 +393,53 @@ async function runStoryWorkRetentionTests() {
   assert.strictEqual(raceWorkRow.deletedAt, null, '作品状态必须确凿为活跃状态（deletedAt === null）');
   console.log('PASS: purge 与 restore 竞态回归验证通过（恢复后的 active 作品未被误删）');
 
-  console.log('=== 6. 边界条件与幂等性校验 ===');
-  // 6.1 重复调用 purgeExpiredUserTrash
+  console.log('=== 6. 统一物理删除 primitive (executeStoryWorkPhysicalDelete / M8 Seam) 契约 ===');
+  // 6.1 active 作品严禁物理删除
+  const activeWorkForSeam = await prisma.storyWork.create({
+    data: {
+      userId: user1.id,
+      prompt: 'Seam 测试提示词',
+      storyText: 'Seam 活跃作品正文……',
+      title: 'Seam 活跃作品',
+      contentHash: `hash_seam_act_${tag}`,
+      createdAt: sixtyDaysAgo,
+      updatedAt: sixtyDaysAgo,
+      deletedAt: null,
+    },
+  });
+  const user1Subject: Subject = { type: 'user', id: user1.id };
+
+  await assert.rejects(
+    async () => permanentlyDeleteStoryWorkForSubject(user1Subject, activeWorkForSeam.id),
+    (err: unknown) =>
+      err instanceof TRPCError &&
+      err.code === 'CONFLICT' &&
+      err.message === '仅允许对回收站中的作品执行永久删除',
+    '活跃作品必须拒绝永久物理删除'
+  );
+
+  // 6.2 移入回收站后通过统一 primitive 执行删除
+  await trashStoryWorkForSubject(user1Subject, activeWorkForSeam.id);
+  const deletePermRes = await permanentlyDeleteStoryWorkForSubject(user1Subject, activeWorkForSeam.id);
+  assert.strictEqual(deletePermRes.success, true);
+  assert.strictEqual(deletePermRes.id, activeWorkForSeam.id);
+
+  const checkSeamWorkDeleted = await prisma.storyWork.findUnique({ where: { id: activeWorkForSeam.id } });
+  assert.strictEqual(checkSeamWorkDeleted, null, '回收站作品经统一 primitive 彻底物理清理');
+  console.log('PASS: 统一物理删除 primitive (executeStoryWorkPhysicalDelete / M8 Seam) 契约验证通过');
+
+  console.log('=== 7. 边界条件与幂等性校验 ===');
+  // 7.1 重复调用 purgeExpiredUserTrash
   const dupPurge1 = await purgeExpiredUserTrash(baseTime);
   const dupPurge2 = await purgeExpiredUserTrash(baseTime);
   assert.strictEqual(dupPurge1.purged, 0);
   assert.strictEqual(dupPurge2.purged, 0);
 
-  // 6.2 重复调用 gcInactiveGuests
-  const dupGc1 = await gcInactiveGuests(baseTime);
-  const dupGc2 = await gcInactiveGuests(baseTime);
-  assert.strictEqual(dupGc1.purgedGuests, 0);
-  assert.strictEqual(dupGc2.purgedGuests, 0);
+  // 7.2 重复调用 purgeExpiredGuestData
+  const dupGc1 = await purgeExpiredGuestData(guestCutoff);
+  const dupGc2 = await purgeExpiredGuestData(guestCutoff);
+  assert.strictEqual(dupGc1.generationsDeleted, 0);
+  assert.strictEqual(dupGc2.generationsDeleted, 0);
   console.log('PASS: 边界条件与幂等性校验通过');
 }
 

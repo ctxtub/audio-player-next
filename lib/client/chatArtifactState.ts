@@ -316,7 +316,6 @@ export function completeArtifact(
   params?: {
     readonly finalStoryText?: string;
     readonly title?: string;
-    readonly audioUrl?: string;
   },
   now?: string
 ): CompleteChatArtifact {
@@ -341,7 +340,6 @@ export function completeArtifact(
     title: params?.title ?? artifact.title,
     prompt: artifact.prompt,
     voiceId: artifact.voiceId,
-    audioUrl: params?.audioUrl ?? artifact.audioUrl,
     createdAt: artifact.createdAt,
     updatedAt: timestamp,
   };
@@ -373,7 +371,6 @@ export function startPromotion(
     title: artifact.title,
     prompt: artifact.prompt,
     voiceId: artifact.voiceId,
-    audioUrl: artifact.audioUrl,
     createdAt: artifact.createdAt,
     updatedAt: timestamp,
   };
@@ -400,7 +397,6 @@ export function markPromotionSuccess(
   artifact: PromotingChatArtifact,
   result: {
     readonly storyWorkId: number;
-    readonly audioUrl?: string;
   },
   now?: string
 ): ReadyChatArtifact {
@@ -431,7 +427,6 @@ export function markPromotionSuccess(
     title: artifact.title,
     prompt: artifact.prompt,
     voiceId: artifact.voiceId,
-    audioUrl: result.audioUrl ?? artifact.audioUrl,
     createdAt: artifact.createdAt,
     updatedAt: timestamp,
   };
@@ -467,7 +462,6 @@ export function markPromotionFailed(
     title: artifact.title,
     prompt: artifact.prompt,
     voiceId: artifact.voiceId,
-    audioUrl: artifact.audioUrl,
     error: result?.error,
     createdAt: artifact.createdAt,
     updatedAt: timestamp,
@@ -504,7 +498,6 @@ export function interruptArtifact(
     title: artifact.title,
     prompt: artifact.prompt,
     voiceId: artifact.voiceId,
-    audioUrl: artifact.audioUrl,
     reason: params?.reason,
     createdAt: artifact.createdAt,
     updatedAt: timestamp,
@@ -515,52 +508,37 @@ export function interruptArtifact(
 }
 
 // ============================================================================
-// Legacy 兼容转换函数
+// Legacy StoryCard 只读兼容辅助函数（B2 冻结语义）
 // ============================================================================
 
 /**
- * 将历史 Legacy StoryCardPart 解码转换为 CompleteChatArtifact。
- * 兼容性保证：历史故事卡片已完成正文生成，转换为 complete 状态，
- * 保持其原始 storyText 和 audioUrl，允许后续统一走 promotion 流程。
+ * 解码/规范化历史 Legacy StoryCardPart。
+ *
+ * 铁律契约（M4-01 B2）：
+ * 1. 严格只读兼容：仅返回规范化后的 StoryCardPart，用于历史只读渲染与播放展示；
+ * 2. 严禁转为 CompleteChatArtifact：绝不赋予 Legacy 卡片 promotion 状态机能力；
+ * 3. 避免会话恢复重入时自动发起 library.create 写入 StoryWork。
  */
-export function convertLegacyStoryCardToArtifact(
-  card: StoryCardPart,
-  assistantMessageId: string,
-  options?: {
-    readonly id?: string;
-    readonly title?: string;
-    readonly prompt?: string;
-    readonly voiceId?: string;
-    readonly createdAt?: string;
+export function decodeLegacyStoryCard(
+  card: unknown
+): StoryCardPart | null {
+  if (card === null || typeof card !== 'object') {
+    return null;
   }
-): CompleteChatArtifact {
-  const trimmedSourceId = assistantMessageId ? assistantMessageId.trim() : '';
-  if (!trimmedSourceId) {
-    throw new Error('Legacy 转换失败：必须提供非空 assistantMessageId');
+  const c = card as Record<string, unknown>;
+  if (c.type !== 'storyCard') {
+    return null;
   }
-
-  const text = card.storyText ? card.storyText.trim() : '';
-  if (!text) {
-    throw new Error('Legacy 转换失败：StoryCardPart 的 storyText 不能为空');
+  if (typeof c.storyText !== 'string' || c.storyText.trim() === '') {
+    return null;
+  }
+  if (typeof c.audioUrl !== 'string') {
+    return null;
   }
 
-  const now = options?.createdAt ?? new Date().toISOString();
-  const id = options?.id ?? `legacy-artifact-${trimmedSourceId}`;
-
-  const artifact: CompleteChatArtifact = {
-    id,
-    artifactType: 'story',
-    status: 'complete',
-    sourceMessageId: trimmedSourceId,
-    storyText: text,
-    title: options?.title,
-    prompt: options?.prompt,
-    voiceId: options?.voiceId,
-    audioUrl: card.audioUrl || undefined,
-    createdAt: now,
-    updatedAt: now,
+  return {
+    type: 'storyCard',
+    storyText: c.storyText,
+    audioUrl: c.audioUrl,
   };
-
-  assertArtifactInvariants(artifact);
-  return artifact;
 }

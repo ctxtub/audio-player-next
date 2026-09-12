@@ -39,8 +39,8 @@ import {
   canPromote,
   canRetryPromotion,
   completeArtifact,
-  convertLegacyStoryCardToArtifact,
   createDraftArtifact,
+  decodeLegacyStoryCard,
   getSourceMessageId,
   interruptArtifact,
   isAllowedTransition,
@@ -54,15 +54,15 @@ import {
 } from '../../../lib/client/chatArtifactState';
 
 /**
- * M4-01 Artifact Domain Contract 单元测试。
+ * M4-01 / E2E-08-01 Artifact Domain Contract 单元测试。
  *
  * 验证：
  * 1. Message delivery 与 Artifact lifecycle 彻底分开。
- * 2. 状态机表达与全生命周期状态跃迁（draft/complete/promoting/ready/promotion_failed/interrupted）。
+ * 2. 状态机表达与全生命周期状态跃迁（draft/complete/promoting/ready/promotion_failed/interrupted），Modern Artifact 绝无 audioUrl。
  * 3. 严格不变量约束（draft/interrupted 严禁 storyWorkId；ready 必须包含正整数 storyWorkId；promotion_failed 保留内容）。
  * 4. sourceMessageId 规则冻结（assistant message id 幂等关联）。
- * 5. Legacy StoryCardPart 向后兼容解码与转换为 CompleteChatArtifact。
- * 6. 纯领域契约与零副作用静态架构守卫。
+ * 5. Legacy StoryCardPart 只读解码与不可 promotion 铁律约束（不产生 StoryWork 新写）。
+ * 6. 纯领域契约与零副作用静态架构守卫（无 audioUrl 泄漏、无外部依赖泄漏）。
  */
 
 async function main() {
@@ -162,14 +162,13 @@ async function main() {
     assert.strictEqual(promoting.storyText, completed.storyText);
     assert.strictEqual(canPromote(promoting), false);
 
-    // 2.5 入库成功 promoting -> ready
+    // 2.5 入库成功 promoting -> ready（Modern Artifact 绝无 audioUrl）
     const ready = markPromotionSuccess(promoting, {
       storyWorkId: 789,
-      audioUrl: 'https://cdn.example.com/audio/789.mp3',
     }, t4);
     assert.strictEqual(ready.status, 'ready');
     assert.strictEqual(ready.storyWorkId, 789);
-    assert.strictEqual(ready.audioUrl, 'https://cdn.example.com/audio/789.mp3');
+    assert.strictEqual('audioUrl' in ready, false, 'Modern Ready Artifact 绝不包含 audioUrl');
     assert.strictEqual(isTerminalArtifact(ready), true);
     assert.strictEqual(canPromote(ready), false);
 
@@ -454,7 +453,7 @@ async function main() {
     console.log('PASS: sourceMessageId 规则冻结与幂等契约断言通过');
   }
 
-  console.log('=== 8. Legacy StoryCardPart 向后兼容解码与转换为 CompleteChatArtifact 断言 ===');
+  console.log('=== 8. Legacy StoryCardPart 只读解码与不可 Promotion 铁律断言（B2） ===');
   {
     const legacyCard: StoryCardPart = {
       type: 'storyCard',
@@ -462,40 +461,34 @@ async function main() {
       audioUrl: 'blob:http://localhost:3000/mock-audio-blob-123',
     };
 
-    const assistantMsgId = 'msg-legacy-asst-888';
-    const converted = convertLegacyStoryCardToArtifact(legacyCard, assistantMsgId, {
-      title: '云朵里的小羊',
-      prompt: '写一个关于云朵小羊的故事',
-      voiceId: 'voice-sunny',
-    });
+    // 8.1 规范解码：正常返回规范化的 StoryCardPart
+    const decoded = decodeLegacyStoryCard(legacyCard);
+    assert.ok(decoded !== null, 'decodeLegacyStoryCard 解码成功');
+    assert.strictEqual(decoded.type, 'storyCard');
+    assert.strictEqual(decoded.storyText, legacyCard.storyText);
+    assert.strictEqual(decoded.audioUrl, legacyCard.audioUrl);
 
-    assert.strictEqual(converted.status, 'complete', 'Legacy 转换后为 complete 状态');
-    assert.strictEqual(converted.storyWorkId, undefined, 'Legacy 转换后尚未创建 StoryWork 资产');
-    assert.strictEqual(converted.sourceMessageId, assistantMsgId, '绑定传入的 assistant 消息 id');
-    assert.strictEqual(converted.storyText, legacyCard.storyText, '保持故事正文完全一致');
-    assert.strictEqual(converted.audioUrl, legacyCard.audioUrl, '保持音频地址');
-    assert.strictEqual(converted.title, '云朵里的小羊');
-    assert.strictEqual(converted.prompt, '写一个关于云朵小羊的故事');
-    assert.strictEqual(isCompleteArtifact(converted), true);
-    assert.strictEqual(canPromote(converted), true, '转换后可直接发起 promotion 流程');
+    // 8.2 核心冻结语义（B2 铁律）：Legacy 卡片只读兼容，绝非现代 ChatArtifact
+    assert.strictEqual(isChatArtifact(decoded), false, 'StoryCardPart 绝非 ChatArtifact');
+    assert.strictEqual(isCompleteArtifact(decoded as unknown as ChatArtifact), false);
+    assert.strictEqual(isDraftArtifact(decoded as unknown as ChatArtifact), false);
+    assert.strictEqual(isReadyArtifact(decoded as unknown as ChatArtifact), false);
+    assert.strictEqual(canPromote(decoded as unknown as ChatArtifact), false, 'Legacy 卡片绝对不可发起 promotion');
 
-    // 验证后续可直接发起 promotion 成功
-    const promoting = startPromotion(converted);
-    const ready = markPromotionSuccess(promoting, { storyWorkId: 555 });
-    assert.strictEqual(ready.status, 'ready');
-    assert.strictEqual(ready.storyWorkId, 555);
-
-    // 异常输入拒绝
+    // 8.3 严禁将 Legacy 卡片作为 CompleteChatArtifact 传入 startPromotion（运行时抛错阻断）
     assert.throws(
-      () => convertLegacyStoryCardToArtifact(legacyCard, ''),
-      /必须提供非空 assistantMessageId/
-    );
-    assert.throws(
-      () => convertLegacyStoryCardToArtifact({ ...legacyCard, storyText: '   ' }, assistantMsgId),
-      /storyText 不能为空/
+      () => startPromotion(decoded as unknown as CompleteChatArtifact),
+      /非法状态转移/
     );
 
-    console.log('PASS: Legacy StoryCardPart 转换断言通过');
+    // 8.4 异常 Legacy 输入安全返回 null
+    assert.strictEqual(decodeLegacyStoryCard(null), null);
+    assert.strictEqual(decodeLegacyStoryCard({}), null);
+    assert.strictEqual(decodeLegacyStoryCard({ type: 'text', content: 'hello' }), null);
+    assert.strictEqual(decodeLegacyStoryCard({ type: 'storyCard', storyText: '  ', audioUrl: 'url' }), null);
+    assert.strictEqual(decodeLegacyStoryCard({ type: 'storyCard', storyText: 'story' }), null); // 缺失 audioUrl
+
+    console.log('PASS: Legacy StoryCardPart 只读解码与不可 Promotion 铁律断言通过');
   }
 
   console.log('=== 9. 纯函数与类型守卫完整性断言 ===');
@@ -572,7 +565,32 @@ async function main() {
       );
     }
 
-    console.log('PASS: 静态架构规范守卫断言通过（无数据库/网络/React依赖泄漏）');
+    // B1 静态 regression 1：types/chatArtifact.ts 绝不得出现 audioUrl
+    assert.strictEqual(
+      typeContent.includes('audioUrl'),
+      false,
+      'types/chatArtifact.ts 静态违规：绝不得出现 audioUrl'
+    );
+
+    // B1 静态 regression 2：chatArtifactState.ts 的现代状态转换函数绝不接受/传播 audioUrl
+    const legacySplitIdx = stateContent.indexOf('decodeLegacyStoryCard');
+    assert.ok(legacySplitIdx > 0, 'chatArtifactState.ts 必须包含 decodeLegacyStoryCard 分界');
+    const modernStateContent = stateContent.slice(0, legacySplitIdx);
+    assert.strictEqual(
+      modernStateContent.includes('audioUrl'),
+      false,
+      'chatArtifactState.ts 现代状态转换静态违规：不得接受或传播 audioUrl'
+    );
+
+    // B1 静态 regression 3：types/chat.ts 中的 Legacy StoryCardPart 仍必须保留 audioUrl（旧数据向后兼容）
+    const chatTypesPath = path.resolve(__dirname, '../../../types/chat.ts');
+    const chatTypesContent = fs.readFileSync(chatTypesPath, 'utf8');
+    assert.ok(
+      chatTypesContent.includes('audioUrl: string'),
+      'types/chat.ts 静态回归：StoryCardPart 必须保留 audioUrl: string'
+    );
+
+    console.log('PASS: 静态架构规范守卫断言通过（无数据库/网络/React依赖泄漏，Modern 无 audioUrl，Legacy 保留 audioUrl）');
   }
 
   console.log('\nALL STORY ARTIFACT CONTRACT UNIT TESTS PASSED SUCCESSFULLY');

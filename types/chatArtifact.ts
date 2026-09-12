@@ -44,8 +44,6 @@ export interface BaseChatArtifact {
   readonly prompt?: string;
   /** 故事配音 voiceId。 */
   readonly voiceId?: string;
-  /** 瞬态音频播放地址（若已合成）。 */
-  readonly audioUrl?: string;
   /** ISO 格式创建时间戳。 */
   readonly createdAt: string;
   /** ISO 格式最近更新时间戳。 */

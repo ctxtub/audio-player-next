@@ -790,7 +790,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-work, library, create, idempotency, retention]
     spec_path: docs/e2e/07-故事库与作品资产/03-StoryWork创作入库与幂等.md
-    executable_ids: [exec-story-work-create, exec-legacy-generation-history-cutover]
+    executable_ids: [exec-story-work-create]
     fixtures: []
     owner: story-library
   - case_id: story-work-lifecycle-mutations
@@ -815,6 +815,18 @@ cases:
     risk_tags: [story-work, library, trpc, facade, rate-limit]
     spec_path: docs/e2e/07-故事库与作品资产/05-Library-Public-API与客户端门面.md
     executable_ids: [exec-story-work-router-facade]
+    fixtures: []
+    owner: story-library
+  - case_id: legacy-generation-history-cutover
+    display_name_zh: Legacy GenerationHistory 兼容切换
+    legacy_aliases: [E2E-07-06]
+    journey_id: story-library
+    user_goal: /player 既有生成历史接口在底层切换到 StoryWork 后保持原 DTO 与交互兼容，同时取消 100 条数据裁剪，旧删除行为映射为可恢复的软删除
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-work, library, legacy, cutover, trash]
+    spec_path: docs/e2e/07-故事库与作品资产/06-Legacy-GenerationHistory兼容切换.md
+    executable_ids: [exec-legacy-generation-history-cutover]
     fixtures: []
     owner: story-library
 executables:

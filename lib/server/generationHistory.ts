@@ -5,7 +5,7 @@
  * 1. 列表读取：保留最近 LIST_LIMIT (50) 条展示兼容语义（非数据保留上限），过滤已软删除（deletedAt != null）记录；
  * 2. 写入：统一走 createStoryWorkForSubject(..., sourceMessageId: null) 兼容路径，
  *    不参与来源消息幂等、允许可重复创建独立作品，彻底退出写链裁剪与数量淘汰；
- * 3. 删除：统一走 trashStoryWorkForSubject（移入回收站软删除，数据行在库永久保留）。
+ * 3. 删除：统一走 trashStoryWorkForSubject（移入回收站软删除、当前阶段不立即物理删除；后续由统一 Trash 生命周期清理）。
  */
 
 import { prisma } from '@/lib/db';

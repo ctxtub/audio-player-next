@@ -168,6 +168,8 @@ async function main(): Promise<void> {
       '必须精确映射五字段，不增不减',
     );
     // buildPromotionInput 同样精确（无 idempotencyKey 等自造字段）。
+    // 直接调用前必须先过门控：类型本身要求 prompt snapshot 非空。
+    assertPromotableArtifact(complete);
     const built = buildPromotionInput(complete);
     assert.deepStrictEqual(Object.keys(built).sort(), [
       'prompt',
@@ -374,6 +376,80 @@ async function main(): Promise<void> {
 
     assert.strictEqual(calls, 0, '非法输入必须 fail-fast，library.create 调用次数=0');
     console.log('PASS: M4-03-05 fail-fast with zero create');
+  }
+
+  console.log('=== M4-03-08: 缺 mandatory prompt snapshot 必须 fail-fast 且 create=0 ===');
+  {
+    let calls = 0;
+    const countingCreate = async (input: LibraryCreateInput): Promise<StoryWorkDetailDTO> => {
+      calls += 1;
+      return makeDetailFixture(888, input);
+    };
+
+    // 08-1 真实领域对象：prompt omitted 全程走合法状态机（draft → complete），
+    // M4-01 contract 允许 prompt 缺失，但 promotion 边界必须 fail-fast。
+    const noPromptDraft = createDraftArtifact({
+      sourceMessageId: 'msg-no-prompt-008',
+      initialText: '无 prompt 草稿正文',
+      // prompt omitted（生成时未冻结快照）
+    });
+    const noPromptComplete = completeArtifact(noPromptDraft, {
+      finalStoryText: '无 prompt 完成正文-08',
+    });
+    assert.strictEqual(noPromptComplete.status, 'complete');
+    assert.strictEqual(noPromptComplete.prompt, undefined);
+    await assert.rejects(
+      promoteStoryArtifact(noPromptComplete, { create: countingCreate }),
+      /mandatory promotion snapshot/,
+    );
+    assert.throws(
+      () => assertPromotableArtifact(noPromptComplete),
+      /mandatory promotion snapshot/,
+    );
+
+    // 同一缺 snapshot 对象走 promotion_failed 重试源同样拒绝。
+    const noPromptFailed: PromotionFailedChatArtifact = markPromotionFailed(
+      startPromotion(noPromptComplete),
+      { error: 'timeout-once' },
+    );
+    await assert.rejects(
+      promoteStoryArtifact(noPromptFailed, { create: countingCreate }),
+      /mandatory promotion snapshot/,
+    );
+
+    // 空白 prompt（'' / 全空格）同样视为缺 snapshot。
+    const blankComplete = makeCompleteFixture({ sourceMessageId: 'msg-blank-008' });
+    for (const blank of ['', '   ']) {
+      await assert.rejects(
+        promoteStoryArtifact({ ...blankComplete, prompt: blank }, { create: countingCreate }),
+        /mandatory promotion snapshot/,
+      );
+    }
+
+    // 08-2 forged unknown：裸 { artifactType: 'story', status: 'complete' } 无 prompt，必须拒绝。
+    await assert.rejects(
+      promoteStoryArtifact({ artifactType: 'story', status: 'complete' }, { create: countingCreate }),
+      /mandatory promotion snapshot/,
+    );
+    await assert.rejects(
+      promoteStoryArtifact(
+        { artifactType: 'story', status: 'promotion_failed' },
+        { create: countingCreate },
+      ),
+      /mandatory promotion snapshot/,
+    );
+
+    assert.strictEqual(calls, 0, '缺 prompt snapshot 必须 fail-fast，library.create 调用次数=0');
+
+    // 静态：adapter 不得用 cast 绕过 prompt 类型（类型本身守 contract）。
+    const adapterPath = path.resolve(process.cwd(), 'lib/client/storyArtifactPromotion.ts');
+    const adapterContent = fs.readFileSync(adapterPath, 'utf8');
+    assert.strictEqual(
+      adapterContent.includes('artifact.prompt as'),
+      false,
+      'adapter 不得用 cast 伪造 prompt 字符串',
+    );
+    console.log('PASS: M4-03-08 missing prompt snapshot fail-fast with zero create');
   }
 
   console.log('=== M4-03-06: adapter 仅消费 frozen libraryClient.create（静态） ===');

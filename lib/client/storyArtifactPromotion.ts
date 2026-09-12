@@ -5,7 +5,9 @@
  * 本步仍然不要自动触发 promotion（orchestration 留 M4-04）；adapter 只负责 I/O。
  *
  * 薄层契约：
- * 1. 只接受 complete / promotion_failed（retry source）；draft / interrupted / promoting / ready / legacy 一律 fail-fast。
+ * 1. 只接受 complete / promotion_failed（retry source）且携带非空 prompt 快照；
+ *    draft / interrupted / promoting / ready / legacy，以及缺失 mandatory
+ *    prompt snapshot 的 complete / promotion_failed，一律 fail-fast。
  * 2. 构造 frozen LibraryCreateInput { title, prompt, storyText, voiceId, sourceMessageId } → libraryClient.create。
  * 3. 不自行造 client-side idempotency key；幂等完全由 M2 [sourceMessageId + storyText hash] 保障。
  * 4. 同 sourceMessageId + 不同 storyText 的 CONFLICT 原样向上暴露；不吞错、不自动换 sourceMessageId。
@@ -26,9 +28,17 @@ import type {
 import { libraryClient } from '@/lib/client/library';
 
 /**
- * 可 promotion 的 Artifact 狭窄类型：仅 complete 与 promotion_failed。
+ * 可 promotion 的 Artifact 狭窄类型：仅 complete 与 promotion_failed，
+ * 且必须携带生成开始时冻结的 mandatory prompt snapshot（非空字符串）。
+ * M4-01 Artifact contract 里 prompt 是 optional，缺 snapshot 的合法状态机
+ * 对象必须在此 fail-fast，绝不触达 library.create。
  */
-export type PromotableChatArtifact = CompleteChatArtifact | PromotionFailedChatArtifact;
+export type PromotableChatArtifact = (
+  | CompleteChatArtifact
+  | PromotionFailedChatArtifact
+) & {
+  readonly prompt: string;
+};
 
 /**
  * library.create 函数签名（与 frozen facade 一致，便于测试注入）。
@@ -43,7 +53,10 @@ export interface PromotionAdapterDeps {
 }
 
 /**
- * 判断未知输入是否为可 promotion 的 Artifact（complete / promotion_failed）。
+ * 判断未知输入是否为可 promotion 的 Artifact（complete / promotion_failed
+ * 且携带非空 prompt 快照）。禁止在 adapter 里自动补 prompt（禁止 prompt=''、
+ * prompt=storyText、prompt=当前 inputValue、从消息列表重新猜）——缺 snapshot
+ * 必须 fail-fast（重新猜 prompt 会破坏生成时快照契约）。
  */
 function isPromotableArtifact(value: unknown): value is PromotableChatArtifact {
   if (value === null || typeof value !== 'object') {
@@ -53,14 +66,22 @@ function isPromotableArtifact(value: unknown): value is PromotableChatArtifact {
   if (candidate.artifactType !== 'story') {
     return false;
   }
+  if (
+    candidate.status !== 'complete' &&
+    candidate.status !== 'promotion_failed'
+  ) {
+    return false;
+  }
+  // mandatory promotion snapshot：prompt 必须是非空字符串。
   return (
-    candidate.status === 'complete' || candidate.status === 'promotion_failed'
+    typeof candidate.prompt === 'string' && candidate.prompt.trim().length > 0
   );
 }
 
 /**
  * 对 Artifact 做 fail-fast 门控，返回可 promotion 的窄类型。
  * 非 complete / promotion_failed（含 draft / interrupted / promoting / ready / legacy）一律抛错，
+ * status 合法但缺失 mandatory prompt snapshot（undefined / 非字符串 / 空白）同样抛错，
  * 且绝不触达 library.create。
  */
 export function assertPromotableArtifact(
@@ -81,8 +102,14 @@ export function assertPromotableArtifact(
       'Promotion adapter 拒绝：Legacy StoryCard 与非故事内容不可 promotion（仅 complete / promotion_failed 可入库）',
     );
   }
+  if (status !== 'complete' && status !== 'promotion_failed') {
+    throw new Error(
+      `Promotion adapter 拒绝：status=${JSON.stringify(status)} 不可 promotion（仅 complete / promotion_failed 可入库）`,
+    );
+  }
+  // status 合法但缺 mandatory promotion snapshot：fail-fast，禁止自动补 prompt。
   throw new Error(
-    `Promotion adapter 拒绝：status=${JSON.stringify(status)} 不可 promotion（仅 complete / promotion_failed 可入库）`,
+    'Promotion adapter 拒绝：缺失 mandatory promotion snapshot（prompt 为空），不可 promotion（fail-fast，未触达 library.create；禁止自动补 prompt）',
   );
 }
 
@@ -95,7 +122,7 @@ export function buildPromotionInput(
 ): LibraryCreateInput {
   return {
     title: artifact.title,
-    prompt: artifact.prompt as LibraryCreateInput['prompt'],
+    prompt: artifact.prompt,
     storyText: artifact.storyText,
     voiceId: artifact.voiceId,
     sourceMessageId: artifact.sourceMessageId,

@@ -77,6 +77,7 @@ const SUITES = [
     { id: 'conversation-conflict-refresh', path: './tests/integration/persistence-config/conversation-conflict-refresh.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'paragraph-segmentation', path: './tests/unit/playback/paragraph-segmentation.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'main-navigation', path: './tests/unit/navigation/main-navigation.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'story-work-domain', path: './tests/unit/persistence-config/story-work-domain.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'runner-group-split', path: './tests/tooling/runner/runner-group-split.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'catalog-checker', path: './tests/tooling/catalog/catalog-checker.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'evidence-schema', path: './tests/tooling/evidence/evidence-schema.tooling.test.ts', group: 'tooling', needs_db: false },

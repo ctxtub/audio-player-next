@@ -261,7 +261,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [history, replay]
     spec_path: docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md#e2e-02-11-02
-    executable_ids: [exec-l3-generation-history-play-once]
+    executable_ids: [exec-l3-generation-history-play-once, exec-story-work-domain]
     fixtures: []
     owner: history-reuse-playback
   - case_id: tts-voice-fallback-browser-behavior
@@ -916,6 +916,10 @@ executables:
     display_name_zh: 主导航路由契约
     layer: L1
     path: ./tests/unit/navigation/main-navigation.unit.test.ts
+  - executable_id: exec-story-work-domain
+    display_name_zh: StoryWork领域契约与派生算法
+    layer: L1
+    path: ./tests/unit/persistence-config/story-work-domain.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

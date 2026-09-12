@@ -766,7 +766,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-work, library, contract]
     spec_path: docs/e2e/07-故事库与作品资产/01-StoryWork领域契约与派生算法.md
-    executable_ids: [exec-story-work-domain]
+    executable_ids: [exec-story-work-domain, exec-story-work-read]
     fixtures: []
     owner: story-library
 executables:
@@ -932,6 +932,10 @@ executables:
     display_name_zh: StoryWork领域契约与派生算法
     layer: L1
     path: ./tests/unit/persistence-config/story-work-domain.unit.test.ts
+  - executable_id: exec-story-work-read
+    display_name_zh: StoryWork读模型与检索
+    layer: L2
+    path: ./tests/integration/persistence-config/story-work-read.integration.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

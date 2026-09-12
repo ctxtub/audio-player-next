@@ -21,10 +21,13 @@
 4. **必须采用 Cancel + Clear 语义（严禁 Invalidate 替代）**：
    - 身份清理必须采用 `queryClient.cancelQueries() + queryClient.clear()`；
    - 严禁使用 `invalidateQueries` 替代身份清理（`invalidate` 会保留 stale 缓存，导致旧身份数据在短时间内可被同步读取，破坏安全隔离）。
-5. **在途请求取消与防复活竞态安全 (In-Flight Cancellation & Anti-Resurrection Race Safety)**：
+5. **单次跃迁单次清理 (Single Transition → Single Purge)**：
+   - 每次身份跃迁（Identity Transition）生命周期内必须且只能触发一次 purge（`cancelQueries() + clear()`）；
+   - 严格杜绝在后续 React render 周期或子组件 effect 中发生二次或多余清理，确保新身份挂载后发起的有效在途请求与新缓存不被误杀。
+6. **在途请求取消与防复活竞态安全 (In-Flight Cancellation & Anti-Resurrection Race Safety)**：
    - 典型竞态场景：Guest 发起 query A（deferred promise，尚未返回）→ 触发身份切换至 User → 执行 `cancelQueries() + clear()` → User 发起同 queryKey 的 query B 并成功 resolve → query A 最终延迟 resolve；
    - 最终缓存必须仅包含 User query B 的数据，query A 晚返回绝不得复活或污染当前缓存。
-6. **不读取 Library 数据**：
+7. **不读取 Library 数据**：
    - M3-01 阶段只建立基础设施，不引入任何 Library 数据读取与组件消费。
 
 ## 关联实现与测试

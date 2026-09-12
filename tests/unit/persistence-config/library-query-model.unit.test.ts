@@ -8,6 +8,7 @@ import {
   libraryDetailQueryOptions,
   DEFAULT_LIBRARY_LIMIT,
 } from '../../../lib/client/libraryQueries';
+import { SEARCH_DEBOUNCE_MS } from '../../../lib/client/libraryFilters';
 import {
   composeLibraryItemViewModel,
   composeLibraryDetailViewModel,
@@ -340,16 +341,27 @@ async function runLibraryQueryModelUnitTests() {
     console.log('PASS: 4. ViewModel 合成边界断言通过');
   }
 
-  console.log('=== 5. 静态守卫断言（源码扫描：严禁禁用 import 泄漏）===');
+  console.log('=== 5. Group B 静态架构守卫断言（M3 Final Freeze / Static Audit）===');
   {
     const repoRoot = process.cwd();
-    const filesToScan = [
-      path.join(repoRoot, 'lib/client/libraryQueries.ts'),
-      path.join(repoRoot, 'lib/client/libraryViewModel.ts'),
-    ];
 
+    // 5.1 守卫：全仓无 libraryStore / useLibraryStore
+    const storesDir = path.join(repoRoot, 'stores');
+    const storeFiles = fs.readdirSync(storesDir);
+    for (const file of storeFiles) {
+      assert(
+        !file.toLowerCase().includes('library'),
+        `架构违背：stores 目录不得包含 libraryStore 文件: ${file}`
+      );
+      const content = fs.readFileSync(path.join(storesDir, file), 'utf-8');
+      assert(
+        !content.includes('useLibraryStore') && !content.includes('libraryStore'),
+        `架构违背：stores/${file} 不得定义或导出 libraryStore / useLibraryStore`
+      );
+    }
+
+    // 5.2 守卫：扫描所有 Library 前端 UI 与 Client 模块，禁止 import lib/server/*, Prisma, @trpc/react-query
     const forbiddenImports = [
-      '@/lib/trpc/client',
       '@/lib/server',
       'lib/server',
       '@prisma/client',
@@ -357,20 +369,77 @@ async function runLibraryQueryModelUnitTests() {
       '@trpc/react-query',
     ];
 
-    for (const filePath of filesToScan) {
-      assert(fs.existsSync(filePath), `被扫描文件必须存在：${filePath}`);
-      const content = fs.readFileSync(filePath, 'utf-8');
+    function collectSourceFiles(dir: string): string[] {
+      const results: string[] = [];
+      if (!fs.existsSync(dir)) return results;
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          results.push(...collectSourceFiles(fullPath));
+        } else if (/\.(ts|tsx)$/.test(entry.name) && !entry.name.endsWith('.d.ts')) {
+          results.push(fullPath);
+        }
+      }
+      return results;
+    }
 
+    const filesToAudit = [
+      ...collectSourceFiles(path.join(repoRoot, 'components/Library')),
+      ...collectSourceFiles(path.join(repoRoot, 'app/(main)/library')),
+      ...collectSourceFiles(path.join(repoRoot, 'lib/client')).filter((f) =>
+        path.basename(f).startsWith('library')
+      ),
+    ];
+
+    assert(filesToAudit.length > 5, `扫描审计文件数应大于 5，实际为 ${filesToAudit.length}`);
+
+    for (const filePath of filesToAudit) {
+      const content = fs.readFileSync(filePath, 'utf-8');
       for (const forbidden of forbiddenImports) {
         const importPattern = new RegExp(`['"]${forbidden}(/.*)?['"]`);
         assert(
           !importPattern.test(content),
-          `静态守卫违背：文件 ${path.basename(filePath)} 不得导入禁用的模块 "${forbidden}"`
+          `静态守卫违背：文件 ${path.relative(repoRoot, filePath)} 不得导入禁用的模块 "${forbidden}"`
         );
       }
+      assert(
+        !content.includes('useLibraryStore'),
+        `静态守卫违背：文件 ${path.relative(repoRoot, filePath)} 不得引用 useLibraryStore`
+      );
     }
 
-    console.log('PASS: 5. 静态守卫断言通过（无 @/lib/trpc/client, @/lib/server/*, @prisma/*, @trpc/react-query 泄漏）');
+    // 5.3 守卫：libraryQueries 与 libraryViewModel 绝不直接依赖底层 @/lib/trpc/client
+    for (const filePath of [
+      path.join(repoRoot, 'lib/client/libraryQueries.ts'),
+      path.join(repoRoot, 'lib/client/libraryViewModel.ts'),
+    ]) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      assert(
+        !content.includes("from '@/lib/trpc/client'") && !content.includes('from "@/lib/trpc/client"'),
+        `静态守卫违背：${path.basename(filePath)} 不得直接导入底层 @/lib/trpc/client`
+      );
+    }
+
+    // 5.4 守卫：cursor 不进入 URL / QueryKey、page size 固定 20、debounce 固定 300ms
+    assert.strictEqual(DEFAULT_LIBRARY_LIMIT, 20, 'DEFAULT_LIBRARY_LIMIT 必须固定为 20');
+    assert.strictEqual(SEARCH_DEBOUNCE_MS, 300, 'SEARCH_DEBOUNCE_MS 必须固定为 300ms');
+
+    // 验证 list query keys 中绝无 cursor
+    const sampleKeys = [
+      libraryKeys.lists(),
+      libraryKeys.list({}),
+      libraryKeys.list({ view: 'active', query: 'test' }),
+      libraryKeys.list({ view: 'trash' }),
+    ];
+    for (const key of sampleKeys) {
+      const keyStr = JSON.stringify(key);
+      assert(!keyStr.includes('cursor'), `list queryKey 绝对禁止包含 cursor: ${keyStr}`);
+    }
+
+    console.log(
+      'PASS: 5. Group B 静态架构守卫全部通过（无 libraryStore、无 forbidden imports、cursor/limit/debounce 契约冻结）'
+    );
   }
 
   console.log('ALL LIBRARY QUERY MODEL UNIT TESTS PASSED SUCCESSFULLY');

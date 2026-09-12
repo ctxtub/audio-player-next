@@ -193,6 +193,9 @@ async function runLibraryDetailReadUnitTests() {
     assert.strictEqual(isUnavailableError(new Error('网络超时或数据库连接失败')), false);
     assert.strictEqual(isUnavailableError(null), false);
     assert.strictEqual(isUnavailableError(undefined), false);
+    // 文本词界收窄：避免诸如端口 31404 或数字 4010 被误伤为不可用
+    assert.strictEqual(isUnavailableError(new Error('Connection refused at port 31404')), false);
+    assert.strictEqual(isUnavailableError(new Error('Payload length 4010 bytes exceeded')), false);
 
     // 1.2 模拟 5 种不同场景下页面渲染结果（NOT_FOUND / UNAUTHORIZED / foreign / trashed / 不存在）
     const scenarios = [

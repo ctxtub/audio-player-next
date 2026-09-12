@@ -613,7 +613,7 @@ export interface RenameOptions {
  * - 采用 view-aware 变更规划与局部逆向回滚补丁 (Journal-based Inverse Patch)；
  * - 成功：detail cache 更新为服务端完整 DTO；所有已加载 list cache 仅更新同 id 的 title，绝对保持分页位置、nextCursor 及 pageParams 原样；
  * - 失败：仅对受影响的特定 item 进行局部逆向回滚，绝不整份覆盖快照；
- * - 失效：仅失效相关 detail 缓存。
+ * - 失效：失效 lists + detail。
  */
 export async function mutateRename(
   queryClient: QueryClient,

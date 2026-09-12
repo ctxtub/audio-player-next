@@ -102,12 +102,17 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
     // 2. /library active 首屏 = 20 条
     await page.goto(`${harnessEnv.appUrl}/library`, { waitUntil: "networkidle", timeout: 30000 });
     const retryBtn = page.getByRole("button", { name: "重试" });
-    try {
-        if (await retryBtn.isVisible({ timeout: 1500 })) {
-            await retryBtn.click();
+    const libraryPage = page.getByTestId("library-page");
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+        if (await libraryPage.isVisible().catch(() => false)) {
+            break;
         }
-    } catch {}
-    await expect(page.getByTestId("library-page")).toBeVisible({ timeout: 15000 });
+        if (await retryBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+            await retryBtn.click().catch(() => {});
+        }
+        await page.waitForTimeout(500);
+    }
+    await expect(libraryPage).toBeVisible({ timeout: 15000 });
     const cards = page.locator('article[data-testid^="story-work-card-"]');
     await expect(cards).toHaveCount(20, { timeout: 15000 });
     recorder.step("首屏20条截断验证", { count: 20 });

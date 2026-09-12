@@ -32,19 +32,22 @@ export function isUnavailableError(error: unknown): boolean {
   const httpStatus = errObj.data?.httpStatus ?? errObj.status ?? errObj.statusCode;
   const message = String(errObj.message ?? '');
 
+  // 1. 优先根据结构化错误字段判定（tRPC TRPCClientError / TRPCError 核心主路径）
   if (code === 'NOT_FOUND' || code === 'UNAUTHORIZED' || code === 'FORBIDDEN') {
     return true;
   }
   if (httpStatus === 404 || httpStatus === 401 || httpStatus === 403) {
     return true;
   }
+
+  // 2. 文本消息回退匹配（仅用于边缘网关或非标准异常无结构化响应时的防御兜底）
+  // 安全收窄：使用独立词界匹配 /\b(404|401|403)\b/，杜绝将端口号（如 31404）或无辜数字 ID 串误判为不可用
   if (
     message.includes('NOT_FOUND') ||
     message.includes('UNAUTHORIZED') ||
     message.includes('FORBIDDEN') ||
     message.includes('作品不存在') ||
-    message.includes('404') ||
-    message.includes('401')
+    /\b(404|401|403)\b/.test(message)
   ) {
     return true;
   }

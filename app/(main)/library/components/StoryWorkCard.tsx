@@ -144,18 +144,22 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({ work, view }) => {
         ) : null}
       </div>
 
-      {/* 操作区域（读取期占位，不触发任何 mutation） */}
-      <div className={styles.cardActions}>
-        <button
-          type="button"
-          className={styles.playBtn}
-          data-testid={`story-card-play-btn-${work.id}`}
-          aria-label={`播放 ${work.title}`}
-        >
-          <Play size={12} fill="currentColor" />
-          <span>播放</span>
-        </button>
-      </div>
+      {/* 操作区域（读取期占位，不触发任何 mutation；回收站不提供播放，正常视图置灰等待 M5 接入） */}
+      {!isTrash ? (
+        <div className={styles.cardActions}>
+          <button
+            type="button"
+            className={styles.playBtn}
+            disabled
+            data-testid={`story-card-play-btn-${work.id}`}
+            aria-label={`播放 ${work.title}（功能开发中）`}
+            title="播放功能将在后续版本开放"
+          >
+            <Play size={12} fill="currentColor" />
+            <span>播放</span>
+          </button>
+        </div>
+      ) : null}
     </article>
   );
 };

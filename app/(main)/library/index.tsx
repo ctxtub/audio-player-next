@@ -134,8 +134,9 @@ const LibraryPage: React.FC = () => {
               <LibraryTimeGroup key={group.label} group={group} view={view} />
             ))}
 
-            {/* 无限滚动哨兵（三重 Gate 守护） */}
+            {/* 无限滚动哨兵（三重 Gate 守护与跨 query identity 锁隔离） */}
             <InfiniteScrollSentinel
+              key={JSON.stringify([view, q ?? null])}
               hasNextPage={Boolean(hasNextPage)}
               isFetchingNextPage={isFetchingNextPage}
               onFetchNext={fetchNextPage}

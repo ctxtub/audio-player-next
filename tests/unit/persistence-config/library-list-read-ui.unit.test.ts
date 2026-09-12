@@ -343,12 +343,16 @@ async function runLibraryListReadUiUnitTests(): Promise<void> {
       })
     );
 
-    // 3.1 active 视图下：Card 必须具有指向 /library/[id] 的 Detail Link
+    // 3.1 active 视图下：Card 必须具有指向 /library/[id] 的 Detail Link，且播放按钮为 disabled 占位
     const { container: activeContainer } = render(
       React.createElement(StoryWorkCard, { work: testWork, view: 'active' })
     );
     const activeLink = activeContainer.querySelector('a[href="/library/42"]');
     assert.ok(activeLink, 'active 视图下的卡片必须渲染指向 /library/[id] 的 Link');
+
+    const activePlayBtn = activeContainer.querySelector('[data-testid="story-card-play-btn-42"]') as HTMLButtonElement;
+    assert.ok(activePlayBtn, 'active 视图卡片应渲染播放按钮视觉占位');
+    assert.strictEqual(activePlayBtn.disabled, true, '播放按钮在 M5 接入前必须 disabled 避免误导');
     cleanup();
 
     // 3.2 favorites 视图下：Card 必须具有指向 /library/[id] 的 Detail Link
@@ -359,7 +363,7 @@ async function runLibraryListReadUiUnitTests(): Promise<void> {
     assert.ok(favLink, 'favorites 视图下的卡片必须渲染指向 /library/[id] 的 Link');
     cleanup();
 
-    // 3.3 trash 视图下：Card 绝不能生成任何 Detail Link！
+    // 3.3 trash 视图下：Card 绝不能生成任何 Detail Link！且绝不渲染播放按钮
     const { container: trashContainer } = render(
       React.createElement(StoryWorkCard, { work: testWork, view: 'trash' })
     );
@@ -384,6 +388,10 @@ async function runLibraryListReadUiUnitTests(): Promise<void> {
     const trashBadge = trashContainer.querySelector('[data-testid="story-card-trash-badge-42"]');
     assert.ok(trashBadge, 'trash 视图必须展示「已移入回收站」标识');
     assert.strictEqual(trashBadge.textContent, '已移入回收站');
+
+    // 播放按钮占位断言：trash 下绝不渲染播放按钮
+    const trashPlayBtn = trashContainer.querySelector('[data-testid^="story-card-play-btn-"]');
+    assert.strictEqual(trashPlayBtn, null, 'trash 视图卡片不得渲染播放按钮');
 
     console.log('PASS: 3. Trash Card 无 Detail Link 铁律断言通过');
   }
@@ -461,6 +469,105 @@ async function runLibraryListReadUiUnitTests(): Promise<void> {
       activeObserverCallback?.([{ isIntersecting: true } as any], activeObserverInstance);
     });
     assert.strictEqual(fetchCallCount, 1, 'hasNextPage 为 false 时禁止触发 fetchNext');
+
+    // 4.5 跨 Query Identity 锁隔离（Key Remount 2 层守卫）
+    console.log('--- 4.5 跨 Query Identity 锁隔离回归（Key Remount 两层断言）---');
+    {
+      cleanup();
+      let fetchACallCount = 0;
+      let resolveA: (() => void) | null = null;
+      const mockFetchA = () => {
+        fetchACallCount += 1;
+        return new Promise<void>((res) => {
+          resolveA = res;
+        });
+      };
+
+      let fetchBCallCount = 0;
+      let resolveB: (() => void) | null = null;
+      const mockFetchB = () => {
+        fetchBCallCount += 1;
+        return new Promise<void>((res) => {
+          resolveB = res;
+        });
+      };
+
+      // 模拟 LibraryPage 中 <InfiniteScrollSentinel key={JSON.stringify([view, q ?? null])} ... />
+      const TestContainer = ({
+        view,
+        q,
+        onFetch,
+      }: {
+        view: string;
+        q?: string | null;
+        onFetch: () => Promise<void>;
+      }) =>
+        React.createElement(InfiniteScrollSentinel, {
+          key: JSON.stringify([view, q ?? null]),
+          hasNextPage: true,
+          isFetchingNextPage: false,
+          onFetchNext: onFetch,
+        });
+
+      // 阶段 1：在 active 视图下挂载并触发相交
+      const { rerender: rerenderContainer } = render(
+        React.createElement(TestContainer, {
+          view: 'active',
+          q: null,
+          onFetch: mockFetchA,
+        })
+      );
+
+      assert.ok(activeObserverCallback, 'active Sentinel 必须已挂载 observer');
+      act(() => {
+        activeObserverCallback!([{ isIntersecting: true } as any], activeObserverInstance);
+      });
+      assert.strictEqual(fetchACallCount, 1, 'active 视图首次触发相交，fetchA 必须调用 1 次');
+      // 注意：此时 resolveA 未调用，请求 A 在途（A promise 保持 unresolved）
+
+      // 阶段 2 (Layer a)：用户切换视图为 favorites（新 query identity），A 仍未返回！
+      // 此时 key 发生变更，React 触发 unmount 旧实例 + mount 新实例
+      rerenderContainer(
+        React.createElement(TestContainer, {
+          view: 'favorites',
+          q: null,
+          onFetch: mockFetchB,
+        })
+      );
+
+      // 新实例相交触发
+      assert.ok(activeObserverCallback, 'favorites Sentinel 必须已挂载新 observer');
+      act(() => {
+        activeObserverCallback!([{ isIntersecting: true } as any], activeObserverInstance);
+      });
+      assert.strictEqual(
+        fetchBCallCount,
+        1,
+        'Layer a: 虽旧请求 A 仍处于挂起未返回状态，但因 key remount 隔离，新视图 favorites 绝不受旧锁阻断，fetchB 必须成功调用 1 次'
+      );
+
+      // 阶段 3 (Layer b 加强层)：B 仍处于在途挂起未返回状态，此时旧请求 A 终于 settle（resolve A）
+      act(() => {
+        resolveA?.();
+      });
+
+      // 再次触发相交：验证旧请求 A 的 settle（A.finally）绝不会误解开当前新 query B 的并发锁！
+      act(() => {
+        activeObserverCallback!([{ isIntersecting: true } as any], activeObserverInstance);
+      });
+      assert.strictEqual(
+        fetchBCallCount,
+        1,
+        'Layer b: 旧请求 A resolve 之后，由于旧闭包只操作已销毁旧实例的 ref，新实例 B 的在途锁绝不被误释放，fetchB 仍只能为 1 次'
+      );
+
+      // 解除 B
+      act(() => {
+        resolveB?.();
+      });
+
+      console.log('PASS: 4.5 跨 Query Identity 锁隔离（Key Remount 两层断言）通过');
+    }
 
     console.log('PASS: 4. 无限滚动三重 Gate 守护与防并发断言通过');
   }
@@ -710,6 +817,12 @@ async function runLibraryListReadUiUnitTests(): Promise<void> {
       libraryIndexCode.includes('@prisma/client'),
       false,
       'UI 页面层严禁导入 Prisma'
+    );
+
+    // 7.4 静态守卫：InfiniteScrollSentinel 必须挂载 key={JSON.stringify([view, q ?? null])}
+    assert.ok(
+      libraryIndexCode.includes('key={JSON.stringify([view, q ?? null])}'),
+      'LibraryPage 必须显式声明 key={JSON.stringify([view, q ?? null])} 保障 Sentinel 跨 query identity 锁隔离'
     );
 
     console.log('PASS: 7. 静态纯只读与架构隔离守卫断言通过');

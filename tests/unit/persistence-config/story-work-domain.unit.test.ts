@@ -38,6 +38,12 @@ import {
   libraryListInputSchema,
   libraryListOutputSchema,
   libraryCreateInputSchema,
+  libraryRenameInputSchema,
+  librarySetFavoriteInputSchema,
+  libraryTrashInputSchema,
+  libraryRestoreInputSchema,
+  libraryDeletePermanentlyInputSchema,
+  libraryDeletePermanentlyOutputSchema,
   storyAudioProjectionSchema,
   storyWorkDetailDtoSchema,
   storyWorkSummaryDtoSchema,
@@ -731,6 +737,39 @@ async function runStoryWorkDomainTests(): Promise<void> {
   assert.throws(() => libraryCreateInputSchema.parse({ prompt: 'A'.repeat(2001), storyText: '正文' }), /提示词过长/);
   assert.throws(() => libraryCreateInputSchema.parse({ prompt: '提示词', storyText: 'B'.repeat(20001) }), /故事正文过长/);
   console.log('PASS: libraryCreateInputSchema 入参边界与不可信字段剥离校验通过');
+
+  console.log('=== 10. 生命周期 Mutations Schemas 契约校验 ===');
+  // 10.1 Rename
+  const validRename = libraryRenameInputSchema.parse({ id: 1, title: '新标题' });
+  assert.strictEqual(validRename.id, 1);
+  assert.strictEqual(validRename.title, '新标题');
+  assert.throws(() => libraryRenameInputSchema.parse({ id: 0, title: '新标题' }), /ID 必须为正整数/);
+  assert.throws(() => libraryRenameInputSchema.parse({ id: 1, title: '' }), /标题不能为空/);
+  assert.throws(() => libraryRenameInputSchema.parse({ id: 1, title: 'A'.repeat(81) }), /标题最多 80 字符/);
+
+  // 10.2 SetFavorite
+  const validFavTrue = librarySetFavoriteInputSchema.parse({ id: 2, favorite: true });
+  assert.strictEqual(validFavTrue.favorite, true);
+  const validFavFalse = librarySetFavoriteInputSchema.parse({ id: 2, favorite: false });
+  assert.strictEqual(validFavFalse.favorite, false);
+  assert.throws(() => librarySetFavoriteInputSchema.parse({ id: -1, favorite: true }), /ID 必须为正整数/);
+  assert.throws(() => librarySetFavoriteInputSchema.parse({ id: 1, favorite: 'not-bool' }));
+
+  // 10.3 Trash / Restore / DeletePermanently ID Schemas
+  assert.strictEqual(libraryTrashInputSchema.parse({ id: 5 }).id, 5);
+  assert.strictEqual(libraryRestoreInputSchema.parse({ id: 5 }).id, 5);
+  assert.strictEqual(libraryDeletePermanentlyInputSchema.parse({ id: 5 }).id, 5);
+  assert.throws(() => libraryTrashInputSchema.parse({ id: 0 }), /ID 必须为正整数/);
+  assert.throws(() => libraryRestoreInputSchema.parse({ id: -1 }), /ID 必须为正整数/);
+  assert.throws(() => libraryDeletePermanentlyInputSchema.parse({ id: -2 }), /ID 必须为正整数/);
+  assert.throws(() => libraryDeletePermanentlyInputSchema.parse({ id: 1.5 }));
+
+  // 10.4 DeletePermanently Output Schema
+  const validDeleteOut = libraryDeletePermanentlyOutputSchema.parse({ success: true, id: 5 });
+  assert.strictEqual(validDeleteOut.success, true);
+  assert.strictEqual(validDeleteOut.id, 5);
+  assert.throws(() => libraryDeletePermanentlyOutputSchema.parse({ success: false, id: 5 }));
+  console.log('PASS: 生命周期 Mutations Schemas 契约校验通过');
 
   console.log('\nALL STORYWORK DOMAIN CONTRACT UNIT TESTS PASSED SUCCESSFULLY!');
 }

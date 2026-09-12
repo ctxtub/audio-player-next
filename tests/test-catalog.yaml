@@ -793,6 +793,18 @@ cases:
     executable_ids: [exec-story-work-create]
     fixtures: []
     owner: story-library
+  - case_id: story-work-lifecycle-mutations
+    display_name_zh: StoryWork 生命周期操作
+    legacy_aliases: [E2E-07-04]
+    journey_id: story-library
+    user_goal: 用户与访客能够安全重命名、收藏切换、软删除、恢复及永久删除作品资产
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-work, library, mutation, lifecycle, trash]
+    spec_path: docs/e2e/07-故事库与作品资产/04-StoryWork生命周期操作.md
+    executable_ids: [exec-story-work-lifecycle]
+    fixtures: []
+    owner: story-library
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -964,6 +976,10 @@ executables:
     display_name_zh: StoryWork创作入库与幂等
     layer: L2
     path: ./tests/integration/persistence-config/story-work-create.integration.test.ts
+  - executable_id: exec-story-work-lifecycle
+    display_name_zh: StoryWork生命周期操作
+    layer: L2
+    path: ./tests/integration/persistence-config/story-work-lifecycle.integration.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

@@ -167,3 +167,31 @@ export const librarySetFavoriteInputSchema = z.object({
   favorite: z.boolean(),
 });
 export type LibrarySetFavoriteInput = z.infer<typeof librarySetFavoriteInputSchema>;
+
+/**
+ * library.trash 入参契约
+ */
+export const libraryTrashInputSchema = libraryIdInputSchema;
+export type LibraryTrashInput = z.infer<typeof libraryTrashInputSchema>;
+
+/**
+ * library.restore 入参契约
+ */
+export const libraryRestoreInputSchema = libraryIdInputSchema;
+export type LibraryRestoreInput = z.infer<typeof libraryRestoreInputSchema>;
+
+/**
+ * library.deletePermanently 入参契约
+ */
+export const libraryDeletePermanentlyInputSchema = libraryIdInputSchema;
+export type LibraryDeletePermanentlyInput = z.infer<typeof libraryDeletePermanentlyInputSchema>;
+
+/**
+ * library.deletePermanently 出参契约
+ */
+export const libraryDeletePermanentlyOutputSchema = z.object({
+  success: z.literal(true),
+  id: z.number().int().positive(),
+});
+export type LibraryDeletePermanentlyOutput = z.infer<typeof libraryDeletePermanentlyOutputSchema>;
+

@@ -604,3 +604,451 @@ export async function createStoryWorkForSubject(
     }
   }
 }
+
+/**
+ * 校验作品 ID 有效性（统一 NOT_FOUND 防信息泄露）
+ */
+function assertValidWorkId(id: unknown): number {
+  if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: '作品不存在',
+    });
+  }
+  return id;
+}
+
+/**
+ * 音频清理统一 Service Seam（物理删除时内部调用，为 M8 Audio tombstone 留口）
+ */
+export type StoryWorkAudioCleanupHook = (
+  subject: Subject,
+  workId: number
+) => Promise<void> | void;
+
+let storyWorkAudioCleanupHook: StoryWorkAudioCleanupHook | null = null;
+
+/**
+ * 注册音频清理 Hook（供 M8 Audio tombstone 注入真实清理逻辑）
+ */
+export function registerStoryWorkAudioCleanupHook(
+  hook: StoryWorkAudioCleanupHook | null
+): void {
+  storyWorkAudioCleanupHook = hook;
+}
+
+/**
+ * 触发音频清理 Hook（统一 Service Seam）
+ */
+export async function performStoryWorkAudioCleanupHook(
+  subject: Subject,
+  workId: number
+): Promise<void> {
+  if (storyWorkAudioCleanupHook) {
+    await storyWorkAudioCleanupHook(subject, workId);
+  }
+}
+
+/**
+ * 重命名故事作品（M2-05）
+ *
+ * 严格语义：
+ * 1. 仅更新 title 字段（+ updatedAt）；
+ * 2. 严禁修改 storyText / contentHash / excerpt，保证作品内容身份不变；
+ * 3. 标题经既有 resolveStoryTitle 规范化（仅 title 参与解析）；
+ * 4. 仅放行 active 作品；回收站中、不存在或属于其他主体的作品统一抛出 NOT_FOUND；
+ * 5. User / Guest 两表严格同构对称。
+ *
+ * @param subject 身份主体（User / Guest）
+ * @param workId 作品 ID
+ * @param newTitle 新标题文本
+ */
+export async function renameStoryWorkForSubject(
+  subject: Subject,
+  workId: number,
+  newTitle: string
+): Promise<StoryWorkDetailDTO> {
+  const validId = assertValidWorkId(workId);
+
+  if (typeof newTitle !== 'string' || newTitle.trim().length === 0) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '标题不能为空',
+    });
+  }
+
+  // 严格按既有 resolveStoryTitle 语义规范化（仅 title 字段参与）
+  const resolvedTitle = resolveStoryTitle({
+    proposedTitle: newTitle,
+    title: newTitle,
+  });
+
+  if (!resolvedTitle || resolvedTitle.trim().length === 0) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '标题不能为空',
+    });
+  }
+
+  if (subject.type === 'user') {
+    const existing = await prisma.storyWork.findFirst({
+      where: {
+        id: validId,
+        userId: subject.id,
+        deletedAt: null,
+      },
+    });
+
+    if (!existing) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: '作品不存在',
+      });
+    }
+
+    const updated = await prisma.storyWork.update({
+      where: { id: validId },
+      data: { title: resolvedTitle },
+    });
+
+    return toDetailDto(updated);
+  } else {
+    const existing = await prisma.guestStoryWork.findFirst({
+      where: {
+        id: validId,
+        guestId: subject.id,
+        deletedAt: null,
+      },
+    });
+
+    if (!existing) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: '作品不存在',
+      });
+    }
+
+    const updated = await prisma.guestStoryWork.update({
+      where: { id: validId },
+      data: { title: resolvedTitle },
+    });
+
+    return toDetailDto(updated);
+  }
+}
+
+/**
+ * 设置故事作品收藏状态（M2-05）
+ *
+ * 严格语义：
+ * 1. favoritedAt 为收藏状态唯一 truth（null=未收藏；非 null=已收藏）；不得引入第二个布尔字段；
+ * 2. 仅放行 active 作品；回收站中、不存在或属于其他主体的作品统一抛出 NOT_FOUND；
+ * 3. 幂等：若已收藏且入参为 true，保留原 favoritedAt 时间戳；
+ * 4. User / Guest 两表严格同构对称。
+ *
+ * @param subject 身份主体（User / Guest）
+ * @param workId 作品 ID
+ * @param favorite 是否收藏
+ */
+export async function setStoryWorkFavoriteForSubject(
+  subject: Subject,
+  workId: number,
+  favorite: boolean
+): Promise<StoryWorkDetailDTO> {
+  const validId = assertValidWorkId(workId);
+
+  if (typeof favorite !== 'boolean') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '收藏状态必须为布尔值',
+    });
+  }
+
+  if (subject.type === 'user') {
+    const existing = await prisma.storyWork.findFirst({
+      where: {
+        id: validId,
+        userId: subject.id,
+        deletedAt: null,
+      },
+    });
+
+    if (!existing) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: '作品不存在',
+      });
+    }
+
+    const favoritedAt = favorite ? (existing.favoritedAt ?? new Date()) : null;
+
+    const updated = await prisma.storyWork.update({
+      where: { id: validId },
+      data: { favoritedAt },
+    });
+
+    return toDetailDto(updated);
+  } else {
+    const existing = await prisma.guestStoryWork.findFirst({
+      where: {
+        id: validId,
+        guestId: subject.id,
+        deletedAt: null,
+      },
+    });
+
+    if (!existing) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: '作品不存在',
+      });
+    }
+
+    const favoritedAt = favorite ? (existing.favoritedAt ?? new Date()) : null;
+
+    const updated = await prisma.guestStoryWork.update({
+      where: { id: validId },
+      data: { favoritedAt },
+    });
+
+    return toDetailDto(updated);
+  }
+}
+
+/**
+ * 将故事作品移入回收站（软删除，M2-05）
+ *
+ * 严格语义：
+ * 1. 仅写入 deletedAt = now()，严禁物理删除，数据行必须保留；
+ * 2. 幂等：若已处于回收站中，保持原 deletedAt，不刷新 30 天清理窗口；
+ * 3. 不存在或属于其他主体的作品统一抛出 NOT_FOUND；
+ * 4. User / Guest 两表严格同构对称。
+ *
+ * @param subject 身份主体（User / Guest）
+ * @param workId 作品 ID
+ */
+export async function trashStoryWorkForSubject(
+  subject: Subject,
+  workId: number
+): Promise<StoryWorkDetailDTO> {
+  const validId = assertValidWorkId(workId);
+
+  if (subject.type === 'user') {
+    const existing = await prisma.storyWork.findFirst({
+      where: {
+        id: validId,
+        userId: subject.id,
+      },
+    });
+
+    if (!existing) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: '作品不存在',
+      });
+    }
+
+    if (existing.deletedAt !== null) {
+      return toDetailDto(existing);
+    }
+
+    const updated = await prisma.storyWork.update({
+      where: { id: validId },
+      data: { deletedAt: new Date() },
+    });
+
+    return toDetailDto(updated);
+  } else {
+    const existing = await prisma.guestStoryWork.findFirst({
+      where: {
+        id: validId,
+        guestId: subject.id,
+      },
+    });
+
+    if (!existing) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: '作品不存在',
+      });
+    }
+
+    if (existing.deletedAt !== null) {
+      return toDetailDto(existing);
+    }
+
+    const updated = await prisma.guestStoryWork.update({
+      where: { id: validId },
+      data: { deletedAt: new Date() },
+    });
+
+    return toDetailDto(updated);
+  }
+}
+
+/**
+ * 从回收站恢复故事作品（M2-05）
+ *
+ * 严格语义：
+ * 1. 仅清空 deletedAt = null，作品重回 active 状态；
+ * 2. 必须保留原 favoritedAt，恢复不影响既有收藏状态；
+ * 3. 仅允许处于回收站中的作品（deletedAt !== null）调用；对 active 作品调用抛出 CONFLICT 领域错误；
+ * 4. 不存在或属于其他主体的作品统一抛出 NOT_FOUND；
+ * 5. User / Guest 两表严格同构对称。
+ *
+ * @param subject 身份主体（User / Guest）
+ * @param workId 作品 ID
+ */
+export async function restoreStoryWorkForSubject(
+  subject: Subject,
+  workId: number
+): Promise<StoryWorkDetailDTO> {
+  const validId = assertValidWorkId(workId);
+
+  if (subject.type === 'user') {
+    const existing = await prisma.storyWork.findFirst({
+      where: {
+        id: validId,
+        userId: subject.id,
+      },
+    });
+
+    if (!existing) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: '作品不存在',
+      });
+    }
+
+    if (existing.deletedAt === null) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message: '作品未处于回收站中，无需恢复',
+      });
+    }
+
+    const updated = await prisma.storyWork.update({
+      where: { id: validId },
+      data: { deletedAt: null },
+    });
+
+    return toDetailDto(updated);
+  } else {
+    const existing = await prisma.guestStoryWork.findFirst({
+      where: {
+        id: validId,
+        guestId: subject.id,
+      },
+    });
+
+    if (!existing) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: '作品不存在',
+      });
+    }
+
+    if (existing.deletedAt === null) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message: '作品未处于回收站中，无需恢复',
+      });
+    }
+
+    const updated = await prisma.guestStoryWork.update({
+      where: { id: validId },
+      data: { deletedAt: null },
+    });
+
+    return toDetailDto(updated);
+  }
+}
+
+/**
+ * 永久物理删除故事作品（M2-05）
+ *
+ * 严格语义：
+ * 1. 仅允许目标处于回收站（deletedAt !== null）；对 active 作品调用明确以 CONFLICT 拒绝；
+ * 2. 物理删除唯一合法执行点（统一 Service Seam）；
+ * 3. 内部统一调用 performStoryWorkAudioCleanupHook 为 M8 Audio tombstone 留口；
+ * 4. 不存在或属于其他主体的作品统一抛出 NOT_FOUND；
+ * 5. User / Guest 两表严格同构对称。
+ *
+ * @param subject 身份主体（User / Guest）
+ * @param workId 作品 ID
+ */
+export async function permanentlyDeleteStoryWorkForSubject(
+  subject: Subject,
+  workId: number
+): Promise<{ success: true; id: number }> {
+  const validId = assertValidWorkId(workId);
+
+  if (subject.type === 'user') {
+    const existing = await prisma.storyWork.findFirst({
+      where: {
+        id: validId,
+        userId: subject.id,
+      },
+    });
+
+    if (!existing) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: '作品不存在',
+      });
+    }
+
+    if (existing.deletedAt === null) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message: '仅允许对回收站中的作品执行永久删除',
+      });
+    }
+
+    // 1. 统一 Service Seam：调用音频清理 Hook（M8 预留）
+    await performStoryWorkAudioCleanupHook(subject, validId);
+
+    // 2. 执行物理删除
+    await prisma.storyWork.delete({
+      where: { id: validId },
+    });
+
+    return {
+      success: true,
+      id: validId,
+    };
+  } else {
+    const existing = await prisma.guestStoryWork.findFirst({
+      where: {
+        id: validId,
+        guestId: subject.id,
+      },
+    });
+
+    if (!existing) {
+      throw new TRPCError({
+        code: 'NOT_FOUND',
+        message: '作品不存在',
+      });
+    }
+
+    if (existing.deletedAt === null) {
+      throw new TRPCError({
+        code: 'CONFLICT',
+        message: '仅允许对回收站中的作品执行永久删除',
+      });
+    }
+
+    await performStoryWorkAudioCleanupHook(subject, validId);
+
+    await prisma.guestStoryWork.delete({
+      where: { id: validId },
+    });
+
+    return {
+      success: true,
+      id: validId,
+    };
+  }
+}
+

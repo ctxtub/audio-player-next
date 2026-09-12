@@ -62,10 +62,3 @@ export function getQueryClient(): QueryClient {
   }
   return browserQueryClient;
 }
-
-/**
- * 测试专用重置/注入浏览器单例。
- */
-export function setBrowserQueryClientForTesting(client: QueryClient | undefined): void {
-  browserQueryClient = client;
-}

@@ -1,5 +1,9 @@
 import assert from 'node:assert';
+import { createRequire } from 'node:module';
+import React from 'react';
+import { render, act } from '@testing-library/react';
 import { QueryClient } from '@tanstack/react-query';
+import * as queryClientModule from '../../../lib/client/queryClient';
 import {
   computeIdentityFingerprint,
   clearQueryClientForIdentityTransition,
@@ -9,24 +13,38 @@ import {
 import { useAuthStore } from '../../../stores/authStore';
 import { ServerStateProvider, MainQueryProvider } from '../../../components/ServerStateProvider';
 
+const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
+const { JSDOM } = nodeRequire('jsdom') as {
+  JSDOM: new (html: string, opts?: Record<string, unknown>) => { window: Record<string, unknown> };
+};
+
+// 初始化 jsdom 全局环境，供真实 React Provider 挂载断言
+if (typeof window === 'undefined') {
+  const dom = new JSDOM('<!doctype html><html><body></body></html>', {
+    url: 'http://localhost/',
+    pretendToBeVisual: true,
+  });
+  const win = dom.window as unknown as Record<string, unknown>;
+  const g = globalThis as unknown as Record<string, unknown>;
+  try {
+    Object.defineProperty(g, 'window', { value: win, writable: true, configurable: true });
+  } catch {
+    g.window = win;
+  }
+  try {
+    Object.defineProperty(g, 'document', { value: win.document, writable: true, configurable: true });
+  } catch {
+    g.document = win.document;
+  }
+  try {
+    Object.defineProperty(g, 'navigator', { value: win.navigator, writable: true, configurable: true });
+  } catch {
+    g.navigator = win.navigator;
+  }
+}
+
 /**
  * E2E-07-08: Library Server State 与身份隔离集成测试套件。
- * 
- * 核心验证：
- * 1. 身份指纹纯净性：严格仅由 initialized, isLogin, isGuest, username 组成；
- *    严禁以 nickname / loading / error 作为身份信号。
- * 2. 核心竞态防御 (Deferred Promise)：
- *    Guest 发起 query A（deferred，尚未 resolve）
- *    → Guest → User 身份切换
- *    → queryClient.cancelQueries() + queryClient.clear()
- *    → User 发起同 queryKey 的 query B → B resolve
- *    → A 最后才 resolve
- *    → 最终 cache 只能包含 B 的数据；A 晚返回不得复活旧身份数据。
- * 3. 独立延迟请求防复活：在途 A 遇身份切换后晚 resolve，无后续请求时缓存保持为空。
- * 4. 严禁 invalidate 替代：证明 invalidateQueries 会保留 stale 缓存破坏隔离，cancel+clear 才是唯一合规语义。
- * 5. 快速切号（User A -> User B）数据彻底隔绝。
- * 6. useAuthStore 订阅与 nickname/loading 免疫验证。
- * 7. ServerStateProvider 与 MainQueryProvider 导出与生命周期契约。
  */
 async function runServerStateIdentityIsolationTests() {
   console.log('=== 1. Identity Fingerprint 纯净性与边界判定（排除 nickname / loading / error）===');
@@ -51,7 +69,6 @@ async function runServerStateIdentityIsolationTests() {
     assert.notStrictEqual(switchUserFp, loginFp, '切号 username 变化必须改变指纹');
 
     // 2) 证明：无论 nickname / loading 如何变化，指纹绝对不变
-    // 构造包含 nickname, loading, error 等污染字段的伪状态
     const withExtraFields1 = {
       ...base,
       nickname: 'Old Nickname',
@@ -127,7 +144,7 @@ async function runServerStateIdentityIsolationTests() {
     resolveGuestA(guestAData);
     await queryAPromise;
 
-    // 等待微任务与可能的调度器结算
+    // 等待微任务与调度器结算
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     // 6) 核心断言：最终 cache 只能包含 B 的数据；A 晚返回绝对不得复活或污染旧身份数据
@@ -192,7 +209,7 @@ async function runServerStateIdentityIsolationTests() {
     // 仅调用 invalidateQueries（错误的反模式）
     await qcInvalidateOnly.invalidateQueries();
 
-    // 证实：invalidateQueries 保留了条目与 stale 数据，可能被同步读取或未及时垃圾回收泄漏
+    // 证实：invalidateQueries 保留了条目与 stale 数据
     assert.strictEqual(
       qcInvalidateOnly.getQueryCache().getAll().length,
       1,
@@ -276,16 +293,20 @@ async function runServerStateIdentityIsolationTests() {
       loading: false,
     });
 
-    // 模拟 ServerStateProvider 内部对 store 的同步订阅逻辑
-    let prevFingerprint = computeIdentityFingerprint({
-      initialized: useAuthStore.getState().initialized,
-      isLogin: useAuthStore.getState().isLogin,
-      isGuest: useAuthStore.getState().isGuest,
-      username: useAuthStore.getState().username,
-    });
+    // 模拟 ServerStateProvider 内部单权威订阅逻辑
+    const initialState = useAuthStore.getState();
+    let prevFingerprint: string | null = initialState.initialized
+      ? computeIdentityFingerprint({
+          initialized: initialState.initialized,
+          isLogin: initialState.isLogin,
+          isGuest: initialState.isGuest,
+          username: initialState.username,
+        })
+      : null;
 
     const unsubscribe = useAuthStore.subscribe((state) => {
       if (!state.initialized) {
+        prevFingerprint = null;
         return;
       }
       const nextFingerprint = computeIdentityFingerprint({
@@ -353,11 +374,102 @@ async function runServerStateIdentityIsolationTests() {
     console.log('PASS: 6. useAuthStore 订阅集成与展示态免死断言通过');
   }
 
-  console.log('=== 7. ServerStateProvider 组件与导出规范校验 ===');
+  console.log('=== 7. ServerStateProvider 组件 mount 与单次清理回归（clear次数===1，新身份Query B在render周期存活）===');
+  {
+    const qc = createQueryClient();
+    let clearCount = 0;
+    const origClear = qc.clear.bind(qc);
+    qc.clear = () => {
+      clearCount += 1;
+      origClear();
+    };
+
+    // 初始状态：Guest 访客已解析完成
+    useAuthStore.setState({
+      initialized: true,
+      isLogin: false,
+      isGuest: true,
+      username: '',
+      nickname: 'Guest User',
+      loading: false,
+    });
+
+    // 挂载一个模拟子组件，当 isLogin=true 时立即发起新身份 Query B
+    function ProbeChild() {
+      const isLogin = useAuthStore((s) => s.isLogin);
+      React.useEffect(() => {
+        if (isLogin) {
+          // 模拟新身份挂载后发起的请求 B
+          qc.setQueryData(['user-probe-b'], { workId: 888, author: 'alice' });
+        }
+      }, [isLogin]);
+      return React.createElement('div', null, isLogin ? 'User' : 'Guest');
+    }
+
+    // 挂载真实 ServerStateProvider
+    const { rerender } = render(
+      React.createElement(ServerStateProvider, { queryClient: qc }, React.createElement(ProbeChild))
+    );
+    assert.strictEqual(clearCount, 0, '首次 mount 时无身份跃迁，clearCount 必须为 0');
+
+    // 发生 Guest → User 身份跃迁
+    act(() => {
+      useAuthStore.setState({
+        isLogin: true,
+        isGuest: false,
+        username: 'alice',
+        nickname: 'Alice Real',
+      });
+    });
+
+    // 核心回归断言：clear 次数必须严格等于 1，绝不允许在 render-cycle 发生第二次清除！
+    assert.strictEqual(
+      clearCount,
+      1,
+      '核心断言：身份切换时 clear() 必须且只能调用 1 次（杜绝双清理竞态）'
+    );
+
+    // 核心安全强化断言：新身份 Query B 启动后，随后 React render/effects 不得再次清除或取消 B
+    const probeBData = qc.getQueryData(['user-probe-b']);
+    assert.deepStrictEqual(
+      probeBData,
+      { workId: 888, author: 'alice' },
+      '新身份发起的数据 B 必须完好保存在缓存中'
+    );
+
+    // 再次触发重渲染（模拟路由或全局 UI 状态刷新）
+    rerender(
+      React.createElement(ServerStateProvider, { queryClient: qc }, React.createElement(ProbeChild))
+    );
+
+    // 断言 clearCount 仍然保持为 1，且 Query B 依然存活
+    assert.strictEqual(clearCount, 1, '重渲染后 clearCount 仍必须为 1');
+    assert.deepStrictEqual(
+      qc.getQueryData(['user-probe-b']),
+      { workId: 888, author: 'alice' },
+      '重渲染后新身份 Query B 必须稳定存活'
+    );
+
+    console.log('PASS: 7. ServerStateProvider 单次清理与新身份 Query B 存活回归断言通过');
+  }
+
+  console.log('=== 8. ServerStateProvider 组件与导出规范校验（无 production test seam）===');
   {
     assert.strictEqual(typeof ServerStateProvider, 'function', 'ServerStateProvider 应为 React 组件函数');
     assert.strictEqual(typeof MainQueryProvider, 'function', 'MainQueryProvider 应为别名函数');
     assert.strictEqual(ServerStateProvider, MainQueryProvider, 'MainQueryProvider 必须严格引用 ServerStateProvider');
+
+    // 断言生产 queryClient 模块严禁导出 setBrowserQueryClientForTesting
+    const exportedKeys = Object.keys(queryClientModule);
+    assert(
+      !exportedKeys.includes('setBrowserQueryClientForTesting'),
+      'lib/client/queryClient.ts 严禁导出 setBrowserQueryClientForTesting（production test seam 已清除）'
+    );
+    assert.strictEqual(
+      (queryClientModule as unknown as Record<string, unknown>).setBrowserQueryClientForTesting,
+      undefined,
+      'setBrowserQueryClientForTesting 必须为 undefined'
+    );
 
     const client1 = getQueryClient();
     assert(client1 instanceof QueryClient, 'getQueryClient 必须返回 QueryClient 实例');
@@ -366,7 +478,7 @@ async function runServerStateIdentityIsolationTests() {
     assert(customClient instanceof QueryClient, 'createQueryClient 必须返回 QueryClient 实例');
     assert.notStrictEqual(client1, customClient, '每次 createQueryClient 必须生成独立实例');
 
-    console.log('PASS: 7. ServerStateProvider 组件与导出规范校验通过');
+    console.log('PASS: 8. ServerStateProvider 导出规范与 test seam 清除校验通过');
   }
 
   console.log('ALL SERVER STATE IDENTITY ISOLATION TESTS PASSED SUCCESSFULLY');

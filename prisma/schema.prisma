@@ -13,23 +13,23 @@ datasource db {
 }
 
 model User {
-  id                Int                 @id @default(autoincrement())
-  username          String              @unique
-  password          String
-  nickname          String?
-  createdAt         DateTime            @default(now())
-  config            UserConfig?
-  promptHistory     PromptHistory[]
-  generationHistory GenerationHistory[]
-  chatMessages      ChatMessage[]
-  playbackProgress  UserPlaybackProgress?
+  id               Int                   @id @default(autoincrement())
+  username         String                @unique
+  password         String
+  nickname         String?
+  createdAt        DateTime              @default(now())
+  config           UserConfig?
+  promptHistory    PromptHistory[]
+  storyWorks       StoryWork[]
+  chatMessages     ChatMessage[]
+  playbackProgress UserPlaybackProgress?
 }
 
 /// 用户当前聊天会话的消息（单会话快照），与 User 多对一关联。
 model ChatMessage {
-  id        Int      @id @default(autoincrement())
+  id        Int     @id @default(autoincrement())
   userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// 会话内顺序
   position  Int
   /// 前端消息 id
@@ -46,20 +46,37 @@ model ChatMessage {
   @@index([userId, position])
 }
 
-/// 用户生成的故事历史，与 User 多对一关联。回放时据 storyText 重新合成音频。
-model GenerationHistory {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+/// 用户作品表（逻辑名 StoryWork，物理表仍为 GenerationHistory），与 User 多对一关联。
+model StoryWork {
+  id              Int       @id @default(autoincrement())
+  userId          Int       @map("userId")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// 触发生成的提示词
-  prompt    String
+  prompt          String
   /// 生成的故事正文
-  storyText String
+  storyText       String
   /// 生成时使用的音色（回放优先用它）
-  voiceId   String   @default("")
-  createdAt DateTime @default(now())
+  voiceId         String    @default("")
+  /// 作品标题（未来可由用户编辑）
+  title           String    @default("")
+  /// 摘要（截取正文前 N 字）
+  excerpt         String    @default("")
+  /// 正文内容哈希
+  contentHash     String    @default("")
+  /// 来源消息 ID（关联 ChatMessage.messageId，NULL 表示 legacy 数据）
+  sourceMessageId String?
+  /// 收藏时间（NULL 表示未收藏）
+  favoritedAt     DateTime?
+  /// 软删除时间（NULL 表示未删除）
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
 
-  @@index([userId, createdAt])
+  @@unique([userId, sourceMessageId])
+  @@index([userId, createdAt, id])
+  @@index([userId, deletedAt])
+  @@index([userId, favoritedAt])
+  @@map("GenerationHistory")
 }
 
 /// 用户提示词使用历史，与 User 多对一关联。
@@ -141,19 +158,35 @@ model GuestChatMessage {
   @@index([updatedAt])
 }
 
-/// 访客生成的故事历史
-model GuestGenerationHistory {
-  id        Int      @id @default(autoincrement())
-  guestId   String
-  prompt    String
-  storyText String
-  voiceId   String   @default("")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+/// 访客作品表（逻辑名 GuestStoryWork，物理表仍为 GuestGenerationHistory）
+model GuestStoryWork {
+  id              Int       @id @default(autoincrement())
+  guestId         String
+  prompt          String
+  storyText       String
+  voiceId         String    @default("")
+  /// 作品标题
+  title           String    @default("")
+  /// 摘要
+  excerpt         String    @default("")
+  /// 正文内容哈希
+  contentHash     String    @default("")
+  /// 来源消息 ID
+  sourceMessageId String?
+  /// 收藏时间
+  favoritedAt     DateTime?
+  /// 软删除时间
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  @@index([guestId, createdAt])
+  @@unique([guestId, sourceMessageId])
+  @@index([guestId, createdAt, id])
+  @@index([guestId, deletedAt])
+  @@index([guestId, favoritedAt])
   @@index([guestId])
   @@index([updatedAt])
+  @@map("GuestGenerationHistory")
 }
 
 /// 访客提示词历史
@@ -173,78 +206,76 @@ model GuestPromptHistory {
 
 /// 用户断点播放进度表（每用户仅保留一条活跃播放锚点）
 model UserPlaybackProgress {
-  id                          Int      @id @default(autoincrement())
-  userId                      Int      @unique
-  user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     Int  @id @default(autoincrement())
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   /// 播放源类型：'chat'（单会话故事卡片）| 'generation'（作品库历史条目）
-  sourceType                  String
+  sourceType String
   /// 溯源唯一标识：chat 时为 ChatMessage.messageId，generation 时为 string(generationId)；严禁 replay-text-* 临时 ID
-  sourceId                    String
+  sourceId   String
   /// 会话标识（可选）
-  sessionId                   String?
+  sessionId  String?
   /// 故事展示标题（用于断点恢复首屏展示，避免异步查主表）
-  title                       String
+  title      String
 
   /// 正文内容哈希（基于规范化文本计算的 8-12 位短哈希，用于检测正文漂移）
-  contentHash                 String   @default("")
+  contentHash         String @default("")
   /// 分段算法版本号（默认 'v1'，升级切段规则时可感知历史不兼容）
-  segmentationVersion         String   @default("v1")
+  segmentationVersion String @default("v1")
 
   /// 上一次已完整听完的段落序号（从 0 开始；-1 表示该故事未听完首段）
-  lastCompletedParagraphIndex Int      @default(-1)
+  lastCompletedParagraphIndex Int @default(-1)
   /// 下一次应当恢复播放的段落序号（通常为 lastCompletedParagraphIndex + 1，中途退出即重播此段）
-  nextParagraphIndex          Int      @default(0)
+  nextParagraphIndex          Int @default(0)
   /// 该故事正文总段落数
-  totalParagraphs             Int      @default(1)
+  totalParagraphs             Int @default(1)
 
   /// 合成语音参数上下文
-  voiceId                     String   @default("")
-  speed                       Float    @default(1.0)
+  voiceId String @default("")
+  speed   Float  @default(1.0)
 
   /// 倒计时上下文：继承定时器剩余有效毫秒数
-  remainingAllowedMs          Int?
-  totalAllowedMs              Int?
+  remainingAllowedMs Int?
+  totalAllowedMs     Int?
   /// 是否为一次性播放（作品库回放，不自动续写新章节）
-  isOneShot                   Boolean  @default(false)
+  isOneShot          Boolean @default(false)
 
-  updatedAt                   DateTime @updatedAt
-  createdAt                   DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 
   @@index([userId])
 }
 
 /// 访客断点播放进度表（具名访客 guestId 唯一索引，物理隔离且受 30 天 GC 管辖）
 model GuestPlaybackProgress {
-  id                          Int      @id @default(autoincrement())
-  guestId                     String   @unique
+  id      Int    @id @default(autoincrement())
+  guestId String @unique
 
   /// 播放源类型：'chat' | 'generation'
-  sourceType                  String
+  sourceType String
   /// 溯源唯一标识：chat 时为 ChatMessage.messageId，generation 时为 string(generationId)；严禁 replay-text-* 临时 ID
-  sourceId                    String
-  sessionId                   String?
-  title                       String
+  sourceId   String
+  sessionId  String?
+  title      String
 
-  contentHash                 String   @default("")
-  segmentationVersion         String   @default("v1")
+  contentHash         String @default("")
+  segmentationVersion String @default("v1")
 
-  lastCompletedParagraphIndex Int      @default(-1)
-  nextParagraphIndex          Int      @default(0)
-  totalParagraphs             Int      @default(1)
+  lastCompletedParagraphIndex Int @default(-1)
+  nextParagraphIndex          Int @default(0)
+  totalParagraphs             Int @default(1)
 
-  voiceId                     String   @default("")
-  speed                       Float    @default(1.0)
+  voiceId String @default("")
+  speed   Float  @default(1.0)
 
-  remainingAllowedMs          Int?
-  totalAllowedMs              Int?
-  isOneShot                   Boolean  @default(false)
+  remainingAllowedMs Int?
+  totalAllowedMs     Int?
+  isOneShot          Boolean @default(false)
 
-  updatedAt                   DateTime @updatedAt
-  createdAt                   DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 
   @@index([guestId])
   @@index([updatedAt])
 }
-
-

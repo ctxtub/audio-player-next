@@ -53,7 +53,7 @@ async function runGuestCreativeSyncTests() {
 
     // Clean initial state
     await prisma.guestChatMessage.deleteMany({ where: { guestId: guestId1 } });
-    await prisma.guestGenerationHistory.deleteMany({ where: { guestId: guestId1 } });
+    await prisma.guestStoryWork.deleteMany({ where: { guestId: guestId1 } });
     await prisma.guestPromptHistory.deleteMany({ where: { guestId: guestId1 } });
 
     // 1.1 Chat Save and Reload with Audio URL Sanitization
@@ -231,7 +231,7 @@ async function runGuestCreativeSyncTests() {
             { prompt: `Prompt ${i}`, storyText: `Story ${i}` }
         );
     }
-    const genCapCount = await prisma.guestGenerationHistory.count({ where: { guestId: guestCap } });
+    const genCapCount = await prisma.guestStoryWork.count({ where: { guestId: guestCap } });
     assert.strictEqual(genCapCount, 100, 'Guest generation history must be capped at 100 records in DB');
 
     console.log('PASS: Hard caps (chat <= 100, generation history <= 100) enforced');
@@ -252,7 +252,7 @@ async function runGuestCreativeSyncTests() {
             updatedAt: thirtyOneDaysAgo,
         },
     });
-    await prisma.guestGenerationHistory.create({
+    await prisma.guestStoryWork.create({
         data: {
             guestId: guestExpired,
             prompt: 'old prompt',
@@ -372,7 +372,7 @@ async function runGuestCreativeSyncTests() {
         orderBy: { position: 'asc' },
     });
     assert.strictEqual(guestChatBefore.length, 6, '前置：访客聊天应为 6 条');
-    const guestGensBefore = await prisma.guestGenerationHistory.findMany({ where: { guestId: guestMigrate } });
+    const guestGensBefore = await prisma.guestStoryWork.findMany({ where: { guestId: guestMigrate } });
     assert.strictEqual(guestGensBefore.length, 1, '前置：访客生成历史应为 1 条');
 
     // 6.1 Successful Registration Migration
@@ -408,7 +408,7 @@ async function runGuestCreativeSyncTests() {
         include: {
             config: true,
             chatMessages: { orderBy: { position: 'asc' } },
-            generationHistory: true,
+            storyWorks: true,
             promptHistory: true,
             playbackProgress: true,
         },
@@ -444,11 +444,11 @@ async function runGuestCreativeSyncTests() {
     assert.strictEqual(newUser.playbackProgress.totalParagraphs, 4, 'totalParagraphs 保真');
     assert.strictEqual(newUser.playbackProgress.sourceId, 'gm_2', 'sourceId 保真');
     assert.strictEqual(newUser.playbackProgress.contentHash, 'migratehash12345', 'contentHash 保真');
-    assert.strictEqual(newUser.generationHistory.length, 1, '1 GenerationHistory must be migrated');
-    assert.strictEqual(newUser.generationHistory[0].prompt, 'Guest story 1');
-    assert.strictEqual(newUser.generationHistory[0].storyText, 'Guest text 1');
+    assert.strictEqual(newUser.storyWorks.length, 1, '1 GenerationHistory must be migrated');
+    assert.strictEqual(newUser.storyWorks[0].prompt, 'Guest story 1');
+    assert.strictEqual(newUser.storyWorks[0].storyText, 'Guest text 1');
     assert.strictEqual(
-        String(newUser.generationHistory[0].createdAt ?? ''),
+        String(newUser.storyWorks[0].createdAt ?? ''),
         String(guestGensBefore[0].createdAt ?? ''),
         'generation createdAt 保真',
     );
@@ -456,9 +456,9 @@ async function runGuestCreativeSyncTests() {
     assert.strictEqual(newUser.promptHistory[0].prompt, 'Guest prompt 1');
     // no-duplicate-rows: 用户侧计数与访客侧计数精确 parity
     assert.strictEqual(newUser.chatMessages.length, guestChatBefore.length, 'no-duplicate-rows: 聊天计数 parity');
-    const guestGenCount = await prisma.guestGenerationHistory.count({ where: { guestId: guestMigrate } });
+    const guestGenCount = await prisma.guestStoryWork.count({ where: { guestId: guestMigrate } });
     const guestPromptCount = await prisma.guestPromptHistory.count({ where: { guestId: guestMigrate } });
-    assert.strictEqual(newUser.generationHistory.length, guestGenCount, 'no-duplicate-rows: 生成计数 parity');
+    assert.strictEqual(newUser.storyWorks.length, guestGenCount, 'no-duplicate-rows: 生成计数 parity');
     assert.strictEqual(newUser.promptHistory.length, guestPromptCount, 'no-duplicate-rows: 提示词计数 parity');
     // 注册即登录（SESSION cookie 签发）
     assert(cookieJar.has('auth'), '注册成功应签发 SESSION(auth) cookie');

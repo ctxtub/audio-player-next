@@ -25,7 +25,7 @@ export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeRes
     const [configs, messages, generations, prompts, playback] = await Promise.all([
         prisma.guestConfig.deleteMany({ where: { updatedAt: { lt: threshold } } }),
         prisma.guestChatMessage.deleteMany({ where: { updatedAt: { lt: threshold } } }),
-        prisma.guestGenerationHistory.deleteMany({ where: { updatedAt: { lt: threshold } } }),
+        prisma.guestStoryWork.deleteMany({ where: { updatedAt: { lt: threshold } } }),
         prisma.guestPromptHistory.deleteMany({ where: { updatedAt: { lt: threshold } } }),
         prisma.guestPlaybackProgress.deleteMany({ where: { updatedAt: { lt: threshold } } }),
     ]);

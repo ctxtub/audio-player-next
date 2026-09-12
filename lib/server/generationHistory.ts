@@ -39,7 +39,7 @@ const toDto = (row: GenerationHistoryRow): GenerationHistoryDTO => ({
 export const listGenerationHistory = async (
     userId: number,
 ): Promise<GenerationHistoryDTO[]> => {
-    const rows = await prisma.generationHistory.findMany({
+    const rows = await prisma.storyWork.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
         take: LIST_LIMIT,
@@ -56,7 +56,7 @@ export const recordGenerationHistory = async (
     userId: number,
     input: { prompt: string; storyText: string; voiceId?: string },
 ): Promise<GenerationHistoryDTO> => {
-    const created = await prisma.generationHistory.create({
+    const created = await prisma.storyWork.create({
         data: {
             userId,
             prompt: input.prompt,
@@ -66,14 +66,14 @@ export const recordGenerationHistory = async (
     });
 
     // 裁剪：删除超出最近 KEEP_LIMIT 的旧记录
-    const keep = await prisma.generationHistory.findMany({
+    const keep = await prisma.storyWork.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
         take: KEEP_LIMIT,
         select: { id: true },
     });
     const keepIds = keep.map((r) => r.id);
-    await prisma.generationHistory.deleteMany({
+    await prisma.storyWork.deleteMany({
         where: { userId, id: { notIn: keepIds } },
     });
 
@@ -86,7 +86,7 @@ export const recordGenerationHistory = async (
  * @param id 记录 ID。
  */
 export const removeGenerationHistory = async (userId: number, id: number): Promise<void> => {
-    await prisma.generationHistory.deleteMany({ where: { id, userId } });
+    await prisma.storyWork.deleteMany({ where: { id, userId } });
 };
 
 import type { Subject } from './subject';
@@ -100,7 +100,7 @@ export const listGenerationHistoryForSubject = async (
     if (subject.type === 'user') {
         return listGenerationHistory(subject.id);
     }
-    const rows = await prisma.guestGenerationHistory.findMany({
+    const rows = await prisma.guestStoryWork.findMany({
         where: { guestId: subject.id },
         orderBy: { createdAt: 'desc' },
         take: LIST_LIMIT,
@@ -119,7 +119,7 @@ export const recordGenerationHistoryForSubject = async (
         return recordGenerationHistory(subject.id, input);
     }
 
-    const created = await prisma.guestGenerationHistory.create({
+    const created = await prisma.guestStoryWork.create({
         data: {
             guestId: subject.id,
             prompt: input.prompt,
@@ -128,14 +128,14 @@ export const recordGenerationHistoryForSubject = async (
         },
     });
 
-    const keep = await prisma.guestGenerationHistory.findMany({
+    const keep = await prisma.guestStoryWork.findMany({
         where: { guestId: subject.id },
         orderBy: { createdAt: 'desc' },
         take: KEEP_LIMIT,
         select: { id: true },
     });
     const keepIds = keep.map((r) => r.id);
-    await prisma.guestGenerationHistory.deleteMany({
+    await prisma.guestStoryWork.deleteMany({
         where: { guestId: subject.id, id: { notIn: keepIds } },
     });
 
@@ -152,7 +152,7 @@ export const removeGenerationHistoryForSubject = async (
     if (subject.type === 'user') {
         return removeGenerationHistory(subject.id, id);
     }
-    await prisma.guestGenerationHistory.deleteMany({
+    await prisma.guestStoryWork.deleteMany({
         where: { id, guestId: subject.id },
     });
 };

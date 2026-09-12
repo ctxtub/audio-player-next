@@ -41,13 +41,13 @@ export async function migrateGuestCreativeRecordsToUser(
     }
 
     // 2. 生成历史迁移（按时间升序插入，最多 100 条）
-    const guestGenerations = await prisma.guestGenerationHistory.findMany({
+    const guestGenerations = await prisma.guestStoryWork.findMany({
         where: { guestId },
         orderBy: { createdAt: 'asc' },
         take: 100,
     });
     if (guestGenerations.length > 0) {
-        await prisma.generationHistory.createMany({
+        await prisma.storyWork.createMany({
             data: guestGenerations.map((g) => ({
                 userId,
                 prompt: g.prompt,

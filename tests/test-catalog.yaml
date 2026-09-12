@@ -841,6 +841,18 @@ cases:
     executable_ids: [exec-story-work-retention]
     fixtures: []
     owner: story-library
+  - case_id: server-state-identity-isolation
+    display_name_zh: Library Server State 与身份隔离
+    legacy_aliases: [E2E-07-08]
+    journey_id: story-library
+    user_goal: 建立 Server State 基础设施，在登录、登出、切号与访客模式切换时严格取消在途请求并清空缓存，防止旧身份数据跨账号复活
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-work, library, server-state, react-query, identity, isolation]
+    spec_path: docs/e2e/07-故事库与作品资产/08-Library-Server-State身份隔离.md
+    executable_ids: [exec-server-state-identity-isolation]
+    fixtures: []
+    owner: story-library
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1032,6 +1044,10 @@ executables:
     display_name_zh: StoryWork访客注册迁移与ID映射
     layer: L2
     path: ./tests/integration/persistence-config/story-work-guest-registration.integration.test.ts
+  - executable_id: exec-server-state-identity-isolation
+    display_name_zh: Server State与身份隔离
+    layer: L2
+    path: ./tests/integration/persistence-config/server-state-identity-isolation.integration.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

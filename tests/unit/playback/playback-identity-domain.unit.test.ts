@@ -219,7 +219,7 @@ async function runPlaybackIdentityDomainTests(): Promise<void> {
   assert.strictEqual(continuationModeToLegacyIsOneShot('extendable'), false);
   console.log('PASS: continuation verified');
 
-  // —— §4 / §4.1 session ——
+  // —— §4 / §4.1 / §17.1 / §33 session（fixup：checkpoint ownership 严格 fail-closed + UUID v4 锁形） ——
   console.log('--- session ---');
   const sidA = createPlaybackSessionId();
   const sidB = createPlaybackSessionId();
@@ -233,19 +233,41 @@ async function runPlaybackIdentityDomainTests(): Promise<void> {
   assert.strictEqual(isValidPlaybackSessionId(''), false);
   assert.strictEqual(isValidPlaybackSessionId('msg-abc-123'), false);
   assert.strictEqual(isValidPlaybackSessionId('not-a-uuid'), false);
+  // v4 锁形：nil UUID 非法
+  assert.strictEqual(isValidPlaybackSessionId('00000000-0000-0000-0000-000000000000'), false);
+  // v4 锁形：非 v4（v1）非法
+  assert.strictEqual(isValidPlaybackSessionId('6ec0bd7f-11c0-11d1-9100-00aa00b548e1'), false);
+  // v4 锁形：version 4 但 variant 非法（c 不在 8/9/a/b）非法
+  assert.strictEqual(isValidPlaybackSessionId('f47ac10b-58cc-4372-c567-0e02b2c3d479'), false);
+  // v4 锁形：已知合法 v4 向量
+  assert.strictEqual(isValidPlaybackSessionId('f47ac10b-58cc-4372-a567-0e02b2c3d479'), true);
+  // crypto.randomUUID() 恒为合法 v4
+  assert.strictEqual(isValidPlaybackSessionId(createPlaybackSessionId()), true);
   assert.strictEqual(ensurePlaybackSessionId(sidA), sidA);
   const repaired = ensurePlaybackSessionId(null);
   assert.strictEqual(isValidPlaybackSessionId(repaired), true);
   assert.strictEqual(isValidPlaybackSessionId(ensurePlaybackSessionId('bad')), true);
-  // stale guard：同 session 接受，异 session 以 STALE_SESSION 拒绝
+  // ensure 修 legacy：nil / 非 v4 / messageId 一律生成新的合法 v4
+  assert.strictEqual(isValidPlaybackSessionId(ensurePlaybackSessionId('00000000-0000-0000-0000-000000000000')), true);
+  assert.strictEqual(isValidPlaybackSessionId(ensurePlaybackSessionId('6ec0bd7f-11c0-11d1-9100-00aa00b548e1')), true);
+  assert.strictEqual(isValidPlaybackSessionId(ensurePlaybackSessionId('msg-legacy-id')), true);
+  // ① valid v4 checkpoint + same valid anchor → ACCEPT
   assert.deepStrictEqual(decideCheckpointAcceptance(sidA, sidA), { accepted: true });
+  // ② valid v4 checkpoint + different valid anchor → STALE
   assert.deepStrictEqual(decideCheckpointAcceptance(sidA, sidB), { accepted: false, reason: STALE_SESSION });
   assert.strictEqual(STALE_SESSION, 'STALE_SESSION');
   assert.strictEqual(isStaleSession(sidA, sidB), true);
   assert.strictEqual(isStaleSession(sidA, sidA), false);
-  // legacy null anchor：接受走修复路径，而非 stale
-  assert.deepStrictEqual(decideCheckpointAcceptance(sidA, null), { accepted: true });
+  // ③ invalid checkpoint + null anchor → STALE
+  assert.deepStrictEqual(decideCheckpointAcceptance('bad-checkpoint', null), { accepted: false, reason: STALE_SESSION });
+  // ④ invalid checkpoint + invalid anchor → STALE
+  assert.deepStrictEqual(decideCheckpointAcceptance('bad-checkpoint', 'also-bad'), { accepted: false, reason: STALE_SESSION });
   assert.strictEqual(isStaleSession('bad-checkpoint', sidA), true);
+  // ⑤ valid checkpoint + null anchor → STALE（先走 getAnchor repair，不在 checkpoint 抢 ownership）
+  assert.deepStrictEqual(decideCheckpointAcceptance(sidA, null), { accepted: false, reason: STALE_SESSION });
+  // ⑥ valid checkpoint + invalid anchor → STALE
+  assert.deepStrictEqual(decideCheckpointAcceptance(sidA, 'legacy-anchor-id'), { accepted: false, reason: STALE_SESSION });
+  assert.strictEqual(isStaleSession(sidA, null), true);
   console.log('PASS: session stale guard verified');
 
   // —— §3.4 promotion 取舍 ——

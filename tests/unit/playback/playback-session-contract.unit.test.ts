@@ -9,6 +9,7 @@ import {
   playbackAnchorDTOSchema,
   playbackCanonicalSourceTypeSchema,
   playbackProgressDTOSchema,
+  playbackSessionIdSchema,
   playbackSourceSchema,
   playbackSourceTypeSchema,
   promoteDraftPlaybackToWorkInputSchema,
@@ -17,6 +18,7 @@ import {
   savePlaybackProgressInputSchema,
   workPlaybackProgressDTOSchema,
 } from '../../../lib/trpc/schemas/playback';
+import { isValidPlaybackSessionId } from '../../../lib/playback/session';
 import {
   beginPlaybackSession,
   clearPlaybackAnchor,
@@ -300,6 +302,92 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   assert.throws(() => getWorkPlaybackProgressBatchInputSchema.parse({ workIds: [0] }));
   assert.throws(() => getWorkPlaybackProgressBatchInputSchema.parse({ workIds: [1.5] }));
   console.log('PASS: procedure inputs verified');
+
+  // —— Session API UUID v4 contract 回归（评审 Blocking 1：继承 M5-01 identity invariant） ——
+  // 六处 sessionId 入口必须共用同一 playbackSessionIdSchema（z.uuidv4），
+  // v4（含 crypto.randomUUID）PASS；v1 / v7 / nil / 坏 variant 一律 REJECT。
+  console.log('--- sessionId UUID v4 contract (M5-01 invariant) ---');
+  const KNOWN_V4 = VALID_UUID;
+  const RANDOM_V4 = crypto.randomUUID();
+  const UUID_V1 = '6ec0bd7f-11c0-11d1-9100-00aa00b548e1';
+  const UUID_V7 = '0196a1a0-9a2f-7f6c-b9e9-7a2b3c4d5e6f';
+  const NIL_UUID = '00000000-0000-0000-0000-000000000000';
+  const BAD_VARIANT = 'f47ac10b-58cc-4372-c567-0e02b2c3d479';
+  // 六处入口的同值构造器：全部只替换 sessionId，其余字段保持合法。
+  const sessionEntries: Array<{ name: string; build: (sessionId: string) => unknown; parse: (v: unknown) => unknown }> = [
+    {
+      name: 'PlaybackAnchorDTO.sessionId',
+      build: (sessionId) => ({ ...buildValidAnchor(), sessionId }),
+      parse: (v) => playbackAnchorDTOSchema.parse(v),
+    },
+    {
+      name: 'beginSession.sessionId',
+      build: (sessionId) => ({
+        sessionId,
+        source: { kind: 'draft', messageId: 'm1' },
+        mode: 'resume',
+        speed: 1.0,
+      }),
+      parse: (v) => beginPlaybackSessionInputSchema.parse(v),
+    },
+    {
+      name: 'saveCheckpoint.sessionId',
+      build: (sessionId) => ({
+        sessionId,
+        contentHash: '549c813b8b62',
+        segmentationVersion: 'v1',
+        lastCompletedParagraphIndex: 0,
+        nextParagraphIndex: 1,
+        totalParagraphs: 4,
+        speed: 1.0,
+      }),
+      parse: (v) => savePlaybackCheckpointInputSchema.parse(v),
+    },
+    {
+      name: 'completeSession.sessionId',
+      build: (sessionId) => ({ sessionId }),
+      parse: (v) => completePlaybackSessionInputSchema.parse(v),
+    },
+    {
+      name: 'clearAnchor.sessionId',
+      build: (sessionId) => ({ sessionId }),
+      parse: (v) => clearPlaybackAnchorInputSchema.parse(v),
+    },
+    {
+      name: 'promoteDraftToWork.sessionId',
+      build: (sessionId) => ({ sessionId, workId: 11 }),
+      parse: (v) => promoteDraftPlaybackToWorkInputSchema.parse(v),
+    },
+  ];
+  assert.strictEqual(sessionEntries.length, 6, 'must lock all six sessionId entries');
+  for (const entry of sessionEntries) {
+    // v4 PASS：known v4 + crypto.randomUUID()
+    entry.parse(entry.build(KNOWN_V4));
+    entry.parse(entry.build(RANDOM_V4));
+    // 非 v4 REJECT：v1 / v7 / nil / 坏 variant / 通用坏串
+    for (const bad of [UUID_V1, UUID_V7, NIL_UUID, BAD_VARIANT, 'bad']) {
+      assert.throws(
+        () => entry.parse(entry.build(bad)),
+        `${entry.name} must reject ${bad}`,
+      );
+    }
+  }
+  // 同一导出复用：六处 shape 必须为同一 playbackSessionIdSchema 引用（禁各自复制）。
+  assert.strictEqual(playbackAnchorDTOSchema.shape.sessionId, playbackSessionIdSchema, 'anchor must reuse playbackSessionIdSchema');
+  assert.strictEqual(beginPlaybackSessionInputSchema.shape.sessionId, playbackSessionIdSchema, 'beginSession must reuse playbackSessionIdSchema');
+  assert.strictEqual(savePlaybackCheckpointInputSchema.shape.sessionId, playbackSessionIdSchema, 'saveCheckpoint must reuse playbackSessionIdSchema');
+  assert.strictEqual(completePlaybackSessionInputSchema.shape.sessionId, playbackSessionIdSchema, 'completeSession must reuse playbackSessionIdSchema');
+  assert.strictEqual(clearPlaybackAnchorInputSchema.shape.sessionId, playbackSessionIdSchema, 'clearAnchor must reuse playbackSessionIdSchema');
+  assert.strictEqual(promoteDraftPlaybackToWorkInputSchema.shape.sessionId, playbackSessionIdSchema, 'promoteDraftToWork must reuse playbackSessionIdSchema');
+  // 与 M5-01 领域判定逐向量一致（schema 继承 identity invariant 的活锁）。
+  for (const v of [KNOWN_V4, RANDOM_V4, UUID_V1, UUID_V7, NIL_UUID, BAD_VARIANT, 'bad']) {
+    assert.strictEqual(
+      playbackSessionIdSchema.safeParse(v).success,
+      isValidPlaybackSessionId(v),
+      `schema/domain parity for ${v}`,
+    );
+  }
+  console.log('PASS: sessionId UUID v4 contract verified');
 
   // —— saveCheckpoint 输出：accepted 判别联合（含 STALE_SESSION） ——
   console.log('--- checkpoint result (§17.1) ---');

@@ -20,6 +20,17 @@ export type PlaybackSourceType = z.infer<typeof playbackSourceTypeSchema>;
 export const playbackCanonicalSourceTypeSchema = z.enum(['draft', 'work']);
 export type PlaybackCanonicalSourceType = z.infer<typeof playbackCanonicalSourceTypeSchema>;
 
+/**
+ * M5-01 identity invariant 的 Session API 继承点（评审 Blocking 1 锁死）：
+ * Session API 的全部 sessionId 输入/输出必须为 UUID v4 + RFC variant
+ *（M5-01 lib/playback/session.ts isValidPlaybackSessionId 契约），
+ * nil UUID / v1 / v7 / 坏 variant 一律拒绝。
+ * 集中单一定義：六处（AnchorDTO + begin/save/complete/clear/promote）
+ * 统一复用本导出，禁止各自复制 regex / z.string().uuid()。
+ */
+export const playbackSessionIdSchema = z.uuidv4();
+export type PlaybackSessionId = z.infer<typeof playbackSessionIdSchema>;
+
 export const playbackProgressDTOSchema = z.object({
   sourceType: playbackSourceTypeSchema,
   sourceId: z.string().min(1).max(128),
@@ -100,7 +111,7 @@ export type PlaybackAnchorState = z.infer<typeof playbackAnchorStateSchema>;
  * 不包含：storyText / audioUrl / currentTime / isPlaying。
  */
 export const playbackAnchorDTOSchema = z.object({
-  sessionId: z.string().uuid(),
+  sessionId: playbackSessionIdSchema,
 
   source: playbackSourceSchema,
 
@@ -162,7 +173,7 @@ export type GetPlaybackAnchorOutput = z.infer<typeof getPlaybackAnchorOutputSche
  * Draft 侧 metadata 经 draftSnapshot 传入，且 replay-text-* 由服务端拒绝。
  */
 export const beginPlaybackSessionInputSchema = z.object({
-  sessionId: z.string().uuid(),
+  sessionId: playbackSessionIdSchema,
 
   source: playbackSourceSchema,
 
@@ -191,7 +202,7 @@ export type BeginPlaybackSessionInput = z.infer<typeof beginPlaybackSessionInput
  * 不再由客户端发送 source / title：当前 Source 由 Anchor.sessionId 决定。
  */
 export const savePlaybackCheckpointInputSchema = z.object({
-  sessionId: z.string().uuid(),
+  sessionId: playbackSessionIdSchema,
 
   contentHash: z.string().min(1).max(64),
   segmentationVersion: z.string().min(1).max(16),
@@ -227,7 +238,7 @@ export type SavePlaybackCheckpointResult = z.infer<typeof savePlaybackCheckpoint
 
 /** §19 playback.completeSession 输入；输出为保留的 ended Anchor（无 Anchor 时为 null）。 */
 export const completePlaybackSessionInputSchema = z.object({
-  sessionId: z.string().uuid(),
+  sessionId: playbackSessionIdSchema,
 });
 
 export type CompletePlaybackSessionInput = z.infer<typeof completePlaybackSessionInputSchema>;
@@ -237,7 +248,7 @@ export type CompletePlaybackSessionInput = z.infer<typeof completePlaybackSessio
  * sessionId 不匹配时 no-op（cleared:false），避免旧异步 cleanup 误删新会话。
  */
 export const clearPlaybackAnchorInputSchema = z.object({
-  sessionId: z.string().uuid(),
+  sessionId: playbackSessionIdSchema,
 });
 
 export type ClearPlaybackAnchorInput = z.infer<typeof clearPlaybackAnchorInputSchema>;
@@ -251,7 +262,7 @@ export type ClearPlaybackAnchorOutput = z.infer<typeof clearPlaybackAnchorOutput
 
 /** §24 playback.promoteDraftToWork 输入。 */
 export const promoteDraftPlaybackToWorkInputSchema = z.object({
-  sessionId: z.string().uuid(),
+  sessionId: playbackSessionIdSchema,
   workId: z.number().int().positive(),
 });
 

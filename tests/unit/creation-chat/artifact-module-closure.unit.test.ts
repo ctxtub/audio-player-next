@@ -860,6 +860,8 @@ async function main(): Promise<void> {
       'app/(main)/chat/components/MessageParts/StoryCardPart.tsx',
       'app/services/storyFlow.ts',
       'stores/playbackProgressStore.ts',
+      // M5-09：PlaybackSessionStore 为 Draft rehydrate 合法 reader（storyCard/storyArtifact 双读，与旧 store 同权，M9 删除旧 store 后本项保留）。
+      'stores/playbackSessionStore.ts',
       'app/(main)/chat/components/ChatLog/MessageBubble/index.tsx',
     ]);
     const offenders: string[] = [];

@@ -1,3 +1,15 @@
+/**
+ * M5-09 Legacy Cutover：本文件正缩回 Audio Transport Store（spec §9.1）。
+ * 新 SSOT = server 四表 + Anchor DTO + stores/playbackSessionStore.ts。
+ * 下列语义 identity 副本已 @deprecated（M6 presentation 收敛时移除，
+ * M9 物理删除）：sessionId / currentMessageId / sourceType / sourceId /
+ * title / isOneShot / isRehydratedReady / currentParagraphIndex /
+ * totalParagraphs / isFloatingVisible。Transport 动作
+ *（playAudio/resumeAudio/pauseAudio/seek/setPlaybackRate/ensureUnlocked/
+ * registerAudioController + isPlaying/currentTime/duration/playbackRate/
+ * remainingMs/totalAllowedMs）保持不变，仍为全局 <audio> 唯一 ownership。
+ * 旧字段仅作兼容镜像由 PlaybackSessionStore 同步写入，新代码禁止直接写入它们。
+ */
 import { useCallback } from 'react';
 import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
@@ -9,9 +21,10 @@ import type { AudioControllerHandle } from '@/types/audioPlayer';
 const MINUTE_IN_MS = 60000;
 
 /**
- * 播放器状态数据结构：负责记录播放会话标识、倒计时、当前段落与进度。
+ * 播放器状态数据结构：Transport 字段为 SSOT；以下 identity 字段已 deprecated。
  */
 type PlaybackStoreBaseState = {
+  /** @deprecated M5-09：session identity 已迁移至 PlaybackSessionStore.sessionId，本字段仅兼容镜像。 */
   sessionId: string | null;
   isPlaying: boolean;
   currentSegmentIndex: number;
@@ -25,6 +38,7 @@ type PlaybackStoreBaseState = {
   audioController: AudioControllerHandle | null;
   /**
    * 浮动播放器是否展示。
+   * @deprecated M5-09：属 M6 presentation state，不再作为 playback engine 状态。新代码勿读。
    */
   isFloatingVisible: boolean;
   /**
@@ -33,35 +47,43 @@ type PlaybackStoreBaseState = {
   currentAudioUrl: string | null;
   /**
    * 当前播放的故事消息 ID（用于追踪“下一段”）。
+   * @deprecated M5-09：已迁移至 PlaybackSessionStore.source，本字段仅兼容镜像。
    */
   currentMessageId: string | null;
   /**
    * 一次性播放（如历史回放）：播完即止，不触发预加载续写。
+   * @deprecated M5-09：已收敛为 PlaybackSessionStore.continuationMode finite|extendable（§11），本字段仅兼容镜像。
    */
   isOneShot: boolean;
   /**
    * 是否处于断点水合完成的就绪待播态（停驻 PAUSED/READY，解封播放按钮）。
+   * @deprecated M5-09：已迁移至 PlaybackSessionStore.status=ready，本字段仅兼容镜像。
    */
   isRehydratedReady: boolean;
   /**
    * 创作源类型：M5-03 起为四值兼容 'chat' | 'generation' | 'draft' | 'work'
    *（DB canonical 为 draft|work，旧值仍可读；新写统一由 server 收敛为 canonical）。
+   * @deprecated M5-09：已迁移至 PlaybackSessionStore.source，本字段仅兼容镜像。
    */
   sourceType: 'chat' | 'generation' | 'draft' | 'work' | null;
   /**
    * 溯源业务标识。
+   * @deprecated M5-09：已迁移至 PlaybackSessionStore.source，本字段仅兼容镜像。
    */
   sourceId: string | null;
   /**
    * 故事展示标题。
+   * @deprecated M5-09：已迁移至 PlaybackSessionStore.title，本字段仅兼容镜像。
    */
   title: string | null;
   /**
    * 当前自然段序号（从 0 开始）。
+   * @deprecated M5-09：已迁移至 PlaybackSessionStore.nextParagraphIndex，本字段仅兼容镜像。
    */
   currentParagraphIndex: number;
   /**
    * 该故事总自然段数。
+   * @deprecated M5-09：已迁移至 PlaybackSessionStore.totalParagraphs，本字段仅兼容镜像。
    */
   totalParagraphs: number;
 };

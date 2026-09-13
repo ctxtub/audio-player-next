@@ -1,6 +1,14 @@
 /**
  * 客户端断点续播状态机 Store
  *
+ * @deprecated M5-09 Legacy Cutover：新 SSOT 为 stores/playbackSessionStore.ts
+ *（server 四表 + Anchor DTO，经 library.get(workId) 精确 resolve，§25.1）。
+ * 本文件保留为 compatibility adapter 一个迁移周期（M9 删除），行为不动：
+ * - initForUser/initForGuest 仍可用，但 AccountSync 已切换到 PlaybackSessionStore.init；
+ * - hydrateFromDTO 仍支持旧 PlaybackProgressDTO（getProgress/saveProgress/clearProgress），
+ *   新代码禁止新增调用，一律走 playback.getAnchor / PlaybackSessionStore；
+ * - 本文件绝不作为 Work rehydrate 的 source 解析入口（分页后 find(id) 必然丢失远页 Anchor）。
+ *
  * 负责端侧断点水合、创作源解析与校验、文本漂移侦测、至多一次保存防抖与自适应预加载调度。
  */
 

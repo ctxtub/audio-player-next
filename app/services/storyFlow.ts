@@ -1,3 +1,10 @@
+/**
+ * M5-09 过渡态：本文件回到故事生成流程；播放 session / preload / ended
+ * 编排已迁出至 app/services/playbackSessionFlow.ts + stores/playbackSessionStore.ts。
+ * 下列 handleNearEnd / handleSegmentEnded / startStoryPlayback / replayGeneration /
+ * playStoryText 保留为 legacy fallback（无 session 的旧音频链，M9 删除），
+ * 新播放代码禁止新增调用，一律走 PlaybackSessionFlow。
+ */
 import { useConfigStore } from '@/stores/configStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';

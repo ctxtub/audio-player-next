@@ -1,6 +1,13 @@
 /**
  * 断点播放进度客户端
  *
+ * @deprecated M5-09 Legacy Cutover（spec §34）：旧 compatibility procedures
+ *（getProgress/saveProgress/clearProgress）保留一个迁移周期（M9 删除）。
+ * 新客户端一律使用 lib/client/playbackSession.ts 正式暴露层：
+ * getPlaybackAnchor / beginPlaybackSession / savePlaybackCheckpoint /
+ * completePlaybackSession / clearPlaybackAnchor / promoteDraftPlaybackToWork /
+ * getWorkPlaybackProgressBatch。本文件行为不动，仅作 adapter。
+ *
  * 使用 tRPC 读取、保存与清除当前主体（用户或具名访客）的段落播放进度。
  */
 

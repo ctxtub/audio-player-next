@@ -2,17 +2,20 @@
 
 import React, { useCallback, useEffect, useRef } from 'react';
 import GlassToast from '@/components/ui/GlassToast';
+/**
+ * M5-09 §26.1：Host 只报告 Audio events，领域决策下沉 PlaybackSessionFlow。
+ * 不再直接 import storyFlow / ChatStore / PreloadStore / PlaybackProgressStore
+ *（chat/work/generation/AI 续写一律由 flow 决定，M9 删除 transitional fallback）。
+ */
 import {
-  handleNearEnd,
-  handleSegmentEnded,
-  handlePlaybackPause,
-  handlePlaybackStart,
-  updatePlaybackProgress,
-} from '@/app/services/storyFlow';
+  handleEnded as handleSessionEnded,
+  pausePlayback as pauseViaSessionFlow,
+  reportPlaybackPause,
+  reportPlaybackStart,
+  reportProgress,
+  reportTimeUpdate,
+} from '@/app/services/playbackSessionFlow';
 import { usePlaybackStore } from '@/stores/playbackStore';
-import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
-import { usePreloadStore } from '@/stores/preloadStore';
-import { useChatStore } from '@/stores/chatStore';
 import { createAudioEndedGuard } from '@/utils/audioEndedGuard';
 import type { AudioControllerHandle } from '@/types/audioPlayer';
 
@@ -135,16 +138,8 @@ const AudioControllerHost: React.FC = () => {
 
       await handleUnlock();
 
-      // 若播放的是最新预加载的段落，需重置 PreloadStore 状态，
-      // 防止后续逻辑误判导致跳过下一次预加载。
-      const preloadStore = usePreloadStore.getState();
-      // 使用 messageId 进行精准匹配
-      if (messageId && useChatStore.getState().selectors.isLatestMessage(messageId)) {
-        if (preloadStore.status === 'ready') {
-          preloadStore.consume();
-        }
-      }
-
+      // M5-09：Host 不再做 Preload/Chat 领域判断（§26.1）。
+      // 预载锁与最新消息匹配由 PlaybackSessionFlow 统一决策，此处只做 transport 同步。
       // 同步当前播放地址到 Store，确保 StoryCard UI 状态正确
       // 使用 syncPlaybackState 避免递归调用 play
       usePlaybackStore.getState().syncPlaybackState(audioUrl, messageId);
@@ -153,15 +148,15 @@ const AudioControllerHost: React.FC = () => {
       audioEl.currentTime = 0;
       audioEl.playbackRate = playbackRate;
       hasTriggeredPreload.current = false;
-      updatePlaybackProgress({ currentTime: 0, duration: 0 });
+      reportProgress({ currentTime: 0, duration: 0 });
       try {
         await audioEl.play();
-        handlePlaybackStart();
+        reportPlaybackStart();
       } catch (error) {
         if (isPlayInterruptedError(error)) {
           return;
         }
-        handlePlaybackPause();
+        reportPlaybackPause();
         const message = error instanceof Error ? error.message : '无法播放音频';
         GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
         throw error instanceof Error ? error : new Error(message);
@@ -181,12 +176,12 @@ const AudioControllerHost: React.FC = () => {
     }
     try {
       await audioEl.play();
-      handlePlaybackStart();
+      reportPlaybackStart();
     } catch (error) {
       if (isPlayInterruptedError(error)) {
         return;
       }
-      handlePlaybackPause();
+      reportPlaybackPause();
       const message = error instanceof Error ? error.message : '无法恢复播放';
       GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
       throw error instanceof Error ? error : new Error(message);
@@ -194,7 +189,7 @@ const AudioControllerHost: React.FC = () => {
   }, []);
 
   /**
-   * 暂停当前播放并同步全局状态与断点。
+   * 暂停当前播放并同步全局状态与断点（经 SessionFlow，不触 Chat/Work 领域）。
    */
   const handlePause = useCallback(() => {
     const audioEl = audioRef.current;
@@ -202,8 +197,7 @@ const AudioControllerHost: React.FC = () => {
       return;
     }
     audioEl.pause();
-    handlePlaybackPause();
-    usePlaybackProgressStore.getState().handleExplicitPause();
+    pauseViaSessionFlow();
   }, []);
 
   /**
@@ -217,7 +211,7 @@ const AudioControllerHost: React.FC = () => {
     }
     audioEl.currentTime = time;
     const duration = Number.isFinite(audioEl.duration) ? audioEl.duration : 0;
-    updatePlaybackProgress({ currentTime: time, duration });
+    reportProgress({ currentTime: time, duration });
   }, []);
 
   /**
@@ -272,48 +266,8 @@ const AudioControllerHost: React.FC = () => {
       }
       const currentTime = audioEl.currentTime;
       const duration = Number.isFinite(audioEl.duration) ? audioEl.duration : 0;
-      updatePlaybackProgress({ currentTime, duration });
-      if (duration > 0) {
-        const remaining = duration - currentTime;
-        const adaptiveThreshold = Math.min(10, Math.max(5, duration * 0.25));
-
-        // 仅在自适应窗口内触发预加载，且严格仅在播放态中触发（暂停态严禁预加载）
-        if (!hasTriggeredPreload.current && remaining <= adaptiveThreshold) {
-          const isPlaying = usePlaybackStore.getState().isPlaying;
-          if (!isPlaying) {
-            return;
-          }
-
-          const progressState = usePlaybackProgressStore.getState();
-          // 若当前为多自然段故事且存在下一段：触发自然段预加载（严格单一前瞻 lookahead = 1）
-          if (
-            progressState.sourceId &&
-            progressState.totalParagraphs > 1 &&
-            progressState.nextParagraphIndex + 1 < progressState.totalParagraphs
-          ) {
-            hasTriggeredPreload.current = true;
-            progressState.prefetchNextParagraph(progressState.nextParagraphIndex + 1);
-          } else {
-            // 聊天续写模式预加载
-            // 中文注释：段落级故事与一次性回放严禁走聊天续写，仅无段落跟踪的 legacy 音频允许。
-            const currentMessageId = usePlaybackStore.getState().currentMessageId;
-            const isLast = currentMessageId
-              ? useChatStore.getState().selectors.isLatestMessage(currentMessageId)
-              : false;
-            const playbackOneShot = usePlaybackStore.getState().isOneShot;
-            const progressOneShot = progressState.isOneShot;
-            const isParagraphTracked =
-              !!progressState.sourceId && progressState.totalParagraphs > 0;
-
-            if (isLast && !playbackOneShot && !progressOneShot && !isParagraphTracked) {
-              hasTriggeredPreload.current = true;
-              handleNearEnd().catch((error) => {
-                console.error('预加载下一段音频失败:', error);
-              });
-            }
-          }
-        }
-      }
+      // M5-09：near-end / 预载决策下沉 flow，Host 只上报 timeupdate。
+      reportTimeUpdate({ currentTime, duration, hasTriggeredPreload });
     };
 
     const handleLoadedMetadata = () => {
@@ -322,7 +276,7 @@ const AudioControllerHost: React.FC = () => {
       }
       hasTriggeredPreload.current = false;
       const duration = Number.isFinite(audioEl.duration) ? audioEl.duration : 0;
-      updatePlaybackProgress({ currentTime: 0, duration });
+      reportProgress({ currentTime: 0, duration });
     };
 
     const handleEnded = async () => {
@@ -330,29 +284,10 @@ const AudioControllerHost: React.FC = () => {
       if (endedGuardRef.current.shouldSkipEnded()) {
         return;
       }
-      handlePlaybackPause();
+      // M5-09：segment / continuation / checkpoint 由 flow 决定，Host 只报告 ended。
+      reportPlaybackPause();
       try {
-        const progressStore = usePlaybackProgressStore.getState();
-        // 中文注释：段落级故事（含故事卡/恢复重合成/一次性回放）统一走段落收尾；
-        // 最终段在段内 clearProgress 后即止，严禁落入聊天续写（防“请继续故事”与卡片增殖）。
-        // 有后续段时段内自动推进下一段（临段预载/推进语义不受影响）。
-        if (progressStore.sourceId && progressStore.totalParagraphs > 0) {
-          // 中文注释：R16——isTransitioningRef 经全仓确认只写不读，已移除；
-          // 段落推进直接 await，无过渡守卫。
-          const continued = await progressStore.handleParagraphEnded();
-          if (continued) {
-            return;
-          }
-          // 中文注释：最终段已清理断点，复位预载锁后回到可再播，不触发 agent.interact。
-          usePreloadStore.getState().reset();
-          return;
-        }
-
-        const nextSegment = await handleSegmentEnded();
-        if (!nextSegment) {
-          return;
-        }
-        await handlePlay(nextSegment.audioUrl, nextSegment.messageId);
+        await handleSessionEnded(handlePlay);
       } catch (error) {
         const message = error instanceof Error ? error.message : '无法播放下一段音频';
         GlassToast.show({ icon: 'fail', content: message, duration: 3000 });

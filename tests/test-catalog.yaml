@@ -393,7 +393,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [history, replay]
     spec_path: docs/e2e/03-播放状态与内核一致性/10-历史恢复卡回放重合成.md
-    executable_ids: [exec-storycard-resume, exec-paragraph-segmentation, exec-playback-identity-domain, exec-playback-session-contract, exec-playback-anchor-begin-session, exec-playback-checkpoint-guards, exec-playback-session-lifecycle-promotion, exec-playback-checkpoint-content-identity]
+    executable_ids: [exec-storycard-resume, exec-paragraph-segmentation, exec-playback-identity-domain, exec-playback-session-contract, exec-playback-anchor-begin-session, exec-playback-checkpoint-guards, exec-playback-session-lifecycle-promotion, exec-playback-checkpoint-content-identity, exec-playback-session-rehydrate, exec-playback-session-rehydrate-server]
     fixtures: []
     owner: playback-kernel
   - case_id: old-card-replay-no-consume-preload
@@ -1236,6 +1236,14 @@ executables:
     display_name_zh: 检查点CAS内容标识绑定
     layer: L2
     path: ./tests/integration/playback/playback-checkpoint-content-identity.integration.test.ts
+  - executable_id: exec-playback-session-rehydrate
+    display_name_zh: 客户端会话重水合双路径与Hash标题语义
+    layer: L1
+    path: ./tests/unit/playback/playback-session-rehydrate.unit.test.ts
+  - executable_id: exec-playback-session-rehydrate-server
+    display_name_zh: 客户端会话重水合集成与远页精确解析
+    layer: L2
+    path: ./tests/integration/playback/playback-session-rehydrate-server.integration.test.ts
   - executable_id: exec-playback-lifecycle-trash
     display_name_zh: 播放Trash生命周期与永久删除边界
     layer: L2

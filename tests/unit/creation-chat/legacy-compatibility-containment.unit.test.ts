@@ -481,9 +481,11 @@ async function main(): Promise<void> {
       // 旧 playback compatibility 纯 reader（M4-09 审计逐个批准）：
       // storyFlow：startStoryPlayback 读历史卡 storyText 注册断点活跃故事；
       // playbackProgressStore：resume 读历史卡 storyText；
+      // playbackSessionStore（M5-09）：Draft rehydrate 双读 storyCard/storyArtifact，与旧 store 同权；
       // MessageBubble：卡片视图/实质内容判定需识别历史卡形态，无构造无转换。
       'app/services/storyFlow.ts',
       'stores/playbackProgressStore.ts',
+      'stores/playbackSessionStore.ts',
       'app/(main)/chat/components/ChatLog/MessageBubble/index.tsx',
     ]);
     const scanRoots = ['app', 'lib', 'stores', 'components', 'types'];

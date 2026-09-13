@@ -2,6 +2,11 @@
  * 生成历史 Store
  *
  * 登录专属：仅登录态下持有服务端生成历史，无 localStorage 持久化。访客为空。
+ *
+ * @deprecated M5-09 部分退役：严禁用于 Work rehydrate source resolve
+ *（§25.1：故事库分页后 Anchor 可指向任意页，最近 N 条 find(id) 必然丢失；
+ * 新路径一律经 library.get(workId) 精确 resolve）。本 store 仅保留历史 UI
+ * 展示用途（GenerationHistory 弹窗），M9 统一清理时再评估删除。
  */
 
 import { create, type StateCreator } from 'zustand';

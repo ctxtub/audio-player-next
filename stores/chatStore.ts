@@ -7,10 +7,13 @@ import type {
   ChatStreamDoneEvent,
   MessagePart,
   StoryArtifactPart,
-  // M4-08 cutover：Legacy read compatibility only——选择器/快照仍需识别历史 storyCard
-  //（只读，不新写；新写链自 M4-02 起只产 storyArtifact，新 Legacy 由服务端 provenance guard 拒绝）。
-  StoryCardPart,
 } from '@/types/chat';
+import {
+  findLegacyPlayableStoryCard,
+  hasAnyStoryPart,
+  hasLegacyStoryCard,
+  hasStoryContent,
+} from '@/lib/client/chatStoryCompatibility';
 import {
   createDraftArtifact,
   appendDraftChunk,
@@ -143,7 +146,7 @@ type ChatStoreBaseState = {
   syncEnabled: boolean;
   /** 最近一次快照保存的失败原因（null 表示无失败；失败不静默丢，由调用方/退出 flush 断言）。 */
   saveError: string | null;
-  /** 跨页自动发送的待发提示词（来自 /player 历史记录选择，瞬态、不持久化）。 */
+  /** History UI 选择后的待发送提示词；瞬态、单 slot、不持久化。 */
   pendingAutoSend: string | null;
 };
 
@@ -480,10 +483,10 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   let flushInFlight: Promise<boolean> | null = null;
 
   /**
-   * 取完成态消息构造保存快照（含 summary 锚点，便于恢复后压缩上下文；storyCard 的音频置空不存）。
+   * 取完成态消息构造保存快照（含 summary 锚点，便于恢复后压缩上下文；历史兼容卡音频置空不存）。
    * M4-06 History persistence boundary：落盘前经 serializePartsForHistory 做
    * history canonicalization（draft→interrupted、complete/promoting→promotion_failed，
-   * stable exact；storyCard audioUrl 清空保持）。serialize 为纯 clone，绝不 mutate
+   * stable exact；历史兼容卡音频清空保持）。serialize 为纯 clone，绝不 mutate
    * live store：内存 promoting 仍保持 promoting，直到真实 M4-04 settlement 改它。
    * @param messages 当前消息列表。
    */
@@ -796,12 +799,12 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           switch (action.intent) {
             case 'Story':
               agentType = 'story_agent';
-              // M4-02：Story 意图确保 Modern draft 存在；绝不再创建 Legacy StoryCard。
+              // M4-02：Story 意图确保 Modern draft 存在；绝不再创建历史兼容卡。
               {
                 const existing = getStoryArtifactPart(msg);
                 if (!existing) {
-                  // 历史 legacy 卡片只读保留：若已含 storyCard 则不覆盖，仅标记 agentType。
-                  const hasLegacyCard = msg.parts?.some((p) => p.type === 'storyCard');
+                  // M4-09 containment：历史兼容卡只读保留，经 compatibility helper 判定，不直读 wire 结构。
+                  const hasLegacyCard = hasLegacyStoryCard(msg.parts);
                   if (!hasLegacyCard) {
                     const draft = createDraftArtifact({
                       sourceMessageId: msg.id,
@@ -1257,8 +1260,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       const messages = get().messages;
       for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
-        // Legacy 读 + Modern 读：历史 storyCard 与新 storyArtifact 均视为故事消息（只读，不新写）。
-        if (msg.role === 'assistant' && msg.parts?.some((p) => p.type === 'storyCard' || p.type === 'storyArtifact')) {
+        // M4-09 containment：故事存在性经 compatibility helper 判定（历史兼容卡或现代 Artifact 均视为故事消息）。
+        if (msg.role === 'assistant' && hasAnyStoryPart(msg.parts)) {
           return msg.id === id;
         }
       }
@@ -1272,12 +1275,12 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         return null;
       }
 
-      // 从当前消息的下一条开始查找助手消息（包含历史故事卡片；M4-02 起 Modern Artifact 无 audioUrl，天然返回 null）。
-      // M4-08 cutover：Legacy read compatibility only，此 selector 行为冻结，不现代化为 StoryWork。
+      // M4-09 containment：经 compatibility helper 查找下一个可播放历史兼容卡；
+      // 现代 Artifact 天然不参加该 selector，行为冻结，不升级为 StoryWork 播放。
       for (let i = currentIndex + 1; i < messages.length; i++) {
         const msg = messages[i];
         if (msg.role === 'assistant' && msg.parts) {
-          const storyPart = msg.parts.find((p) => p.type === 'storyCard') as StoryCardPart | undefined;
+          const storyPart = findLegacyPlayableStoryCard(msg.parts);
           if (storyPart && storyPart.audioUrl && storyPart.storyText) {
             return {
               audioUrl: storyPart.audioUrl,
@@ -1333,13 +1336,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     },
     hasStoryMessages: (excludeMessageId) => {
       const messages = get().messages;
-      // Legacy 读 + Modern 读：storyCard 历史与 storyArtifact（非空正文）均计为故事存在性（只读）。
+      // M4-09 containment：故事内容存在性经 compatibility helper 判定（历史兼容卡或非空正文现代 Artifact）。
       const isStoryMsg = (msg: (typeof messages)[number]) =>
-        msg.role === 'assistant' &&
-        (msg.parts?.some((p) => p.type === 'storyCard') ||
-          msg.parts?.some(
-            (p) => p.type === 'storyArtifact' && (p as StoryArtifactPart).artifact.storyText.trim() !== '',
-          ));
+        msg.role === 'assistant' && hasStoryContent(msg.parts);
       const targetIndex = excludeMessageId
         ? messages.findIndex((m) => m.id === excludeMessageId)
         : messages.length;

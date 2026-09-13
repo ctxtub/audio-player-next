@@ -40,7 +40,6 @@ import {
   canRetryPromotion,
   completeArtifact,
   createDraftArtifact,
-  decodeLegacyStoryCard,
   getSourceMessageId,
   interruptArtifact,
   isAllowedTransition,
@@ -52,6 +51,9 @@ import {
   startPromotion,
   validateArtifactInvariants,
 } from '../../../lib/client/chatArtifactState';
+import {
+  decodeLegacyStoryCard,
+} from '../../../lib/client/chatStoryCompatibility';
 
 /**
  * M4-01 / E2E-08-01 Artifact Domain Contract 单元测试。
@@ -572,14 +574,33 @@ async function main() {
       'types/chatArtifact.ts 静态违规：绝不得出现 audioUrl'
     );
 
-    // B1 静态 regression 2：chatArtifactState.ts 的现代状态转换函数绝不接受/传播 audioUrl
-    const legacySplitIdx = stateContent.indexOf('decodeLegacyStoryCard');
-    assert.ok(legacySplitIdx > 0, 'chatArtifactState.ts 必须包含 decodeLegacyStoryCard 分界');
-    const modernStateContent = stateContent.slice(0, legacySplitIdx);
+    // B1 静态 regression 2（M4-09 containment）：chatArtifactState.ts 为 Modern lifecycle only，
+    // 全文件不得接受/传播 audioUrl，也不得再认识 Legacy wire（decoder 已迁移）。
     assert.strictEqual(
-      modernStateContent.includes('audioUrl'),
+      stateContent.includes('audioUrl'),
       false,
       'chatArtifactState.ts 现代状态转换静态违规：不得接受或传播 audioUrl'
+    );
+    assert.strictEqual(
+      stateContent.includes('decodeLegacyStoryCard'),
+      false,
+      'M4-09 containment：decodeLegacyStoryCard 已迁移至 chatStoryCompatibility.ts'
+    );
+    assert.ok(
+      !/['"]storyCard['"]/.test(stateContent),
+      'M4-09 containment：chatArtifactState.ts 不得直读 Legacy wire 字面量'
+    );
+    assert.strictEqual(
+      stateContent.includes('StoryCardPart'),
+      false,
+      'M4-09 containment：chatArtifactState.ts 不得 import Legacy 类型'
+    );
+    // M4-09 containment：decoder 在新边界模块逐字等价保留，仍声明只读不转 Artifact。
+    const compatPath = path.resolve(__dirname, '../../../lib/client/chatStoryCompatibility.ts');
+    const compatContent = fs.readFileSync(compatPath, 'utf8');
+    assert.ok(
+      compatContent.includes('decodeLegacyStoryCard'),
+      'chatStoryCompatibility.ts 必须提供 decodeLegacyStoryCard（M4-09 relocation）'
     );
 
     // B1 静态 regression 3：types/chat.ts 中的 Legacy StoryCardPart 仍必须保留 audioUrl（旧数据向后兼容）

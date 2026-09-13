@@ -21,7 +21,7 @@ import {
 } from '../../../types/chat';
 import {
   decodeLegacyStoryCard,
-} from '../../../lib/client/chatArtifactState';
+} from '../../../lib/client/chatStoryCompatibility';
 import {
   assertNoNewLegacyStoryCardWrites,
 } from '../../../lib/server/chatConversation';
@@ -574,9 +574,10 @@ async function main(): Promise<void> {
   {
     // 审计口径：不是“源码零 storyCard 字符串”（reader 必须保留），而是
     // “没有能新产生 storyCard 的业务路径”——对象构造仅允许 compatibility decoder。
+    // M4-09 containment：decoder 已从 chatArtifactState.ts 迁移至 chatStoryCompatibility.ts。
     const prodRoots = ['app', 'lib/client', 'stores', 'components'];
     const allowlistedFiles = new Set([
-      path.resolve(process.cwd(), 'lib/client/chatArtifactState.ts'),
+      path.resolve(process.cwd(), 'lib/client/chatStoryCompatibility.ts'),
     ]);
     const constructorRe = /type\s*:\s*['"]storyCard['"]/;
     const violations: string[] = [];
@@ -601,15 +602,17 @@ async function main(): Promise<void> {
     assert.deepStrictEqual(violations, [], `生产代码 Legacy 构造点必须仅存 allowlist decoder，违规：${violations.join(', ')}`);
     // allowlist 自身确为 read boundary：decodeLegacyStoryCard 存在且声明不转 Artifact/不建 StoryWork。
     const decoderSource = fs.readFileSync(
-      path.resolve(process.cwd(), 'lib/client/chatArtifactState.ts'), 'utf8',
+      path.resolve(process.cwd(), 'lib/client/chatStoryCompatibility.ts'), 'utf8',
     );
     assert.ok(decoderSource.includes('decodeLegacyStoryCard'), 'allowlist decoder 必须存在');
     // decoder 为纯读：不得 import Library 门面、不得调用入库写（注释提及除外）。
     assert.ok(!/from\s+['"][^'"]*library[^'"]*['"]/i.test(decoderSource), 'decoder 不得 import Library 模块');
     assert.ok(!/\blibrary\s*\.\s*create\s*\(/.test(decoderSource), 'decoder 不得调用 library.create');
-    // reader 本来就必须保留：抽查关键只读引用仍存在。
+    // M4-09 containment：chatStore 不再直读 wire，只经 compatibility helper。
     const storeSource = fs.readFileSync(path.resolve(process.cwd(), 'stores/chatStore.ts'), 'utf8');
-    assert.ok(storeSource.includes("'storyCard'"), 'chatStore Legacy 读引用必须保留（非构造）');
+    assert.ok(!/['"]storyCard['"]/.test(storeSource), 'M4-09 containment：chatStore 不得直读 Legacy wire 字面量');
+    assert.ok(!storeSource.includes('StoryCardPart'), 'M4-09 containment：chatStore 不得 import Legacy 类型');
+    assert.ok(storeSource.includes('chatStoryCompatibility'), 'chatStore 必须经 compatibility helper 查询 Legacy');
     const messagePartsSource = fs.readFileSync(
       path.resolve(process.cwd(), 'app/(main)/chat/components/MessageParts/index.tsx'), 'utf8',
     );

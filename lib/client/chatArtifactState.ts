@@ -24,7 +24,9 @@ import type {
   PromotionFailedChatArtifact,
   ReadyChatArtifact,
 } from '../../types/chatArtifact';
-import type { StoryCardPart } from '../../types/chat';
+
+// M4-09 containment：Legacy read-compatibility helpers live in
+// ./chatStoryCompatibility.ts. This module is Modern lifecycle only.
 
 // ============================================================================
 // 合法状态转移表
@@ -505,40 +507,4 @@ export function interruptArtifact(
 
   assertArtifactInvariants(interrupted);
   return interrupted;
-}
-
-// ============================================================================
-// Legacy StoryCard 只读兼容辅助函数（B2 冻结语义）
-// ============================================================================
-
-/**
- * 解码/规范化历史 Legacy StoryCardPart。
- *
- * 铁律契约（M4-01 B2）：
- * 1. 严格只读兼容：仅返回规范化后的 StoryCardPart，用于历史只读渲染与播放展示；
- * 2. 严禁转为 CompleteChatArtifact：绝不赋予 Legacy 卡片 promotion 状态机能力；
- * 3. 避免会话恢复重入时自动发起 library.create 写入 StoryWork。
- */
-export function decodeLegacyStoryCard(
-  card: unknown
-): StoryCardPart | null {
-  if (card === null || typeof card !== 'object') {
-    return null;
-  }
-  const c = card as Record<string, unknown>;
-  if (c.type !== 'storyCard') {
-    return null;
-  }
-  if (typeof c.storyText !== 'string' || c.storyText.trim() === '') {
-    return null;
-  }
-  if (typeof c.audioUrl !== 'string') {
-    return null;
-  }
-
-  return {
-    type: 'storyCard',
-    storyText: c.storyText,
-    audioUrl: c.audioUrl,
-  };
 }

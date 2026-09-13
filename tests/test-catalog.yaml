@@ -1033,6 +1033,18 @@ cases:
     executable_ids: [exec-legacy-cutover, exec-legacy-cutover-guard]
     fixtures: []
     owner: creation-artifact
+  - case_id: legacy-compatibility-containment
+    display_name_zh: Legacy 兼容边界收敛与 Artifact 架构清理
+    legacy_aliases: [E2E-08-09]
+    journey_id: creation-artifact
+    user_goal: 旧 StoryCard 可读可渲染可兼容播放但客户端结构知识收敛至显式边界，现代状态机与存储编排不再直读旧结构且历史与血缘语义零变化
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [chat, artifact, legacy, containment, boundary, architecture]
+    spec_path: docs/e2e/08-创作Artifact/09-LegacyCompatibilityContainment.md
+    executable_ids: [exec-legacy-compatibility-containment]
+    fixtures: []
+    owner: creation-artifact
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1292,6 +1304,10 @@ executables:
     display_name_zh: Legacy 血缘守卫服务端对称
     layer: L2
     path: ./tests/integration/persistence-config/legacy-cutover-guard.integration.test.ts
+  - executable_id: exec-legacy-compatibility-containment
+    display_name_zh: Legacy 兼容边界收敛与架构清理
+    layer: L1
+    path: ./tests/unit/creation-chat/legacy-compatibility-containment.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

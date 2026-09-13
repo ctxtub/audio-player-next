@@ -39,15 +39,18 @@ import {
 } from '../../../lib/server/playbackSession';
 
 /**
- * M5-05 Playback API Contract 冻结单元测试（L1）。
- * 锁定 spec §13 / §14 / §34 surface：
+ * M5-06 Playback API Contract 冻结单元测试（L1）。
+ * 锁定 spec §13 / §14 / §17 / §18 / §34 surface：
  * Source discriminatedUnion（§13.1）+ Anchor DTO 14 字段（§13.2，
  * 绝不含 storyText/audioUrl/currentTime/isPlaying）+ WorkProgress DTO（§13.3）
  * + 7 新 procedures 输入输出 + 旧 API 保留 + 双层外观 7 方法 +
  * facade 分态：getAnchor / beginSession 真逻辑（M5-05，经 prisma + M2 边界），
- * 其余 5 procedures 保持 fail-closed skeleton（M5-06+）。
+ * saveCheckpoint 真逻辑（M5-06：Stale/Monotonic/Work 事务），其余 4 procedures
+ *（completeSession / clearAnchor / promoteDraftToWork / getWorkProgressBatch）
+ * 保持 fail-closed skeleton（M5-07+）。
  * 纯契约：不触库、不调网络；router / server 侧经源码文本断言
- *（避免 unit 直连持久化层；getAnchor / beginSession 的 DB 语义由 L2 集成测试覆盖）。
+ *（避免 unit 直连持久化层；getAnchor / beginSession / saveCheckpoint 的 DB 语义
+ * 由 L2 集成测试覆盖，unit 仅断言 surface + skeleton 分态 + 源码执行面）。
  */
 
 const VALID_UUID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
@@ -290,6 +293,43 @@ async function runPlaybackSessionContractTests(): Promise<void> {
       speed: 1.0,
     }),
   );
+  // §17 input 严格 8 字段：sessionId/contentHash/segmentationVersion/
+  // lastCompletedParagraphIndex/nextParagraphIndex/totalParagraphs/speed/
+  // remainingAllowedMs/totalAllowedMs；不收 source/title，且无 forceReset 旁路。
+  assert.deepStrictEqual(Object.keys(savePlaybackCheckpointInputSchema.shape).sort(), [
+    'contentHash',
+    'lastCompletedParagraphIndex',
+    'nextParagraphIndex',
+    'remainingAllowedMs',
+    'segmentationVersion',
+    'sessionId',
+    'speed',
+    'totalAllowedMs',
+    'totalParagraphs',
+  ].sort());
+  for (const forbidden of ['source', 'title', 'forceReset', 'sourceType', 'sourceId', 'voiceId']) {
+    assert.strictEqual(
+      Object.prototype.hasOwnProperty.call(savePlaybackCheckpointInputSchema.shape, forbidden),
+      false,
+      `saveCheckpoint input must not contain ${forbidden}`,
+    );
+  }
+  // 透传 source/title/forceReset 一律 strip（zod 默认），绝不进入业务语义。
+  const strippedCheckpoint = savePlaybackCheckpointInputSchema.parse({
+    sessionId: VALID_UUID,
+    contentHash: '549c813b8b62',
+    segmentationVersion: 'v1',
+    lastCompletedParagraphIndex: 0,
+    nextParagraphIndex: 1,
+    totalParagraphs: 4,
+    speed: 1.0,
+    source: { kind: 'work', workId: 999 },
+    title: '伪造标题',
+    forceReset: true,
+  } as unknown as Record<string, unknown>);
+  for (const forbidden of ['source', 'title', 'forceReset']) {
+    assert.strictEqual(forbidden in strippedCheckpoint, false, `parsed checkpoint must not carry ${forbidden}`);
+  }
   completePlaybackSessionInputSchema.parse({ sessionId: VALID_UUID });
   assert.throws(() => completePlaybackSessionInputSchema.parse({ sessionId: 'bad' }));
   clearPlaybackAnchorInputSchema.parse({ sessionId: VALID_UUID });
@@ -448,8 +488,8 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   assert.match(legacyClientText, /clearProgress/, 'legacy client adapter must be retained');
   console.log('PASS: client facade verified');
 
-  // —— server facade：7 函数 + 分态（M5-05：getAnchor / beginSession 真逻辑，其余 5 fail-closed） ——
-  console.log('--- server facade (M5-05 split) ---');
+  // —— server facade：7 函数 + 分态（M5-06：getAnchor/beginSession/saveCheckpoint 真逻辑，其余 4 fail-closed） ——
+  console.log('--- server facade (M5-06 split) ---');
   for (const fn of [
     getPlaybackAnchorForSubject,
     beginPlaybackSessionForSubject,
@@ -478,26 +518,34 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   assert.strictEqual(/from\s+['"]@\/lib\/storyWork\/metadata['"]/.test(serverText), false, 'M5-05 must not import work metadata derivators');
   assert.strictEqual(/computeStoryContentHash\s*\(/.test(serverText), false, 'M5-05 must not recompute work contentHash');
   assert.strictEqual(/resolveStoryTitle\s*\(/.test(serverText), false, 'M5-05 must not recompute work title');
-  // 其余 5 procedures 保持 fail-closed skeleton（不提前做 M5-06+ 语义；unit 不触库，直接断言抛错）。
+  // M5-06 saveCheckpoint 真逻辑执行面（源码文本锁死§17/§18；unit 不直连 DB，真写由 L2 覆盖）。
+  // §17.1 Stale：session 写权限 + STALE_SESSION 绝不覆盖。
+  assert.match(serverText, /STALE_SESSION/, 'saveCheckpoint must return STALE_SESSION');
+  assert.match(serverText, /currentRow\.sessionId\s*!==\s*sessionId|anchor\.sessionId\s*!==/, 'stale guard must compare anchor.sessionId !== input.sessionId');
+  // §17.2 Monotonic：同 Session 不回退 + 无 forceReset 旁路。
+  assert.match(serverText, /nextParagraphIndex\s*<\s*currentRow\.nextParagraphIndex|incoming\.nextParagraphIndex/, 'monotonic guard must block nextParagraphIndex regression');
+  // forceReset 不得绕单调性：server 执行面不得读取 input.forceReset（注释提及不计，只查属性访问）。
+  assert.strictEqual(/\.forceReset\b/.test(serverText), false, 'M5-06 must not read forceReset (no bypass)');
+  assert.strictEqual(/\[.forceReset.*\]/.test(serverText), false, 'M5-06 must not read forceReset (no bypass)');
+  // §18 Work 事务原子性：一事务同时 UPDATE Anchor + UPSERT Progress，用户/访客对称。
+  assert.match(serverText, /prisma\.\$transaction/, 'work checkpoint must use single transaction');
+  assert.match(serverText, /userPlaybackAnchor\.update/, 'transaction must UPDATE user anchor');
+  assert.match(serverText, /guestPlaybackAnchor\.update/, 'transaction must UPDATE guest anchor (symmetric)');
+  assert.match(serverText, /storyPlaybackProgress\.upsert/, 'transaction must UPSERT user progress');
+  assert.match(serverText, /guestStoryPlaybackProgress\.upsert/, 'transaction must UPSERT guest progress (symmetric)');
+  // Draft 按 Anchor identity，不做 Work progress（源码含 draft 分支且 draft 路径无 progress upsert）。
+  assert.match(serverText, /source\.kind\s*===\s*['"]draft['"]/, 'draft checkpoint must branch by anchor identity');
+  // 其余 4 procedures 保持 fail-closed skeleton（不提前做 M5-07+ 语义；unit 不触库，直接断言抛错）。
+  // 注意：saveCheckpoint 已落真逻辑（触库），unit 不再直调它（由 L2 集成覆盖），此处仅断言其为函数。
+  assert.strictEqual(typeof savePlaybackCheckpointForSubject, 'function');
   const guest = { type: 'guest', id: 'g_contract_probe' } as const;
-  await assert.rejects(() =>
-    savePlaybackCheckpointForSubject({ ...guest }, {
-      sessionId: VALID_UUID,
-      contentHash: '549c813b8b62',
-      segmentationVersion: 'v1',
-      lastCompletedParagraphIndex: 0,
-      nextParagraphIndex: 1,
-      totalParagraphs: 4,
-      speed: 1.0,
-    }),
-  );
   await assert.rejects(() => completePlaybackSessionForSubject({ ...guest }, { sessionId: VALID_UUID }));
   await assert.rejects(() => clearPlaybackAnchorForSubject({ ...guest }, { sessionId: VALID_UUID }));
   await assert.rejects(() =>
     promoteDraftPlaybackToWorkForSubject({ ...guest }, { sessionId: VALID_UUID, workId: 5 }),
   );
   await assert.rejects(() => getWorkPlaybackProgressBatchForSubject({ ...guest }, { workIds: [1] }));
-  console.log('PASS: server facade M5-05 split verified');
+  console.log('PASS: server facade M5-06 split verified');
 
   console.log('\nALL PLAYBACK SESSION CONTRACT TEST CASES PASSED SUCCESSFULLY!');
 }

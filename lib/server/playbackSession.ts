@@ -1,12 +1,12 @@
 /**
- * M5-05 Playback Session 服务端 Facade（spec §14 / §15 / §16 / §33 / §36）。
+ * M5-06 Playback Session 服务端 Facade（spec §14 / §15 / §16 / §17 / §18 / §33 / §36）。
  *
  * 本文件是 Session API 在 server 侧的正式暴露层，逐步替代
  * lib/server/playbackProgress.ts（旧 CRUD Progress 实现保留兼容，不删除）。
  *
- * M5-05 定调：getAnchor 与 beginSession 落真逻辑；其余 5 procedures
- *（saveCheckpoint / completeSession / clearAnchor / promoteDraftToWork /
- * getWorkProgressBatch）保持 fail-closed skeleton，留给 M5-06+。
+ * M5-06 定调：getAnchor / beginSession（M5-05）语义不变；saveCheckpoint 落真逻辑
+ *（§17 / §17.1 / §17.2 / §18）；其余 4 procedures（completeSession / clearAnchor /
+ * promoteDraftToWork / getWorkProgressBatch）保持 fail-closed skeleton，留给 M5-07+。
  *
  * - getAnchor（§15 / §33）：读取当前 Subject 唯一 Anchor；legacy
  *   chat→draft / generation→work 归一；sessionId null/invalid UUID 则生成
@@ -20,6 +20,17 @@
  *   restart 位置→0、保留 completedAt、创建新 sessionId（input.sessionId）；
  *   Draft 验证 ChatMessage.messageId 属于当前 Subject，server 拒绝
  *   replay-text-* 瞬态 ID 持久化（§16.4 server contract）。
+ * - saveCheckpoint（§17 / §17.1 / §17.2 / §18）：input 严格 8 字段
+ *   sessionId/contentHash/segmentationVersion/lastCompletedParagraphIndex/
+ *   nextParagraphIndex/totalParagraphs/speed/remainingAllowedMs/totalAllowedMs，
+ *   不收 source/title（Source 由 Anchor.sessionId 决定）；Stale Guard
+ *   anchor.sessionId !== input.sessionId → {accepted:false,reason:'STALE_SESSION'}
+ *   绝不覆盖（含无 Anchor/dangling/并发删除）；Monotonic Guard 同 Session
+ *   incoming.next < existing.next → 不回退（保持旧 server 保护性质，原样返回
+ *   现有 Anchor，accepted:true，无 forceReset 旁路——新 input 根本无此字段，
+ *   透传亦忽略）；Work 时一事务同时 UPDATE Anchor + UPSERT Progress
+ *   （prisma.$transaction，用户/访客对称，completedAt 保留，lastPlayedAt=now）；
+ *   Draft 按 Anchor identity 只更新 Anchor，不做 Work progress。
  *
  * Router（lib/trpc/routers/playback.ts）只经由本 facade 对外提供
  * 7 个新 procedures，Subject 鉴权与 rate limit 仍由 router 层复用。
@@ -30,6 +41,7 @@ import { TRPCError } from '@/lib/trpc/init';
 import type { Subject } from '@/lib/server/subject';
 import { getStoryWorkForSubject } from '@/lib/server/storyWork';
 import {
+  STALE_SESSION,
   createPlaybackSessionId,
   isValidPlaybackSessionId,
 } from '@/lib/playback/session';
@@ -534,17 +546,178 @@ export const beginPlaybackSessionForSubject = async (
   return dto;
 };
 
-/** §17 playback.saveCheckpoint：Session 归属 + 单调守卫后更新 Anchor（M5-06 落地）。 */
+/**
+ * §17 playback.saveCheckpoint：Session 归属 + 单调守卫后更新 Anchor（M5-06 落地）。
+ *
+ * 顺序冻结（§17.1 → §17.2 → §18）：
+ * 1. Stale Guard：无 Anchor / anchor.sessionId !== input.sessionId（含 null/非法
+ *    legacy、dangling source 不可解析、DTO 映射失败、并发删除 P2025）→
+ *    {accepted:false, reason:'STALE_SESSION'}，绝不覆盖（late save 不得影响新
+ *    Anchor/Progress；input.sessionId 非法亦 STALE，fail-closed）。
+ * 2. Monotonic Guard：同 Session incoming.nextParagraphIndex < existing.next →
+ *    不允许回退（保持旧 server 保护性质；accepted:true + 现有 Anchor 原样返回，
+ *    不写 Anchor、不碰 Progress；无 forceReset 旁路——新 input 无此字段）。
+ * 3. Work 行为（§18）：source.kind==work 时一事务同时 UPDATE Anchor + UPSERT
+ *    Progress（prisma.$transaction；completedAt 保留，lastPlayedAt=now；用户/
+ *    访客对称；ownership 经 M2 getStoryWorkForSubject，不直查 Work 表）。
+ *    Draft 按 Anchor identity 只更新 Anchor，不做 Work progress。
+ */
 export const savePlaybackCheckpointForSubject = async (
   subject: Subject,
   input: SavePlaybackCheckpointInput,
 ): Promise<SavePlaybackCheckpointResult> => {
-  void subject;
-  void input;
-  return notYetImplemented('playback.saveCheckpoint');
+  // 新 input 无 forceReset：即使 JS 透传亦忽略（解构只取契约字段，绝不读 forceReset）。
+  const {
+    sessionId,
+    contentHash,
+    segmentationVersion,
+    lastCompletedParagraphIndex,
+    nextParagraphIndex,
+    totalParagraphs,
+    speed,
+    remainingAllowedMs,
+    totalAllowedMs,
+  } = input;
+  // Fail-closed：input session 非法（router zod 已拦，直调 facade 仍守）→ STALE，不写。
+  if (!isValidPlaybackSessionId(sessionId)) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+
+  const currentRow =
+    subject.type === 'user'
+      ? await prisma.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
+      : await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+  // §17.1：无 Anchor → STALE（绝不凭空创建）。
+  if (!currentRow) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  // §17.1：sessionId 写权限——Anchor.sessionId !== input.sessionId → STALE，绝不覆盖。
+  if (currentRow.sessionId !== sessionId) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  // Dangling Anchor（source 不可解析）视为 STALE：不给不可信行续命，不覆盖。
+  const source = tryParseLegacyPlaybackSource(currentRow.sourceKind, currentRow.sourceId);
+  if (!source) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  const existingDto = toAnchorDto(currentRow);
+  if (!existingDto) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  // §17.2：同 Session 单调守卫——incoming.next < existing.next → 不回退。
+  // 保持旧 server 保护性质：不写 Anchor、不碰 Progress，原样返回现有 Anchor。
+  if (nextParagraphIndex < currentRow.nextParagraphIndex) {
+    return { accepted: true, anchor: existingDto };
+  }
+
+  const anchorData = {
+    contentHash,
+    segmentationVersion,
+    lastCompletedParagraphIndex,
+    nextParagraphIndex,
+    totalParagraphs,
+    speed,
+    remainingAllowedMs: remainingAllowedMs ?? null,
+    totalAllowedMs: totalAllowedMs ?? null,
+  };
+
+  // —— Draft checkpoint：按 Anchor identity 只更新 Anchor，不做 Work progress ——
+  if (source.kind === 'draft') {
+    try {
+      const updated =
+        subject.type === 'user'
+          ? await prisma.userPlaybackAnchor.update({
+              where: { userId: subject.id },
+              data: anchorData,
+            })
+          : await prisma.guestPlaybackAnchor.update({
+              where: { guestId: subject.id },
+              data: anchorData,
+            });
+      const dto = toAnchorDto(updated);
+      if (!dto) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: '[playback-session] Draft checkpoint 落库后映射失败',
+        });
+      }
+      return { accepted: true, anchor: dto };
+    } catch (err) {
+      // 并发删除：行已消失按无 Anchor 处理（STALE，不抛错）。
+      if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 'P2025') {
+        return { accepted: false, reason: STALE_SESSION };
+      }
+      throw err;
+    }
+  }
+
+  // —— Work checkpoint（§18）：一事务同时 UPDATE Anchor + UPSERT Progress ——
+  const workId = source.workId;
+  // Ownership 经 M2（subject, workId），不直查 Work 表、不重算 title/hash；
+  // missing/foreign/trash 统一 NOT_FOUND 原样透出（fail-closed，无 partial 写）。
+  await getStoryWorkForSubject(subject, workId);
+  try {
+    const updatedAnchorRow = await prisma.$transaction(async (tx) => {
+      const updated =
+        subject.type === 'user'
+          ? await tx.userPlaybackAnchor.update({
+              where: { userId: subject.id },
+              data: anchorData,
+            })
+          : await tx.guestPlaybackAnchor.update({
+              where: { guestId: subject.id },
+              data: anchorData,
+            });
+      const progressCreateBase = {
+        storyWorkId: workId,
+        contentHash,
+        segmentationVersion,
+        lastCompletedParagraphIndex,
+        nextParagraphIndex,
+        totalParagraphs,
+        completedAt: null,
+        lastPlayedAt: new Date(),
+      };
+      const progressUpdateBase = {
+        contentHash,
+        segmentationVersion,
+        lastCompletedParagraphIndex,
+        nextParagraphIndex,
+        totalParagraphs,
+        lastPlayedAt: new Date(),
+      };
+      if (subject.type === 'user') {
+        await tx.storyPlaybackProgress.upsert({
+          where: { storyWorkId: workId },
+          create: progressCreateBase,
+          update: progressUpdateBase,
+        });
+      } else {
+        await tx.guestStoryPlaybackProgress.upsert({
+          where: { storyWorkId: workId },
+          create: progressCreateBase,
+          update: progressUpdateBase,
+        });
+      }
+      return updated;
+    });
+    const dto = toAnchorDto(updatedAnchorRow);
+    if (!dto) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: '[playback-session] Work checkpoint 落库后映射失败',
+      });
+    }
+    return { accepted: true, anchor: dto };
+  } catch (err) {
+    if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 'P2025') {
+      return { accepted: false, reason: STALE_SESSION };
+    }
+    throw err;
+  }
 };
 
-/** §19 playback.completeSession：完播收尾（保留 ended Anchor，M5-0x 落地）。 */
+/** §19 playback.completeSession：完播收尾（保留 ended Anchor，M5-07+ 落地）。 */
 export const completePlaybackSessionForSubject = async (
   subject: Subject,
   input: CompletePlaybackSessionInput,
@@ -554,7 +727,7 @@ export const completePlaybackSessionForSubject = async (
   return notYetImplemented('playback.completeSession');
 };
 
-/** §21 playback.clearAnchor：仅清理当前 session（不匹配则 no-op，M5-0x 落地）。 */
+/** §21 playback.clearAnchor：仅清理当前 session（不匹配则 no-op，M5-07+ 落地）。 */
 export const clearPlaybackAnchorForSubject = async (
   subject: Subject,
   input: ClearPlaybackAnchorInput,
@@ -564,7 +737,7 @@ export const clearPlaybackAnchorForSubject = async (
   return notYetImplemented('playback.clearAnchor');
 };
 
-/** §24 playback.promoteDraftToWork：Draft→Work 提升（M5-0x 落地）。 */
+/** §24 playback.promoteDraftToWork：Draft→Work 提升（M5-07+ 落地）。 */
 export const promoteDraftPlaybackToWorkForSubject = async (
   subject: Subject,
   input: PromoteDraftPlaybackToWorkInput,
@@ -574,7 +747,7 @@ export const promoteDraftPlaybackToWorkForSubject = async (
   return notYetImplemented('playback.promoteDraftToWork');
 };
 
-/** §22 playback.getWorkProgressBatch：M3 消费的 Work 进度批量视图（M5-0x 落地）。 */
+/** §22 playback.getWorkProgressBatch：M3 消费的 Work 进度批量视图（M5-07+ 落地）。 */
 export const getWorkPlaybackProgressBatchForSubject = async (
   subject: Subject,
   input: GetWorkPlaybackProgressBatchInput,

@@ -23,6 +23,10 @@ import {
   decodeLegacyStoryCard,
 } from '../../../lib/client/chatArtifactState';
 import {
+  assertNoNewLegacyStoryCardWrites,
+} from '../../../lib/server/chatConversation';
+import { TRPCError } from '../../../lib/trpc/init';
+import {
   rehydrateServerMessages,
   serializePartsForHistory,
 } from '../../../lib/client/chatArtifactHistory';
@@ -32,9 +36,10 @@ import {
 // Modern runtime 只产 storyArtifact；已有 storyCard 可继续 decode/render/play/read 并随快照原样续存；
 // NO conversion、NO promotion、NO new legacy creation。
 // 本文件覆盖客户端侧：M4-08-01/02（Modern 链零 storyCard）、M4-08-03（persisted read compat）、
-// M4-08-04（renderer 可用，真实渲染）、M4-08-05-client（既有 Legacy round-trip 序列化）、M4-08-11
+// M4-08-04（renderer 可用，真实渲染）、M4-08-05-client（既有 Legacy round-trip 序列化）、
+// M4-08-06-collision（tuple fingerprint 碰撞拒绝，直测服务端 guard 纯函数）、M4-08-11
 // （生产代码 Legacy 构造点纯度）；服务端 guard 由 L2 legacy-cutover integration 覆盖。
-// 全程内存打桩，不建 socket、不绑端口，不碰 prisma/dev.db（不 import lib/db）。
+// 全程内存打桩，不建 socket、不绑端口，不碰 prisma/dev.db（guard 为纯函数，绝不查库）。
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
 
@@ -523,6 +528,46 @@ async function main(): Promise<void> {
     assert.strictEqual(rehydrated[0].parts?.[0]?.type, 'storyCard');
     assert.strictEqual((rehydrated[0].parts?.[0] as StoryCardPart).storyText, 'legacy');
     console.log('PASS: M4-08-05-client round-trip');
+  }
+
+  console.log('=== M4-08-06-collision: tuple fingerprint 碰撞不得绕过 guard ===');
+  {
+    // M4-08 fixup：identity 是真正 tuple (messageId, storyText)，无拼接歧义。
+    // 碰撞例：persisted ("A", "B\u0000C") vs incoming ("A\u0000B", "C")——拼接 key 下同键，
+    // tuple 下不同桶，后者是新 Legacy，必须 BAD_REQUEST。
+    const persisted = [
+      {
+        messageId: 'A',
+        parts: JSON.stringify([{ type: 'storyCard', storyText: 'B\u0000C', audioUrl: '' }]),
+      },
+    ];
+    const colliding = [
+      {
+        messageId: 'A\u0000B',
+        role: 'assistant',
+        content: 'C',
+        parts: [{ type: 'storyCard', storyText: 'C', audioUrl: '' }],
+      },
+    ];
+    assert.throws(
+      () => assertNoNewLegacyStoryCardWrites(persisted, colliding as never),
+      (err: unknown) => err instanceof TRPCError && err.code === 'BAD_REQUEST',
+      'tuple 碰撞的新 Legacy 必须以 BAD_REQUEST 拒绝',
+    );
+    // 对照：完全相同的 tuple 原样保留必须通过（含 \u0000 内容本身）。
+    assert.doesNotThrow(
+      () =>
+        assertNoNewLegacyStoryCardWrites(persisted, [
+          {
+            messageId: 'A',
+            role: 'assistant',
+            content: 'B\u0000C',
+            parts: [{ type: 'storyCard', storyText: 'B\u0000C', audioUrl: '' }],
+          },
+        ] as never),
+      '相同 tuple 原样续存必须通过',
+    );
+    console.log('PASS: M4-08-06-collision tuple provenance');
   }
 
   console.log('=== M4-08-11: Architecture writer purity（构造点仅 allowlist decoder） ===');

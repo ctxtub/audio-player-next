@@ -320,6 +320,24 @@ async function runLegacyCutoverTests(): Promise<void> {
             );
             assert.deepStrictEqual(await snapshotOf(guestNoBase), [], 'guest 拒写后 DB 为空不变得');
             await clearSubject(guestNoBase);
+            // M4-08 fixup：tuple fingerprint 碰撞（no-baseline 路径，DB unchanged）。
+            // persisted ("A", "B<NUL>C") vs incoming ("A<NUL>B", "C")——拼接 key 下同键，
+            // tuple 下不同桶，后者是新 Legacy，必须 BAD_REQUEST。
+            const NUL = String.fromCharCode(0);
+            const guestColl = { type: 'guest', id: `g_cutover09c_${stamp}` } as Subject;
+            await seedDirect(guestColl, [
+                { messageId: 'A', role: 'assistant', content: `B${NUL}C`, parts: [storyCard(`B${NUL}C`, '')] },
+            ]);
+            const collBefore = await snapshotOf(guestColl);
+            assert.strictEqual(collBefore.length, 1, '碰撞前置应为 1 条');
+            await expectBadRequest(
+                () => saveConversationForSubject(guestColl, [
+                    { messageId: `A${NUL}B`, role: 'assistant', content: 'C', parts: [storyCard('C', '')] },
+                ] as never),
+                'NUL 碰撞的新 Legacy（无 baseline）必须拒绝',
+            );
+            assert.deepStrictEqual(await snapshotOf(guestColl), collBefore, '碰撞拒写后 DB 不变得');
+            await clearSubject(guestColl);
         }
         console.log('PASS: M4-08-09 no-baseline blocked');
 

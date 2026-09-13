@@ -60,9 +60,6 @@ type ChatMessageRow = {
 const LEGACY_CUTOVER_REJECT_MESSAGE =
     'Legacy StoryCard 新写已被禁止（M4-08 cutover：只允许原样续存既有历史）';
 
-/** Legacy fingerprint 内 messageId 与 storyText 的分隔符（storyText 可含任意字符，取 \0 避免碰撞）。 */
-const LEGACY_FINGERPRINT_SEPARATOR = '\u0000';
-
 /** Provenance 比较的最小输入形态（DB 行的 parts 为 JSON 字符串；incoming 为已解析数组）。 */
 type LegacyProvenanceEntry = {
     readonly messageId: string;
@@ -70,17 +67,25 @@ type LegacyProvenanceEntry = {
 };
 
 /**
- * 收集消息集合中的 Legacy StoryCard fingerprint 计数（multiset）。
- * fingerprint = messageId + storyText + occurrence count；audioUrl 显式不参与
- * （audioUrl 是非持久字段：M4-06 起 save 侧统一置空，新旧 ''/temp-url 视为同一张卡）。
+ * Legacy provenance fingerprint 计数（multiset）。
+ * identity 为真正 tuple (messageId, storyText)：外层按 messageId 分桶、内层按
+ * storyText 计数，不做任何字符串拼接（messageId / storyText 均可合法包含 \u0000，
+ * 拼接 key 存在可构造碰撞，M4-08 fixup 改为嵌套 Map 消除歧义）。
+ * audioUrl 显式不参与（audioUrl 是非持久字段：M4-06 起 save 侧统一置空，
+ * 新旧 ''/temp-url 视为同一张卡）。
  * 非 storyCard part 一律忽略；storyText 非字符串时按其 JSON 形态计入（仍受 subset 约束）。
+ */
+type LegacyFingerprintCounts = Map<string, Map<string, number>>;
+
+/**
+ * 收集消息集合中的 Legacy StoryCard fingerprint 计数（multiset）。
  * @param messages 待统计的消息集合（DB 行或 incoming 快照均可）。
- * @returns fingerprint → 出现次数。
+ * @returns messageId → storyText → 出现次数。
  */
 const collectLegacyFingerprintCounts = (
     messages: ReadonlyArray<LegacyProvenanceEntry>,
-): Map<string, number> => {
-    const counts = new Map<string, number>();
+): LegacyFingerprintCounts => {
+    const counts: LegacyFingerprintCounts = new Map();
     for (const message of messages) {
         if (message === null || typeof message !== 'object') {
             continue;
@@ -111,8 +116,12 @@ const collectLegacyFingerprintCounts = (
                 typeof record.storyText === 'string'
                     ? record.storyText
                     : JSON.stringify(record.storyText ?? null);
-            const key = `${message.messageId}${LEGACY_FINGERPRINT_SEPARATOR}${storyText}`;
-            counts.set(key, (counts.get(key) ?? 0) + 1);
+            let byText = counts.get(message.messageId);
+            if (!byText) {
+                byText = new Map();
+                counts.set(message.messageId, byText);
+            }
+            byText.set(storyText, (byText.get(storyText) ?? 0) + 1);
         }
     }
     return counts;
@@ -136,15 +145,16 @@ export const assertNoNewLegacyStoryCardWrites = (
 ): void => {
     const persisted = collectLegacyFingerprintCounts(currentRows);
     const incoming = collectLegacyFingerprintCounts(incomingMessages);
-    for (const [key, count] of incoming) {
-        const allowed = persisted.get(key) ?? 0;
-        if (count > allowed) {
-            const separatorIndex = key.indexOf(LEGACY_FINGERPRINT_SEPARATOR);
-            const messageId = separatorIndex >= 0 ? key.slice(0, separatorIndex) : key;
-            throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: `${LEGACY_CUTOVER_REJECT_MESSAGE}（messageId=${messageId}）`,
-            });
+    for (const [messageId, byText] of incoming) {
+        const persistedByText = persisted.get(messageId);
+        for (const [storyText, count] of byText) {
+            const allowed = persistedByText?.get(storyText) ?? 0;
+            if (count > allowed) {
+                throw new TRPCError({
+                    code: 'BAD_REQUEST',
+                    message: `${LEGACY_CUTOVER_REJECT_MESSAGE}（messageId=${messageId}）`,
+                });
+            }
         }
     }
 };

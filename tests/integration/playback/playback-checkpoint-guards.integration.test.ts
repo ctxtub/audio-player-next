@@ -5,6 +5,7 @@ import {
   getPlaybackAnchorForSubject,
   beginPlaybackSessionForSubject,
   savePlaybackCheckpointForSubject,
+  conditionalUpdatePlaybackAnchorForSubject,
 } from '../../../lib/server/playbackSession';
 import { createStoryWorkForSubject } from '../../../lib/server/storyWork';
 import {
@@ -488,6 +489,196 @@ async function runPlaybackCheckpointGuardsTests(): Promise<void> {
   assert(userDraftSave.accepted === true);
   assert.deepStrictEqual(userDraftSave.anchor.source, { kind: 'draft', messageId: userDraftMsg });
   console.log('PASS: user symmetry verified');
+
+  // —— 7. R1（评审 Blocking 1 回归）：Stale CAS 竞争 ——
+  // 旧 S1 拿旧 snapshot 后 DB Anchor 切成 S2/B；S1 conditional write 必须 count=0，
+  // B/S2 Anchor + B progress 不变（防 guard 后 write 前切换穿透）。
+  console.log('--- R1: stale CAS race (S1 snapshot vs DB switched to S2/B) ---');
+  const guestR1: Subject = { type: 'guest', id: makeGuestId('m506_r1_stale_cas') };
+  const workR1A = await createStoryWorkForSubject(guestR1, {
+    prompt: 'm506 R1 A 提示词',
+    storyText: STORY_TEXT,
+    voiceId: 'voice-r1a',
+  });
+  const workR1B = await createStoryWorkForSubject(guestR1, {
+    prompt: 'm506 R1 B 提示词',
+    storyText: STORY_TEXT,
+    voiceId: 'voice-r1b',
+  });
+  const sessionR1A = newSessionId();
+  await beginPlaybackSessionForSubject(guestR1, {
+    sessionId: sessionR1A,
+    source: { kind: 'work', workId: workR1A.id },
+    mode: 'resume',
+    speed: 1.0,
+  });
+  const r1aSave = await savePlaybackCheckpointForSubject(guestR1, {
+    sessionId: sessionR1A,
+    contentHash: workR1A.contentHash,
+    segmentationVersion: SEGMENTATION_VERSION,
+    lastCompletedParagraphIndex: 0,
+    nextParagraphIndex: 1,
+    totalParagraphs: expectedTotal,
+    speed: 1.0,
+  });
+  assert(r1aSave.accepted === true);
+  // 旧 S1 快照：若只看快照，next=2 看似可写；随后 DB Anchor 切到 B/S2（模拟并发 begin）。
+  const staleNextR1 = 2;
+  const sessionR1B = newSessionId();
+  const anchorR1B = await beginPlaybackSessionForSubject(guestR1, {
+    sessionId: sessionR1B,
+    source: { kind: 'work', workId: workR1B.id },
+    mode: 'resume',
+    speed: 1.0,
+  });
+  assert.strictEqual(anchorR1B.sessionId, sessionR1B);
+  assert.deepStrictEqual(anchorR1B.source, { kind: 'work', workId: workR1B.id });
+  const anchorRowR1BBefore = await prisma.guestPlaybackAnchor.findUnique({
+    where: { guestId: guestR1.id },
+  });
+  assert(anchorRowR1BBefore !== null);
+  assert.strictEqual(anchorRowR1BBefore.sessionId, sessionR1B);
+  // S1 conditional write 以 DB 当前值为准：session 已变 → count=0，绝不穿透覆盖 B。
+  const r1count = await conditionalUpdatePlaybackAnchorForSubject(
+    guestR1,
+    sessionR1A,
+    staleNextR1,
+    {
+      contentHash: workR1A.contentHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: 1,
+      nextParagraphIndex: staleNextR1,
+      totalParagraphs: expectedTotal,
+      speed: 1.0,
+      remainingAllowedMs: null,
+      totalAllowedMs: null,
+    },
+  );
+  assert.strictEqual(r1count, 0, 'stale conditional write must affect 0 rows');
+  // B/S2 Anchor 不变，B progress 仍 null（未被创建/覆盖），A progress 仍为 1。
+  assert.deepStrictEqual(
+    await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestR1.id } }),
+    anchorRowR1BBefore,
+  );
+  assert.deepStrictEqual(await getPlaybackAnchorForSubject(guestR1), anchorR1B);
+  assert.strictEqual(
+    await prisma.guestStoryPlaybackProgress.findUnique({ where: { storyWorkId: workR1B.id } }),
+    null,
+    'R1: B progress must stay null after stale CAS',
+  );
+  const progressR1A = await prisma.guestStoryPlaybackProgress.findUnique({
+    where: { storyWorkId: workR1A.id },
+  });
+  assert(progressR1A !== null);
+  assert.strictEqual(progressR1A.nextParagraphIndex, 1);
+  assert.strictEqual(progressR1A.lastCompletedParagraphIndex, 0);
+  // facade 层面 late S1 亦 STALE，且同样不污染 B（CAS 失败绝不碰 WorkProgress）。
+  const r1late = await savePlaybackCheckpointForSubject(guestR1, {
+    sessionId: sessionR1A,
+    contentHash: workR1A.contentHash,
+    segmentationVersion: SEGMENTATION_VERSION,
+    lastCompletedParagraphIndex: 1,
+    nextParagraphIndex: staleNextR1,
+    totalParagraphs: expectedTotal,
+    speed: 1.0,
+  });
+  assert.deepStrictEqual(r1late, { accepted: false, reason: 'STALE_SESSION' });
+  assert.deepStrictEqual(
+    await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestR1.id } }),
+    anchorRowR1BBefore,
+  );
+  assert.strictEqual(
+    await prisma.guestStoryPlaybackProgress.findUnique({ where: { storyWorkId: workR1B.id } }),
+    null,
+    'R1: B progress must stay null after facade late save',
+  );
+  console.log('PASS: R1 stale CAS race verified');
+
+  // —— 8. R2（评审 Blocking 1 回归）：Monotonic CAS 竞争 ——
+  // same session DB 已推进 next=4；旧 snapshot 发 next=3；conditional write 必须
+  // count=0，最终仍为 4（防同 Session 两 checkpoint 竞争回写）。
+  console.log('--- R2: monotonic CAS race (DB next=4 vs stale incoming next=3) ---');
+  const guestR2: Subject = { type: 'guest', id: makeGuestId('m506_r2_mono_cas') };
+  const workR2 = await createStoryWorkForSubject(guestR2, {
+    prompt: 'm506 R2 提示词',
+    storyText: STORY_TEXT,
+  });
+  const sessionR2 = newSessionId();
+  await beginPlaybackSessionForSubject(guestR2, {
+    sessionId: sessionR2,
+    source: { kind: 'work', workId: workR2.id },
+    mode: 'resume',
+    speed: 1.0,
+  });
+  const r2fwd = await savePlaybackCheckpointForSubject(guestR2, {
+    sessionId: sessionR2,
+    contentHash: workR2.contentHash,
+    segmentationVersion: SEGMENTATION_VERSION,
+    lastCompletedParagraphIndex: 3,
+    nextParagraphIndex: 4,
+    totalParagraphs: expectedTotal,
+    speed: 1.0,
+  });
+  assert(r2fwd.accepted === true);
+  assert.strictEqual(r2fwd.anchor.nextParagraphIndex, 4);
+  const anchorRowR2Fwd = await prisma.guestPlaybackAnchor.findUnique({
+    where: { guestId: guestR2.id },
+  });
+  const progressRowR2Fwd = await prisma.guestStoryPlaybackProgress.findUnique({
+    where: { storyWorkId: workR2.id },
+  });
+  assert(anchorRowR2Fwd !== null && progressRowR2Fwd !== null);
+  assert.strictEqual(anchorRowR2Fwd.nextParagraphIndex, 4);
+  assert.strictEqual(progressRowR2Fwd.nextParagraphIndex, 4);
+  // 旧 snapshot（incoming next=3）conditional write：DB next=4 > 3 → count=0。
+  const r2count = await conditionalUpdatePlaybackAnchorForSubject(
+    guestR2,
+    sessionR2,
+    3,
+    {
+      contentHash: workR2.contentHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: 2,
+      nextParagraphIndex: 3,
+      totalParagraphs: expectedTotal,
+      speed: 1.0,
+      remainingAllowedMs: null,
+      totalAllowedMs: null,
+    },
+  );
+  assert.strictEqual(r2count, 0, 'monotonic conditional write must affect 0 rows');
+  // 最终仍为 4：Anchor 行 + Progress 行均 unchanged。
+  assert.deepStrictEqual(
+    await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestR2.id } }),
+    anchorRowR2Fwd,
+  );
+  assert.deepStrictEqual(
+    await prisma.guestStoryPlaybackProgress.findUnique({ where: { storyWorkId: workR2.id } }),
+    progressRowR2Fwd,
+  );
+  assert.deepStrictEqual(await getPlaybackAnchorForSubject(guestR2), r2fwd.anchor);
+  // facade 同值回退亦 monotonic no-op（accepted:true + 当前 Anchor），DB 不变。
+  const r2back = await savePlaybackCheckpointForSubject(guestR2, {
+    sessionId: sessionR2,
+    contentHash: workR2.contentHash,
+    segmentationVersion: SEGMENTATION_VERSION,
+    lastCompletedParagraphIndex: 2,
+    nextParagraphIndex: 3,
+    totalParagraphs: expectedTotal,
+    speed: 1.0,
+  });
+  assert(r2back.accepted === true);
+  assert.strictEqual(r2back.anchor.nextParagraphIndex, 4);
+  assert.deepStrictEqual(r2back.anchor, r2fwd.anchor);
+  assert.deepStrictEqual(
+    await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestR2.id } }),
+    anchorRowR2Fwd,
+  );
+  assert.deepStrictEqual(
+    await prisma.guestStoryPlaybackProgress.findUnique({ where: { storyWorkId: workR2.id } }),
+    progressRowR2Fwd,
+  );
+  console.log('PASS: R2 monotonic CAS race verified');
 
   console.log('\nALL PLAYBACK CHECKPOINT GUARDS TEST CASES PASSED SUCCESSFULLY!');
 }

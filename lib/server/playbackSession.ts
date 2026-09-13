@@ -27,10 +27,12 @@
  *   anchor.sessionId !== input.sessionId → {accepted:false,reason:'STALE_SESSION'}
  *   绝不覆盖（含无 Anchor/dangling/并发删除）；Monotonic Guard 同 Session
  *   incoming.next < existing.next → 不回退（保持旧 server 保护性质，原样返回
- *   现有 Anchor，accepted:true，无 forceReset 旁路——新 input 根本无此字段，
- *   透传亦忽略）；Work 时一事务同时 UPDATE Anchor + UPSERT Progress
+ *   现有 Anchor，accepted:true，新 input 根本无此字段，
+ *   透传亦忽略）；预读仅 fast-path，权威判定下沉 conditional write CAS
+ *   （WHERE sessionId + next lte，以 DB 当前值为准，消除 TOCTOU）；
+ *   Work 时同一事务内先 CAS Anchor、成功才 UPSERT Progress
  *   （prisma.$transaction，用户/访客对称，completedAt 保留，lastPlayedAt=now）；
- *   Draft 按 Anchor identity 只更新 Anchor，不做 Work progress。
+ *   Draft 按 Anchor identity 只 conditional 更新 Anchor，不做 Work progress。
  *
  * Router（lib/trpc/routers/playback.ts）只经由本 facade 对外提供
  * 7 个新 procedures，Subject 鉴权与 rate limit 仍由 router 层复用。
@@ -547,26 +549,123 @@ export const beginPlaybackSessionForSubject = async (
 };
 
 /**
- * §17 playback.saveCheckpoint：Session 归属 + 单调守卫后更新 Anchor（M5-06 落地）。
+ * M5-06 FIXUP conditional-write (CAS) helpers（评审 Blocking 1：消除 TOCTOU）。
+ *
+ * 预读快照只做 fast-path 早退与 source 定路（不具权威性）；最终写入一律经
+ * conditional updateMany 原子绑定，以数据库当前值（而非几毫秒前快照）为准：
+ * - Stale CAS：anchor.sessionId === expectedSessionId
+ * - Monotonic CAS：currentAnchor.nextParagraphIndex <= incomingNext
+ * 两者同时下沉到同一 WHERE，count===1 方为成功，count===0 则按当前 DB 值
+ * 区分 STALE_SESSION / monotonic no-op（见 resolveConditionalCheckpointFailure）。
+ */
+export type CheckpointAnchorWriteData = {
+  contentHash: string;
+  segmentationVersion: string;
+  lastCompletedParagraphIndex: number;
+  nextParagraphIndex: number;
+  totalParagraphs: number;
+  speed: number;
+  remainingAllowedMs: number | null;
+  totalAllowedMs: number | null;
+};
+
+/**
+ * 构造 CAS 子句（Stale + Monotonic），调用方再拼 subject identity
+ *（userId / guestId）即得完整 updateMany WHERE。Draft 直写与 Work 事务内
+ * CAS 共用同一构造，杜绝漂移。
+ */
+export const buildConditionalAnchorCasClause = (
+  expectedSessionId: string,
+  incomingNextParagraphIndex: number,
+) => ({
+  sessionId: expectedSessionId,
+  nextParagraphIndex: { lte: incomingNextParagraphIndex },
+});
+
+/**
+ * 非事务 conditional anchor 更新（Draft 路径与 regression 直验共用）。
+ * 返回命中行数：1 为 CAS 成功，0 为 CAS 失败（调用方再读区分原因）。
+ */
+export const conditionalUpdatePlaybackAnchorForSubject = async (
+  subject: Subject,
+  expectedSessionId: string,
+  incomingNextParagraphIndex: number,
+  data: CheckpointAnchorWriteData,
+): Promise<number> => {
+  const cas = buildConditionalAnchorCasClause(expectedSessionId, incomingNextParagraphIndex);
+  const res =
+    subject.type === 'user'
+      ? await prisma.userPlaybackAnchor.updateMany({
+          where: { userId: subject.id, ...cas },
+          data,
+        })
+      : await prisma.guestPlaybackAnchor.updateMany({
+          where: { guestId: subject.id, ...cas },
+          data,
+        });
+  return res.count;
+};
+
+/**
+ * CAS 失败后按数据库当前值区分原因（绝不写）：
+ * - 无行 / session 已变化 → {accepted:false, reason:'STALE_SESSION'}
+ * - session 相同（CAS 失败即 DB next > incoming）→ {accepted:true} + 当前 Anchor
+ *  （维持 monotonic no-op 语义；异常交错下 DB next <= incoming 亦只读返回当前值）。
+ */
+const resolveConditionalCheckpointFailureForSubject = async (
+  subject: Subject,
+  expectedSessionId: string,
+  incomingNextParagraphIndex: number,
+): Promise<SavePlaybackCheckpointResult> => {
+  const latest =
+    subject.type === 'user'
+      ? await prisma.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
+      : await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+  if (!latest) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  if (latest.sessionId !== expectedSessionId) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  const latestSource = tryParseLegacyPlaybackSource(latest.sourceKind, latest.sourceId);
+  if (!latestSource) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  const latestDto = toAnchorDto(latest);
+  if (!latestDto) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  if (latest.nextParagraphIndex > incomingNextParagraphIndex) {
+    return { accepted: true, anchor: latestDto };
+  }
+  return { accepted: true, anchor: latestDto };
+};
+
+/**
+ * §17 playback.saveCheckpoint：Session 归属 + 单调守卫后更新 Anchor（M5-06 落地，
+ * M5-06 FIXUP 原子绑定：预读仅 fast-path，权威判定下沉 conditional write CAS）。
  *
  * 顺序冻结（§17.1 → §17.2 → §18）：
  * 1. Stale Guard：无 Anchor / anchor.sessionId !== input.sessionId（含 null/非法
- *    legacy、dangling source 不可解析、DTO 映射失败、并发删除 P2025）→
+ *    legacy、dangling source 不可解析、DTO 映射失败）→
  *    {accepted:false, reason:'STALE_SESSION'}，绝不覆盖（late save 不得影响新
  *    Anchor/Progress；input.sessionId 非法亦 STALE，fail-closed）。
+ *    预读未命中直接返回；预读命中仍须经 CAS 以 DB 当前值复核（防 TOCTOU 穿透）。
  * 2. Monotonic Guard：同 Session incoming.nextParagraphIndex < existing.next →
  *    不允许回退（保持旧 server 保护性质；accepted:true + 现有 Anchor 原样返回，
- *    不写 Anchor、不碰 Progress；无 forceReset 旁路——新 input 无此字段）。
- * 3. Work 行为（§18）：source.kind==work 时一事务同时 UPDATE Anchor + UPSERT
- *    Progress（prisma.$transaction；completedAt 保留，lastPlayedAt=now；用户/
+ *    不写 Anchor、不碰 Progress；新 input 无此字段，透传亦忽略）。
+ *    预读回退直接 no-op 返回；预读放行仍须经 CAS lte 子句复核（防同 Session 竞争回写）。
+ * 3. Work 行为（§18）：source.kind==work 时一事务内先 conditional CAS Anchor，
+ *    CAS 成功才 UPSERT Progress，CAS 失败绝不碰 Progress
+ *    （prisma.$transaction；completedAt 保留，lastPlayedAt=now；用户/
  *    访客对称；ownership 经 M2 getStoryWorkForSubject，不直查 Work 表）。
- *    Draft 按 Anchor identity 只更新 Anchor，不做 Work progress。
+ *    Draft 按 Anchor identity 只 conditional 更新 Anchor，不做 Work progress。
  */
 export const savePlaybackCheckpointForSubject = async (
   subject: Subject,
   input: SavePlaybackCheckpointInput,
 ): Promise<SavePlaybackCheckpointResult> => {
-  // 新 input 无 forceReset：即使 JS 透传亦忽略（解构只取契约字段，绝不读 forceReset）。
+  // 新 input 无 forceReset：即使 JS 透传亦忽略（解构只取契约字段，绝不读该旁路开关）。
   const {
     sessionId,
     contentHash,
@@ -583,6 +682,7 @@ export const savePlaybackCheckpointForSubject = async (
     return { accepted: false, reason: STALE_SESSION };
   }
 
+  // 预读 fast-path（非权威）：定 source 路由与早退，权威判定一律下沉 CAS。
   const currentRow =
     subject.type === 'user'
       ? await prisma.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
@@ -592,6 +692,7 @@ export const savePlaybackCheckpointForSubject = async (
     return { accepted: false, reason: STALE_SESSION };
   }
   // §17.1：sessionId 写权限——Anchor.sessionId !== input.sessionId → STALE，绝不覆盖。
+  // 命中此分支直接返回（无写）；未命中仍须经 CAS 复核，防 guard 后 write 前切换。
   if (currentRow.sessionId !== sessionId) {
     return { accepted: false, reason: STALE_SESSION };
   }
@@ -604,13 +705,14 @@ export const savePlaybackCheckpointForSubject = async (
   if (!existingDto) {
     return { accepted: false, reason: STALE_SESSION };
   }
-  // §17.2：同 Session 单调守卫——incoming.next < existing.next → 不回退。
+  // §17.2：同 Session 单调守卫 fast-path——incoming.next < existing.next → 不回退。
   // 保持旧 server 保护性质：不写 Anchor、不碰 Progress，原样返回现有 Anchor。
+  // 放行（>=）仍须经 CAS lte 子句以 DB 当前值复核，防同 Session 竞争回写。
   if (nextParagraphIndex < currentRow.nextParagraphIndex) {
     return { accepted: true, anchor: existingDto };
   }
 
-  const anchorData = {
+  const anchorData: CheckpointAnchorWriteData = {
     contentHash,
     segmentationVersion,
     lastCompletedParagraphIndex,
@@ -621,100 +723,106 @@ export const savePlaybackCheckpointForSubject = async (
     totalAllowedMs: totalAllowedMs ?? null,
   };
 
-  // —— Draft checkpoint：按 Anchor identity 只更新 Anchor，不做 Work progress ——
+  // —— Draft checkpoint：按 Anchor identity conditional 只更新 Anchor，不做 Work progress ——
   if (source.kind === 'draft') {
-    try {
-      const updated =
-        subject.type === 'user'
-          ? await prisma.userPlaybackAnchor.update({
-              where: { userId: subject.id },
-              data: anchorData,
-            })
-          : await prisma.guestPlaybackAnchor.update({
-              where: { guestId: subject.id },
-              data: anchorData,
-            });
-      const dto = toAnchorDto(updated);
-      if (!dto) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: '[playback-session] Draft checkpoint 落库后映射失败',
-        });
-      }
-      return { accepted: true, anchor: dto };
-    } catch (err) {
-      // 并发删除：行已消失按无 Anchor 处理（STALE，不抛错）。
-      if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 'P2025') {
-        return { accepted: false, reason: STALE_SESSION };
-      }
-      throw err;
+    const casCount = await conditionalUpdatePlaybackAnchorForSubject(
+      subject,
+      sessionId,
+      nextParagraphIndex,
+      anchorData,
+    );
+    if (casCount === 0) {
+      return resolveConditionalCheckpointFailureForSubject(subject, sessionId, nextParagraphIndex);
     }
+    const fresh =
+      subject.type === 'user'
+        ? await prisma.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
+        : await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+    if (!fresh) {
+      return { accepted: false, reason: STALE_SESSION };
+    }
+    const dto = toAnchorDto(fresh);
+    if (!dto) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: '[playback-session] Draft checkpoint 落库后映射失败',
+      });
+    }
+    return { accepted: true, anchor: dto };
   }
 
-  // —— Work checkpoint（§18）：一事务同时 UPDATE Anchor + UPSERT Progress ——
+  // —— Work checkpoint（§18）：同一事务内 conditional CAS Anchor + UPSERT Progress ——
   const workId = source.workId;
   // Ownership 经 M2（subject, workId），不直查 Work 表、不重算 title/hash；
   // missing/foreign/trash 统一 NOT_FOUND 原样透出（fail-closed，无 partial 写）。
   await getStoryWorkForSubject(subject, workId);
-  try {
-    const updatedAnchorRow = await prisma.$transaction(async (tx) => {
-      const updated =
-        subject.type === 'user'
-          ? await tx.userPlaybackAnchor.update({
-              where: { userId: subject.id },
-              data: anchorData,
-            })
-          : await tx.guestPlaybackAnchor.update({
-              where: { guestId: subject.id },
-              data: anchorData,
-            });
-      const progressCreateBase = {
-        storyWorkId: workId,
-        contentHash,
-        segmentationVersion,
-        lastCompletedParagraphIndex,
-        nextParagraphIndex,
-        totalParagraphs,
-        completedAt: null,
-        lastPlayedAt: new Date(),
-      };
-      const progressUpdateBase = {
-        contentHash,
-        segmentationVersion,
-        lastCompletedParagraphIndex,
-        nextParagraphIndex,
-        totalParagraphs,
-        lastPlayedAt: new Date(),
-      };
-      if (subject.type === 'user') {
-        await tx.storyPlaybackProgress.upsert({
-          where: { storyWorkId: workId },
-          create: progressCreateBase,
-          update: progressUpdateBase,
-        });
-      } else {
-        await tx.guestStoryPlaybackProgress.upsert({
-          where: { storyWorkId: workId },
-          create: progressCreateBase,
-          update: progressUpdateBase,
-        });
-      }
-      return updated;
-    });
-    const dto = toAnchorDto(updatedAnchorRow);
-    if (!dto) {
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: '[playback-session] Work checkpoint 落库后映射失败',
+  const casTx = await prisma.$transaction(async (tx) => {
+    const cas = buildConditionalAnchorCasClause(sessionId, nextParagraphIndex);
+    const casRes =
+      subject.type === 'user'
+        ? await tx.userPlaybackAnchor.updateMany({
+            where: { userId: subject.id, ...cas },
+            data: anchorData,
+          })
+        : await tx.guestPlaybackAnchor.updateMany({
+            where: { guestId: subject.id, ...cas },
+            data: anchorData,
+          });
+    // CAS 失败绝不碰 WorkProgress，直接返回，由外层按当前 DB 值区分原因。
+    if (casRes.count === 0) {
+      return { casApplied: false as const };
+    }
+    const progressCreateBase = {
+      storyWorkId: workId,
+      contentHash,
+      segmentationVersion,
+      lastCompletedParagraphIndex,
+      nextParagraphIndex,
+      totalParagraphs,
+      completedAt: null,
+      lastPlayedAt: new Date(),
+    };
+    const progressUpdateBase = {
+      contentHash,
+      segmentationVersion,
+      lastCompletedParagraphIndex,
+      nextParagraphIndex,
+      totalParagraphs,
+      lastPlayedAt: new Date(),
+    };
+    if (subject.type === 'user') {
+      await tx.storyPlaybackProgress.upsert({
+        where: { storyWorkId: workId },
+        create: progressCreateBase,
+        update: progressUpdateBase,
+      });
+    } else {
+      await tx.guestStoryPlaybackProgress.upsert({
+        where: { storyWorkId: workId },
+        create: progressCreateBase,
+        update: progressUpdateBase,
       });
     }
-    return { accepted: true, anchor: dto };
-  } catch (err) {
-    if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: unknown }).code === 'P2025') {
-      return { accepted: false, reason: STALE_SESSION };
-    }
-    throw err;
+    const fresh =
+      subject.type === 'user'
+        ? await tx.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
+        : await tx.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+    return { casApplied: true as const, row: fresh };
+  });
+  if (!casTx.casApplied) {
+    return resolveConditionalCheckpointFailureForSubject(subject, sessionId, nextParagraphIndex);
   }
+  if (!casTx.row) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  const dto = toAnchorDto(casTx.row);
+  if (!dto) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: '[playback-session] Work checkpoint 落库后映射失败',
+    });
+  }
+  return { accepted: true, anchor: dto };
 };
 
 /** §19 playback.completeSession：完播收尾（保留 ended Anchor，M5-07+ 落地）。 */

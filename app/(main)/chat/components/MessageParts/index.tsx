@@ -34,7 +34,9 @@ const MessagePartRenderer: FC<PartRendererProps> = ({ part, messageId, onPlaySto
         case 'storyCard':
             return <StoryCardPartRenderer part={part} messageId={messageId} onPlayStory={onPlayStory} />;
         case 'storyArtifact':
-            return <StoryArtifactPartRenderer part={part} messageId={messageId} onPlayStory={onPlayStory} />;
+            // M4-05：Modern StoryArtifact 为纯 lifecycle UI，不再接收 playback 回调；
+            // Legacy storyCard 分支保持 onPlayStory 契约不变。
+            return <StoryArtifactPartRenderer part={part} messageId={messageId} />;
         case 'guidance':
             return <GuidancePartComponent part={part} />;
         case 'summary':

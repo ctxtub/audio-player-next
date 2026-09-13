@@ -1,12 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
-import { Sparkles, Pause, Headphones } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import type { StoryArtifactPart } from '@/types/chat';
-import { useGenerationStore } from '@/stores/generationStore';
-import { usePlaybackStore } from '@/stores/playbackStore';
-import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
-import { playStoryText } from '@/app/services/storyFlow';
+import { useChatStore } from '@/stores/chatStore';
 import StoryViewer from '@/app/(main)/chat/components/StoryViewer';
 import type { PartRendererProps } from './index';
 import styles from './index.module.scss';
@@ -15,9 +12,15 @@ import styles from './index.module.scss';
 const PREVIEW_MAX_LENGTH = 100;
 
 /**
- * Modern 故事 Artifact 片段渲染器（M4-02）。
- * 只读渲染 draft/complete/interrupted 正文；绝不读写 audioUrl（Modern Artifact 无该字段），
- * 播放经正文重合成（playStoryText），与 Legacy StoryCard 渲染并存（历史只读）。
+ * Modern 故事 Artifact 片段渲染器（M4-05）。
+ *
+ * 纯 ChatArtifact lifecycle UI：唯一状态源是 `artifact.status`
+ *（draft → complete → promoting → ready / promotion_failed，draft → interrupted）。
+ * - 正文只读 `artifact.storyText`，绝不回退读全局生成暂存；
+ * - 无 playback 预接（无播放/暂停/续播/音频生成语义）；
+ * - promotion_failed 重试只 dispatch `{ type: 'promotion.retry', messageId }`（fail-closed）；
+ * - ready 只做 Library handoff（导航到 `/library/${storyWorkId}`，不做任何 fetch/播放/mutation）；
+ * - 不推导、不改写 ChatMessage delivery 状态。
  */
 const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
   part,
@@ -26,70 +29,66 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
   const [showFullText, setShowFullText] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const phase = useGenerationStore((state) => state.phase);
-  const streamingText = useGenerationStore((state) => state.streamingText);
-  const isPlaybackPlaying = usePlaybackStore((state) => state.isPlaying);
-  const pauseAudioPlayback = usePlaybackStore((state) => state.pauseAudioPlayback);
-  const activeProgressSourceId = usePlaybackProgressStore((state) => state.sourceId);
-  const activeNextIndex = usePlaybackProgressStore((state) => state.nextParagraphIndex);
+  const dispatch = useChatStore((state) => state.dispatch);
 
   const artifact = part.artifact;
   const status = artifact.status;
   const isDraft = status === 'draft';
-  const isInterrupted = status === 'interrupted';
 
-  const isThisCardPlaying =
-    isPlaybackPlaying && activeProgressSourceId === messageId && isPlaybackPlaying;
-  const isThisCardResumePoint = Boolean(
-    messageId && activeProgressSourceId === messageId && activeNextIndex > 0,
-  );
+  // M4-05：正文唯一来源是 Artifact 自身持有，不读全局 generation。
+  const currentText = artifact.storyText;
 
-  const isGlobalGenerating = phase === 'generating_text' || phase === 'generating_audio';
-  const isGenerating = isGlobalGenerating && isDraft;
-
-  const isGeneratingText = isGenerating && phase === 'generating_text';
-  const isGeneratingAudio = isGenerating && phase === 'generating_audio';
-
-  const currentText = artifact.storyText || (isGenerating ? streamingText : '');
-
+  // draft 自动滚动：条件只看 Artifact 自身（status + storyText 变化）。
   useEffect(() => {
-    if (isGenerating && contentRef.current) {
+    if (isDraft && contentRef.current) {
       contentRef.current.scrollTop = contentRef.current.scrollHeight;
     }
-  }, [isGenerating, currentText]);
+  }, [isDraft, currentText]);
 
   const needsTruncation = useMemo(
-    () => !isGenerating && currentText.length > PREVIEW_MAX_LENGTH,
-    [isGenerating, currentText],
+    () => !isDraft && currentText.length > PREVIEW_MAX_LENGTH,
+    [isDraft, currentText],
   );
 
   const displayText = useMemo(() => {
-    if (isGenerating) return currentText;
+    if (isDraft) return currentText;
     if (!needsTruncation) return currentText;
     return `${currentText.slice(0, PREVIEW_MAX_LENGTH)}...`;
-  }, [isGenerating, needsTruncation, currentText]);
+  }, [isDraft, needsTruncation, currentText]);
 
-  const handlePlay = () => {
-    if (isThisCardPlaying) {
-      pauseAudioPlayback();
-      return;
-    }
-    if (currentText) {
-      void playStoryText(currentText, messageId);
-    }
+  // M4-05：promotion_failed 重试唯一动作；messageId 缺失时 fail-closed（不猜 latest）。
+  const handleRetryPromotion = () => {
+    if (!messageId) return;
+    dispatch({ type: 'promotion.retry', messageId });
   };
 
   const headerText = useMemo(() => {
-    if (isInterrupted) return '生成已中断';
-    if (isGeneratingText) return '正在创作故事...';
-    if (isGeneratingAudio) return '正在生成语音...';
-    if (isDraft) return '正在创作故事...';
-    return null;
-  }, [isInterrupted, isGeneratingText, isGeneratingAudio, isDraft]);
+    switch (status) {
+      case 'draft':
+        return '正在创作故事';
+      case 'complete':
+        return '故事正文已完成，准备保存';
+      case 'promoting':
+        return '正在保存到作品库';
+      case 'ready':
+        return '已保存到作品库';
+      case 'promotion_failed':
+        return '保存失败，可重试保存';
+      case 'interrupted':
+        return '生成已中断';
+      default:
+        return null;
+    }
+  }, [status]);
+
+  const showRetry = status === 'promotion_failed';
+  // ready 必须携带正整数 storyWorkId（领域契约）；非正整数时不渲染 CTA（fail-closed，只导航）。
+  const readyWorkId = status === 'ready' ? artifact.storyWorkId : undefined;
+  const showLibraryCta = typeof readyWorkId === 'number' && Number.isInteger(readyWorkId) && readyWorkId > 0;
 
   return (
-    <div className={`${styles.storyCard} ${isThisCardPlaying ? styles.playing : ''}`}>
-      {(isGenerating || isInterrupted || (isDraft && headerText)) && (
+    <div className={styles.storyCard}>
+      {headerText && (
         <div className={styles.storyHeader}>
           <Sparkles size={16} strokeWidth={2} className={styles.sparkle} />
           <span>{headerText}</span>
@@ -98,25 +97,15 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
 
       <div
         ref={contentRef}
-        className={`${styles.storyContent} ${isGenerating ? styles.storyContentGenerating : ''}`}
+        className={`${styles.storyContent} ${isDraft ? styles.storyContentGenerating : ''}`}
       >
         <p className={styles.storyText}>
           {displayText}
-          {isGeneratingText && <span className={styles.cursor}>|</span>}
+          {isDraft && <span className={styles.cursor}>|</span>}
         </p>
       </div>
 
-      {isGeneratingAudio && (
-        <div className={styles.audioOverlay}>
-          <div className={styles.bars}>
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className={styles.bar} style={{ animationDelay: `${i * 0.1}s` }} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!isGenerating && !isInterrupted && currentText && (
+      {(needsTruncation || showRetry || showLibraryCta) && (
         <div className={styles.storyActions}>
           {needsTruncation && (
             <button
@@ -127,21 +116,23 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
               查看全文
             </button>
           )}
-          <button type="button" className={styles.playButton} onClick={handlePlay}>
-            {isThisCardPlaying ? (
-              <><Pause size={14} strokeWidth={2} /> 暂停播放</>
-            ) : isThisCardResumePoint ? (
-              <><Headphones size={14} strokeWidth={2} /> 从第 {activeNextIndex + 1} 段继续收听</>
-            ) : (
-              <><Headphones size={14} strokeWidth={2} /> 播放故事</>
-            )}
-          </button>
-        </div>
-      )}
-
-      {isInterrupted && (
-        <div className={styles.storyActions}>
-          <span>生成未完成，可重试</span>
+          {showRetry && (
+            <button
+              type="button"
+              className={styles.retryButton}
+              onClick={handleRetryPromotion}
+            >
+              重试保存
+            </button>
+          )}
+          {showLibraryCta && (
+            <a
+              className={styles.libraryLink}
+              href={`/library/${readyWorkId}`}
+            >
+              查看作品
+            </a>
+          )}
         </div>
       )}
 

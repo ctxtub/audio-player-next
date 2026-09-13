@@ -985,6 +985,18 @@ cases:
     executable_ids: [exec-promotion-orchestration]
     fixtures: []
     owner: creation-artifact
+  - case_id: artifact-chat-ui-promotion-state-surface
+    display_name_zh: Artifact Chat UI 与 Promotion 状态呈现
+    legacy_aliases: [E2E-08-05]
+    journey_id: creation-artifact
+    user_goal: Chat 内故事 Artifact 以纯生命周期语义呈现六态可操作界面，失败可重试保存且成功可进入作品库，全程无播放无持久化
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [chat, artifact, promotion, ui, lifecycle]
+    spec_path: docs/e2e/08-创作Artifact/05-ArtifactChatUI.md
+    executable_ids: [exec-artifact-chat-ui]
+    fixtures: []
+    owner: creation-artifact
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1224,6 +1236,10 @@ executables:
     display_name_zh: Promotion 编排失败重试与中断治理
     layer: L1
     path: ./tests/unit/creation-chat/promotion-orchestration.unit.test.ts
+  - executable_id: exec-artifact-chat-ui
+    display_name_zh: Artifact Chat UI 与 Promotion 状态呈现
+    layer: L1
+    path: ./tests/unit/creation-chat/artifact-chat-ui.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

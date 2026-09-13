@@ -324,6 +324,70 @@
   outline-offset: 2px;
 }
 
+/* M7-04-02 Draft Transcript 只读面（additive，不改既有 Surface 布局/断点）。
+ * 正文可滚动（内容区滚动不触发 dismiss，spec §78），按钮延续 glass/typography，
+ * 触控热区 >=44px，与查看正文同口径；只读展示无编辑面。 */
+.body [data-testid='expanded-transcript'] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.body [data-testid='expanded-transcript-text'] {
+  max-height: 320px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--text-base);
+  line-height: 24px;
+  color: var(--text-primary);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--border-default);
+  background: var(--bg-tertiary);
+  touch-action: pan-y;
+}
+
+.body [data-testid='expanded-transcript-empty'] {
+  font-size: var(--text-sm);
+  line-height: 18px;
+  color: var(--text-tertiary);
+  padding: var(--space-3);
+}
+
+.body [data-testid='expanded-view-transcript-button'],
+.body [data-testid='expanded-transcript-back-button'],
+.body [data-testid='expanded-open-work-detail-button'] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch-target);
+  width: 100%;
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.body [data-testid='expanded-view-transcript-button']:disabled,
+.body [data-testid='expanded-transcript-back-button']:disabled,
+.body [data-testid='expanded-open-work-detail-button']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.body [data-testid='expanded-view-transcript-button']:focus-visible,
+.body [data-testid='expanded-transcript-back-button']:focus-visible,
+.body [data-testid='expanded-open-work-detail-button']:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+}
+
 /* Reduced Motion：关闭弹簧/位移动画，drag dismiss 立即收起（spec §10.3）。 */
 @media (prefers-reduced-motion: reduce) {
   .overlay,

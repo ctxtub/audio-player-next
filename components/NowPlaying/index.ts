@@ -28,6 +28,7 @@ export {
     EXPANDED_SHEET_DISMISS_THRESHOLD_PX,
     formatExpandedSubtitle,
 } from './ExpandedNowPlaying';
+export type { ExpandedLocalView } from './ExpandedNowPlaying';
 export {
     MINI_METADATA_TRIGGER_SELECTOR,
     NowPlayingLayer,
@@ -48,6 +49,9 @@ export {
     deriveExpandedPlaybackRate,
     deriveExpandedCanRestart,
     deriveExpandedCanViewStory,
+    deriveExpandedCanViewTranscript,
+    deriveDraftTranscriptText,
+    deriveTranscriptDisplayText,
     deriveWorkLibraryTarget,
     EXPANDED_NOW_PLAYING_FALLBACK_TITLE,
     EXPANDED_VOICE_FALLBACK_LABEL,
@@ -88,6 +92,25 @@ export {
     type SleepTimerSelection,
 } from './SleepTimerControl';
 export { NowPlayingActions, type NowPlayingActionsProps } from './NowPlayingActions';
+export { TranscriptView, type TranscriptViewProps } from './TranscriptView';
+export {
+    EXPANDED_TRANSCRIPT_TESTID,
+    EXPANDED_TRANSCRIPT_TEXT_TESTID,
+    EXPANDED_TRANSCRIPT_EMPTY_TESTID,
+    EXPANDED_VIEW_TRANSCRIPT_BUTTON_TESTID,
+    EXPANDED_TRANSCRIPT_BACK_BUTTON_TESTID,
+    EXPANDED_OPEN_WORK_DETAIL_BUTTON_TESTID,
+    TRANSCRIPT_BACK_LABEL,
+    OPEN_WORK_DETAIL_LABEL,
+    TRANSCRIPT_EMPTY_LABEL,
+    normalizeDraftTranscriptText,
+    resolveDraftTranscriptText,
+    resolveTranscriptDisplayText,
+    shouldShowDraftTranscript,
+    decideDraftTranscript,
+    type DraftTranscriptDecision,
+    type DraftTranscriptDecisionInput,
+} from './draftTranscript';
 export {
     VIEW_STORY_LABEL,
     EXPANDED_ACTIONS_TESTID,

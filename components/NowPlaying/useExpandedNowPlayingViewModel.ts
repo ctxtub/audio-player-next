@@ -26,6 +26,13 @@
  *   Draft/空 source 一律隐藏（绝不拼凑目标）；同 Detail 去重由调用方经
  *   isSameLibraryDetail 判定（只 close，不重复 push）。
  *
+ * M7-04-02 Draft Transcript 增补（spec §35/§72 additive，不破既有字段）：
+ * - transcriptText/canViewTranscript = Draft source + Session.storyText
+ *   直接派生（只读原文；无正文/Work/空/idle 一律隐藏，fail-closed）；
+ *   controls ↔ transcript 切换由 Expanded 局部 useState 持有，不进
+ *   global UI Store；promotion 成功（source 切 work，sessionId 不变）不强制
+ *   关闭 transcript（调用方不因 source 变化重置局部 view）。
+ *
  * 纯派生见 deriveExpandedNowPlayingViewModel（可独立测试）；
  * Hook 层只做 selector 派生，不 mutation Session/Transport/Config。
  */
@@ -40,6 +47,7 @@ import { deriveExpandedPlaybackAction, type ExpandedPlaybackAction } from './Pla
 import { EXPANDED_TIMELINE_MODE } from './PlaybackTimeline';
 import { isValidSleepTimerMode, type SleepTimerMode } from '@/lib/playback/sleepTimer';
 import { resolveWorkLibraryTarget } from './workViewStoryNavigation';
+import { resolveDraftTranscriptText, resolveTranscriptDisplayText } from './draftTranscript';
 
 export type { ExpandedPlaybackAction };
 export { deriveExpandedPlaybackAction };
@@ -62,6 +70,8 @@ export type ExpandedTransportViewModel = {
 
 /** M7-01 Expanded ViewModel（Header/Surface 最小集 + M7-02 P3A 增补）。 */
 export type ExpandedNowPlayingViewModel = {
+    /** M7-04-02 当前 Session id（transcript 局部 view 重置键；promotion 同 id 保持打开）。 */
+    sessionId: string | null;
     /** 是否存在可展示 session（source 非空且 status 非 idle）。 */
     hasSession: boolean;
     /** 一级标题（Session.title，空回退“正在播放”）。 */
@@ -94,6 +104,10 @@ export type ExpandedNowPlayingViewModel = {
     canViewStory: boolean;
     /** M7-04-01 查看正文 Library 目标（source.workId 直接派生；其余 null）。 */
     viewStoryTarget: string | null;
+    /** M7-04-02 是否展示 Draft 查看正文入口（Draft + storyText 可用，spec §35）。 */
+    canViewTranscript: boolean;
+    /** M7-04-02 Draft 只读正文（Session.storyText 原文；不可用时 null，promotion 后仍展示）。 */
+    transcriptText: string | null;
 };
 
 /** M7-03 Expanded SleepTimer ViewModel（spec §32；纯展示派生，不复制 Timer 状态）。 */
@@ -122,10 +136,14 @@ export type ExpandedSessionSnapshot = {
     voiceId: string;
     nextParagraphIndex: number;
     totalParagraphs: number;
+    /** M7-04-02 当前 Session id（缺省 null，保持旧调用兼容）。 */
+    sessionId?: string | null;
     /** M7-02 当前 Session 倍速（缺省 1.0，保持 M7-01 调用兼容）。 */
     speed?: number;
     /** M7-03 当前 Session Sleep Timer 三态（缺省 off，保持旧调用兼容）。 */
     sleepTimerMode?: SleepTimerMode;
+    /** M7-04-02 当前 Session 正文（缺省空，保持旧调用兼容；唯一来源 Session.storyText）。 */
+    storyText?: string;
 };
 
 /** Transport 快照输入（纯函数层）。 */
@@ -275,6 +293,37 @@ export const deriveExpandedCanViewStory = (
 };
 
 /**
+ * M7-04-02 纯函数：Draft 只读正文派生（spec §35）。
+ * 唯一来源 Session.storyText；Work/空/idle/无正文一律 null（fail-closed）。
+ */
+export const deriveDraftTranscriptText = (
+    source: PlaybackSourceRef | null,
+    storyText: unknown,
+    status: PlaybackSessionStatus
+): string | null => resolveDraftTranscriptText(source, storyText, status);
+
+/**
+ * M7-04-02 纯函数：Transcript 展示文本派生（§35.1 promotion 容忍）。
+ * 有可展示会话且正文可用即返回原文（不分 Draft/Work），供已打开的
+ * transcript 在 promotion 后继续展示；入口可见性仍由 Draft-only 判定把关。
+ */
+export const deriveTranscriptDisplayText = (
+    source: PlaybackSourceRef | null,
+    storyText: unknown,
+    status: PlaybackSessionStatus
+): string | null => resolveTranscriptDisplayText(source, storyText, status);
+
+/**
+ * M7-04-02 纯函数：是否展示 Draft 查看正文入口（spec §35）。
+ * 有可展示 Draft 会话且正文可用即 true。
+ */
+export const deriveExpandedCanViewTranscript = (
+    source: PlaybackSourceRef | null,
+    storyText: unknown,
+    status: PlaybackSessionStatus
+): boolean => resolveDraftTranscriptText(source, storyText, status) !== null;
+
+/**
  * 纯函数：ViewModel 总装（不复制 Store，只做展示派生）。
  */
 export const deriveExpandedNowPlayingViewModel = (
@@ -290,6 +339,7 @@ export const deriveExpandedNowPlayingViewModel = (
     const playbackRate = deriveExpandedPlaybackRate(session.speed ?? 1.0, transportRate);
     return {
         hasSession,
+        sessionId: session.sessionId ?? null,
         title: deriveExpandedTitle(session.title),
         voiceLabel: deriveExpandedVoiceLabel(session.voiceId, voiceOptions),
         sessionStatus: session.status,
@@ -313,6 +363,16 @@ export const deriveExpandedNowPlayingViewModel = (
         ),
         canViewStory: deriveExpandedCanViewStory(session.source, session.status),
         viewStoryTarget: deriveWorkLibraryTarget(session.source),
+        canViewTranscript: deriveExpandedCanViewTranscript(
+            session.source,
+            session.storyText ?? '',
+            session.status
+        ),
+        transcriptText: deriveTranscriptDisplayText(
+            session.source,
+            session.storyText ?? '',
+            session.status
+        ),
     };
 };
 
@@ -329,6 +389,8 @@ export const useExpandedNowPlayingViewModel = (): ExpandedNowPlayingViewModel =>
     const totalParagraphs = usePlaybackSessionStore((state) => state.totalParagraphs);
     const speed = usePlaybackSessionStore((state) => state.speed);
     const sleepTimerMode = usePlaybackSessionStore((state) => state.sleepTimerMode);
+    const storyText = usePlaybackSessionStore((state) => state.storyText);
+    const sessionId = usePlaybackSessionStore((state) => state.sessionId);
     const isPlaying = usePlaybackStore((state) => state.isPlaying);
     const currentTime = usePlaybackStore((state) => state.currentTime);
     const duration = usePlaybackStore((state) => state.duration);
@@ -337,7 +399,7 @@ export const useExpandedNowPlayingViewModel = (): ExpandedNowPlayingViewModel =>
     const voiceOptions = useConfigStore((state) => state.voiceOptions);
 
     return deriveExpandedNowPlayingViewModel(
-        { source, status, title, voiceId, nextParagraphIndex, totalParagraphs, speed, sleepTimerMode },
+        { source, status, title, voiceId, nextParagraphIndex, totalParagraphs, speed, sleepTimerMode, storyText, sessionId },
         { isPlaying, currentTime, duration, playbackRate, remainingMs } as unknown as ExpandedTransportSnapshot,
         voiceOptions
     );

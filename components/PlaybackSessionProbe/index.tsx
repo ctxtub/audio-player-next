@@ -46,6 +46,10 @@ export default function PlaybackSessionProbe(): null {
               sessionId: session.sessionId,
               source: session.source,
               status: session.status,
+              // M7-04-02 Draft Transcript browser 断言用（只读透传）：
+              // Session.storyText 原文（transcript 唯一数据源）+ title。
+              storyText: (session as unknown as { storyText?: unknown }).storyText ?? null,
+              title: (session as unknown as { title?: unknown }).title ?? null,
               continuationMode: session.continuationMode,
               nextParagraphIndex: session.nextParagraphIndex,
               totalParagraphs: session.totalParagraphs,
@@ -102,6 +106,47 @@ export default function PlaybackSessionProbe(): null {
             minutes?: number,
           ): Promise<Record<string, unknown>> => {
             await flow.setSleepTimer(mode, minutes);
+            return snapshot();
+          },
+          // M7-04-02 Draft Transcript browser 入口（E2E-only，local seed，
+          // 不建 server Anchor、不触网络：经 setActiveStory 直写 Session.storyText
+          // + paused 驻留，供 transcript 只读/切换/同一性断言；音频宿主不断）。
+          seedDraftTranscript: (input: {
+            messageId: string;
+            title: string;
+            storyText: string;
+          }): Record<string, unknown> => {
+            const sessionId =
+              typeof crypto !== 'undefined' && 'randomUUID' in crypto
+                ? crypto.randomUUID()
+                : `00000000-0000-4000-8000-${String(Date.now()).slice(-12).padStart(12, '0')}`;
+            usePlaybackSessionStore.getState().setActiveStory({
+              source: { kind: 'draft', messageId: input.messageId },
+              sessionId,
+              title: input.title,
+              storyText: input.storyText,
+              voiceId: 'alloy',
+              speed: 1.0,
+            });
+            usePlaybackSessionStore.getState().setStatus('paused');
+            try {
+              usePlaybackStore.getState().pause();
+            } catch {
+              // transport 暂停失败不阻断 seed（调用方以 snapshot 为准）。
+            }
+            return snapshot();
+          },
+          // M7-04-02 §35.1 promotion 本地模拟（E2E-only：复刻 server promotion
+          // 的本地 effect——sessionId 不变、source 切 work；真实 M4 promotion
+          // 触发面在 Expanded 外，本入口只验 transcript 不强制关闭 + 入口复用）。
+          simulateDraftPromotedToWork: (workId: number): Record<string, unknown> => {
+            const session = usePlaybackSessionStore.getState();
+            if (!session.sessionId || !session.source || session.source.kind !== 'draft') {
+              return snapshot();
+            }
+            usePlaybackSessionStore.setState({
+              source: { kind: 'work', workId },
+            });
             return snapshot();
           },
         };

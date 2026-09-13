@@ -3,11 +3,12 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import React from 'react';
 
-// 中文注释：M7-04-01 Work 查看正文导航集成（L2）：真实 Session/Transport/UI +
+// 中文注释：M7-04-02 Draft Transcript 集成（L2）：真实 Session/Transport/UI +
 // Expanded ViewModel/decision 穿越明确 seam + Expanded 真实渲染。
-// 锁定验收 1/2/3/4/5/6：Work 展示与精确目标、同 Detail 只关、它 Detail 照推、
-// 点击关推顺序且播放继续（session/transport 不变）、Draft 隐藏无 fake-id、
-// 动作区仅查看正文。DB 不触持久化但按 runner 归类走隔离建库。
+// 锁定验收 1/2/3/4/5/6：Draft 查看正文入口与 Expanded 内打开（route 不变）、
+// 内容 = Session.storyText 只读、返回控制 Session/Transport/Audio 零变化、
+// 全程无 /library/fake-id、开合不写 global UI Store（isExpanded 全程 true）、
+// promotion 保持打开 + 打开作品详情复用同一出口、fail-closed、Work 回归。
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
 const repoRoot: string = process.cwd();
@@ -87,7 +88,6 @@ function setupJsdomIfNeeded(): void {
             clearTimeout(id as NodeJS.Timeout);
         };
     }
-    // RAC FocusScope 取全局 rAF（非 window. 前缀），此处与 expanded-surface 同口径挂全局。
     g.requestAnimationFrame = (win as Record<string, unknown>).requestAnimationFrame as (
         cb: () => void
     ) => unknown;
@@ -112,9 +112,10 @@ const PARA1 =
 const PARA2 =
     '第二自然段：小松鼠每天早晨迎着金色的朝阳出门收集松果，仔细辨别每一颗果实是否饱满香甜，并将它们整齐地存放在自己温暖干燥的树洞深处，准备迎接即将到来的寒冷冬天。它还会在洞口铺上柔软的干草。';
 const STORY_2 = `${PARA1}\n${PARA2}`;
-const WORK_SESSION_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+const DRAFT_SESSION_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d481';
+const DRAFT_MESSAGE_ID = 'msg_draft_transcript_02_01';
 
-async function runWorkViewStoryNavigation(): Promise<void> {
+async function runDraftTranscriptIntegration(): Promise<void> {
     setupJsdomIfNeeded();
     installAssetStubs();
 
@@ -127,11 +128,10 @@ async function runWorkViewStoryNavigation(): Promise<void> {
         exports: { default: { show: () => {}, clear: () => {} } },
     } as unknown as NodeModule;
 
-    // next/navigation 打桩：隔离路由上下文；push 可观测、pathname 可控
-    //（跨路由存活与真实 push 目标由 L3 覆盖，本层只验关推顺序与去重）。
+    // next/navigation 打桩：transcript 全程不得导航（push 必须保持 0）；
+    // promotion 后打开作品详情复用同一出口（精确目标断言）。
     const pushedUrls: string[] = [];
-    const effectOrder: string[] = [];
-    let mockPathname: string | null = '/chat';
+    const mockPathname: string | null = '/chat';
     const navigationPath = (nodeRequire as unknown as { resolve: (id: string) => string }).resolve('next/navigation');
     cache[navigationPath] = {
         id: navigationPath,
@@ -141,7 +141,6 @@ async function runWorkViewStoryNavigation(): Promise<void> {
             __esModule: true,
             useRouter: () => ({
                 push: (url: string) => {
-                    effectOrder.push('push');
                     pushedUrls.push(url);
                 },
                 replace: () => {},
@@ -224,8 +223,6 @@ async function runWorkViewStoryNavigation(): Promise<void> {
             } catch {}
         }
         pushedUrls.length = 0;
-        effectOrder.length = 0;
-        mockPathname = '/chat';
         try {
             rtl.cleanup();
         } catch {}
@@ -234,10 +231,23 @@ async function runWorkViewStoryNavigation(): Promise<void> {
         } catch {}
     };
 
+    const seedDraftSession = (storyText: string = STORY_2) => {
+        useSession.getState().setActiveStory({
+            source: { kind: 'draft', messageId: DRAFT_MESSAGE_ID },
+            sessionId: DRAFT_SESSION_ID,
+            title: '草稿故事',
+            storyText,
+            voiceId: 'alloy',
+            speed: 1.0,
+        });
+        useSession.getState().setStatus('paused');
+        useTransport.setState({ isPlaying: false, currentTime: 5, duration: 60, playbackRate: 1.0 });
+    };
+
     const seedWorkSession = () => {
         useSession.getState().setActiveStory({
             source: { kind: 'work', workId: 481 },
-            sessionId: WORK_SESSION_ID,
+            sessionId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
             title: '月球上的小狐狸',
             storyText: STORY_2,
             voiceId: 'alloy',
@@ -245,19 +255,6 @@ async function runWorkViewStoryNavigation(): Promise<void> {
         });
         useSession.getState().setStatus('paused');
         useTransport.setState({ isPlaying: false, currentTime: 20, duration: 100, playbackRate: 1.0 });
-    };
-
-    const seedDraftSession = () => {
-        useSession.getState().setActiveStory({
-            source: { kind: 'draft', messageId: 'msg_view_story_draft_01' },
-            sessionId: 'f47ac10b-58cc-4372-a567-0e02b2c3d480',
-            title: '草稿故事',
-            storyText: STORY_2,
-            voiceId: 'alloy',
-            speed: 1.0,
-        });
-        useSession.getState().setStatus('paused');
-        useTransport.setState({ isPlaying: false, currentTime: 5, duration: 60, playbackRate: 1.0 });
     };
 
     const readVm = () => {
@@ -272,10 +269,12 @@ async function runWorkViewStoryNavigation(): Promise<void> {
                 nextParagraphIndex: s.nextParagraphIndex,
                 totalParagraphs: s.totalParagraphs,
                 speed: s.speed,
+                storyText: s.storyText,
+                sessionId: s.sessionId,
             },
             { isPlaying: t.isPlaying, currentTime: t.currentTime, duration: t.duration, playbackRate: t.playbackRate },
             [{ value: 'alloy', label: '小雅' }]
-        ) as unknown as { canViewStory: boolean; viewStoryTarget: string | null };
+        ) as unknown as { canViewTranscript: boolean; transcriptText: string | null; canViewStory: boolean; viewStoryTarget: string | null; sessionId: string | null };
     };
 
     const renderExpanded = () => {
@@ -293,132 +292,203 @@ async function runWorkViewStoryNavigation(): Promise<void> {
         sessionId: useSession.getState().sessionId as string | null,
         source: JSON.stringify(useSession.getState().source),
         status: useSession.getState().status as string,
+        storyText: useSession.getState().storyText as string,
         isPlaying: useTransport.getState().isPlaying as boolean,
         currentTime: useTransport.getState().currentTime as number,
         audioUrl: useTransport.getState().currentAudioUrl as string | null,
     });
 
-    console.log('=== M7-04-01-I1: Work 展示精确目标，点击先关后导且播放继续（验收 1/2） ===');
+    console.log('=== M7-04-02-I1: Draft 查看正文入口 → Expanded 内打开（验收 1，route 不变） ===');
     {
-        resetAll();
-        seedWorkSession();
-        const vm = readVm();
-        assert.strictEqual(vm.canViewStory, true, 'Work 展示查看正文');
-        assert.strictEqual(vm.viewStoryTarget, '/library/481', '目标精确等于当前 workId');
-        // close/push 顺序观测：渲染前包装 closeExpanded（组件挂载即捕获探针，无闭包时序）。
-        const originalClose = useUi.getState().closeExpanded;
-        act(() => {
-            useUi.setState({
-                closeExpanded: () => {
-                    effectOrder.push('close');
-                    originalClose();
-                },
-            });
-        });
-        const rendered = renderExpanded();
-        const button = rendered.getByTestId('expanded-view-story-button');
-        assert.strictEqual(button.textContent?.includes('查看正文'), true, '按钮文案为查看正文');
-        assert.ok(rendered.getByTestId('expanded-actions'), '动作区容器存在');
-        const before = snapshotPlayback();
-        act(() => {
-            rendered.getByTestId('expanded-view-story-button').click();
-        });
-        assert.deepStrictEqual(effectOrder, ['close', 'push'], '顺序固定：close 先于 push');
-        assert.deepStrictEqual(pushedUrls, ['/library/481'], 'push 精确目标');
-        assert.strictEqual(useUi.getState().isExpanded as boolean, false, 'Expanded 已关闭');
-        assert.deepStrictEqual(snapshotPlayback(), before, '播放继续：session/transport 全不变（不 pause）');
-        act(() => {
-            useUi.setState({ closeExpanded: originalClose });
-        });
-        rendered.unmount();
-        console.log('PASS: M7-04-01-I1 work exact close-then-push');
-    }
-
-    console.log('=== M7-04-01-I2: 同 Detail 只关不推（验收 3） ===');
-    {
-        resetAll();
-        seedWorkSession();
-        mockPathname = '/library/481';
-        const rendered = renderExpanded();
-        assert.ok(rendered.getByTestId('expanded-view-story-button'), '同 Detail 仍展示按钮（只关语义）');
-        const before = snapshotPlayback();
-        act(() => {
-            rendered.getByTestId('expanded-view-story-button').click();
-        });
-        assert.deepStrictEqual(pushedUrls, [], '同 Detail 不重复 push');
-        assert.strictEqual(useUi.getState().isExpanded as boolean, false, '只 closeExpanded');
-        assert.deepStrictEqual(snapshotPlayback(), before, '播放继续');
-        rendered.unmount();
-        console.log('PASS: M7-04-01-I2 same-detail close-only');
-    }
-
-    console.log('=== M7-04-01-I3: 它 Detail 照推当前 Work（验收 4） ===');
-    {
-        resetAll();
-        seedWorkSession();
-        mockPathname = '/library/999';
-        const rendered = renderExpanded();
-        act(() => {
-            rendered.getByTestId('expanded-view-story-button').click();
-        });
-        assert.deepStrictEqual(pushedUrls, ['/library/481'], '在它 Detail 正常 push 当前 Work id');
-        assert.strictEqual(useUi.getState().isExpanded as boolean, false);
-        rendered.unmount();
-        console.log('PASS: M7-04-01-I3 other-detail push-current');
-    }
-
-    console.log('=== M7-04-01-I4: Draft 无 Work 导航且无 fake-id（验收 5；M7-04-02 supersede） ===');
-    {
-        // M7-04-02 supersede：Draft 查看正文入口已由 02 接管（Actions 内同文案
-        // 独立 testid expanded-view-transcript-button，点击切 Expanded 局部 view，
-        // 不导航）；本用例锁定 Work 导航口冻结面：Draft 无 Work 导航按钮、
-        // 无 Library 导航（更无 /library/fake-id）。Draft Transcript 全量语义
-        // 见 draft-transcript 集成（I1-I6）。
         resetAll();
         seedDraftSession();
         const vm = readVm();
+        assert.strictEqual(vm.canViewTranscript, true, 'Draft + 正文即展示查看正文');
+        assert.strictEqual(vm.transcriptText, STORY_2, 'ViewModel 正文 = Session.storyText 原文');
         assert.strictEqual(vm.canViewStory, false, 'Draft 不走 Work 导航口');
-        assert.strictEqual(vm.viewStoryTarget, null, 'Draft 不生成 Library 目标');
+        assert.strictEqual(vm.viewStoryTarget, null, 'Draft 无 Library 目标');
         const rendered = renderExpanded();
-        assert.strictEqual(rendered.queryByTestId('expanded-view-story-button'), null, 'Draft 无 Work 查看正文导航按钮');
-        assert.ok(rendered.getByTestId('expanded-view-transcript-button'), 'Draft Transcript 口由 02 承接（同文案独立口）');
-        assert.deepStrictEqual(pushedUrls, [], '无任何导航（更无 /library/fake-id）');
-        const observedUrls: string[] = [...pushedUrls];
-        for (const url of observedUrls) {
-            assert.ok(!url.includes('fake') && !url.includes('undefined') && !url.includes('null'), `非法目标：${url}`);
-        }
+        // Draft 口：同文案、独立 testid；Work 口 absent。
+        const transcriptButton = rendered.getByTestId('expanded-view-transcript-button');
+        assert.strictEqual(transcriptButton.textContent?.includes('查看正文'), true, 'Draft 口文案为查看正文');
+        assert.strictEqual(rendered.queryByTestId('expanded-view-story-button'), null, 'Draft 无 Work 导航按钮');
+        assert.ok(rendered.getByTestId('expanded-actions'), '动作区容器存在');
+        assert.strictEqual(rendered.queryByTestId('expanded-transcript'), null, '点击前 transcript 未打开');
+        const before = snapshotPlayback();
+        act(() => {
+            transcriptButton.click();
+        });
+        // Expanded 内打开：面板保持打开（isExpanded 全程 true），route 零导航。
+        assert.strictEqual(useUi.getState().isExpanded as boolean, true, 'transcript 打开不关闭 Expanded（局部切换）');
+        assert.deepStrictEqual(pushedUrls, [], 'transcript 打开不导航（route 不变）');
+        const transcript = rendered.getByTestId('expanded-transcript');
+        assert.ok(transcript, 'TranscriptView 已打开');
+        assert.strictEqual(rendered.getByTestId('expanded-now-playing').getAttribute('data-view'), 'transcript', '局部 view = transcript');
+        assert.deepStrictEqual(snapshotPlayback(), before, '打开不改变 Session/Transport');
         rendered.unmount();
-        console.log('PASS: M7-04-01-I4 draft no-work-nav no-fake-id');
+        console.log('PASS: M7-04-02-I1 draft open in-expanded no-nav');
     }
 
-    console.log('=== M7-04-01-I5: 动作区仅查看正文（验收 6） ===');
+    console.log('=== M7-04-02-I2: Transcript 只读原文（验收 2，无编辑面） ===');
+    {
+        resetAll();
+        seedDraftSession();
+        const rendered = renderExpanded();
+        act(() => {
+            rendered.getByTestId('expanded-view-transcript-button').click();
+        });
+        const textEl = rendered.getByTestId('expanded-transcript-text');
+        assert.strictEqual(textEl.textContent, STORY_2, '内容逐字等于 Session.storyText');
+        // 无编辑面：transcript  subtree 内无可编辑元素。
+        const editable = rendered.getByTestId('expanded-transcript').querySelectorAll(
+            'textarea, input, [contenteditable="true"], [contenteditable=""]'
+        );
+        assert.strictEqual(editable.length, 0, '只读，无编辑面');
+        assert.strictEqual(rendered.queryByTestId('expanded-transcript-empty'), null, '有正文时无空态');
+        rendered.unmount();
+        console.log('PASS: M7-04-02-I2 readonly exact storyText');
+    }
+
+    console.log('=== M7-04-02-I3: 返回控制 Session/Transport/Audio 零变化（验收 3） ===');
+    {
+        resetAll();
+        seedDraftSession();
+        const rendered = renderExpanded();
+        act(() => {
+            rendered.getByTestId('expanded-view-transcript-button').click();
+        });
+        assert.ok(rendered.getByTestId('expanded-transcript'), 'transcript 已打开');
+        const audioCountBefore = document.querySelectorAll('audio').length;
+        const before = snapshotPlayback();
+        const uiBefore = { ...(useUi.getState() as unknown as Record<string, unknown>) };
+        act(() => {
+            rendered.getByTestId('expanded-transcript-back-button').click();
+        });
+        assert.strictEqual(rendered.queryByTestId('expanded-transcript'), null, 'transcript 已收起');
+        assert.strictEqual(rendered.getByTestId('expanded-now-playing').getAttribute('data-view'), 'controls', '局部 view 回到 controls');
+        assert.strictEqual(useUi.getState().isExpanded as boolean, true, '返回控制不关闭 Expanded');
+        assert.deepStrictEqual(pushedUrls, [], '返回控制不导航');
+        assert.deepStrictEqual(snapshotPlayback(), before, '返回控制不改变 Session（sessionId 不变、不 pause）');
+        assert.strictEqual(document.querySelectorAll('audio').length, audioCountBefore, 'Host 不 remount');
+        // 开合不写 global UI Store：除 isExpanded/returnFocusTarget 外无 transcript 字段。
+        const uiAfter = useUi.getState() as unknown as Record<string, unknown>;
+        assert.strictEqual(uiAfter.isExpanded, uiBefore.isExpanded);
+        assert.ok(!('transcript' in uiAfter) && !('expandedView' in uiAfter) && !('localView' in uiAfter), 'global UI Store 无 transcript 字段');
+        rendered.unmount();
+        console.log('PASS: M7-04-02-I3 back zero-change');
+    }
+
+    console.log('=== M7-04-02-I4: 全程无 fake-id 导航（验收 4） ===');
+    {
+        resetAll();
+        seedDraftSession();
+        const rendered = renderExpanded();
+        act(() => {
+            rendered.getByTestId('expanded-view-transcript-button').click();
+        });
+        act(() => {
+            rendered.getByTestId('expanded-transcript-back-button').click();
+        });
+        assert.deepStrictEqual(pushedUrls, [], 'Draft 全程零导航（更无 /library/fake-id）');
+        for (const url of pushedUrls) {
+            assert.ok(!url.includes('fake') && !url.includes('undefined') && !url.includes('null') && !url.includes('/library/'), `非法目标：${url}`);
+        }
+        rendered.unmount();
+        console.log('PASS: M7-04-02-I4 no-fake-id');
+    }
+
+    console.log('=== M7-04-02-I5: promotion 保持打开 + 打开作品详情复用出口（验收 5，§35.1） ===');
+    {
+        resetAll();
+        seedDraftSession();
+        const rendered = renderExpanded();
+        act(() => {
+            rendered.getByTestId('expanded-view-transcript-button').click();
+        });
+        assert.ok(rendered.getByTestId('expanded-transcript'), 'transcript 已打开');
+        assert.strictEqual(rendered.queryByTestId('expanded-open-work-detail-button'), null, 'promotion 前无打开作品详情入口（不越界）');
+        // 模拟 promotion 本地 effect：sessionId 不变、source 切 work（server 已切，M4 触发面在外）。
+        const sessionIdBefore = useSession.getState().sessionId as string;
+        act(() => {
+            useSession.setState({ source: { kind: 'work', workId: 481 } });
+        });
+        // transcript 保持打开（不强制关闭）。
+        assert.ok(rendered.getByTestId('expanded-transcript'), 'promotion 成功不强制关闭 transcript');
+        assert.strictEqual(rendered.getByTestId('expanded-now-playing').getAttribute('data-view'), 'transcript', '局部 view 保持 transcript');
+        assert.strictEqual(rendered.getByTestId('expanded-transcript-text').textContent, STORY_2, 'promotion 后仍展示同一 storyText');
+        // promotion 后出现打开作品详情入口（复用 Work 先关后导 handler）。
+        const openDetail = rendered.getByTestId('expanded-open-work-detail-button');
+        assert.strictEqual(openDetail.textContent?.includes('打开作品详情'), true);
+        const before = snapshotPlayback();
+        assert.strictEqual(before.sessionId, sessionIdBefore, 'promotion 模拟 sessionId 不变');
+        act(() => {
+            openDetail.click();
+        });
+        assert.deepStrictEqual(pushedUrls, ['/library/481'], '打开作品详情 push 精确目标（同一路由出口）');
+        assert.strictEqual(useUi.getState().isExpanded as boolean, false, '打开详情先关 Expanded');
+        assert.strictEqual((useSession.getState().sessionId as string), sessionIdBefore, '打开详情不改变 Session');
+        rendered.unmount();
+        console.log('PASS: M7-04-02-I5 promote keep-open open-detail');
+    }
+
+    console.log('=== M7-04-02-I6: fail-closed（验收 6：无正文/idle 不展示或空态） ===');
+    {
+        resetAll();
+        seedDraftSession('');
+        const vmEmpty = readVm();
+        assert.strictEqual(vmEmpty.canViewTranscript, false, '空正文不展示入口');
+        assert.strictEqual(vmEmpty.transcriptText, null);
+        const renderedEmpty = renderExpanded();
+        assert.strictEqual(renderedEmpty.queryByTestId('expanded-view-transcript-button'), null, '空正文无查看正文按钮');
+        assert.strictEqual(renderedEmpty.queryByTestId('expanded-view-story-button'), null, '空 Draft 亦无 Work 按钮');
+        assert.deepStrictEqual(pushedUrls, [], '空态零导航');
+        renderedEmpty.unmount();
+
+        resetAll();
+        seedDraftSession();
+        act(() => {
+            useSession.getState().setStatus('idle');
+        });
+        const vmIdle = readVm();
+        assert.strictEqual(vmIdle.canViewTranscript, false, 'idle 不展示');
+        renderedEmpty.unmount();
+        console.log('PASS: M7-04-02-I6 fail-closed');
+    }
+
+    console.log('=== M7-04-02-I7: Work 面回归（01 冻结，验收 6） ===');
     {
         resetAll();
         seedWorkSession();
+        const vm = readVm();
+        assert.strictEqual(vm.canViewStory, true, 'Work 导航口不变');
+        assert.strictEqual(vm.viewStoryTarget, '/library/481');
+        assert.strictEqual(vm.canViewTranscript, false, 'Work 不走 transcript 入口');
         const rendered = renderExpanded();
-        const zone = rendered.getByTestId('expanded-actions');
-        const buttons = zone.querySelectorAll('button');
-        assert.strictEqual(buttons.length, 1, '动作区仅一个按钮');
-        assert.strictEqual(buttons[0]?.getAttribute('data-testid'), 'expanded-view-story-button');
-        const zoneText = zone.textContent ?? '';
-        assert.ok(zoneText.includes('查看正文'), '仅查看正文文案');
+        assert.ok(rendered.getByTestId('expanded-view-story-button'), 'Work 查看正文按钮回归');
+        assert.strictEqual(rendered.queryByTestId('expanded-view-transcript-button'), null, 'Work 无 transcript 口');
+        const before = snapshotPlayback();
+        act(() => {
+            rendered.getByTestId('expanded-view-story-button').click();
+        });
+        assert.deepStrictEqual(pushedUrls, ['/library/481'], 'Work 先关后导精确目标');
+        assert.deepStrictEqual(snapshotPlayback(), before, 'Work 导航播放继续');
         rendered.unmount();
-        console.log('PASS: M7-04-01-I5 actions only-view-story');
+        console.log('PASS: M7-04-02-I7 work regression');
     }
 
     resetAll();
     try {
         delete cache[navigationPath];
     } catch {}
-    console.log('\nALL WORK VIEW STORY NAVIGATION INTEGRATION TESTS PASSED SUCCESSFULLY!');
+    console.log('\nALL DRAFT TRANSCRIPT INTEGRATION TESTS PASSED SUCCESSFULLY!');
 }
 
-const testPromise = runWorkViewStoryNavigation()
+const testPromise = runDraftTranscriptIntegration()
     .then(() => {
-        console.log('ALL WORK VIEW STORY NAVIGATION INTEGRATION TESTS PASSED SUCCESSFULLY!');
+        console.log('ALL DRAFT TRANSCRIPT INTEGRATION TESTS PASSED SUCCESSFULLY!');
     })
     .catch((error) => {
-        console.error('Work view story navigation integration test failed:', error);
+        console.error('Draft transcript integration test failed:', error);
         process.exit(1);
     });
 

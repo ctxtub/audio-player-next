@@ -29,6 +29,19 @@
  *   由 source.workId 直接派生）；Draft/空 source 不展示；
  * - 点击顺序固定：closeExpanded() 先行 → 已在同一 /library/[workId] 则止步，
  *   否则 router.push(target)；全程不改播放状态（播放继续）。
+ *
+ * M7-04-02 Draft Transcript（spec §35 / §35.1 / §72 additive）：
+ * - Draft source（含可用 storyText）即经 Actions 展示同文案「查看正文」
+ *   （独立 testid，Transcript 口）；点击只切 Expanded 内部局部 view state
+ *   controls → transcript，不导航（URL 不变）、不拼凑 /library/[fake-id]、
+ *   不写 global UI Store（nowPlayingUiStore 无新增字段）；
+ * - TranscriptView 只读展示 ViewModel.transcriptText（= M5 Session.storyText
+ *   原文）；返回控制只切回 controls，不改 Session/Transport/Audio；
+ * - promotion（source 切 work，sessionId 不变）不强制关闭 transcript
+ *   （局部 view 只按 sessionId 与 Expanded 开关重置）；promotion 后
+ *   viewStoryTarget 非空时 transcript 内展示「打开作品详情」入口（复用
+ *   handleViewStory 同一路由出口；M4 真实 promotion 触发面在 Expanded 外，
+ *   本文件只保证不强制关闭 + 入口复用，不越界）。
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -44,11 +57,15 @@ import { PlaybackControls } from './PlaybackControls';
 import { PlaybackRateControl } from './PlaybackRateControl';
 import { SleepTimerControl } from './SleepTimerControl';
 import { NowPlayingActions } from './NowPlayingActions';
+import { TranscriptView } from './TranscriptView';
 import { isSameLibraryDetail } from './workViewStoryNavigation';
 import { PlaybackTimeline, EXPANDED_TIMELINE_KEYBOARD_STEP_SECONDS } from './PlaybackTimeline';
 import { useExpandedPlaybackControls } from './useExpandedPlaybackControls';
 import { useExpandedNowPlayingViewModel } from './useExpandedNowPlayingViewModel';
 import styles from './ExpandedNowPlaying.module.scss';
+
+/** Expanded 内部局部视图（spec §35：controls ↔ transcript，不进 global UI Store）。 */
+export type ExpandedLocalView = 'controls' | 'transcript';
 
 /** 下滑关闭阈值（px）：Handle 向下拖超此值释放即关闭，否则回弹（spec §78）。 */
 export const EXPANDED_SHEET_DISMISS_THRESHOLD_PX = 80;
@@ -94,6 +111,9 @@ export const ExpandedNowPlaying: React.FC = () => {
 
     const [dragOffsetY, setDragOffsetY] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
+    // M7-04-02 Expanded 内部局部 view state（spec §35：不进 global UI Store；
+    // 只按 sessionId 与 Expanded 开关重置，promotion 同 sessionId 保持打开）。
+    const [expandedView, setExpandedView] = useState<ExpandedLocalView>('controls');
     const dragOffsetRef = useRef(0);
     dragOffsetRef.current = dragOffsetY;
     // Escape 兜底的事实判断锚点（Blocking 3）：用真实 overlay/dialog ref 做 contains，
@@ -103,6 +123,8 @@ export const ExpandedNowPlaying: React.FC = () => {
 
     const handleClose = useCallback(() => {
         // 只关闭 UI，不暂停/不 clear Session（spec §9：播放继续）。
+        // M7-04-02：关闭即回落 controls（下次打开从控制面进入）。
+        setExpandedView('controls');
         setDragOffsetY(0);
         setIsDragging(false);
         closeExpanded();
@@ -124,6 +146,38 @@ export const ExpandedNowPlaying: React.FC = () => {
         }
         router.push(target);
     }, [viewModel.viewStoryTarget, handleClose, pathname, router]);
+
+    /**
+     * M7-04-02 Draft 查看正文 → transcript（spec §35/§72）：
+     * 只切 Expanded 内部局部 view（controls → transcript），不导航
+     * （URL 不变）、不拼凑 /library 目标、不改 Session/Transport/Audio、
+     * 不写 global UI Store。
+     */
+    const handleViewTranscript = useCallback(() => {
+        setExpandedView('transcript');
+    }, []);
+
+    /**
+     * M7-04-02 返回控制（spec §72）：
+     * 只切回 controls，不改变 Session（sessionId/status/source 全不动）。
+     */
+    const handleBackToControls = useCallback(() => {
+        setExpandedView('controls');
+    }, []);
+
+    // M7-04-02 局部 view 重置（只按 sessionId 与 Expanded 开关）：
+    // - 新 Session（sessionId 变化）→ 回落 controls；
+    // - promotion（source 切 work 但 sessionId 不变）→ 保持 transcript 打开（§35.1）；
+    // - Expanded 关闭 → 回落 controls（下次打开从控制面进入）。
+    const sessionIdForView = viewModel.sessionId;
+    useEffect(() => {
+        setExpandedView('controls');
+    }, [sessionIdForView]);
+    useEffect(() => {
+        if (!isExpanded) {
+            setExpandedView('controls');
+        }
+    }, [isExpanded]);
 
     const handleOverlayOpenChange = useCallback(
         (open: boolean) => {
@@ -220,6 +274,13 @@ export const ExpandedNowPlaying: React.FC = () => {
             ? { transform: `translateY(${dragOffsetY}px)` }
             : undefined;
 
+    // M7-04-02 transcript 是否展示「打开作品详情」（§35.1：仅 promotion 后
+    // viewStoryTarget 非空时展示，复用同一 handleViewStory 路由出口）。
+    const transcriptOpenDetail =
+        expandedView === 'transcript' && viewModel.viewStoryTarget !== null
+            ? handleViewStory
+            : null;
+
     return (
         <ModalOverlay
             ref={overlayRef}
@@ -241,6 +302,7 @@ export const ExpandedNowPlaying: React.FC = () => {
                     aria-label={EXPANDED_DIALOG_ARIA_LABEL}
                     data-testid="expanded-now-playing"
                     data-status={viewModel.sessionStatus}
+                    data-view={expandedView}
                     data-ended={viewModel.isEnded ? 'true' : 'false'}
                 >
                     <div className={styles.content}>
@@ -308,10 +370,25 @@ export const ExpandedNowPlaying: React.FC = () => {
                                 onSelect={controls.setSleepTimer}
                                 disabled={!viewModel.hasSession}
                             />
-                            {/* M7-04-01 Work 查看正文（spec §34：Work 即展示，Draft 不展示；点击先关后导，播放继续）。 */}
+                            {expandedView === 'transcript' ? (
+                                /* M7-04-02 Draft Transcript 只读面（spec §35/§72：
+                                   内容 = Session.storyText 原文；返回控制只切局部 view）。 */
+                                <TranscriptView
+                                    storyText={viewModel.transcriptText}
+                                    onBack={handleBackToControls}
+                                    onOpenWorkDetail={transcriptOpenDetail}
+                                    disabled={!viewModel.hasSession}
+                                />
+                            ) : null}
+                            {/* M7-04-01 Work 查看正文（spec §34：Work 导航口冻结）+
+                                M7-04-02 Draft 查看正文（spec §35：Transcript 口，
+                                同文案独立 testid，点击只切局部 view，不导航）。 */}
                             <NowPlayingActions
                                 source={viewModel.source}
                                 onViewStory={handleViewStory}
+                                storyText={viewModel.transcriptText}
+                                status={viewModel.sessionStatus}
+                                onViewTranscript={handleViewTranscript}
                                 disabled={!viewModel.hasSession}
                             />
                             {viewModel.isEnded ? (

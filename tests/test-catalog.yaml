@@ -1157,12 +1157,24 @@ cases:
     display_name_zh: Expanded查看正文Work导航
     legacy_aliases: []
     journey_id: smoke-baseline
-    user_goal: Work会话经查看正文先关后导精确详情且播放继续同详情只关Draft隐藏
+    user_goal: Work会话经查看正文先关后导精确详情且播放继续同详情只关Draft无导航
     priority: P1
     lifecycle_status: ACTIVE
     risk_tags: [ui, playback, session, navigation, library]
     spec_path: docs/e2e/01-基础冒烟与页面基线/17-Expanded查看正文Work导航M7-04-01.md
     executable_ids: [exec-work-view-story, exec-work-view-story-navigation, exec-l3-work-view-story]
+    fixtures: []
+    owner: smoke-baseline
+  - case_id: expanded-draft-transcript
+    display_name_zh: Expanded草稿正文Transcript只读面
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: Draft会话经查看正文在Expanded内只读展示且返回控制零变化promotion保持打开
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [ui, playback, session, transcript, navigation]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/18-Expanded草稿正文TranscriptM7-04-02.md
+    executable_ids: [exec-draft-transcript, exec-draft-transcript-view, exec-l3-draft-transcript]
     fixtures: []
     owner: smoke-baseline
 executables:
@@ -1568,6 +1580,18 @@ executables:
     display_name_zh: L3 Expanded查看正文Work导航全链路
     layer: L3
     path: ./tests/system/browser/scenarios/work-view-story.spec.ts
+  - executable_id: exec-draft-transcript
+    display_name_zh: 草稿正文只读派生局部视图与命令面守卫
+    layer: L1
+    path: ./tests/unit/now-playing/draft-transcript.unit.test.ts
+  - executable_id: exec-draft-transcript-view
+    display_name_zh: 草稿正文开合零变化与promotion保持穿越
+    layer: L2
+    path: ./tests/integration/now-playing/draft-transcript-view.integration.test.ts
+  - executable_id: exec-l3-draft-transcript
+    display_name_zh: L3 Expanded草稿正文Transcript全链路
+    layer: L3
+    path: ./tests/system/browser/scenarios/draft-transcript.spec.ts
   - executable_id: exec-l3-desktop-floating-mode
     display_name_zh: L3桌面悬浮拖拽吸附收官
     layer: L3

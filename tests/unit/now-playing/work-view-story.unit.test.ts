@@ -268,7 +268,9 @@ async function runWorkViewStoryUnit(): Promise<void> {
             assert.ok(!helperSrc.includes(token), `helper 不得含 ${token}`);
         }
         // Draft Transcript（02）与继续创作（03）不在本轮：Expanded 不得新增其入口。
-        assert.ok(!expandedSrc.includes('TranscriptView'), '本轮不碰 Draft Transcript（02 职责）');
+        // M7-04-02 supersede：Draft Transcript 已由 02 接管（Expanded 挂载 TranscriptView
+        // + 局部 view，Work 导航口冻结不变）；继续创作仍归 03，Expanded 不得碰。
+        assert.ok(expandedSrc.includes('TranscriptView'), 'M7-04-02 起 Expanded 挂载 TranscriptView（02 接管，Work 口冻结）');
         assert.ok(!expandedSrc.includes('continueFromStoryWork'), '本轮不碰继续创作（03 职责）');
         console.log('PASS: M7-04-01-U8 no scope creep');
     }

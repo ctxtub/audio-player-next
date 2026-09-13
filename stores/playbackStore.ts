@@ -44,9 +44,10 @@ type PlaybackStoreBaseState = {
    */
   isRehydratedReady: boolean;
   /**
-   * 创作源类型：'chat' | 'generation'
+   * 创作源类型：M5-03 起为四值兼容 'chat' | 'generation' | 'draft' | 'work'
+   *（DB canonical 为 draft|work，旧值仍可读；新写统一由 server 收敛为 canonical）。
    */
-  sourceType: 'chat' | 'generation' | null;
+  sourceType: 'chat' | 'generation' | 'draft' | 'work' | null;
   /**
    * 溯源业务标识。
    */
@@ -104,7 +105,7 @@ type PlaybackStoreActions = {
   hydrateFromProgress: (payload: {
     sessionId: string | null;
     currentMessageId: string | null;
-    sourceType: 'chat' | 'generation' | null;
+    sourceType: 'chat' | 'generation' | 'draft' | 'work' | null;
     sourceId: string | null;
     title: string;
     remainingMs: number | null;

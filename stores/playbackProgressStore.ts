@@ -156,9 +156,11 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
 
   hydrateFromDTO: async (dto: PlaybackProgressDTO): Promise<boolean> => {
     // 1. 创作源检索与门禁校验 (Stable Creative Source Resolution)
+    // M5-03 reader 四值兼容：chat|draft 同走 Chat 消息分支，generation|work 同走作品分支
+    //（DB canonical 为 draft|work，旧值 chat|generation 仍可读，至少一个兼容周期）。
     let storyText = '';
 
-    if (dto.sourceType === 'chat') {
+    if (dto.sourceType === 'chat' || dto.sourceType === 'draft') {
       let msg = useChatStore.getState().messages.find((m) => m.id === dto.sourceId);
       if (!msg) {
         await useChatStore.getState().initForUser();
@@ -187,7 +189,7 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
       }
 
       storyText = storyCard.storyText;
-    } else if (dto.sourceType === 'generation') {
+    } else if (dto.sourceType === 'generation' || dto.sourceType === 'work') {
       let record = useGenerationHistoryStore.getState().records.find((r) => String(r.id) === dto.sourceId);
       if (!record) {
         await useGenerationHistoryStore.getState().initForUser();
@@ -255,7 +257,8 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
 
     usePlaybackStore.getState().hydrateFromProgress({
       sessionId: dto.sessionId ?? null,
-      currentMessageId: dto.sourceType === 'chat' ? dto.sourceId : null,
+      currentMessageId:
+        dto.sourceType === 'chat' || dto.sourceType === 'draft' ? dto.sourceId : null,
       sourceType: dto.sourceType,
       sourceId: dto.sourceId,
       title: dto.title,
@@ -417,7 +420,10 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
       totalParagraphs: state.totalParagraphs,
     });
 
-    const msgId = state.sourceType === 'chat' ? state.sourceId ?? undefined : undefined;
+    const msgId =
+      state.sourceType === 'chat' || state.sourceType === 'draft'
+        ? (state.sourceId ?? undefined)
+        : undefined;
     await usePlaybackStore.getState().playAudio(audioUrl, msgId, { explicit: options?.explicit });
   },
 
@@ -533,8 +539,8 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
       return;
     }
 
-    // 门禁：chat 场景必须是 delivered 态
-    if (state.sourceType === 'chat') {
+    // 门禁：chat/draft 场景必须是 delivered 态（M5-03：draft 为 chat 的 canonical 形态，同门禁）
+    if (state.sourceType === 'chat' || state.sourceType === 'draft') {
       const msg = useChatStore.getState().messages.find((m) => m.id === state.sourceId);
       if (msg && msg.status !== 'delivered') {
         return;

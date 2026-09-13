@@ -1,7 +1,22 @@
 import { z } from 'zod';
 
-export const playbackSourceTypeSchema = z.enum(['chat', 'generation']);
+/**
+ * M5-03 reader 兼容：DB canonical 为 draft|work（§5.3 / §32 Step 2 已迁移），
+ * 但读路径（DTO 输出 + input 兼容）仍接受四值 chat|generation|draft|work
+ * 至少一个兼容周期（对齐 lib/playback/legacy.ts canonicalizeSourceKind）。
+ * 未知 kind 由 server canonicalize 侧 fail-closed，不在此静默丢弃。
+ */
+export const playbackSourceTypeSchema = z.enum(['chat', 'generation', 'draft', 'work']);
 export type PlaybackSourceType = z.infer<typeof playbackSourceTypeSchema>;
+
+/**
+ * M5-03 new writer canonical 锁定点（文档锚）：server 落库只写 draft|work。
+ * 本 schema 仅作类型标注与未来收紧入口；当前 input 仍接受四值以兼容旧客户端，
+ * canonical 收敛统一在 lib/server/playbackProgress.ts + unifiedMigration.ts
+ * 经 canonicalizeSourceKind 落库前完成（旧值透传兼容，新值原样，绝不存 chat|generation）。
+ */
+export const playbackCanonicalSourceTypeSchema = z.enum(['draft', 'work']);
+export type PlaybackCanonicalSourceType = z.infer<typeof playbackCanonicalSourceTypeSchema>;
 
 export const playbackProgressDTOSchema = z.object({
   sourceType: playbackSourceTypeSchema,

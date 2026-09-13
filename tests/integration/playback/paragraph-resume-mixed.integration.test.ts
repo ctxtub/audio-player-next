@@ -9,6 +9,7 @@ import {
     buildParagraphProgressSeed,
     buildSquirrelStoryText,
     buildStoryChatMessage,
+    SQUIRREL_STORY_TITLE,
 } from '../../support/fixtures/playback-story.fixture';
 import { makeGuestContext, makeGuestId, makeMessageId } from '../../support/builders/auth-subject.builder';
 import { setupIsolatedDb } from '../../support/db/isolated-db.helper';
@@ -653,6 +654,166 @@ async function runParagraphResumeTests() {
     assert.strictEqual(dbCheckAfterReset?.nextParagraphIndex, 0, 'DB value must be updated to 0');
 
     console.log('PASS: TC-P2-17 verified');
+
+    console.log('=== TC-P2-18 (M5-03): writer canonical + reader 四值兼容 ===');
+    // M5-03：DB canonical=draft/work；reader 保留四值；new writer 只写 canonical。
+    // 1) legacy 输入经 server 收敛：chat→draft 落库，generation→work 落库。
+    const canonGuestChat = `g_m503_chat_${Date.now()}`;
+    const callerCanonChat = playbackRouter.createCaller({ session: null, guestId: canonGuestChat, isGuest: true, clientIp: '127.0.0.1' });
+    await callerCanonChat.saveProgress({
+        sourceType: 'chat',
+        sourceId: `m503_msg_${Date.now()}`,
+        title: 'M5-03 chat 收敛',
+        contentHash: 'm503hashchat1',
+        segmentationVersion: SEGMENTATION_VERSION,
+        lastCompletedParagraphIndex: 0,
+        nextParagraphIndex: 1,
+        totalParagraphs: 2,
+    });
+    const chatRow = await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: canonGuestChat } });
+    assert.ok(chatRow !== null);
+    assert.strictEqual(chatRow.sourceKind, 'draft', 'M5-03：chat 输入必须收敛为 draft 落库');
+    const chatFetched = await callerCanonChat.getProgress();
+    assert.ok(chatFetched !== null);
+    assert.strictEqual(chatFetched.sourceType, 'draft', 'M5-03：读出为 canonical draft');
+
+    const canonGuestGen = `g_m503_gen_${Date.now()}`;
+    const callerCanonGen = playbackRouter.createCaller({ session: null, guestId: canonGuestGen, isGuest: true, clientIp: '127.0.0.1' });
+    await callerCanonGen.saveProgress({
+        sourceType: 'generation',
+        sourceId: '4242',
+        title: 'M5-03 generation 收敛',
+        contentHash: 'm503hashgen1',
+        segmentationVersion: SEGMENTATION_VERSION,
+        lastCompletedParagraphIndex: 1,
+        nextParagraphIndex: 2,
+        totalParagraphs: 4,
+    });
+    const genRow = await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: canonGuestGen } });
+    assert.ok(genRow !== null);
+    assert.strictEqual(genRow.sourceKind, 'work', 'M5-03：generation 输入必须收敛为 work 落库');
+
+    // 2) canonical 直写保持：draft→draft，work→work。
+    const canonGuestDraft = `g_m503_draft_${Date.now()}`;
+    const callerCanonDraft = playbackRouter.createCaller({ session: null, guestId: canonGuestDraft, isGuest: true, clientIp: '127.0.0.1' });
+    await callerCanonDraft.saveProgress({
+        sourceType: 'draft',
+        sourceId: `m503_draft_${Date.now()}`,
+        title: 'M5-03 draft 直写',
+        contentHash: 'm503hashdraft',
+        segmentationVersion: SEGMENTATION_VERSION,
+        lastCompletedParagraphIndex: 0,
+        nextParagraphIndex: 1,
+        totalParagraphs: 2,
+    });
+    const draftRow = await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: canonGuestDraft } });
+    assert.strictEqual(draftRow?.sourceKind, 'draft', 'M5-03：draft 直写保持 draft');
+
+    // 3) reader 四值：直写 legacy 行仍可读（绕 server 写路径，模拟迁移前旧行）。
+    const legacyReadableId = `g_m503_legacy_${Date.now()}`;
+    await prisma.guestPlaybackAnchor.create({
+        data: {
+            guestId: legacyReadableId,
+            sourceKind: 'chat',
+            sourceId: `m503_legacy_${Date.now()}`,
+            title: 'M5-03 旧值可读',
+            contentHash: 'm503legacy',
+            segmentationVersion: SEGMENTATION_VERSION,
+            nextParagraphIndex: 1,
+            totalParagraphs: 2,
+        },
+    });
+    const legacyCaller = playbackRouter.createCaller({ session: null, guestId: legacyReadableId, isGuest: true, clientIp: '127.0.0.1' });
+    const legacyFetched = await legacyCaller.getProgress();
+    assert.ok(legacyFetched !== null, 'M5-03：旧值 chat 必须仍可读出');
+    assert.strictEqual(legacyFetched.sourceType, 'chat', 'M5-03：旧值读出保持原值（不改写）');
+
+    // 4) 单调谓词跨形态同源：legacy chat 行 + draft 输入同 sourceId 视为同源（防回退仍生效）。
+    const monoGuest = `g_m503_mono_${Date.now()}`;
+    const monoSourceId = `m503_mono_${Date.now()}`;
+    await prisma.guestPlaybackAnchor.create({
+        data: {
+            guestId: monoGuest,
+            sourceKind: 'chat',
+            sourceId: monoSourceId,
+            title: 'M5-03 跨形态单调',
+            contentHash: 'm503mono',
+            segmentationVersion: SEGMENTATION_VERSION,
+            lastCompletedParagraphIndex: 2,
+            nextParagraphIndex: 3,
+            totalParagraphs: 5,
+        },
+    });
+    const monoCaller = playbackRouter.createCaller({ session: null, guestId: monoGuest, isGuest: true, clientIp: '127.0.0.1' });
+    const monoStale = await monoCaller.saveProgress({
+        sourceType: 'draft',
+        sourceId: monoSourceId,
+        title: 'M5-03 跨形态单调',
+        contentHash: 'm503mono',
+        segmentationVersion: SEGMENTATION_VERSION,
+        lastCompletedParagraphIndex: 0,
+        nextParagraphIndex: 1,
+        totalParagraphs: 5,
+    });
+    assert.strictEqual(monoStale.nextParagraphIndex, 3, 'M5-03：chat/draft 同源必须共享单调谓词');
+
+    // 5) 客户端 hydrate 四值：draft 走 chat 分支、work 走作品分支（防“先迁数据、runtime 不会读”）。
+    const hydrateMsgId = `m503_hyd_${Date.now()}`;
+    const hydrateStory = buildSquirrelStoryText();
+    const hydrateHash = computeStoryContentHash(hydrateStory);
+    useChatStore.getState().reset();
+    usePlaybackStore.getState().reset();
+    usePlaybackProgressStore.getState().reset();
+    useChatStore.setState({
+        messages: [
+            {
+                id: hydrateMsgId,
+                role: 'assistant',
+                content: hydrateStory,
+                parts: [{ type: 'storyCard', storyText: hydrateStory, audioUrl: '' }],
+                status: 'delivered',
+                createdAt: new Date().toISOString(),
+            },
+        ],
+        syncEnabled: true,
+    });
+    const draftDto = {
+        sourceType: 'draft' as const,
+        sourceId: hydrateMsgId,
+        sessionId: null,
+        title: SQUIRREL_STORY_TITLE,
+        contentHash: hydrateHash,
+        segmentationVersion: SEGMENTATION_VERSION,
+        lastCompletedParagraphIndex: 1,
+        nextParagraphIndex: 2,
+        totalParagraphs: 4,
+        voiceId: 'alloy',
+        speed: 1.0,
+        remainingAllowedMs: null,
+        totalAllowedMs: null,
+        isOneShot: false,
+        updatedAt: new Date().toISOString(),
+    };
+    const draftHydrated = await usePlaybackProgressStore.getState().hydrateFromDTO(draftDto);
+    assert.strictEqual(draftHydrated, true, 'M5-03：draft hydrate 必须成功（chat 分支）');
+    assert.strictEqual(usePlaybackProgressStore.getState().sourceType, 'draft');
+    assert.strictEqual(usePlaybackProgressStore.getState().nextParagraphIndex, 2);
+    // 未知 kind 仍 fail-closed（hydrate 返回 false，不抛错、不残留）。
+    const unknownDto = { ...draftDto, sourceType: 'audio' as unknown as 'chat' };
+    usePlaybackProgressStore.getState().reset();
+    usePlaybackStore.getState().reset();
+    const unknownHydrated = await usePlaybackProgressStore.getState().hydrateFromDTO(unknownDto);
+    assert.strictEqual(unknownHydrated, false, 'M5-03：未知 kind hydrate 必须返回 false');
+    usePlaybackProgressStore.getState().reset();
+    usePlaybackStore.getState().reset();
+    useChatStore.getState().reset();
+
+    // 清理 M5-03 实验行（不污染后续套件；隔离库按 suite 复用，需显式清理）
+    await prisma.guestPlaybackAnchor.deleteMany({
+        where: { guestId: { in: [canonGuestChat, canonGuestGen, canonGuestDraft, legacyReadableId, monoGuest] } },
+    });
+
+    console.log('PASS: TC-P2-18 (M5-03) verified');
 
     console.log('\nALL 17 PARAGRAPH-BOUNDARY RESUME TEST CASES PASSED SUCCESSFULLY!');
 }

@@ -6,6 +6,7 @@
 
 import { TRPCError } from '@trpc/server';
 import { prisma } from '@/lib/db';
+import { canonicalizeSourceKind } from '@/lib/playback/legacy';
 
 export interface MigrationResult {
     messagesMigrated: number;
@@ -213,10 +214,14 @@ export async function migrateGuestCreativeRecordsToUser(
  * 将指定 guestId 的断点播放进度迁移至指定用户（单行）。
  * 保留访客原表记录供回滚/审计，由 30 天 GC 自然清理。
  *
- * 若 source 为 generation/work（M5-02 起 DB  canonical 值为 work，兼容期同时接受 generation），
- * 借本次 ID map 映射 guestStoryWorkId → userStoryWorkId；
+ * M5-03 canonical 锁定：读兼容四值（chat|generation|draft|work，经 canonicalizeSourceKind
+ * 收敛；未知 kind 直接 fail-closed 返回 false），新写只落 canonical draft|work。
+ * 若 canonical 为 work，借本次 ID map 映射 guestStoryWorkId → userStoryWorkId；
  * 找不到对应映射时必须 drop Anchor（fail closed，不产生悬空断点）。
- * M5-02 仅做 Prisma 逻辑 rename 机械适配（delegate + sourceKind），映射语义不变，kind 原样透传。
+ * work sourceId 须为 canonical 十进制 positive int 文本
+ * （String(Number(sourceId)) === sourceId 且 safe int 且 > 0，与 migration SQL
+ * 的 CAST(CAST(sourceId AS INTEGER) AS TEXT)=sourceId 等价；"001"/"1.5"/"1e3" 等一律拒绝），
+ * 非 canonical 一律 fail-closed（不映射、不落库）。
  */
 export async function migrateGuestPlaybackProgressToUser(
     guestId: string,
@@ -230,28 +235,46 @@ export async function migrateGuestPlaybackProgressToUser(
         return false;
     }
 
+    let canonicalKind: 'draft' | 'work';
+    try {
+        canonicalKind = canonicalizeSourceKind(guestProgress.sourceKind);
+    } catch {
+        // 未知 kind：fail-closed，不创建、不更新。
+        return false;
+    }
+
     let mappedSourceId = guestProgress.sourceId;
 
-    if (guestProgress.sourceKind === 'generation' || guestProgress.sourceKind === 'work') {
-        const guestWorkId = Number(guestProgress.sourceId);
+    if (canonicalKind === 'work') {
+        // fail-closed canonical 文本校验（SQL 等价：String(CAST(sourceId AS INTEGER)) === sourceId AND id > 0）。
+        const rawId = guestProgress.sourceId;
+        const numericId = Number(rawId);
+        if (
+            typeof rawId !== 'string' ||
+            rawId.length === 0 ||
+            !Number.isSafeInteger(numericId) ||
+            numericId <= 0 ||
+            String(numericId) !== rawId
+        ) {
+            return false;
+        }
+        const guestWorkId = numericId;
         let userWorkId: number | undefined;
 
-        if (!isNaN(guestWorkId)) {
-            if (storyWorkIdMap && storyWorkIdMap.has(guestWorkId)) {
-                userWorkId = storyWorkIdMap.get(guestWorkId);
-            } else {
-                // 从持久化迁移记录表中查询映射
-                const mapping = await prisma.storyWorkMigration.findUnique({
-                    where: {
-                        guestId_guestStoryWorkId: {
-                            guestId,
-                            guestStoryWorkId: guestWorkId,
-                        },
+        if (storyWorkIdMap && storyWorkIdMap.has(guestWorkId)) {
+            userWorkId = storyWorkIdMap.get(guestWorkId);
+        } else {
+            // 从持久化迁移记录表中查询映射
+            const mapping = await prisma.storyWorkMigration.findUnique({
+                where: {
+                    guestId_guestStoryWorkId: {
+                        guestId,
+                        guestStoryWorkId: guestWorkId,
                     },
-                });
-                if (mapping) {
-                    userWorkId = mapping.userStoryWorkId;
-                }
+                },
+            });
+            if (mapping) {
+                userWorkId = mapping.userStoryWorkId;
             }
         }
 
@@ -267,7 +290,7 @@ export async function migrateGuestPlaybackProgressToUser(
         where: { userId },
         create: {
             userId,
-            sourceKind: guestProgress.sourceKind,
+            sourceKind: canonicalKind,
             sourceId: mappedSourceId,
             sessionId: guestProgress.sessionId,
             title: guestProgress.title,
@@ -283,7 +306,7 @@ export async function migrateGuestPlaybackProgressToUser(
             isOneShot: guestProgress.isOneShot,
         },
         update: {
-            sourceKind: guestProgress.sourceKind,
+            sourceKind: canonicalKind,
             sourceId: mappedSourceId,
             sessionId: guestProgress.sessionId,
             title: guestProgress.title,

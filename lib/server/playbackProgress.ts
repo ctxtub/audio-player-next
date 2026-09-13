@@ -7,6 +7,7 @@
 
 import { prisma } from '@/lib/db';
 import type { Subject } from '@/lib/server/subject';
+import { canonicalizeSourceKind } from '@/lib/playback/legacy';
 import type {
   PlaybackProgressDTO,
   SavePlaybackProgressInput,
@@ -34,6 +35,8 @@ type PlaybackProgressRow = {
 };
 
 const toDto = (row: PlaybackProgressRow): PlaybackProgressDTO => ({
+  // M5-03 reader 兼容：DB canonical 为 draft|work，旧值 chat|generation 仍原样透传
+  //（DTO schema 已放宽至四值，至少一个兼容周期；不对读出做 canonical 改写，避免掩盖迁移状态）。
   sourceType: row.sourceKind as PlaybackSourceType,
   sourceId: row.sourceId,
   sessionId: row.sessionId,
@@ -71,20 +74,37 @@ export const savePlaybackProgressForSubject = async (
   subject: Subject,
   input: SavePlaybackProgressInput
 ): Promise<PlaybackProgressDTO> => {
+  // M5-03 new writer canonical 锁定点：所有新写库路径只写 draft|work（server side）。
+  // input 仍接受四值（兼容旧客户端），此处经 canonicalizeSourceKind 收敛后落库；
+  // 单调比较两侧同样先 canonicalize，避免 chat/draft 或 generation/work 同源被误判为不同源。
+  // sessionId 本项不动（§33 repair 属 M5-05，此处原样透传）。
+  const canonicalKind = canonicalizeSourceKind(input.sourceType);
+  const canonicalizeExisting = (value: unknown): string | null => {
+    try {
+      if (typeof value !== 'string') return null;
+      return canonicalizeSourceKind(value);
+    } catch {
+      // 存量脏值（未知 kind）视为不同源，允许本次 canonical 写覆盖修复，不抛错。
+      return null;
+    }
+  };
   if (subject.type === 'user') {
     const existing = await prisma.userPlaybackAnchor.findUnique({
       where: { userId: subject.id },
     });
 
-    // M5-02：比较经 sourceKind（物理列 sourceType），输入仍为 DTO sourceType（chat|generation），原样存入，不做 canonicalize（后续 slice 才收敛写路径）。
-    if (existing && existing.sourceKind === input.sourceType && existing.sourceId === input.sourceId) {
+    if (
+      existing &&
+      canonicalizeExisting(existing.sourceKind) === canonicalKind &&
+      existing.sourceId === input.sourceId
+    ) {
       if (!input.forceReset && input.nextParagraphIndex < existing.nextParagraphIndex) {
         return toDto(existing);
       }
     }
 
     const data = {
-      sourceKind: input.sourceType,
+      sourceKind: canonicalKind,
       sourceId: input.sourceId,
       sessionId: input.sessionId ?? null,
       title: input.title,
@@ -115,14 +135,18 @@ export const savePlaybackProgressForSubject = async (
     where: { guestId: subject.id },
   });
 
-  if (existing && existing.sourceKind === input.sourceType && existing.sourceId === input.sourceId) {
+  if (
+    existing &&
+    canonicalizeExisting(existing.sourceKind) === canonicalKind &&
+    existing.sourceId === input.sourceId
+  ) {
     if (!input.forceReset && input.nextParagraphIndex < existing.nextParagraphIndex) {
       return toDto(existing);
     }
   }
 
   const data = {
-    sourceKind: input.sourceType,
+    sourceKind: canonicalKind,
     sourceId: input.sourceId,
     sessionId: input.sessionId ?? null,
     title: input.title,

@@ -230,7 +230,8 @@ async function runGuestRegistrationMigrationTests() {
     where: { userId: testUser1.id },
   });
   assert.ok(userProgress !== null, '用户断点播放进度必须已落库');
-  assert.strictEqual(userProgress.sourceKind, 'generation', 'sourceType 必须保持 generation');
+  // M5-03 new writer canonical：guest 'generation' 经注册迁移落库必须收敛为 'work'（reader 仍兼容四值）。
+  assert.strictEqual(userProgress.sourceKind, 'work', 'M5-03：迁移写库必须为 canonical work');
   // 核心契约：sourceId 必须通过 ID Map 映射为新用户作品 ID，严禁原样保留旧 guest ID！
   assert.strictEqual(
     userProgress.sourceId,
@@ -559,9 +560,9 @@ async function runGuestRegistrationMigrationTests() {
   assert.strictEqual(uWork1.favoritedAt?.toISOString(), g1.favoritedAt?.toISOString(), 'E2E: favoritedAt 保真');
   assert.strictEqual(uWork2.deletedAt?.toISOString(), g2.deletedAt?.toISOString(), 'E2E: deletedAt 保真');
 
-  // 验证断点映射
+  // 验证断点映射（M5-03：迁移写库为 canonical work）
   assert.ok(e2eUser.playbackAnchor !== null);
-  assert.strictEqual(e2eUser.playbackAnchor.sourceKind, 'generation');
+  assert.strictEqual(e2eUser.playbackAnchor.sourceKind, 'work');
   assert.strictEqual(
     e2eUser.playbackAnchor.sourceId,
     String(uWork1.id),
@@ -682,6 +683,85 @@ async function runGuestRegistrationMigrationTests() {
   assert.strictEqual(migRecordDiff, null, '同源异 hash 绝不建立错误 map 记录');
 
   console.log('PASS: sourceMessageId 碰撞安全与 contentHash 校验回归验证通过');
+
+  console.log('=== 8. M5-03 迁移写 canonical（chat→draft）与非 canonical workId fail-closed ===');
+  // 8.1 chat 经迁移收敛为 draft（无 ID remap，sourceId 原样）。
+  const m503ChatGuest = `g_m503_chat_${Date.now()}`;
+  const m503ChatUser = await prisma.user.create({
+    data: { username: `u_m503_chat_${Date.now()}`, password: 'Password123!' },
+  });
+  const m503ChatMsg = `m503_msg_${Date.now()}`;
+  await prisma.guestPlaybackAnchor.create({
+    data: {
+      guestId: m503ChatGuest,
+      sourceKind: 'chat',
+      sourceId: m503ChatMsg,
+      title: 'M5-03 chat 迁移',
+    },
+  });
+  const m503ChatRes = await migrateGuestPlaybackProgressToUser(m503ChatGuest, m503ChatUser.id);
+  assert.strictEqual(m503ChatRes, true, 'M5-03：chat 迁移应成功');
+  const m503ChatRow = await prisma.userPlaybackAnchor.findUnique({ where: { userId: m503ChatUser.id } });
+  assert.ok(m503ChatRow !== null);
+  assert.strictEqual(m503ChatRow.sourceKind, 'draft', 'M5-03：chat 迁移写库必须为 draft');
+  assert.strictEqual(m503ChatRow.sourceId, m503ChatMsg, 'M5-03：draft sourceId 原样保留');
+  await prisma.user.delete({ where: { id: m503ChatUser.id } });
+  await prisma.guestPlaybackAnchor.deleteMany({ where: { guestId: m503ChatGuest } });
+
+  // 8.2 非 canonical work sourceId（"001"）必须 fail-closed（与 migration SQL 等价，禁用 GLOB 宽松）。
+  const m503NonCanonGuest = `g_m503_001_${Date.now()}`;
+  const m503NonCanonUser = await prisma.user.create({
+    data: { username: `u_m503_001_${Date.now()}`, password: 'Password123!' },
+  });
+  // 先建一个真实 Guest Work，使“若用 Number('001')=1 宽松解析则会误命中”的条件成立；
+  // 严格校验下仍必须拒绝（不产生悬空/误映射）。
+  const m503RealWork = await prisma.guestStoryWork.create({
+    data: {
+      guestId: m503NonCanonGuest,
+      prompt: 'M5-03 非 canonical 探针',
+      storyText: 'M5-03 非 canonical 探针正文',
+      title: 'M5-03 探针作品',
+      contentHash: 'm503probe',
+    },
+  });
+  void m503RealWork;
+  await prisma.guestPlaybackAnchor.create({
+    data: {
+      guestId: m503NonCanonGuest,
+      sourceKind: 'work',
+      sourceId: '001',
+      title: 'M5-03 非 canonical anchor',
+    },
+  });
+  const m503NonCanonRes = await migrateGuestPlaybackProgressToUser(m503NonCanonGuest, m503NonCanonUser.id);
+  assert.strictEqual(m503NonCanonRes, false, 'M5-03："001" 非 canonical 必须 fail-closed');
+  const m503NonCanonRow = await prisma.userPlaybackAnchor.findUnique({ where: { userId: m503NonCanonUser.id } });
+  assert.strictEqual(m503NonCanonRow, null, 'M5-03："001" 不得落库');
+  await prisma.user.delete({ where: { id: m503NonCanonUser.id } });
+  await prisma.guestPlaybackAnchor.deleteMany({ where: { guestId: m503NonCanonGuest } });
+  await prisma.guestStoryWork.deleteMany({ where: { guestId: m503NonCanonGuest } });
+
+  // 8.3 未知 kind 直接 fail-closed。
+  const m503UnknownGuest = `g_m503_unk_${Date.now()}`;
+  const m503UnknownUser = await prisma.user.create({
+    data: { username: `u_m503_unk_${Date.now()}`, password: 'Password123!' },
+  });
+  await prisma.guestPlaybackAnchor.create({
+    data: {
+      guestId: m503UnknownGuest,
+      sourceKind: 'audio',
+      sourceId: 'x1',
+      title: 'M5-03 未知 kind',
+    },
+  });
+  const m503UnknownRes = await migrateGuestPlaybackProgressToUser(m503UnknownGuest, m503UnknownUser.id);
+  assert.strictEqual(m503UnknownRes, false, 'M5-03：未知 kind 必须 fail-closed');
+  const m503UnknownRow = await prisma.userPlaybackAnchor.findUnique({ where: { userId: m503UnknownUser.id } });
+  assert.strictEqual(m503UnknownRow, null, 'M5-03：未知 kind 不得落库');
+  await prisma.user.delete({ where: { id: m503UnknownUser.id } });
+  await prisma.guestPlaybackAnchor.deleteMany({ where: { guestId: m503UnknownGuest } });
+
+  console.log('PASS: M5-03 迁移写 canonical 与 fail-closed 验证通过');
 }
 
 const testPromise = runGuestRegistrationMigrationTests()

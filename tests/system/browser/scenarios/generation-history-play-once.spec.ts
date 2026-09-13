@@ -1,12 +1,16 @@
 // case_id: generation-history-play-once
 // journey: history-reuse-playback
 // legacy_aliases: [E2E-02-11-02, H-21]
+// M4-07 relocation：History ownership 已回迁 Chat（Chat History Surface），/player 不再拥有 History 入口；
+// 本用例自 M4-10 起改走聊天页「历史」按钮 + 面板内「生成历史」分段，oracle 不变
+// （source/text 匹配、不触发 Agent/新历史/续写、oneShot 本页单次）。
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";
+import { dismissOnboarding } from "./helpers/guest";
 import { countTableRows, resolveIsolationDbPath } from "./helpers/db";
 
 /**
- * 生成历史本页单次回放（旧 E2E-02-11-02/H-21）。
+ * 生成历史本页单次回放（旧 E2E-02-11-02/H-21，现 Chat-owned History Surface）。
  *
  * 断言绑定方案第6节：source/text 匹配；不触发 Agent/新历史/续写。
  * oneShot 播放源切换、不新增历史（隔离库计数不变）、不污染聊天、不触发续写。
@@ -25,8 +29,6 @@ test("生成历史本页单次回放", async ({ page, harnessEnv, evidence }) =>
     const prompt: string = `L3回放${Date.now()}${Math.floor(Math.random() * 100000)}请讲一个动物朋友互相帮助的故事。`;
     /** Agent/续写相关请求计数（回放段只允许 TTS，不允许 Agent）。 */
     let agentCalls = 0;
-    /** 聊天快照请求计数（回放不得新增聊天落库语义，由 DB 行数兜底）。 */
-    const chatBeforeText: string[] = [];
     page.on("request", (request) => {
         const url: string = request.url();
         if (url.includes("agent.interact")) {
@@ -42,16 +44,14 @@ test("生成历史本页单次回放", async ({ page, harnessEnv, evidence }) =>
     await composer.fill(prompt);
     await page.getByRole("button", { name: "发送" }).click({ timeout: 15000 });
     await expect(composer).toBeEnabled({ timeout: 90000 });
-    // 中文注释：记录回放前聊天区文本基线（回放不得污染聊天）。
-    const chatTextBefore: string = await page.locator("body").innerText();
-    chatBeforeText.push(chatTextBefore);
     /** 回放前访客生成历史行数（DB 断言基线）。 */
     const historyBefore: number = countTableRows(dbFile, "GuestGenerationHistory");
     expect(historyBefore).toBeGreaterThanOrEqual(1);
     recorder.step("回放前基线", { historyBefore });
 
-    // 中文注释：进播放器切生成历史，清空 Agent 计数后点回放（本页单次）。
-    await page.goto(`${harnessEnv.appUrl}/player`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    // 中文注释：开聊天历史切生成历史（M4-07 后入口为聊天页「历史」按钮），清空 Agent 计数后点回放（本页单次）。
+    await dismissOnboarding(page);
+    await page.getByRole("button", { name: "打开历史" }).click({ timeout: 15000 });
     await page.getByRole("tab", { name: "生成历史" }).click({ timeout: 15000 });
     await expect(page.getByText(prompt).first()).toBeVisible({ timeout: 30000 });
     agentCalls = 0;
@@ -104,5 +104,7 @@ test("生成历史本页单次回放", async ({ page, harnessEnv, evidence }) =>
     expect(historyAfter).toBe(historyBefore);
     // 中文注释：network 断言——回放不触发 Agent/续写。
     expect(agentCalls).toBe(0);
+    // 中文注释：聊天断言——回放不污染聊天（本次创作仍在，无新增续写气泡改变主体）。
+    await expect(page.getByText(prompt).first()).toBeVisible({ timeout: 30000 });
     recorder.step("回放无副作用", { historyBefore, historyAfter, agentCalls });
 });

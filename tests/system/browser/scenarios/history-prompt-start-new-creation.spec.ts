@@ -2,6 +2,8 @@
 // journey: reuse-history-to-create
 // legacy_aliases: [E2E-02-11-01, H-21]
 // FIXED 2026-09-10：H-21 历史重创作不清空旧会话（RED-2-1，双浏览器复现 run=2026-09-10T01-41-03-283Z-dc4778）→ 方案A ChatLayout 消费 pendingAutoSend 前调 resetStoryFlow()（+2 行），chromium L75/L78 转 PASS（run=2026-09-10T01-43-27-744Z-28d858）；K1/K2 为 oracle 校准非缺陷
+// M4-07 relocation：History ownership 已回迁 Chat（Chat History Surface），/player 不再拥有 History 入口；
+// 本用例自 M4-10 起改走聊天页「历史」按钮 + 面板内「提示词历史」分段，oracle 不变（干净新会话、上下文隔离、自动播放、旧作可返、重载后不断点续播）。
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";
 import { dismissOnboarding } from "./helpers/guest";
@@ -11,7 +13,7 @@ import { countTableRows, resolveIsolationDbPath } from "./helpers/db";
 const newPromptTail: string = "请用全新开头讲一个关于深海小潜航员的故事。";
 
 /**
- * 从提示词历史开始新创作（旧 E2E-02-11-01/H-21）。
+ * 从提示词历史开始新创作（旧 E2E-02-11-01/H-21，现 Chat-owned History Surface）。
  *
  * 断言绑定方案第6节：新 Agent 上下文不含旧会话；新建干净当前会话；
  * 旧创作保留在历史可返回；新故事允许自动播放。
@@ -47,22 +49,21 @@ test("从提示词历史开始新创作", async ({ page, harnessEnv, evidence })
     await expect(composer).toBeEnabled({ timeout: 90000 });
     recorder.step("第一次创作完成", { oldPrompt });
 
-    // 中文注释：进播放器确认旧提示词已落历史（UI 可见即落库可查）。
-    await page.goto(`${harnessEnv.appUrl}/player`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    // 中文注释：在聊天历史确认旧提示词已落历史（UI 可见即落库可查；M4-07 后入口为聊天页「历史」按钮）。
+    await dismissOnboarding(page);
+    await page.getByRole("button", { name: "打开历史" }).click({ timeout: 15000 });
     await page.getByRole("tab", { name: "提示词历史" }).click({ timeout: 15000 });
     await expect(page.getByText(oldPrompt).first()).toBeVisible({ timeout: 30000 });
 
     // 中文注释：清空 network 计数，仅统计“从历史开始的新创作”窗口。
     agentBodies.length = 0;
-    /** 新创作提示词（基于旧提示词改写，明确不同会话）。 */
+    /** 新创作提示词（基于旧提示词改写，明确不同会话；实际提交沿用所选历史条目原文）。 */
     const newPrompt: string = `${oldPrompt} ${newPromptTail}`;
-    // 中文注释：点击“用此提示词重新创作”→跳创作页自动发送（产品真实链路）。
+    // 中文注释：点击“用此提示词重新创作”→同页自动发送（产品真实链路：面板关闭 + pending 消费 + 先重置再提交）。
     const recreateButton = page.getByRole("button", { name: "用此提示词重新创作" }).first();
     await recreateButton.click({ timeout: 15000 });
-    await page.waitForURL("**/chat", { timeout: 30000 });
-    await dismissOnboarding(page);
 
-    // 中文注释：新创作输入框应被预填（跨页待发语义），若已自动发送则等待其完成。
+    // 中文注释：新创作输入框应保持可见；自动发送进行中输入框禁用；完成后恢复可用（至多等一次完整生成）。
     const chatComposer = page.getByPlaceholder("请输入内容...");
     await expect(chatComposer).toBeVisible({ timeout: 30000 });
     // 中文注释：自动发送进行中输入框禁用；完成后恢复可用（至多等一次完整生成）。
@@ -76,6 +77,7 @@ test("从提示词历史开始新创作", async ({ page, harnessEnv, evidence })
     }
     // 中文注释：K2校准续——WebKit 无手势自动发送经解锁门延迟，首个 Enabled 可能早于请求发出；请求出现后再等一次流式结束，确保“创作完成后”再断言网络与起播。
     await expect(chatComposer).toBeEnabled({ timeout: 90000 });
+
     // 中文注释：network 层断言——新请求恰一次 Agent 调用，且不含旧会话上下文。
     // 新创作沿用所选旧提示词（同文），故以旧助手回复（固定 mock 文本）为旧上下文标记：
     // 干净会话的请求体应仅含新用户消息，不含旧助手旧文；串台态则含旧助手旧文。
@@ -150,15 +152,17 @@ test("从提示词历史开始新创作", async ({ page, harnessEnv, evidence })
     expect(chatAutoplay.readyState).toBeGreaterThanOrEqual(1);
     recorder.step("新故事已生成并起播", chatAutoplay);
 
-    // 中文注释：旧创作保留在历史可返回（隔离库直查 + UI 可见，双重证据）。
-    await page.goto(`${harnessEnv.appUrl}/player`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    // 中文注释：旧创作保留在历史可返回（聊天历史面板可见 + 隔离库直查，双重证据）。
+    await page.getByRole("button", { name: "打开历史" }).click({ timeout: 15000 });
     await page.getByRole("tab", { name: "提示词历史" }).click({ timeout: 15000 });
     await expect(page.getByText(oldPrompt).first()).toBeVisible({ timeout: 30000 });
     /** 访客提示词历史行数（新创作应新增，不覆盖旧条）。 */
     const promptRows: number = countTableRows(dbFile, "GuestPromptHistory");
     expect(promptRows).toBeGreaterThanOrEqual(1);
 
-    // 中文注释：K1校准——断点水合设计 isPlaying=false，重载后不自动恢复为预期；/player 重载后断言 audio 无 src 且不自动播放。
+    // 中文注释：K1校准——断点水合设计 isPlaying=false，重载后不自动恢复为预期；/chat 重载后断言 audio 无 src 且不自动播放。
+    await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
+    await expect(page.getByPlaceholder("请输入内容...")).toBeEnabled({ timeout: 90000 });
     const afterReload = await page.evaluate(() => {
         const audio = document.querySelector("audio") as HTMLAudioElement | null;
         if (!audio) {

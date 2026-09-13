@@ -103,6 +103,7 @@ const SUITES = [
     { id: 'history-ui-relocation', path: './tests/unit/creation-chat/history-ui-relocation.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'legacy-cutover', path: './tests/unit/creation-chat/legacy-cutover.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'legacy-compatibility-containment', path: './tests/unit/creation-chat/legacy-compatibility-containment.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'artifact-module-closure', path: './tests/unit/creation-chat/artifact-module-closure.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'legacy-cutover-guard', path: './tests/integration/persistence-config/legacy-cutover-guard.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'runner-group-split', path: './tests/tooling/runner/runner-group-split.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'catalog-checker', path: './tests/tooling/catalog/catalog-checker.tooling.test.ts', group: 'tooling', needs_db: false },

@@ -1,12 +1,13 @@
 /**
- * M5-06 Playback Session 服务端 Facade（spec §14 / §15 / §16 / §17 / §18 / §33 / §36）。
+ * M5-07 Playback Session 服务端 Facade（spec §14 / §15 / §16 / §17 / §18 / §19 /
+ * §21 / §22 / §24 / §30 / §33 / §36）。
  *
  * 本文件是 Session API 在 server 侧的正式暴露层，逐步替代
  * lib/server/playbackProgress.ts（旧 CRUD Progress 实现保留兼容，不删除）。
  *
- * M5-06 定调：getAnchor / beginSession（M5-05）语义不变；saveCheckpoint 落真逻辑
- *（§17 / §17.1 / §17.2 / §18）；其余 4 procedures（completeSession / clearAnchor /
- * promoteDraftToWork / getWorkProgressBatch）保持 fail-closed skeleton，留给 M5-07+。
+ * M5-07 定调：getAnchor / beginSession（M5-05）与 saveCheckpoint（M5-06）语义冻结
+ * 不动；completeSession / clearAnchor / promoteDraftToWork / getWorkProgressBatch
+ * 落真逻辑（§19 / §21 / §22 / §24 / §30）。
  *
  * - getAnchor（§15 / §33）：读取当前 Subject 唯一 Anchor；legacy
  *   chat→draft / generation→work 归一；sessionId null/invalid UUID 则生成
@@ -33,6 +34,20 @@
  *   Work 时同一事务内先 CAS Anchor、成功才 UPSERT Progress
  *   （prisma.$transaction，用户/访客对称，completedAt 保留，lastPlayedAt=now）；
  *   Draft 按 Anchor identity 只 conditional 更新 Anchor，不做 Work progress。
+ * - completeSession（§19 / §30 / §41）：session 匹配才收尾；Work 时同一事务内
+ *   CAS Anchor（next=total/last=total-1/state=ended）+ UPSERT Progress
+ *   （next=total/completedAt=首完时间/lastPlayedAt=now，重复 complete 保留首完，
+ *   不删 completion history）；Draft 仅 CAS 置 Anchor ended，不建 Work progress。
+ * - clearAnchor（§21）：deleteMany WHERE sessionId（CAS 原子，不匹配 no-op
+ *   cleared:false）；不校验 Work 存在（trash/missing 照清），User/Guest 对称。
+ * - promoteDraftToWork（§24 / §24.1 / §45）：三校验 fail-closed（session 匹配 +
+ *   当前 source=draft + StoryWork.sourceMessageId==draft.messageId）；成功则
+ *   Anchor source→work/title/hash/voiceId 取 Work（sessionId 不变，total 重算），
+ *   hash 一致沿用 draft 段落（钳制），不一致 reset 0；同一事务内 UPSERT Work
+ *   progress（completedAt 保留，lastPlayedAt=now）。
+ * - getWorkProgressBatch（§22 / §40）：只读批量视图，每个 workId 必有结果
+ *   （无 row/非自有 → not_started 默认行）；state/progress 经
+ *   lib/playback/progress.ts 推导；绝不写库、不覆盖其它 work。
  *
  * Router（lib/trpc/routers/playback.ts）只经由本 facade 对外提供
  * 7 个新 procedures，Subject 鉴权与 rate limit 仍由 router 层复用。
@@ -59,6 +74,12 @@ import {
   tryParseLegacyPlaybackSource,
 } from '@/lib/playback/legacy';
 import {
+  computeWorkProgressRatio,
+  deriveWorkPlaybackState,
+  resolvePromotedNextParagraphIndex,
+  shouldPreserveDraftBreakpointOnPromote,
+} from '@/lib/playback/progress';
+import {
   SEGMENTATION_VERSION,
   normalizeStoryText,
   segmentStoryText,
@@ -78,15 +99,10 @@ import type {
 } from '@/lib/trpc/schemas/playback';
 
 /**
- * 占位统一失败：尚未落地的 Session 业务逻辑一律 fail-closed。
- * 不读不写任何持久化状态。
+ * M5-07 已落地全部 7 procedures：本占位不再使用（保留注释说明分态历史）。
+ * 所有未知/非法输入一律在各 procedure 内 fail-closed（BAD_REQUEST / NOT_FOUND /
+ * STALE_SESSION / no-op），绝不脏写。
  */
-const notYetImplemented = (procedure: string): never => {
-  throw new TRPCError({
-    code: 'INTERNAL_SERVER_ERROR',
-    message: `[playback-session] ${procedure} 尚未就绪（M5-06+ 落地），fail-closed，拒绝脏写`,
-  });
-};
 
 type AnchorRow = {
   sourceKind: string;
@@ -825,42 +841,466 @@ export const savePlaybackCheckpointForSubject = async (
   return { accepted: true, anchor: dto };
 };
 
-/** §19 playback.completeSession：完播收尾（保留 ended Anchor，M5-07+ 落地）。 */
+/**
+ * §19 playback.completeSession：完播收尾（保留 ended Anchor，M5-07 落地）。
+ *
+ * - 无 Anchor → null（不建不写）；dangling source 不可解析 → null（不给脏行续命）。
+ * - input.sessionId 非法 → BAD_REQUEST（fail-closed，不写）。
+ * - anchor.sessionId !== input.sessionId → BAD_REQUEST（stale complete 拒绝覆盖
+ *   新会话；与 saveCheckpoint 的 STALE_SESSION 同源，但 complete 输出无 accepted
+ *   通道，故以 fail-closed 抛错，绝不覆盖）。
+ * - Draft：CAS（WHERE sessionId）置 anchorState=ended，不建 Work progress；
+ *   重复 complete 幂等（已 ended 仍返回同一 ended Anchor，不破坏位置）。
+ * - Work：先经 M2 getStoryWorkForSubject（subject, workId）鉴权
+ *   （missing/foreign/trash 统一 NOT_FOUND，原样透出，无 partial 写）；
+ *   total 经 computeWorkTotalParagraphs（work.storyText）权威计算；
+ *   同一事务内 CAS Anchor（WHERE sessionId + sourceId，position→total、
+ *   state→ended）+ UPSERT Progress（next=total/last=total-1、
+ *   completedAt=首完保留、lastPlayedAt=now）；CAS 失败（并发切换）→
+ *   BAD_REQUEST，绝不碰 Progress；重复 complete 保留首个 completedAt
+ *   （不删 completion history，§41）。
+ * - User/Guest 对称。
+ */
 export const completePlaybackSessionForSubject = async (
   subject: Subject,
   input: CompletePlaybackSessionInput,
 ): Promise<PlaybackAnchorDTO | null> => {
-  void subject;
-  void input;
-  return notYetImplemented('playback.completeSession');
+  const { sessionId } = input;
+  if (!isValidPlaybackSessionId(sessionId)) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: '非法 sessionId（须为 UUID v4）' });
+  }
+  const currentRow =
+    subject.type === 'user'
+      ? await prisma.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
+      : await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+  if (!currentRow) return null;
+  if (currentRow.sessionId !== sessionId) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '[playback-session] completeSession session 不匹配（STALE_SESSION），fail-closed，拒绝覆盖新会话',
+    });
+  }
+  const source = tryParseLegacyPlaybackSource(currentRow.sourceKind, currentRow.sourceId);
+  if (!source) return null;
+  const existingDto = toAnchorDto(currentRow);
+  if (!existingDto) return null;
+
+  // —— Draft complete：仅 ended Anchor，不建 Work progress ——
+  if (source.kind === 'draft') {
+    if (currentRow.anchorState === 'ended') return existingDto;
+    const casRes =
+      subject.type === 'user'
+        ? await prisma.userPlaybackAnchor.updateMany({
+            where: { userId: subject.id, sessionId },
+            data: { anchorState: 'ended' },
+          })
+        : await prisma.guestPlaybackAnchor.updateMany({
+            where: { guestId: subject.id, sessionId },
+            data: { anchorState: 'ended' },
+          });
+    if (casRes.count === 0) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: '[playback-session] completeSession 并发切换（STALE_SESSION），fail-closed',
+      });
+    }
+    const fresh =
+      subject.type === 'user'
+        ? await prisma.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
+        : await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+    if (!fresh) return null;
+    const dto = toAnchorDto(fresh);
+    if (!dto) return null;
+    return dto;
+  }
+
+  // —— Work complete（§19 / §30 / §41）：ended + Progress next=total + completedAt ——
+  const workId = source.workId;
+  const work = await getStoryWorkForSubject(subject, workId);
+  const workTotal = computeWorkTotalParagraphs(work.storyText);
+  const completedLast = workTotal - 1;
+  const now = new Date();
+  const txResult = await prisma.$transaction(async (tx) => {
+    const casRes =
+      subject.type === 'user'
+        ? await tx.userPlaybackAnchor.updateMany({
+            where: { userId: subject.id, sessionId, sourceId: String(workId) },
+            data: {
+              lastCompletedParagraphIndex: completedLast,
+              nextParagraphIndex: workTotal,
+              totalParagraphs: workTotal,
+              anchorState: 'ended',
+            },
+          })
+        : await tx.guestPlaybackAnchor.updateMany({
+            where: { guestId: subject.id, sessionId, sourceId: String(workId) },
+            data: {
+              lastCompletedParagraphIndex: completedLast,
+              nextParagraphIndex: workTotal,
+              totalParagraphs: workTotal,
+              anchorState: 'ended',
+            },
+          });
+    if (casRes.count === 0) {
+      return { applied: false as const };
+    }
+    const existingProgress =
+      subject.type === 'user'
+        ? await tx.storyPlaybackProgress.findUnique({ where: { storyWorkId: work.id } })
+        : await tx.guestStoryPlaybackProgress.findUnique({ where: { storyWorkId: work.id } });
+    // 幂等：重复 complete 保留首个 completedAt，不刷新、不删除 history。
+    const preservedCompletedAt = existingProgress?.completedAt ?? now;
+    const progressCreateBase = {
+      storyWorkId: work.id,
+      contentHash: work.contentHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: completedLast,
+      nextParagraphIndex: workTotal,
+      totalParagraphs: workTotal,
+      completedAt: preservedCompletedAt,
+      lastPlayedAt: now,
+    };
+    const progressUpdateBase = {
+      contentHash: work.contentHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: completedLast,
+      nextParagraphIndex: workTotal,
+      totalParagraphs: workTotal,
+      completedAt: preservedCompletedAt,
+      lastPlayedAt: now,
+    };
+    if (subject.type === 'user') {
+      await tx.storyPlaybackProgress.upsert({
+        where: { storyWorkId: work.id },
+        create: progressCreateBase,
+        update: progressUpdateBase,
+      });
+    } else {
+      await tx.guestStoryPlaybackProgress.upsert({
+        where: { storyWorkId: work.id },
+        create: progressCreateBase,
+        update: progressUpdateBase,
+      });
+    }
+    const fresh =
+      subject.type === 'user'
+        ? await tx.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
+        : await tx.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+    return { applied: true as const, row: fresh };
+  });
+  if (!txResult.applied) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '[playback-session] completeSession 并发切换（STALE_SESSION），fail-closed',
+    });
+  }
+  if (!txResult.row) return null;
+  const dto = toAnchorDto(txResult.row);
+  if (!dto) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: '[playback-session] Work complete 落库后映射失败',
+    });
+  }
+  return dto;
 };
 
-/** §21 playback.clearAnchor：仅清理当前 session（不匹配则 no-op，M5-07+ 落地）。 */
+/**
+ * §21 playback.clearAnchor：仅清理当前 session（不匹配则 no-op，M5-07 落地）。
+ *
+ * - deleteMany WHERE sessionId（CAS 原子，count 判定 cleared）；
+ * - 无 Anchor / session 不匹配 / input session 非法 → {success:true, cleared:false}
+ *  （no-op，绝不误删新会话；沿用 M5-04 router 注释契约）；
+ * - 不校验 Work 存在与否（已 trash/missing 的 Anchor 照清，Trash invalidation 最小面）；
+ * - dangling source 亦照 session 清（session 匹配即删，不给脏行续命但允许清理）；
+ * - 已 ended 的 Anchor 同样可清（session 匹配即删）；
+ * - User/Guest 对称。
+ */
 export const clearPlaybackAnchorForSubject = async (
   subject: Subject,
   input: ClearPlaybackAnchorInput,
 ): Promise<ClearPlaybackAnchorOutput> => {
-  void subject;
-  void input;
-  return notYetImplemented('playback.clearAnchor');
+  const { sessionId } = input;
+  if (!isValidPlaybackSessionId(sessionId)) {
+    return { success: true as const, cleared: false };
+  }
+  const res =
+    subject.type === 'user'
+      ? await prisma.userPlaybackAnchor.deleteMany({
+          where: { userId: subject.id, sessionId },
+        })
+      : await prisma.guestPlaybackAnchor.deleteMany({
+          where: { guestId: subject.id, sessionId },
+        });
+  return { success: true as const, cleared: res.count > 0 };
 };
 
-/** §24 playback.promoteDraftToWork：Draft→Work 提升（M5-07+ 落地）。 */
+/**
+ * §24 playback.promoteDraftToWork：Draft→Work 提升（M5-07 落地）。
+ *
+ * 三校验 fail-closed（任一失败绝不写库）：
+ * 1. Anchor.sessionId === input.sessionId（不匹配 → BAD_REQUEST）；
+ * 2. 当前 Source 必须是 draft（含 legacy chat 归一；已是 work/dangling → BAD_REQUEST）；
+ * 3. StoryWork.sourceMessageId === draft.messageId（经 M2
+ *    getStoryWorkForSubject 加载，missing/foreign/trash 统一 NOT_FOUND；
+ *    sourceMessageId 缺失/不一致 → BAD_REQUEST）。
+ *
+ * 成功（同一事务内 CAS Anchor + UPSERT Progress）：
+ * - Anchor：source→work(workId)/title→work.title/contentHash→work.contentHash/
+ *   voiceId→work.voiceId/segmentationVersion→current/total→work 重算；
+ *   **sessionId 不变**（§45 audio 不重启的 server 侧保证；client 维持播放）；
+ *   position：hash 一致沿用 draft 段落（钳制到 [0,total]/[-1,total-1]），
+ *   不一致（§24.1，含任一空 hash）→ reset 0（last=-1/next=0，不许旧段落套新正文）；
+ *   speed/timers/state 原样保留。
+ * - Progress：UPSERT work 进度（hash/version/total 取 Work 当前值，
+ *   completedAt 保留既有、lastPlayedAt=now）。
+ * - CAS：updateMany WHERE sessionId + sourceId(draftMessageId)，count===0 →
+ *   BAD_REQUEST（并发切换穿透防护）；User/Guest 对称。
+ */
 export const promoteDraftPlaybackToWorkForSubject = async (
   subject: Subject,
   input: PromoteDraftPlaybackToWorkInput,
 ): Promise<PlaybackAnchorDTO> => {
-  void subject;
-  void input;
-  return notYetImplemented('playback.promoteDraftToWork');
+  const { sessionId, workId } = input;
+  if (!isValidPlaybackSessionId(sessionId)) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: '非法 sessionId（须为 UUID v4）' });
+  }
+  if (typeof workId !== 'number' || !Number.isSafeInteger(workId) || workId <= 0) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: '作品不存在' });
+  }
+  const currentRow =
+    subject.type === 'user'
+      ? await prisma.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
+      : await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+  if (!currentRow) {
+    throw new TRPCError({
+      code: 'NOT_FOUND',
+      message: '[playback-session] 无当前 Anchor，无法 promotion',
+    });
+  }
+  if (currentRow.sessionId !== sessionId) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '[playback-session] promote session 不匹配（STALE_SESSION），fail-closed',
+    });
+  }
+  const draftSource = tryParseLegacyPlaybackSource(currentRow.sourceKind, currentRow.sourceId);
+  if (!draftSource || draftSource.kind !== 'draft') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '[playback-session] 当前 Source 非 draft，拒绝 promotion',
+    });
+  }
+  const draftMessageId = draftSource.messageId;
+  const draftHash = typeof currentRow.contentHash === 'string' ? currentRow.contentHash : '';
+  const draftNext = currentRow.nextParagraphIndex;
+  const draftLast = currentRow.lastCompletedParagraphIndex;
+
+  // Work 鉴权与权威 metadata 一律经 M2（不直查表、不重算 title/hash）。
+  const work = await getStoryWorkForSubject(subject, workId);
+  if (!work.sourceMessageId || work.sourceMessageId !== draftMessageId) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '[playback-session] StoryWork.sourceMessageId 与 Draft.messageId 不一致，拒绝 promotion',
+    });
+  }
+  const workTotal = computeWorkTotalParagraphs(work.storyText);
+  const workHash = typeof work.contentHash === 'string' ? work.contentHash : '';
+  const preserve = shouldPreserveDraftBreakpointOnPromote(draftHash, workHash);
+  const promotedNext = resolvePromotedNextParagraphIndex(draftNext, draftHash, workHash, workTotal);
+  const promotedLast = preserve ? Math.max(-1, Math.min(draftLast, workTotal - 1)) : -1;
+  const now = new Date();
+
+  const freshRow = await prisma.$transaction(async (tx) => {
+    const anchorData = {
+      sourceKind: 'work',
+      sourceId: String(work.id),
+      title: work.title,
+      contentHash: workHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: promotedLast,
+      nextParagraphIndex: promotedNext,
+      totalParagraphs: workTotal,
+      voiceId: work.voiceId ?? '',
+    };
+    const casRes =
+      subject.type === 'user'
+        ? await tx.userPlaybackAnchor.updateMany({
+            where: { userId: subject.id, sessionId, sourceId: draftMessageId },
+            data: anchorData,
+          })
+        : await tx.guestPlaybackAnchor.updateMany({
+            where: { guestId: subject.id, sessionId, sourceId: draftMessageId },
+            data: anchorData,
+          });
+    if (casRes.count === 0) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: '[playback-session] promote 并发切换（STALE_SESSION），fail-closed',
+      });
+    }
+    const existingProgress =
+      subject.type === 'user'
+        ? await tx.storyPlaybackProgress.findUnique({ where: { storyWorkId: work.id } })
+        : await tx.guestStoryPlaybackProgress.findUnique({ where: { storyWorkId: work.id } });
+    const preservedCompletedAt = existingProgress?.completedAt ?? null;
+    if (subject.type === 'user') {
+      await tx.storyPlaybackProgress.upsert({
+        where: { storyWorkId: work.id },
+        create: {
+          storyWorkId: work.id,
+          contentHash: workHash,
+          segmentationVersion: SEGMENTATION_VERSION,
+          lastCompletedParagraphIndex: promotedLast,
+          nextParagraphIndex: promotedNext,
+          totalParagraphs: workTotal,
+          completedAt: preservedCompletedAt,
+          lastPlayedAt: now,
+        },
+        update: {
+          contentHash: workHash,
+          segmentationVersion: SEGMENTATION_VERSION,
+          lastCompletedParagraphIndex: promotedLast,
+          nextParagraphIndex: promotedNext,
+          totalParagraphs: workTotal,
+          lastPlayedAt: now,
+        },
+      });
+      return tx.userPlaybackAnchor.findUnique({ where: { userId: subject.id } });
+    }
+    await tx.guestStoryPlaybackProgress.upsert({
+      where: { storyWorkId: work.id },
+      create: {
+        storyWorkId: work.id,
+        contentHash: workHash,
+        segmentationVersion: SEGMENTATION_VERSION,
+        lastCompletedParagraphIndex: promotedLast,
+        nextParagraphIndex: promotedNext,
+        totalParagraphs: workTotal,
+        completedAt: preservedCompletedAt,
+        lastPlayedAt: now,
+      },
+      update: {
+        contentHash: workHash,
+        segmentationVersion: SEGMENTATION_VERSION,
+        lastCompletedParagraphIndex: promotedLast,
+        nextParagraphIndex: promotedNext,
+        totalParagraphs: workTotal,
+        lastPlayedAt: now,
+      },
+    });
+    return tx.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+  });
+
+  if (!freshRow) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: '[playback-session] promotion 落库后 Anchor 缺失',
+    });
+  }
+  const dto = toAnchorDto(freshRow);
+  if (!dto) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: '[playback-session] promotion 落库后映射失败',
+    });
+  }
+  if (dto.sessionId !== sessionId) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: '[playback-session] promotion 不得变更 sessionId',
+    });
+  }
+  return dto;
 };
 
-/** §22 playback.getWorkProgressBatch：M3 消费的 Work 进度批量视图（M5-07+ 落地）。 */
+/**
+ * §22 playback.getWorkProgressBatch：M3 消费的 Work 进度批量视图（M5-07 落地）。
+ *
+ * - 只读：绝不创建/更新/删除任何 Anchor 或 Progress 行；
+ * - 每个输入 workId 必有对应输出（顺序与输入一致；重复 id 逐项返回）；
+ * - 无 Progress row 或 work 非当前 Subject 自有（missing/foreign 一律 fail-closed
+ *   为 not_started，不抛错不泄漏；trash 本项不做 invalidation，原样返回进度，
+ *   留 M5-08）→ state=not_started/progress=0/last=-1/next=0/total=1/
+ *   completedAt=null/lastPlayedAt=null；
+ * - 有自有 Progress row → state/progress 经 lib/playback/progress.ts
+ *   deriveWorkPlaybackState / computeWorkProgressRatio 推导（绝不另存 status 列，
+ *   §7），位置与 completedAt/lastPlayedAt 原样透传；
+ * - 因此播放 Work D 绝不触碰 A/B 的长期 Progress（§40 后半）；
+ * - User/Guest 对称（读各自 Progress 表 + 各自 Work 表做 ownership 过滤）。
+ */
 export const getWorkPlaybackProgressBatchForSubject = async (
   subject: Subject,
   input: GetWorkPlaybackProgressBatchInput,
 ): Promise<GetWorkPlaybackProgressBatchOutput> => {
-  void subject;
-  void input;
-  return notYetImplemented('playback.getWorkProgressBatch');
+  const { workIds } = input;
+  for (const id of workIds) {
+    if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: '非法 workId' });
+    }
+  }
+  const ownedRows =
+    subject.type === 'user'
+      ? await prisma.storyWork.findMany({
+          where: { id: { in: workIds }, userId: subject.id },
+          select: { id: true },
+        })
+      : await prisma.guestStoryWork.findMany({
+          where: { id: { in: workIds }, guestId: subject.id },
+          select: { id: true },
+        });
+  const ownedSet = new Set(ownedRows.map((r) => r.id));
+  const progressRows =
+    subject.type === 'user'
+      ? await prisma.storyPlaybackProgress.findMany({
+          where: { storyWorkId: { in: workIds } },
+        })
+      : await prisma.guestStoryPlaybackProgress.findMany({
+          where: { storyWorkId: { in: workIds } },
+        });
+  const progressById = new Map(progressRows.map((r) => [r.storyWorkId, r]));
+  const items = workIds.map((workId) => {
+    if (!ownedSet.has(workId)) {
+      return {
+        workId,
+        state: 'not_started' as const,
+        progress: 0,
+        lastCompletedParagraphIndex: -1,
+        nextParagraphIndex: 0,
+        totalParagraphs: 1,
+        completedAt: null as string | null,
+        lastPlayedAt: null as string | null,
+      };
+    }
+    const row = progressById.get(workId);
+    if (!row) {
+      return {
+        workId,
+        state: 'not_started' as const,
+        progress: 0,
+        lastCompletedParagraphIndex: -1,
+        nextParagraphIndex: 0,
+        totalParagraphs: 1,
+        completedAt: null as string | null,
+        lastPlayedAt: null as string | null,
+      };
+    }
+    const position = {
+      lastCompletedParagraphIndex: row.lastCompletedParagraphIndex,
+      nextParagraphIndex: row.nextParagraphIndex,
+      totalParagraphs: row.totalParagraphs,
+      completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+    };
+    return {
+      workId,
+      state: deriveWorkPlaybackState(position),
+      progress: computeWorkProgressRatio(position),
+      lastCompletedParagraphIndex: row.lastCompletedParagraphIndex,
+      nextParagraphIndex: row.nextParagraphIndex,
+      totalParagraphs: row.totalParagraphs,
+      completedAt: row.completedAt ? row.completedAt.toISOString() : null,
+      lastPlayedAt: row.lastPlayedAt ? row.lastPlayedAt.toISOString() : null,
+    };
+  });
+  return { items };
 };

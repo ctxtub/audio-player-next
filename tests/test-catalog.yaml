@@ -393,7 +393,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [history, replay]
     spec_path: docs/e2e/03-播放状态与内核一致性/10-历史恢复卡回放重合成.md
-    executable_ids: [exec-storycard-resume, exec-paragraph-segmentation, exec-playback-identity-domain, exec-playback-session-contract, exec-playback-anchor-begin-session, exec-playback-checkpoint-guards]
+    executable_ids: [exec-storycard-resume, exec-paragraph-segmentation, exec-playback-identity-domain, exec-playback-session-contract, exec-playback-anchor-begin-session, exec-playback-checkpoint-guards, exec-playback-session-lifecycle-promotion]
     fixtures: []
     owner: playback-kernel
   - case_id: old-card-replay-no-consume-preload
@@ -1228,6 +1228,10 @@ executables:
     display_name_zh: 检查点过期与单调守卫
     layer: L2
     path: ./tests/integration/playback/playback-checkpoint-guards.integration.test.ts
+  - executable_id: exec-playback-session-lifecycle-promotion
+    display_name_zh: 会话生命周期与草稿转正
+    layer: L2
+    path: ./tests/integration/playback/playback-session-lifecycle-promotion.integration.test.ts
   - executable_id: exec-main-navigation
     display_name_zh: 主导航路由契约
     layer: L1

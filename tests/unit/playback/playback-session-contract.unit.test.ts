@@ -39,18 +39,18 @@ import {
 } from '../../../lib/server/playbackSession';
 
 /**
- * M5-06 Playback API Contract 冻结单元测试（L1）。
- * 锁定 spec §13 / §14 / §17 / §18 / §34 surface：
+ * M5-07 Playback API Contract 冻结单元测试（L1）。
+ * 锁定 spec §13 / §14 / §17 / §18 / §19 / §21 / §22 / §24 / §34 surface：
  * Source discriminatedUnion（§13.1）+ Anchor DTO 14 字段（§13.2，
  * 绝不含 storyText/audioUrl/currentTime/isPlaying）+ WorkProgress DTO（§13.3）
  * + 7 新 procedures 输入输出 + 旧 API 保留 + 双层外观 7 方法 +
  * facade 分态：getAnchor / beginSession 真逻辑（M5-05，经 prisma + M2 边界），
- * saveCheckpoint 真逻辑（M5-06：Stale/Monotonic/Work 事务），其余 4 procedures
- *（completeSession / clearAnchor / promoteDraftToWork / getWorkProgressBatch）
- * 保持 fail-closed skeleton（M5-07+）。
+ * saveCheckpoint 真逻辑（M5-06：Stale/Monotonic/Work 事务），
+ * completeSession / clearAnchor / promoteDraftToWork / getWorkProgressBatch
+ * 真逻辑（M5-07：§19 ended + §21 session-CAS + §24 三校验 + §22 只读批量）。
  * 纯契约：不触库、不调网络；router / server 侧经源码文本断言
- *（避免 unit 直连持久化层；getAnchor / beginSession / saveCheckpoint 的 DB 语义
- * 由 L2 集成测试覆盖，unit 仅断言 surface + skeleton 分态 + 源码执行面）。
+ *（避免 unit 直连持久化层；7 procedures 的 DB 语义由 L2 集成测试覆盖，
+ * unit 仅断言 surface + 分态 + 源码执行面）。
  */
 
 const VALID_UUID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
@@ -488,8 +488,8 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   assert.match(legacyClientText, /clearProgress/, 'legacy client adapter must be retained');
   console.log('PASS: client facade verified');
 
-  // —— server facade：7 函数 + 分态（M5-06：getAnchor/beginSession/saveCheckpoint 真逻辑，其余 4 fail-closed） ——
-  console.log('--- server facade (M5-06 split) ---');
+  // —— server facade：7 函数 + 分态（M5-07：7 procedures 全部真逻辑） ——
+  console.log('--- server facade (M5-07 split) ---');
   for (const fn of [
     getPlaybackAnchorForSubject,
     beginPlaybackSessionForSubject,
@@ -511,10 +511,16 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   assert.match(serverText, /SEGMENTATION_VERSION/, 'resume must validate segmentationVersion');
   assert.match(serverText, /isValidDraftMessageId|REPLAY_TEXT_PREFIX/, 'draft must gate replay-text-* on server');
   assert.match(serverText, /createPlaybackSessionId|isValidPlaybackSessionId/, 'getAnchor must repair sessionId');
-  // §36 禁止面：不得直查 StoryWork 表 / legacy DTO、不得重算 Work title/hash
+  // §36 禁止面：单作品权威读必须经 M2，不得直查单行 / legacy DTO、不得重算 Work title/hash
   //（源码执行面锁死；注释提及不计，只查 prisma 直查与派生函数导入）。
-  assert.strictEqual(/prisma\.storyWork/.test(serverText), false, 'M5-05 must not query StoryWork directly');
-  assert.strictEqual(/prisma\.guestStoryWork/.test(serverText), false, 'M5-05 must not query GuestStoryWork directly');
+  // M5-07 例外：getWorkProgressBatch  ownership 过滤允许只读 findMany（无 deletedAt
+  // 过滤，trash invalidation 留 M5-08），禁单行 findUnique/findFirst 旁路与任何写。
+  assert.strictEqual(/prisma\.storyWork\.findUnique/.test(serverText), false, 'M5-05 must not query StoryWork directly');
+  assert.strictEqual(/prisma\.storyWork\.findFirst/.test(serverText), false, 'M5-05 must not query StoryWork directly');
+  assert.strictEqual(/prisma\.guestStoryWork\.findUnique/.test(serverText), false, 'M5-05 must not query GuestStoryWork directly');
+  assert.strictEqual(/prisma\.guestStoryWork\.findFirst/.test(serverText), false, 'M5-05 must not query GuestStoryWork directly');
+  assert.strictEqual(/prisma\.storyWork\.(create|update|delete)/.test(serverText), false, 'M5 must not write StoryWork directly');
+  assert.strictEqual(/prisma\.guestStoryWork\.(create|update|delete)/.test(serverText), false, 'M5 must not write GuestStoryWork directly');
   assert.strictEqual(/from\s+['"]@\/lib\/storyWork\/metadata['"]/.test(serverText), false, 'M5-05 must not import work metadata derivators');
   assert.strictEqual(/computeStoryContentHash\s*\(/.test(serverText), false, 'M5-05 must not recompute work contentHash');
   assert.strictEqual(/resolveStoryTitle\s*\(/.test(serverText), false, 'M5-05 must not recompute work title');
@@ -535,17 +541,36 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   assert.match(serverText, /guestStoryPlaybackProgress\.upsert/, 'transaction must UPSERT guest progress (symmetric)');
   // Draft 按 Anchor identity，不做 Work progress（源码含 draft 分支且 draft 路径无 progress upsert）。
   assert.match(serverText, /source\.kind\s*===\s*['"]draft['"]/, 'draft checkpoint must branch by anchor identity');
-  // 其余 4 procedures 保持 fail-closed skeleton（不提前做 M5-07+ 语义；unit 不触库，直接断言抛错）。
-  // 注意：saveCheckpoint 已落真逻辑（触库），unit 不再直调它（由 L2 集成覆盖），此处仅断言其为函数。
+  // M5-07 真逻辑执行面（源码文本锁死§19/§21/§22/§24；unit 不直连 DB，真写由 L2 覆盖）。
+  // 注意：7 procedures 全部已落真逻辑（触库），unit 不再直调其中任何一个
+  //（直调将触 prisma；由 L2 集成覆盖），此处仅断言函数存在 + 源码执行面。
   assert.strictEqual(typeof savePlaybackCheckpointForSubject, 'function');
-  const guest = { type: 'guest', id: 'g_contract_probe' } as const;
-  await assert.rejects(() => completePlaybackSessionForSubject({ ...guest }, { sessionId: VALID_UUID }));
-  await assert.rejects(() => clearPlaybackAnchorForSubject({ ...guest }, { sessionId: VALID_UUID }));
-  await assert.rejects(() =>
-    promoteDraftPlaybackToWorkForSubject({ ...guest }, { sessionId: VALID_UUID, workId: 5 }),
-  );
-  await assert.rejects(() => getWorkPlaybackProgressBatchForSubject({ ...guest }, { workIds: [1] }));
-  console.log('PASS: server facade M5-06 split verified');
+  assert.strictEqual(typeof completePlaybackSessionForSubject, 'function');
+  assert.strictEqual(typeof clearPlaybackAnchorForSubject, 'function');
+  assert.strictEqual(typeof promoteDraftPlaybackToWorkForSubject, 'function');
+  assert.strictEqual(typeof getWorkPlaybackProgressBatchForSubject, 'function');
+  // §19 complete：ended 收尾 + Progress next=total + completedAt + 幂等保留首完。
+  assert.match(serverText, /completePlaybackSessionForSubject/, 'completeSession facade must exist');
+  assert.match(serverText, /anchorState:\s*['"]ended['"]/, 'complete must persist ended anchorState');
+  assert.match(serverText, /preservedCompletedAt/, 'complete must preserve first completedAt (idempotent)');
+  assert.match(serverText, /nextParagraphIndex:\s*workTotal/, 'complete progress next must equal total');
+  // §21 clear：session-CAS 删除 + 不匹配 no-op。
+  assert.match(serverText, /clearPlaybackAnchorForSubject/, 'clearAnchor facade must exist');
+  assert.match(serverText, /deleteMany\(\{\s*\n?\s*where:\s*\{\s*(userId|guestId):\s*subject\.id,\s*sessionId/, 'clearAnchor must CAS-delete by sessionId');
+  assert.match(serverText, /cleared:\s*res\.count\s*>\s*0/, 'clearAnchor must report cleared by count');
+  assert.match(serverText, /cleared:\s*false/, 'clearAnchor mismatch must no-op cleared:false');
+  // §24 promote：三校验 + session 不变 + hash 分流。
+  assert.match(serverText, /promoteDraftPlaybackToWorkForSubject/, 'promote facade must exist');
+  assert.match(serverText, /sourceMessageId/, 'promote must verify StoryWork.sourceMessageId == draft.messageId');
+  assert.match(serverText, /shouldPreserveDraftBreakpointOnPromote/, 'promote must branch on hash equality (§24.1)');
+  assert.match(serverText, /resolvePromotedNextParagraphIndex/, 'promote must resolve next via domain helper');
+  assert.match(serverText, /dto\.sessionId\s*!==\s*sessionId/, 'promote must guarantee sessionId unchanged');
+  // §22 batch：只读 + 三态推导 + not_started 默认。
+  assert.match(serverText, /getWorkPlaybackProgressBatchForSubject/, 'batch facade must exist');
+  assert.match(serverText, /deriveWorkPlaybackState/, 'batch must derive state (§7), never store status');
+  assert.match(serverText, /computeWorkProgressRatio/, 'batch must compute paragraph-level ratio (§7.1)');
+  assert.match(serverText, /not_started/, 'batch missing row must map to not_started');
+  console.log('PASS: server facade M5-07 split verified');
 
   console.log('\nALL PLAYBACK SESSION CONTRACT TEST CASES PASSED SUCCESSFULLY!');
 }

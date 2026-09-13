@@ -303,8 +303,6 @@ export function buildSnapshotEnv(dbFile, mockBaseUrl) {
     return {
         ...process.env,
         NEXT_PUBLIC_E2E_PLAYBACK_PROBE: '1',
-    return {
-        ...process.env,
         SESSION_SECRET: randomBytes(32).toString('hex'),
         DATABASE_URL: `file:${dbFile}`,
         OPENAI_API_KEY: 'sk-harness-synthetic',

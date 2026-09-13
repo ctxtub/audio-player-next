@@ -1093,6 +1093,18 @@ cases:
     executable_ids: [exec-mini-now-playing-semantic, exec-mini-now-playing-session]
     fixtures: []
     owner: smoke-baseline
+  - case_id: main-chrome-mobile-docked-mini
+    display_name_zh: MainChrome 移动端固定 Mini
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: 移动端 Mini 固定 TabBar 上方不可拖且键盘纯隐藏跨路由同会话
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [ui, layout, session, keyboard, navigation]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/12-MainChrome移动端固定Mini.md
+    executable_ids: [exec-main-chrome-docked, exec-main-chrome-docked-layout, exec-l3-main-chrome-mobile-docked]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1424,6 +1436,18 @@ executables:
     display_name_zh: Mini 会话派生与 Flow 委托集成
     layer: L2
     path: ./tests/integration/now-playing/mini-now-playing-session.integration.test.ts
+  - executable_id: exec-main-chrome-docked
+    display_name_zh: MainChrome 固定预留与键盘纯显隐
+    layer: L1
+    path: ./tests/unit/now-playing/main-chrome-docked.unit.test.ts
+  - executable_id: exec-main-chrome-docked-layout
+    display_name_zh: MainChrome 布局集成与键盘恢复
+    layer: L2
+    path: ./tests/integration/now-playing/main-chrome-docked-layout.integration.test.ts
+  - executable_id: exec-l3-main-chrome-mobile-docked
+    display_name_zh: L3移动端固定 Mini 全链路
+    layer: L3
+    path: ./tests/system/browser/scenarios/main-chrome-mobile-docked.spec.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

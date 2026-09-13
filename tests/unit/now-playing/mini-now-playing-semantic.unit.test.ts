@@ -466,12 +466,25 @@ async function runMiniSemanticTests(): Promise<void> {
         assert.ok(!compat.includes('GlassToast'), 'compat 不得保留旧播放逻辑');
         assert.ok(compat.includes('useFloatingPlayer'), 'compat 须保留旧 hook 可编译');
         const layoutSrc = readRepoText('app/(main)/layout.tsx');
-        assert.ok(layoutSrc.includes('MiniNowPlaying'), 'layout 必须切换正式命名');
+        // M6-03 演进：Mini 已收进 MainChrome/BottomChrome slot（spec §16/§34），
+        // layout 经 MainChrome 编排，不再直引 Mini；正式命名链由 BottomChrome 持有。
+        // 意图不变：全局仍为正式 MiniNowPlaying，绝不回退 FloatingPlayer。
+        const bottomChromeSrc = readRepoText('components/MainChrome/BottomChrome.tsx');
         assert.ok(
-            layoutSrc.includes("from '@/components/NowPlaying/MiniNowPlaying'"),
-            'layout 必须从正式 surface 导入'
+            layoutSrc.includes('MiniNowPlaying') || bottomChromeSrc.includes('MiniNowPlaying'),
+            '全局仍须为正式 MiniNowPlaying（M6-03 经 BottomChrome slot 持有）'
+        );
+        assert.ok(
+            layoutSrc.includes("from '@/components/MainChrome'") ||
+                layoutSrc.includes("from '@/components/NowPlaying/MiniNowPlaying'"),
+            'layout 必须经 MainChrome 或正式 surface 编排 Mini'
+        );
+        assert.ok(
+            bottomChromeSrc.includes("from '@/components/NowPlaying/MiniNowPlaying'"),
+            'BottomChrome 必须从正式 surface 导入 Mini'
         );
         assert.ok(!layoutSrc.includes("from '@/components/FloatingPlayer'"), 'layout 不得再走兼容路径');
+        assert.ok(!bottomChromeSrc.includes("from '@/components/FloatingPlayer'"), 'BottomChrome 不得走兼容路径');
         const chatSrc = readRepoText('app/(main)/chat/components/ChatLayout/index.tsx');
         assert.ok(
             !chatSrc.includes("from '@/components/FloatingPlayer'"),

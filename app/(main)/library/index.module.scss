@@ -2,7 +2,8 @@
 
 .libraryPage {
   padding: var(--page-padding);
-  padding-bottom: calc(var(--tab-bar-safe-bottom, 80px) + var(--space-6));
+  /* M6-03：消费统一 BottomChrome 预留（Mini 出现时最后 Card 可滚到 Mini 之上）。 */
+  padding-bottom: calc(var(--bottom-chrome-safe-bottom, var(--tab-bar-safe-bottom, 80px)) + var(--space-6));
   flex: 1;
   display: flex;
   flex-direction: column;

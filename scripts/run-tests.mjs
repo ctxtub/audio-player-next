@@ -121,6 +121,8 @@ const SUITES = [
     { id: 'now-playing-foundation', path: './tests/unit/now-playing/now-playing-foundation.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'mini-now-playing-semantic', path: './tests/unit/now-playing/mini-now-playing-semantic.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'mini-now-playing-session', path: './tests/integration/now-playing/mini-now-playing-session.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'main-chrome-docked', path: './tests/unit/now-playing/main-chrome-docked.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'main-chrome-docked-layout', path: './tests/integration/now-playing/main-chrome-docked-layout.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'runner-group-split', path: './tests/tooling/runner/runner-group-split.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'catalog-checker', path: './tests/tooling/catalog/catalog-checker.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'evidence-schema', path: './tests/tooling/evidence/evidence-schema.tooling.test.ts', group: 'tooling', needs_db: false },

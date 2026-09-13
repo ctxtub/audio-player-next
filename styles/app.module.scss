@@ -1,3 +1,9 @@
+/* M6-03 Bottom Chrome Reservation（spec §15/§29）。
+ * --tab-bar-safe-bottom 仍表示“仅 TabBar 占用”（定义见 styles/tokens/_spacing.scss）；
+ * --bottom-chrome-safe-bottom 为 scoped 实际避让量：默认等于 TabBar，
+ * 有 docked Mini 时叠加 Mini 高度 + 间距。页面/Composer 一律消费后者，
+ * 禁止各自 hardcode Mini 高度或重复加 safe-area。
+ */
 .app {
   max-width: 800px;
   height: 100dvh;
@@ -11,12 +17,20 @@
   transition: background-color var(--duration-normal) var(--ease-default),
     color var(--duration-normal) var(--ease-default);
 
+  --bottom-chrome-safe-bottom: var(--tab-bar-safe-bottom);
+
   .content {
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
     overflow-y: auto;
-    /* 为浮动 Tab Bar 留出底部空间 */
-    padding-bottom: var(--tab-bar-safe-bottom);
+    /* 统一底部 Chrome 预留：无 Mini 时等于 TabBar，有 docked Mini 时自动抬高 */
+    padding-bottom: var(--bottom-chrome-safe-bottom);
   }
+}
+
+.appWithDockedNowPlaying {
+  --bottom-chrome-safe-bottom: calc(
+    var(--tab-bar-safe-bottom) + var(--size-mini-now-playing-height) + var(--space-2)
+  );
 }

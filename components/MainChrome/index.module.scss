@@ -1,0 +1,13 @@
+/* M6-03 MainChrome / BottomChrome 样式（spec §15/§16）。
+ * Reservation 本体在 styles/app.module.scss（--bottom-chrome-safe-bottom）；
+ * 本文件只保证 BottomChrome 不引入额外布局盒（display: contents），
+ * Mini 仍为 viewport fixed，TabBar 仍为原 fixed 胶囊。
+ */
+
+.bottomChrome {
+  display: contents;
+}
+
+.miniSlot {
+  display: contents;
+}

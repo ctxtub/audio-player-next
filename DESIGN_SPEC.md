@@ -306,8 +306,11 @@ iOS 26 Liquid Glass 风格，使用更高强度的模糊 + 饱和度增强。
 | `--size-touch-target` | `44px` | 最小可点击区域（无障碍） |
 | `--size-button-height` | `48px` | 标准按钮高度 |
 | `--size-input-height` | `48px` | 标准输入框高度 |
-| `--size-disc` | `200px` | 播放器唱片尺寸 |
+| `--size-disc` | `200px` | 播放器唱片尺寸（旧 Player 页遗留，M7 不再搬进 Expanded） |
 | `--size-play-button` | `56px` | 播放按钮尺寸 |
+| `--size-now-playing-sheet-max-height` | `85vh` | Expanded Bottom Sheet 最大高度（M7） |
+| `--size-now-playing-panel-width` | `400px` | Expanded Side Panel 宽度（M7，`>=768`） |
+| `--size-now-playing-handle` | `36px` | Expanded Drag Handle 视觉宽度（M7，仅 `<768` 可见） |
 
 ---
 
@@ -368,12 +371,15 @@ iOS 26 Liquid Glass 风格，使用更高强度的模糊 + 饱和度增强。
 | **User** | `var(--accent-primary)` | `var(--text-on-primary)` | `var(--radius-xl)` | `var(--space-3) var(--space-4)` |
 | **System** | `var(--bg-tertiary)` | `var(--text-secondary)` | `var(--radius-md)` | `var(--space-3)` |
 
-### 3.5 播放器 (AudioPlayer)
+### 3.5 播放器 (AudioPlayer → M7 Expanded Now Playing 内播放控制规格）
+
+> M7 起 `/player` 不再是视觉焦点（M9 退役）；本节由“页面播放器规格”调整为“Expanded Now Playing 内播放控制规格”。
+> 大型唱片（`--size-disc` 176–200px spinning disc / glow / vinyl）不作为 Expanded 迁移要求（M7-P06），使用克制 ambient / typography 表达，不挤压 timeline / controls / sleep timer / actions。
 
 | 部件 | 规格 |
 |------|------|
 | **容器** | `bg: var(--bg-elevated)`, `blur: var(--blur-lg)`, `radius: var(--radius-lg)`, `padding: var(--card-padding)`, `shadow: var(--shadow-xl)` |
-| **唱片** | `width/height: var(--size-disc)`, `radius: var(--radius-full)`, `border: 3px solid var(--border-default)`, `animation: disc-rotate 20s linear infinite` |
+| **唱片（旧页遗留）** | `width/height: var(--size-disc)`, `radius: var(--radius-full)`, `border: 3px solid var(--border-default)`, `animation: disc-rotate 20s linear infinite`（不搬进 Expanded） |
 | **播放按钮** | `size: var(--size-play-button)`, `radius: var(--radius-full)`, `bg: var(--accent-primary)`, `shadow: var(--shadow-accent)` |
 | **进度条轨道** | `height: 4px (hover: 6px)`, `radius: var(--radius-xs)`, `bg: var(--bg-tertiary)` |
 | **进度条已播** | `bg: var(--accent-primary)` |
@@ -539,6 +545,22 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 | **关闭按钮** | `28px` 圆形, `bg: var(--bg-tertiary)`, `border: 0.5px solid var(--border-default)`, `color: var(--text-secondary)`, 图标 `16px` |
 | **内容区** | `flex: 1`, `overflow-y: auto`, `display: flex; flex-direction: column`（支持空状态居中） |
 
+### 3.20 Expanded Now Playing (M7)
+
+全局播放详情浮层：`isExpanded` 为纯 UI state（`stores/nowPlayingUiStore`，不属于 route），经 `NowPlayingLayer` 挂载于 `MainChrome`（`Page + BottomChrome{Mini + TabBar} + NowPlayingLayer{Expanded}`）。`react-aria-components ModalOverlay/Modal/Dialog` 提供 modal semantics / focus containment / Escape / overlay semantics；打开/关闭一律不改变播放（`open ≠ play`，`close ≠ pause`，关闭后播放继续）。
+
+| 元素 | 规格 |
+|------|------|
+| **遮罩** | `bg: var(--bg-overlay)`, `blur: 12px saturate(120%)`, `z-index: var(--z-modal)`，点击关闭（播放继续），拖 Slider / Speed / Timer popover 不冒泡误关 |
+| **移动 Sheet（`<768`）** | `width: min(100%, 800px)`, `max-height: var(--size-now-playing-sheet-max-height)` = 85vh，底部弹出，`radius: var(--radius-xl) var(--radius-xl) 0 0`，`bg: var(--bg-elevated)` + `var(--glass-blur)`，`border: 0.5px solid var(--glass-border)`，`shadow: var(--glass-highlight), var(--shadow-xl)` |
+| **桌面 Panel（`>=768`）** | `width: var(--size-now-playing-panel-width)` = 400px（`max-width: calc(100vw - 32px)` 防溢出），右侧 anchored，全高（`100dvh`），`radius: var(--radius-xl) 0 0 var(--radius-xl)`，glass elevated，body 可滚动；仍为 modal（背景不可交互，V1 不做 persistent split pane） |
+| **Handle** | 顶部居中 `width: var(--size-now-playing-handle)` = 36px × `4px` bar，`radius: var(--radius-full)`，`bg: var(--border-strong)`；命中区 `min-height: var(--size-touch-target)`，仅 Handle 发起 drag dismiss（内容滚动 / Speed / Timer 与其不冲突）；桌面隐藏 |
+| **Header** | `padding: var(--space-2) var(--space-4) var(--space-3)`，标题 `size: var(--text-md)` + `weight: var(--weight-semibold)`，副标题 `size: var(--text-sm)` + `color: var(--text-secondary)`（`voice · 第 X / Y 段`，P3A 不伪装整篇） |
+| **关闭按钮** | `var(--size-touch-target)` 热区，`radius: var(--radius-full)`，`bg: var(--bg-tertiary)`，图标 `16px`；打开后首个焦点落点（`autoFocus`），关闭后焦点返回 Mini Metadata trigger（或实际 trigger） |
+| **Body** | `padding: var(--space-4)`，`gap: var(--space-3)`，`overflow-y: auto`（`touch-action: pan-y`，滚动不触发 dismiss） |
+| **完成态** | `ended` 保持 open 并显示“播放完成”徽标（`bg: var(--accent-primary-subtle)`），关闭后 Mini 恢复 ended |
+| **动效** | Sheet 上滑 / Panel 右滑（`var(--duration-slow)` + `var(--ease-out)`）；`prefers-reduced-motion` 下无弹簧入场、drag 后立即收起、无 blur scale |
+
 ### 3.19 GuidancePart (终端风格消息)
 
 | 元素 | 规格 |
@@ -554,7 +576,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 
 ## 4. 页面布局规范
 
-### 4.1 全局布局
+### 4.1 全局布局（M7：MainChrome = Page + BottomChrome + NowPlayingLayer）
 
 ```
 ┌─────────────────────────────┐
@@ -564,14 +586,15 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 │                             │
 │        Page Content         │  ← flex: 1, overflow-y: auto
 │    padding: var(--page-     │     padding-bottom:
-│             padding)        │       var(--tab-bar-safe-bottom)
+│             padding)        │       var(--bottom-chrome-safe-bottom)
 │                             │
 │                             │
 └─────────────────────────────┘
      ┌───────────────────┐
      │   TabBar 胶囊       │  ← fixed bottom, z-sticky
      └───────────────────┘      浮动在内容上方
-  Mini Now Playing         ← fixed, z-floating；docked 固定 TabBar 上方（预留），floating 默认右下可拖（Grip-only）
+  Mini Now Playing         ← fixed, z-floating；docked 固定 TabBar 上方（预留），floating 默认右下可拖（Grip-only）；Expanded open 时 suppress（presentation 隐藏，不改变 Session/Transport）
+  Expanded Now Playing     ← z-modal；<768 Bottom Sheet，>=768 Right Side Panel（NowPlayingLayer，全局 single instance，导航不卸载）
 ```
 
 ### 4.2 Home 页布局
@@ -681,6 +704,17 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 | `>=768` + `desktopFloatingPlayerEnabled=false` | `wide-docked` | 固定 TabBar 上方，不可拖，无 Grip（与移动端一致） | 同 docked 预留（Mini 不因关闭而消失） |
 
 BottomChrome 统一承载 Mini slot + TabBar（`display: contents`，不引入额外布局盒）；内容区与 Composer 一律消费 `--bottom-chrome-safe-bottom`，禁止各自 hardcode Mini 高度。
+
+### 5.2 Expanded Now Playing 响应式（M7）
+
+单一 Modal 语义，CSS 断点切换形态（JS 不重挂载，`resize` 时 `isExpanded` 不变，不关闭重开）：
+
+| 视口 | 形态 | 定位与交互 |
+|------|------|------------|
+| `<768` compact | Modal Bottom Sheet | 底部弹出，`max-height: var(--size-now-playing-sheet-max-height)`；顶部 Handle 向下拖超 `80px` 释放关闭，不足回弹；内容区滚动不触发 dismiss |
+| `>=768` wide | Modal Right Side Panel | 右侧 anchored，全高，`width: var(--size-now-playing-panel-width)`，左侧大圆角，glass elevated，body 可滚动；仍为 modal（背景 dimmed 不可交互） |
+
+断点 `768px` 与 Mini `--breakpoint-lg` / `$breakpoint-lg` / `NOW_PLAYING_BREAKPOINT_PX` 三方同值，禁止第二边界。
 
 ---
 

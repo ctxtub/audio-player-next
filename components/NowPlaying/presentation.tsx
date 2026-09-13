@@ -16,12 +16,12 @@ import { Loader2, Pause, Play, RotateCcw, RotateCw } from 'lucide-react';
 
 import type { MiniPlaybackAction } from './types';
 
-/** Metadata 按钮 props（点击 → openDetails/openExpanded）。 */
+/** Metadata 按钮 props（点击 → openDetails/openExpanded，显式透传触发元素供焦点返回）。 */
 export type MiniMetadataButtonProps = {
     title: string;
     secondaryLabel: string | null;
     coarseProgress: number | null;
-    onOpenDetails: () => void;
+    onOpenDetails: (target?: HTMLElement | null) => void;
 };
 
 /** 播放动作按钮 props（点击 → Flow delegation，不打开详情）。 */
@@ -83,7 +83,9 @@ export const MiniMetadataButton: React.FC<MiniMetadataButtonProps> = ({
     <button
         type="button"
         aria-label={`展开正在播放：${title}`}
-        onClick={onOpenDetails}
+        // WebKit 点击 <button> 不自动聚焦（activeElement 仍为 body）：
+        // 显式透传 e.currentTarget，store 不再依赖 open 时的 activeElement 捕获。
+        onClick={(e) => onOpenDetails(e.currentTarget as unknown as HTMLElement)}
         data-testid="mini-metadata-button"
     >
         <span data-testid="mini-title">{title}</span>

@@ -23,4 +23,10 @@
   --size-mini-now-playing-height: 68px;
   --size-mini-now-playing-wide: 360px;
   --size-mini-now-playing-docked-max: 776px;
+
+  /* M7 Expanded Now Playing（spec §12）：Sheet 最大高度 / Panel 宽度 / Handle 命中尺寸。
+   * 响应式：compact → bottom sheet；wide → side panel（断点 768px 与 Mini 同契约）。 */
+  --size-now-playing-sheet-max-height: 85vh;
+  --size-now-playing-panel-width: 400px;
+  --size-now-playing-handle: 36px;
 }

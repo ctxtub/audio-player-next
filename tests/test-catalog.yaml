@@ -1117,6 +1117,18 @@ cases:
     executable_ids: [exec-desktop-floating-geometry, exec-l3-desktop-floating-mode]
     fixtures: []
     owner: smoke-baseline
+  - case_id: expanded-global-surface-responsive
+    display_name_zh: Expanded全局浮层与响应式Surface
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: 点Mini进全局Expanded且URL不变开关不改播放跨路由保持响应式正确
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [ui, playback, session, responsive, modal, focus]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/14-Expanded全局浮层与响应式Surface.md
+    executable_ids: [exec-expanded-ui-state, exec-expanded-surface, exec-l3-expanded-now-playing-surface]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1464,6 +1476,18 @@ executables:
     display_name_zh: 桌面悬浮几何与拖拽契约
     layer: L1
     path: ./tests/unit/now-playing/desktop-floating-geometry.unit.test.ts
+  - executable_id: exec-expanded-ui-state
+    display_name_zh: Expanded UI状态与响应式契约
+    layer: L1
+    path: ./tests/unit/now-playing/expanded-ui-state.unit.test.ts
+  - executable_id: exec-expanded-surface
+    display_name_zh: Expanded浮层集成与开关纯度
+    layer: L2
+    path: ./tests/integration/now-playing/expanded-surface.integration.test.ts
+  - executable_id: exec-l3-expanded-now-playing-surface
+    display_name_zh: L3 Expanded全局浮层与响应式
+    layer: L3
+    path: ./tests/system/browser/scenarios/expanded-now-playing-surface.spec.ts
   - executable_id: exec-l3-desktop-floating-mode
     display_name_zh: L3桌面悬浮拖拽吸附收官
     layer: L3

@@ -14,6 +14,7 @@ import { useNowPlayingLayoutMode } from '@/components/NowPlaying/useNowPlayingLa
 import type { MiniNowPlayingLayoutMode } from '@/components/NowPlaying/types';
 import { useSoftKeyboardState } from '@/components/NowPlaying/useSoftKeyboardState';
 import { useConfigStore } from '@/stores/configStore';
+import { useNowPlayingUiStore } from '@/stores/nowPlayingUiStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 
 import {
@@ -31,13 +32,16 @@ export type MainChromeState = MainChromeVisibility & {
     layoutMode: MiniNowPlayingLayoutMode;
     /** 软键盘原始信号（透传，供调试与单测mock对齐）。 */
     isKeyboardOpen: boolean;
+    /** Expanded 开关透传（供 data-expanded 打点，M7-01）。 */
+    isExpanded: boolean;
 };
 
 /**
  * MainChrome 状态 hook：只做 selector 派生，不 mutation Session。
  * - source/status 仅订阅（不 set）；
  * - desktopFloatingPlayerEnabled 只决定 layoutMode，不决定存在性；
- * - keyboard 只决定 visibility（纯隐藏，播放/Anchor 不动）。
+ * - keyboard 只决定 visibility（纯隐藏，播放/Anchor 不动）；
+ * - isExpanded 只 suppress Mini presentation（M7-01，不改变 Session/Transport）。
  */
 export const useMainChromeState = (): MainChromeState => {
     const source = usePlaybackSessionStore((state) => state.source);
@@ -47,17 +51,20 @@ export const useMainChromeState = (): MainChromeState => {
     );
     const layoutMode = useNowPlayingLayoutMode(desktopFloatingPlayerEnabled);
     const { isOpen: isKeyboardOpen } = useSoftKeyboardState();
+    const isExpanded = useNowPlayingUiStore((state) => state.isExpanded);
 
     const visibility = resolveMainChromeVisibility({
         source,
         status,
         layoutMode,
         isKeyboardOpen,
+        isExpanded,
     });
 
     return {
         ...visibility,
         layoutMode,
         isKeyboardOpen,
+        isExpanded,
     };
 };

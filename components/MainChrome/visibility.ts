@@ -22,6 +22,11 @@ export type MainChromeVisibilityInput = {
     layoutMode: MiniNowPlayingLayoutMode;
     /** 软键盘是否展开（useSoftKeyboardState().isOpen）。 */
     isKeyboardOpen: boolean;
+    /**
+     * Expanded 是否打开（M7-01 新增，缺省 false 保持 M6 调用兼容）。
+     * open 时 suppress Mini presentation（不改变 Session/Transport，spec §7）。
+     */
+    isExpanded?: boolean;
 };
 
 /** MainChrome 可见性纯输出（reservation 与 slot 渲染的唯一依据）。 */
@@ -30,7 +35,9 @@ export type MainChromeVisibility = {
     hasNowPlaying: boolean;
     /** 键盘抑制（仅 compact-docked + open）。 */
     keyboardSuppressed: boolean;
-    /** 是否渲染 Mini（hasNowPlaying && !keyboardSuppressed）。 */
+    /** Expanded 抑制（isExpanded 时 Mini presentation 隐藏，spec §7）。 */
+    expandedSuppressed: boolean;
+    /** 是否渲染 Mini（hasNowPlaying && !keyboardSuppressed && !expandedSuppressed）。 */
     visible: boolean;
     /** 是否预留 docked 空间（visible && 非 wide-floating）。 */
     hasDockedMini: boolean;
@@ -39,8 +46,10 @@ export type MainChromeVisibility = {
 };
 
 /**
- * 纯函数：MainChrome 可见性派生（spec §30 M6-03 切面）。
+ * 纯函数：MainChrome 可见性派生（spec §30 M6-03 切面 + M7-01 Expanded suppress）。
  * 不读 store、不写 session、不触 audio，调用方（hook/单测）可独立验证。
+ * Expanded open 只改变 Mini presentation，不改变 Session/Transport；
+ * 关闭后 Mini 自动重新出现（调用方以同一输入重算即恢复）。
  */
 export const resolveMainChromeVisibility = (
     input: MainChromeVisibilityInput
@@ -56,12 +65,14 @@ export const resolveMainChromeVisibility = (
     });
     const keyboardSuppressed =
         input.layoutMode === 'compact-docked' && input.isKeyboardOpen;
-    const visible = hasNowPlaying && !keyboardSuppressed;
+    const expandedSuppressed = input.isExpanded === true;
+    const visible = hasNowPlaying && !keyboardSuppressed && !expandedSuppressed;
     const hasDockedMini = visible && input.layoutMode !== 'wide-floating';
     const hasFloatingMini = visible && input.layoutMode === 'wide-floating';
     return {
         hasNowPlaying,
         keyboardSuppressed,
+        expandedSuppressed,
         visible,
         hasDockedMini,
         hasFloatingMini,

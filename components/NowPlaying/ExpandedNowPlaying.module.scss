@@ -1,0 +1,328 @@
+/* M7-01 Expanded Now Playing Surface（spec §10/§11/§12）。
+ * 响应式单一 Modal 语义 + CSS 断点切换形态（JS 不重挂载，resize 时 isExpanded 不变）：
+ * - <768px：Modal Bottom Sheet（底部弹出，顶部 Handle 发起 drag dismiss）；
+ * - >=768px：Modal Right Side Panel（右侧 anchored，全高，glass elevated，左侧大圆角）。
+ * 断点 768px 与 Mini NOW_PLAYING_BREAKPOINT_PX / $breakpoint-lg 同值（禁止第二边界）。
+ * 所有尺寸经 --size-now-playing-* token（禁止 hardcode 面板宽/高）。
+ */
+
+/* 断点 768px 与 styles/tokens/_breakpoints.scss $breakpoint-lg /
+ * NOW_PLAYING_BREAKPOINT_PX 同值（CSS media 不能用 var，此处显式 768，禁止第二边界）。 */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: var(--bg-overlay);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+
+  &[data-entering] {
+    animation: expandedOverlayIn var(--duration-slow) var(--ease-out);
+  }
+
+  &[data-exiting] {
+    animation: expandedOverlayOut var(--duration-normal) var(--ease-in);
+  }
+}
+
+@media (min-width: 768px) {
+  .overlay {
+    align-items: stretch;
+    justify-content: flex-end;
+  }
+}
+
+.sheet {
+  width: min(100%, 800px);
+  max-height: var(--size-now-playing-sheet-max-height);
+  outline: none;
+  display: flex;
+  flex-direction: column;
+
+  &[data-entering] {
+    animation: expandedSheetUp var(--duration-slow) var(--ease-out);
+  }
+
+  &[data-exiting] {
+    animation: expandedSheetDown var(--duration-normal) var(--ease-in);
+  }
+}
+
+@media (min-width: 768px) {
+  .sheet {
+    width: var(--size-now-playing-panel-width);
+    max-width: calc(100vw - var(--space-8));
+    max-height: none;
+    height: 100dvh;
+    height: 100vh;
+
+    &[data-entering] {
+      animation: expandedPanelIn var(--duration-slow) var(--ease-out);
+    }
+
+    &[data-exiting] {
+      animation: expandedPanelOut var(--duration-normal) var(--ease-in);
+    }
+  }
+}
+
+.dialog {
+  background: var(--bg-elevated);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--shadow-xl);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  outline: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+@media (min-width: 768px) {
+  .dialog {
+    border-radius: var(--radius-xl) 0 0 var(--radius-xl);
+    height: 100%;
+  }
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Header（含 Handle + 标题 + 关闭）。 */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-raised);
+  background: var(--bg-elevated);
+  border-bottom: 0.5px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Drag Handle 命中区：仅顶部 Handle 发起 dismiss（spec §10.2），内容区不捕获 vertical drag。 */
+.dragHandleZone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-touch-target);
+  padding: var(--space-2) var(--space-4) var(--space-1);
+  cursor: grab;
+  touch-action: pan-x;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.dragHandleZone[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+.dragHandleZone:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: -2px;
+}
+
+.dragHandleBar {
+  display: inline-block;
+  width: var(--size-now-playing-handle);
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--border-strong);
+}
+
+@media (min-width: 768px) {
+  /* 桌面 Side Panel 不提供 drag dismiss：Handle 视觉隐藏但保留 DOM 打点一致性。 */
+  .dragHandleZone {
+    display: none;
+  }
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-3);
+}
+
+.titleBlock {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title {
+  font-size: var(--text-md);
+  line-height: 24px;
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subtitle {
+  font-size: var(--text-sm);
+  line-height: 18px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.closeButton {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  border: 0.5px solid var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  min-width: var(--size-touch-target);
+  min-height: var(--size-touch-target);
+  width: var(--size-touch-target);
+  height: var(--size-touch-target);
+}
+
+.closeButton:hover {
+  transform: scale(1.05);
+}
+
+.closeButton:active {
+  transform: scale(0.95);
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+}
+
+/* Body：M7-01 最小信息区（P3A 段定位 + 完成态），可滚动，滚动手势不触发 dismiss。 */
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  touch-action: pan-y;
+}
+
+.statusLine {
+  font-size: var(--text-sm);
+  line-height: 18px;
+  color: var(--text-secondary);
+}
+
+.paragraphLine {
+  font-size: var(--text-base);
+  line-height: 22px;
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.endedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--accent-primary-subtle);
+  color: var(--accent-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.hintLine {
+  font-size: var(--text-xs);
+  line-height: 16px;
+  color: var(--text-tertiary);
+}
+
+/* Reduced Motion：关闭弹簧/位移动画，drag dismiss 立即收起（spec §10.3）。 */
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .sheet,
+  .dialog {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+@keyframes expandedOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes expandedOverlayOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes expandedSheetUp {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes expandedSheetDown {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+@keyframes expandedPanelIn {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes expandedPanelOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}

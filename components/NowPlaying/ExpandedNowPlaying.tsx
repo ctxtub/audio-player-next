@@ -1,0 +1,204 @@
+'use client';
+
+/**
+ * M7-01 ExpandedNowPlaying（spec §10/§11 基础 Surface + §42 Focus + §9 关闭语义）。
+ *
+ * 职责（M7-01 最小集）：
+ * - Modal Bottom Sheet（<768）/ Modal Right Side Panel（>=768）单一语义，
+ *   CSS 断点切换，JS 不重挂载（resize 时 isExpanded 不变，spec §76）；
+ * - react-aria-components ModalOverlay/Modal/Dialog 提供 focus containment /
+ *   Escape / overlay semantics（spec §10.1），不自研 focus trap；
+ * - 打开不改变播放，关闭/Escape/backdrop/下滑一律不暂停（spec §9）；
+ * - 移动 drag dismiss 只能由顶部 Handle 发起（spec §10.2），内容区滚动不触发；
+ * - Header/Surface 最小 presentation：title / voice · 段落 / 完成态（P3A）；
+ *   完整 Timeline/Controls/Rate/Sleep/Actions 留给 M7-B/C/D。
+ *
+ * 本文件只读 ViewModel + UI Store 关闭动作，不直调 playbackSessionFlow /
+ * AudioControllerHost / playbackStore 写面（M5 ownership 边界）。
+ */
+
+import React, { useCallback, useRef, useState } from 'react';
+import { Dialog, Modal as AriaModal, ModalOverlay } from 'react-aria-components';
+import { useDrag } from '@use-gesture/react';
+
+import { useNowPlayingUiStore } from '@/stores/nowPlayingUiStore';
+
+import { NowPlayingHeader } from './NowPlayingHeader';
+import { useExpandedNowPlayingViewModel } from './useExpandedNowPlayingViewModel';
+import styles from './ExpandedNowPlaying.module.scss';
+
+/** 下滑关闭阈值（px）：Handle 向下拖超此值释放即关闭，否则回弹（spec §78）。 */
+export const EXPANDED_SHEET_DISMISS_THRESHOLD_PX = 80;
+
+/** Expanded 对话框无障碍标签（与 Mini aria-label 呼应）。 */
+export const EXPANDED_DIALOG_ARIA_LABEL = '正在播放详情';
+
+/**
+ * 是否偏好减少动态（drag dismiss 立即收起，不做弹簧，spec §10.3）。
+ * SSR 下回退 false（首帧动画由 CSS media 兜底）。
+ */
+const prefersReducedMotion = (): boolean => {
+    try {
+        if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+            return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        }
+    } catch {
+        // 忽略 matchMedia 异常，回退完整动画。
+    }
+    return false;
+};
+
+/** 组装二级文案：voice · 第 X / Y 段（P3A 明确段定位，不伪装整篇）。 */
+export const formatExpandedSubtitle = (
+    voiceLabel: string,
+    current: number,
+    total: number
+): string => `${voiceLabel} · 第 ${current} / ${total} 段`;
+
+/**
+ * Global Expanded Surface（受控于 nowPlayingUiStore.isExpanded）。
+ * 未打开时返回 null（不挂载 Modal，不抢焦点）；打开时挂载 Modal。
+ */
+export const ExpandedNowPlaying: React.FC = () => {
+    const isExpanded = useNowPlayingUiStore((state) => state.isExpanded);
+    const closeExpanded = useNowPlayingUiStore((state) => state.closeExpanded);
+    const viewModel = useExpandedNowPlayingViewModel();
+
+    const [dragOffsetY, setDragOffsetY] = useState(0);
+    const [isDragging, setIsDragging] = useState(false);
+    const dragOffsetRef = useRef(0);
+    dragOffsetRef.current = dragOffsetY;
+
+    const handleClose = useCallback(() => {
+        // 只关闭 UI，不暂停/不 clear Session（spec §9：播放继续）。
+        setDragOffsetY(0);
+        setIsDragging(false);
+        closeExpanded();
+    }, [closeExpanded]);
+
+    const handleOverlayOpenChange = useCallback(
+        (open: boolean) => {
+            if (!open) {
+                handleClose();
+            }
+        },
+        [handleClose]
+    );
+
+    // 移动 Sheet drag：仅 Handle 绑定（内容区/controls 不 spread）。
+    // 向下拖超阈值释放 → 关闭；不足 → 回弹（reduced-motion 下立即收起/回弹，无弹簧）。
+    const bindHandleDrag = useDrag(
+        (gesture) => {
+            const movementY = gesture.movement?.[1] ?? 0;
+            if (gesture.first) {
+                setIsDragging(true);
+            }
+            // 只响应向下拖（向上拖钳制 0，不上滑 ekspand）。
+            const nextOffset = Math.max(0, movementY);
+            if (gesture.last) {
+                setIsDragging(false);
+                if (nextOffset >= EXPANDED_SHEET_DISMISS_THRESHOLD_PX) {
+                    // reduced-motion 与常规一致：阈值超即关闭（CSS 已禁动画，立即收起）。
+                    void prefersReducedMotion();
+                    setDragOffsetY(0);
+                    handleClose();
+                } else {
+                    // 不足阈值：回弹（无弹簧，立即归位；CSS transition 已在 dragging=false 时恢复）。
+                    setDragOffsetY(0);
+                }
+                return undefined;
+            }
+            if (gesture.active) {
+                setDragOffsetY(nextOffset);
+            }
+            return undefined;
+        },
+        {
+            axis: 'y',
+            filterTaps: true,
+        } as Parameters<typeof useDrag>[1]
+    );
+
+    if (!isExpanded) {
+        return null;
+    }
+
+    const subtitle = formatExpandedSubtitle(
+        viewModel.voiceLabel,
+        viewModel.paragraph.current,
+        viewModel.paragraph.total
+    );
+
+    // drag 位移仅作用于 Sheet（跟手），释放后关闭/回弹；桌面 Panel 经 CSS 隐藏 Handle，
+    // 位移在桌面视口下无视觉影响（Handle display:none，不可发起）。
+    const sheetStyle =
+        dragOffsetY > 0
+            ? { transform: `translateY(${dragOffsetY}px)` }
+            : undefined;
+
+    return (
+        <ModalOverlay
+            className={styles.overlay}
+            isOpen={isExpanded}
+            onOpenChange={handleOverlayOpenChange}
+            isDismissable
+            data-testid="expanded-overlay"
+        >
+            <AriaModal
+                className={styles.sheet}
+                data-testid="expanded-sheet"
+                data-dragging={isDragging ? 'true' : 'false'}
+                style={sheetStyle}
+            >
+                <Dialog
+                    className={styles.dialog}
+                    aria-label={EXPANDED_DIALOG_ARIA_LABEL}
+                    data-testid="expanded-now-playing"
+                    data-status={viewModel.sessionStatus}
+                    data-ended={viewModel.isEnded ? 'true' : 'false'}
+                >
+                    <div className={styles.content}>
+                        <NowPlayingHeader
+                            title={viewModel.title}
+                            subtitle={subtitle}
+                            onClose={handleClose}
+                            dragHandleProps={
+                                bindHandleDrag() as unknown as Record<string, unknown>
+                            }
+                            isDragging={isDragging}
+                        />
+                        <div
+                            className={styles.body}
+                            data-testid="expanded-body"
+                            // 内容区滚动手势不触发 dismiss（spec §10.2/§78）：
+                            // 此处不 spread 任何 drag 绑定，仅 Handle 可发起。
+                        >
+                            <div className={styles.statusLine} data-testid="expanded-status">
+                                {viewModel.isEnded ? '播放完成' : subtitle}
+                            </div>
+                            <div
+                                className={styles.paragraphLine}
+                                data-testid="expanded-paragraph"
+                            >
+                                {`第 ${viewModel.paragraph.current} / ${viewModel.paragraph.total} 段`}
+                            </div>
+                            {viewModel.isEnded ? (
+                                <div
+                                    className={styles.endedBadge}
+                                    data-testid="expanded-ended-badge"
+                                >
+                                    播放完成 · 再次播放请回 Mini
+                                </div>
+                            ) : null}
+                            <div className={styles.hintLine} data-testid="expanded-hint">
+                                关闭后播放继续
+                            </div>
+                        </div>
+                    </div>
+                </Dialog>
+            </AriaModal>
+        </ModalOverlay>
+    );
+};
+
+export default ExpandedNowPlaying;

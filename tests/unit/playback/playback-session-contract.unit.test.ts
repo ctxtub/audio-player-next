@@ -39,12 +39,15 @@ import {
 } from '../../../lib/server/playbackSession';
 
 /**
- * M5-04 Playback API Contract 冻结单元测试（L1）。
+ * M5-05 Playback API Contract 冻结单元测试（L1）。
  * 锁定 spec §13 / §14 / §34 surface：
  * Source discriminatedUnion（§13.1）+ Anchor DTO 14 字段（§13.2，
  * 绝不含 storyText/audioUrl/currentTime/isPlaying）+ WorkProgress DTO（§13.3）
- * + 7 新 procedures 输入输出 + 旧 API 保留 + 双层外观 7 方法 + facade fail-closed。
- * 纯契约：不触库、不调网络；router 侧经源码文本断言（避免 unit 直连持久化层）。
+ * + 7 新 procedures 输入输出 + 旧 API 保留 + 双层外观 7 方法 +
+ * facade 分态：getAnchor / beginSession 真逻辑（M5-05，经 prisma + M2 边界），
+ * 其余 5 procedures 保持 fail-closed skeleton（M5-06+）。
+ * 纯契约：不触库、不调网络；router / server 侧经源码文本断言
+ *（避免 unit 直连持久化层；getAnchor / beginSession 的 DB 语义由 L2 集成测试覆盖）。
  */
 
 const VALID_UUID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
@@ -445,8 +448,8 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   assert.match(legacyClientText, /clearProgress/, 'legacy client adapter must be retained');
   console.log('PASS: client facade verified');
 
-  // —— server facade：7 函数 + fail-closed（抛错、不写坏数据） ——
-  console.log('--- server facade (fail-closed) ---');
+  // —— server facade：7 函数 + 分态（M5-05：getAnchor / beginSession 真逻辑，其余 5 fail-closed） ——
+  console.log('--- server facade (M5-05 split) ---');
   for (const fn of [
     getPlaybackAnchorForSubject,
     beginPlaybackSessionForSubject,
@@ -459,17 +462,24 @@ async function runPlaybackSessionContractTests(): Promise<void> {
     assert.strictEqual(typeof fn, 'function');
   }
   const serverText = readRepoText('lib/server/playbackSession.ts');
-  assert.strictEqual(/prisma\./.test(serverText), false, 'facade skeleton must not write data');
+  // M5-05：getAnchor / beginSession 已落真逻辑，facade 必然触库（getAnchor repair + begin upsert）。
+  assert.strictEqual(/prisma\./.test(serverText), true, 'M5-05 facade must touch prisma for getAnchor/beginSession');
+  // M5-05 真逻辑锚点：Work 只经 M2 边界 + 分段 SSOT + Draft 门禁 + UUID repair（源码文本锁死§36/§16/§33）。
+  assert.match(serverText, /getStoryWorkForSubject/, 'beginSession work must go via M2 getStoryWorkForSubject');
+  assert.match(serverText, /normalizeStoryText/, 'work total must via normalizeStoryText');
+  assert.match(serverText, /segmentStoryText/, 'work total must via segmentStoryText');
+  assert.match(serverText, /SEGMENTATION_VERSION/, 'resume must validate segmentationVersion');
+  assert.match(serverText, /isValidDraftMessageId|REPLAY_TEXT_PREFIX/, 'draft must gate replay-text-* on server');
+  assert.match(serverText, /createPlaybackSessionId|isValidPlaybackSessionId/, 'getAnchor must repair sessionId');
+  // §36 禁止面：不得直查 StoryWork 表 / legacy DTO、不得重算 Work title/hash
+  //（源码执行面锁死；注释提及不计，只查 prisma 直查与派生函数导入）。
+  assert.strictEqual(/prisma\.storyWork/.test(serverText), false, 'M5-05 must not query StoryWork directly');
+  assert.strictEqual(/prisma\.guestStoryWork/.test(serverText), false, 'M5-05 must not query GuestStoryWork directly');
+  assert.strictEqual(/from\s+['"]@\/lib\/storyWork\/metadata['"]/.test(serverText), false, 'M5-05 must not import work metadata derivators');
+  assert.strictEqual(/computeStoryContentHash\s*\(/.test(serverText), false, 'M5-05 must not recompute work contentHash');
+  assert.strictEqual(/resolveStoryTitle\s*\(/.test(serverText), false, 'M5-05 must not recompute work title');
+  // 其余 5 procedures 保持 fail-closed skeleton（不提前做 M5-06+ 语义；unit 不触库，直接断言抛错）。
   const guest = { type: 'guest', id: 'g_contract_probe' } as const;
-  await assert.rejects(() => getPlaybackAnchorForSubject({ ...guest }));
-  await assert.rejects(() =>
-    beginPlaybackSessionForSubject({ ...guest }, {
-      sessionId: VALID_UUID,
-      source: { kind: 'draft', messageId: 'm1' },
-      mode: 'resume',
-      speed: 1.0,
-    }),
-  );
   await assert.rejects(() =>
     savePlaybackCheckpointForSubject({ ...guest }, {
       sessionId: VALID_UUID,
@@ -487,7 +497,7 @@ async function runPlaybackSessionContractTests(): Promise<void> {
     promoteDraftPlaybackToWorkForSubject({ ...guest }, { sessionId: VALID_UUID, workId: 5 }),
   );
   await assert.rejects(() => getWorkPlaybackProgressBatchForSubject({ ...guest }, { workIds: [1] }));
-  console.log('PASS: server facade fail-closed verified');
+  console.log('PASS: server facade M5-05 split verified');
 
   console.log('\nALL PLAYBACK SESSION CONTRACT TEST CASES PASSED SUCCESSFULLY!');
 }

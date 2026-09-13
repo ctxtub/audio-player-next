@@ -39,7 +39,7 @@ export function isValidPlaybackSessionId(value: unknown): value is string {
 
 /**
  * 会话修复（§33 纯逻辑部分）：合法则原样返回，否则生成新 UUID。
- * 物理写回由 M5-02+ 服务端完成，本函数不触库。
+ * 物理写回由 M5-05 服务端完成，本函数不触库。
  */
 export function ensurePlaybackSessionId(value: unknown): string {
   if (isValidPlaybackSessionId(value)) return value;

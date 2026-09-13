@@ -390,7 +390,9 @@ async function runDraftTranscriptIntegration(): Promise<void> {
             rendered.getByTestId('expanded-transcript-back-button').click();
         });
         assert.deepStrictEqual(pushedUrls, [], 'Draft 全程零导航（更无 /library/fake-id）');
-        for (const url of pushedUrls) {
+        // deepStrictEqual 断言签名会把 pushedUrls 收窄为 never[]；循环先经显式 string[] 拷贝（与 01 同式）。
+        const observedUrls: string[] = [...pushedUrls];
+        for (const url of observedUrls) {
             assert.ok(!url.includes('fake') && !url.includes('undefined') && !url.includes('null') && !url.includes('/library/'), `非法目标：${url}`);
         }
         rendered.unmount();

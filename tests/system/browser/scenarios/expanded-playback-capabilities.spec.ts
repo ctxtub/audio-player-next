@@ -101,6 +101,12 @@ test("Expanded 播放能力 P3A", async ({ page, harnessEnv, evidence }) => {
         const w = window as unknown as Record<string, { playParagraph: (i: number) => Promise<ProbeSnapshot> }>;
         return w["__M5PlaybackProbe"].playParagraph(0);
     });
+    // 立即暂停（防时序竞速：mock 音频固定 1s，若 pause 跑输"段 1 播完"，
+    // 段落会自然推进到第 2 段，后续 seek/speed/badge 断言全部偏移——历史 flaky 源）。
+    await page.evaluate(() => {
+        const w = window as unknown as Record<string, { pause: () => ProbeSnapshot }>;
+        return w["__M5PlaybackProbe"].pause();
+    });
     await expect
         .poll(async () => (await readProbe(page)).transport?.hasAudioUrl === true, { timeout: 30000 })
         .toBe(true);
@@ -108,10 +114,6 @@ test("Expanded 播放能力 P3A", async ({ page, harnessEnv, evidence }) => {
     await expect
         .poll(async () => (await readProbe(page)).transport?.duration ?? 0, { timeout: 30000 })
         .toBeGreaterThan(0);
-    await page.evaluate(() => {
-        const w = window as unknown as Record<string, { pause: () => ProbeSnapshot }>;
-        return w["__M5PlaybackProbe"].pause();
-    });
     await expect.poll(async () => (await readProbe(page)).status, { timeout: 30000 }).toBe("paused");
     const pausedAudioUrl = (await readProbe(page)).transport?.audioUrl as string;
     const pausedDuration = (await readProbe(page)).transport?.duration as number;

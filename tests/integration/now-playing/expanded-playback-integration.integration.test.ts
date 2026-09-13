@@ -123,6 +123,7 @@ async function runExpandedPlaybackIntegration(): Promise<void> {
                 setSpeed: (r: number) => Promise<void>;
                 restart: () => Promise<void>;
                 hydrateFromAnchor: (a: Record<string, unknown>, d?: Record<string, unknown>) => Promise<boolean>;
+                saveCheckpointImmediate: (o?: { forceReset?: boolean }) => Promise<void>;
                 reset: () => void;
                 beginPlayback: (p: Record<string, unknown>) => Promise<void>;
             };

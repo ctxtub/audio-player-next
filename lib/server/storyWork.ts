@@ -416,6 +416,38 @@ export async function getStoryWorkForSubject(
 }
 
 /**
+ * M5-08 Work Trash 状态判定（spec §29.1 / §29.2，产品拍板 M5-P03）。
+ *
+ * 仅读取 deletedAt 存在信号（select id，不取 title/storyText/voiceId/contentHash），
+ * 不重算任何元数据、不触 legacy DTO（§36 边界：M5 不得重算 title/hash）。
+ * missing / foreign / 非法 id 一律返回 false（与 getStoryWorkForSubject 的统一
+ * NOT_FOUND 不可区分面一致，调用方按 fail-closed 处理）。
+ *
+ * @param subject 身份主体（User / Guest）
+ * @param id 作品 ID
+ */
+export async function isStoryWorkTrashedForSubject(
+  subject: Subject,
+  id: number
+): Promise<boolean> {
+  if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
+    return false;
+  }
+  if (subject.type === 'user') {
+    const row = await prisma.storyWork.findFirst({
+      where: { id, userId: subject.id, deletedAt: { not: null } },
+      select: { id: true },
+    });
+    return row !== null;
+  }
+  const row = await prisma.guestStoryWork.findFirst({
+    where: { id, guestId: subject.id, deletedAt: { not: null } },
+    select: { id: true },
+  });
+  return row !== null;
+}
+
+/**
  * 故事作品入库（Library Create，M2-04）
  *
  * M4 将来调用的正式资产创建服务，负责：

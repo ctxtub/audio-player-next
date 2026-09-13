@@ -9,6 +9,12 @@
  * 不动；completeSession / clearAnchor / promoteDraftToWork / getWorkProgressBatch
  * 落真逻辑（§19 / §21 / §22 / §24 / §30）。
  *
+ * M5-08 §29 生命周期边界（CAS 内核不动，只收 trash/dangling 外环）：
+ * getAnchor 对不可解析 work Anchor（trash/missing/foreign/已删）删行 + null；
+ * saveCheckpoint / completeSession 对 trash 自有 Work 仍走同一 CAS 面（不复活）；
+ * beginSession trash 仍经 M2 统一 NOT_FOUND（即 WORK_UNAVAILABLE 的 wire 形）；
+ * 另提供 invalidatePlaybackReferencesForWork 供 permanent delete 后清理（不自动接入）。
+ *
  * - getAnchor（§15 / §33）：读取当前 Subject 唯一 Anchor；legacy
  *   chat→draft / generation→work 归一；sessionId null/invalid UUID 则生成
  *   UUID 写回；新写入全部要求 UUID（M5-01 isValidPlaybackSessionId）。
@@ -61,7 +67,7 @@
 import { prisma } from '@/lib/db';
 import { TRPCError } from '@/lib/trpc/init';
 import type { Subject } from '@/lib/server/subject';
-import { getStoryWorkForSubject } from '@/lib/server/storyWork';
+import { getStoryWorkForSubject, isStoryWorkTrashedForSubject } from '@/lib/server/storyWork';
 import {
   STALE_SESSION,
   createPlaybackSessionId,
@@ -264,9 +270,32 @@ export const getPlaybackAnchorForSubject = async (
   if (canonicalKind === 'draft') {
     if (!isValidDraftMessageId(row.sourceId)) return null;
   } else {
+    let workId: number;
     try {
-      parseLegacyWorkId(row.sourceId);
+      workId = parseLegacyWorkId(row.sourceId);
     } catch {
+      return null;
+    }
+    // M5-08 §29.2（M5-P03）/ §29.3：work Anchor 可解析性门禁。
+    // getStoryWorkForSubject 仅放行 active（deletedAt IS NULL）自有 Work；trash /
+    // missing / foreign / 已物理删除统一 NOT_FOUND（M2 no-leak 不可区分面）→
+    // fail-closed：删除 dangling Anchor 行，返回 null 不 rehydrate。
+    // Draft 无 trash 概念，不在此判定。本删除只清 Anchor 行（M5 半径 Anchor 层），
+    // Per-Work Progress 由 Work FK / GC 处理，不连带删。
+    try {
+      await getStoryWorkForSubject(subject, workId);
+    } catch (err) {
+      const code = (err as { code?: unknown } | null | undefined)?.code;
+      if (code !== 'NOT_FOUND') throw err;
+      try {
+        if (subject.type === 'user') {
+          await prisma.userPlaybackAnchor.deleteMany({ where: { userId: subject.id } });
+        } else {
+          await prisma.guestPlaybackAnchor.deleteMany({ where: { guestId: subject.id } });
+        }
+      } catch {
+        // 清理写失败不掩盖 fail-closed 语义：仍返回 null（下次 getAnchor 重试清理）。
+      }
       return null;
     }
   }
@@ -833,11 +862,29 @@ export const savePlaybackCheckpointForSubject = async (
     return { accepted: true, anchor: dto };
   }
 
-  // —— Work checkpoint（§18）：同一事务内 conditional CAS Anchor + UPSERT Progress ——
+  // —— Work checkpoint（§18 + M5-08 §29.1）：同一事务内 conditional CAS Anchor + UPSERT Progress ——
   const workId = source.workId;
   // Ownership 经 M2（subject, workId），不直查 Work 表、不重算 title/hash；
-  // missing/foreign/trash 统一 NOT_FOUND 原样透出（fail-closed，无 partial 写）。
-  await getStoryWorkForSubject(subject, workId);
+  // missing/foreign 统一 NOT_FOUND 原样透出（fail-closed，无 partial 写）。
+  // M5-08 trash 边界：在播 Session 的 Work 被 moveToTrash 后，内存播放不被打断，
+  // 同一 Session 的 checkpoint 仍经同一 CAS 面落库（Stale/Monotonic/Identity 全绑，
+  // 写值取 input/Anchor，不取 trash 行元数据，不复活无辜行）；仅当 Work 非 trash
+  //（missing/foreign/已物理删除）才 NOT_FOUND。trash 判定只读 deletedAt 信号
+  //（isStoryWorkTrashedForSubject，§36 边界）；trash 后一旦 getAnchor 刷新即 null，
+  // 后续 checkpoint 即 STALE（§29.2，不复活）。
+  try {
+    await getStoryWorkForSubject(subject, workId);
+  } catch (err) {
+    let trashed = false;
+    try {
+      trashed = await isStoryWorkTrashedForSubject(subject, workId);
+    } catch {
+      // trash 判定自身失败：按原错透出，不掩盖、不写。
+      throw err;
+    }
+    if (!trashed) throw err;
+    // trash 自有：在播 Session checkpoint 继续下沉同一 CAS 事务（见下）。
+  }
   const casTx = await prisma.$transaction(async (tx) => {
     const cas = buildConditionalAnchorCasClause(
       sessionId,
@@ -991,10 +1038,34 @@ export const completePlaybackSessionForSubject = async (
     return dto;
   }
 
-  // —— Work complete（§19 / §30 / §41）：ended + Progress next=total + completedAt ——
+  // —— Work complete（§19 / §30 / §41 + M5-08 §29.1）：ended + Progress next=total + completedAt ——
   const workId = source.workId;
-  const work = await getStoryWorkForSubject(subject, workId);
-  const workTotal = computeWorkTotalParagraphs(work.storyText);
+  // M5-08 trash 边界：在播 Session 的 Work 被 moveToTrash 后，completion 仍允许；
+  // trash 自有时 total/content 取 Anchor 已存值（frozen，不重算、不取 trash 行元数据），
+  // 同一 CAS 面落库；非 trash 的 missing/foreign/已物理删除仍 NOT_FOUND 原样透出。
+  let workTotal: number;
+  let workHashForProgress: string;
+  let workVersionForProgress: string;
+  try {
+    const work = await getStoryWorkForSubject(subject, workId);
+    workTotal = computeWorkTotalParagraphs(work.storyText);
+    workHashForProgress = typeof work.contentHash === 'string' ? work.contentHash : '';
+    workVersionForProgress = SEGMENTATION_VERSION;
+  } catch (err) {
+    let trashed = false;
+    try {
+      trashed = await isStoryWorkTrashedForSubject(subject, workId);
+    } catch {
+      throw err;
+    }
+    if (!trashed) throw err;
+    workTotal = currentRow.totalParagraphs;
+    workHashForProgress = typeof currentRow.contentHash === 'string' ? currentRow.contentHash : '';
+    workVersionForProgress =
+      typeof currentRow.segmentationVersion === 'string' && currentRow.segmentationVersion.length > 0
+        ? currentRow.segmentationVersion
+        : SEGMENTATION_VERSION;
+  }
   const completedLast = workTotal - 1;
   const now = new Date();
   const txResult = await prisma.$transaction(async (tx) => {
@@ -1023,14 +1094,14 @@ export const completePlaybackSessionForSubject = async (
     }
     const existingProgress =
       subject.type === 'user'
-        ? await tx.storyPlaybackProgress.findUnique({ where: { storyWorkId: work.id } })
-        : await tx.guestStoryPlaybackProgress.findUnique({ where: { storyWorkId: work.id } });
+        ? await tx.storyPlaybackProgress.findUnique({ where: { storyWorkId: workId } })
+        : await tx.guestStoryPlaybackProgress.findUnique({ where: { storyWorkId: workId } });
     // 幂等：重复 complete 保留首个 completedAt，不刷新、不删除 history。
     const preservedCompletedAt = existingProgress?.completedAt ?? now;
     const progressCreateBase = {
-      storyWorkId: work.id,
-      contentHash: work.contentHash,
-      segmentationVersion: SEGMENTATION_VERSION,
+      storyWorkId: workId,
+      contentHash: workHashForProgress,
+      segmentationVersion: workVersionForProgress,
       lastCompletedParagraphIndex: completedLast,
       nextParagraphIndex: workTotal,
       totalParagraphs: workTotal,
@@ -1038,8 +1109,8 @@ export const completePlaybackSessionForSubject = async (
       lastPlayedAt: now,
     };
     const progressUpdateBase = {
-      contentHash: work.contentHash,
-      segmentationVersion: SEGMENTATION_VERSION,
+      contentHash: workHashForProgress,
+      segmentationVersion: workVersionForProgress,
       lastCompletedParagraphIndex: completedLast,
       nextParagraphIndex: workTotal,
       totalParagraphs: workTotal,
@@ -1048,13 +1119,13 @@ export const completePlaybackSessionForSubject = async (
     };
     if (subject.type === 'user') {
       await tx.storyPlaybackProgress.upsert({
-        where: { storyWorkId: work.id },
+        where: { storyWorkId: workId },
         create: progressCreateBase,
         update: progressUpdateBase,
       });
     } else {
       await tx.guestStoryPlaybackProgress.upsert({
-        where: { storyWorkId: work.id },
+        where: { storyWorkId: workId },
         create: progressCreateBase,
         update: progressUpdateBase,
       });
@@ -1110,6 +1181,45 @@ export const clearPlaybackAnchorForSubject = async (
           where: { guestId: subject.id, sessionId },
         });
   return { success: true as const, cleared: res.count > 0 };
+};
+
+/**
+ * M5-08 §29.3 domain hook：清理某 Subject 下指向指定 Work 的 PlaybackAnchor。
+ *
+ * Permanent delete 后 Anchor 视为 dangling（无法再 resolve Source），本 hook 提供
+ * Anchor 层 fail-closed 清理路径：
+ * - subject-scoped（User/Guest 表 id 序列独立，绝不全局按 sourceId 删除）；
+ * - 仅删 sourceKind work（含 legacy generation 兼容值）且 sourceId 为 String(workId) 的行；
+ * - draft Anchor 不动；Per-Work Progress 由 Work FK CASCADE 接管（M5-02 schema），本 hook 不碰；
+ * - 非法 workId → { cleared:false } no-op，不抛错。
+ *
+ * M5 半径内仅提供路径，不自动接入任何删除流程（不做大规模删除；“已在播不打断”由
+ * getAnchor 懒清理 + checkpoint/complete 的 trash 容忍承接，刷新后自然 fail-closed）。
+ */
+export const invalidatePlaybackReferencesForWork = async (
+  subject: Subject,
+  workId: number,
+): Promise<{ cleared: boolean }> => {
+  if (typeof workId !== 'number' || !Number.isSafeInteger(workId) || workId <= 0) {
+    return { cleared: false };
+  }
+  const res =
+    subject.type === 'user'
+      ? await prisma.userPlaybackAnchor.deleteMany({
+          where: {
+            userId: subject.id,
+            sourceKind: { in: ['work', 'generation'] },
+            sourceId: String(workId),
+          },
+        })
+      : await prisma.guestPlaybackAnchor.deleteMany({
+          where: {
+            guestId: subject.id,
+            sourceKind: { in: ['work', 'generation'] },
+            sourceId: String(workId),
+          },
+        });
+  return { cleared: res.count > 0 };
 };
 
 /**

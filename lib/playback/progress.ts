@@ -136,6 +136,64 @@ export function continuationModeToLegacyIsOneShot(mode: PlaybackContinuationMode
 }
 
 /**
+ * M5-08 Subject remap 可迁移进度形状（spec §31.4，纯数据，不触库）。
+ * completedAt / lastPlayedAt 为 ISO 字符串或 null（DB Date 的传输形）。
+ */
+export interface RemappableWorkProgress {
+  contentHash: string;
+  segmentationVersion: string;
+  lastCompletedParagraphIndex: number;
+  nextParagraphIndex: number;
+  totalParagraphs: number;
+  completedAt: string | null;
+  lastPlayedAt: string | null;
+}
+
+const normalizeRemapNext = (value: unknown): number => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  const floored = Math.floor(value);
+  return floored < 0 ? 0 : floored;
+};
+
+const laterPlayedAt = (a: string | null, b: string | null): string | null => {
+  const ta = typeof a === 'string' ? Date.parse(a) : NaN;
+  const tb = typeof b === 'string' ? Date.parse(b) : NaN;
+  const validA = Number.isFinite(ta);
+  const validB = Number.isFinite(tb);
+  if (validA && validB) return ta >= tb ? a : b;
+  if (validA) return a;
+  if (validB) return b;
+  return null;
+};
+
+/**
+ * M5-08 Subject remap 进度合并（spec §31.4 + 任务 4g，纯函数，不触库）。
+ *
+ * User 侧已有同 work 进度时不覆盖：取 newer/更完整者（按 max(nextParagraphIndex)，
+ * 持平取 User 既有 existing，register 重试幂等）；位置五元组
+ * （contentHash/segmentationVersion/last/next/total）整体取胜者，
+ * 不跨行拼凑；completedAt 取首个非空（首完保留，与 §41 complete 幂等一致）；
+ * lastPlayedAt 取更晚者。
+ */
+export function mergeRemappedWorkProgress(
+  existing: RemappableWorkProgress,
+  incoming: RemappableWorkProgress,
+): RemappableWorkProgress {
+  const existingNext = normalizeRemapNext(existing.nextParagraphIndex);
+  const incomingNext = normalizeRemapNext(incoming.nextParagraphIndex);
+  const winner = incomingNext > existingNext ? incoming : existing;
+  return {
+    contentHash: winner.contentHash,
+    segmentationVersion: winner.segmentationVersion,
+    lastCompletedParagraphIndex: winner.lastCompletedParagraphIndex,
+    nextParagraphIndex: winner.nextParagraphIndex,
+    totalParagraphs: winner.totalParagraphs,
+    completedAt: existing.completedAt ?? incoming.completedAt,
+    lastPlayedAt: laterPlayedAt(existing.lastPlayedAt, incoming.lastPlayedAt),
+  };
+}
+
+/**
  * Draft→Work 提升断点取舍（§3.4）：
  * 仅当两侧 contentHash 均非空且严格相等时迁移旧断点；
  * 不一致（含任一为空）→ 安全回退 paragraph 0，不迁移旧断点。

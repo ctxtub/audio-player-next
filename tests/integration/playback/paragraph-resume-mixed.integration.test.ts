@@ -278,11 +278,11 @@ async function runParagraphResumeTests() {
     assert.strictEqual(migratedProgress.nextParagraphIndex, 2);
     assert.strictEqual(migratedProgress.contentHash, 'hashmig12345');
 
-    // Verify GuestPlaybackProgress row remains intact in guest table (for 30d GC)
+    // M5-08 move 语义：成功迁移的 Guest Anchor 随单事务清除（作品行仍留 30d GC）。
     const guestOriginal = await prisma.guestPlaybackAnchor.findUnique({
         where: { guestId: guestId5 },
     });
-    assert(guestOriginal !== null, 'Guest original progress must be retained for GC');
+    assert.strictEqual(guestOriginal, null, 'M5-08：已迁移的 Guest 进度行必须清除（move 语义）');
 
     // 6.1 Rollback Contract (Cascade on user deletion)
     await prisma.user.delete({ where: { id: newUser.id } });
@@ -291,11 +291,11 @@ async function runParagraphResumeTests() {
     });
     assert.strictEqual(userProgressAfterDelete, null, 'UserPlaybackProgress must cascade delete with user');
 
-    // Guest progress must still be intact
+    // move 语义下 Guest 行已在迁移时清除，用户删除不复活、不影响 Guest 其它行。
     const guestProgressAfterRollback = await prisma.guestPlaybackAnchor.findUnique({
         where: { guestId: guestId5 },
     });
-    assert(guestProgressAfterRollback !== null, 'Guest progress must survive user rollback');
+    assert.strictEqual(guestProgressAfterRollback, null, 'M5-08：move 后用户回滚不得复活 Guest 进度行');
 
     console.log('PASS: TC-P2-05 & TC-P2-06 verified');
 

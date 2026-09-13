@@ -511,7 +511,12 @@ async function runGuestCreativeSyncTests() {
     const preservedGuestChat = await prisma.guestChatMessage.count({ where: { guestId: guestMigrate } });
     assert.strictEqual(preservedGuestChat, 6, 'Guest records must be preserved for audit then GC-expired');
     assert(await prisma.guestConfig.findUnique({ where: { guestId: guestMigrate } }), 'Guest 配置行保留');
-    assert(await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestMigrate } }), 'Guest 进度行保留');
+    // M5-08 move 语义：成功迁移的 Guest Anchor 随单事务清除（配置/聊天/作品行仍保留审计）。
+    assert.strictEqual(
+        await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestMigrate } }),
+        null,
+        'M5-08：已迁移的 Guest 进度行必须清除（move 语义）'
+    );
 
     // 6.2 Registration Rollback Safety
     const guestRollback = `g_rb_${Date.now()}`;

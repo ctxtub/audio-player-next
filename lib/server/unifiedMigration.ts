@@ -7,6 +7,8 @@
 import { TRPCError } from '@trpc/server';
 import { prisma } from '@/lib/db';
 import { canonicalizeSourceKind } from '@/lib/playback/legacy';
+import { isValidDraftMessageId } from '@/lib/playback/source';
+import { mergeRemappedWorkProgress } from '@/lib/playback/progress';
 
 export interface MigrationResult {
     messagesMigrated: number;
@@ -211,117 +213,206 @@ export async function migrateGuestCreativeRecordsToUser(
 }
 
 /**
- * 将指定 guestId 的断点播放进度迁移至指定用户（单行）。
- * 保留访客原表记录供回滚/审计，由 30 天 GC 自然清理。
+ * 将指定 guestId 的播放状态迁移至指定用户（Anchor + Per-Work Progress，M5-08 §31）。
  *
- * M5-03 canonical 锁定：读兼容四值（chat|generation|draft|work，经 canonicalizeSourceKind
- * 收敛；未知 kind 直接 fail-closed 返回 false），新写只落 canonical draft|work。
- * 若 canonical 为 work，借本次 ID map 映射 guestStoryWorkId → userStoryWorkId；
- * 找不到对应映射时必须 drop Anchor（fail closed，不产生悬空断点）。
- * work sourceId 须为 canonical 十进制 positive int 文本
- * （String(Number(sourceId)) === sourceId 且 safe int 且 > 0，与 migration SQL
- * 的 CAST(CAST(sourceId AS INTEGER) AS TEXT)=sourceId 等价；"001"/"1.5"/"1e3" 等一律拒绝），
- * 非 canonical 一律 fail-closed（不映射、不落库）。
+ * M5-08 move 语义（同一浏览器身 subject 键切换，不算跨人 merge，M2 no-leak 保持）：
+ * 成功迁移的部分以单事务完成 User 侧 upsert + Guest 侧 delete（deleteMany guest +
+ * upsert user，Anchor 先 Progress 后，每 workId 保持配对）；未映射部分逐项跳过
+ * （Guest 行保留，GC 兜底），绝不产生悬空 User 状态。注册后 Guest 侧已迁移的
+ * Anchor/Progress 即清除完毕（§47：登录既有账号仍不触发任何迁移/删除，见 login 不调本函数）。
+ *
+ * - sessionId 原样沿用（不改 session 键域，只改 subject 键；null 由 getAnchor §33 repair）。
+ * - M5-03 canonical 锁定：读兼容四值（chat|generation|draft|work，经 canonicalizeSourceKind
+ *   收敛；未知 kind 直接 fail-closed），新写只落 canonical draft|work。
+ * - Draft Anchor：messageId 原样迁移（chat migration 保持 messageId，§31.1），但
+ *   replay-text-* 瞬态 ID 拒绝迁移（fail-closed）。
+ * - Work Anchor：借本次 ID map 映射 guestStoryWorkId → userStoryWorkId（§31.2）；
+ *   找不到对应映射时 drop Anchor（fail closed，不产生悬空断点，§31.3）。
+ * - work sourceId 须为 canonical 十进制 positive int 文本
+ *   （String(Number(sourceId)) === sourceId 且 safe int 且 > 0；"001"/"1.5"/"1e3" 等一律拒绝），
+ *   非 canonical 一律 fail-closed（不映射、不落库）。
+ * - Per-Work Progress（§31.4）：全部 GuestStoryPlaybackProgress 按同一 map 逐行 remap；
+ *   User 侧已有同 work 进度时不覆盖，按 max(next) 合并（mergeRemappedWorkProgress）。
+ *
+ * 返回值（沿用旧契约）：Anchor 迁移成功或任一 Progress 行迁移成功 → true；
+ * 无可迁移项（无 guest 行 / 未映射 / 非法）→ false（此时绝无任何写）。
  */
 export async function migrateGuestPlaybackProgressToUser(
     guestId: string,
     userId: number,
     storyWorkIdMap?: Map<number, number>
 ): Promise<boolean> {
-    const guestProgress = await prisma.guestPlaybackAnchor.findUnique({
+    // 合并传入 map（本次 creative 迁移新鲜结果，优先）与持久化 StoryWorkMigration（guest 域）。
+    const persistedMappings = await prisma.storyWorkMigration.findMany({
+        where: { guestId },
+        select: { guestStoryWorkId: true, userStoryWorkId: true },
+    });
+    const workIdMap = new Map<number, number>();
+    for (const r of persistedMappings) {
+        workIdMap.set(r.guestStoryWorkId, r.userStoryWorkId);
+    }
+    if (storyWorkIdMap) {
+        for (const [guestWorkId, userWorkId] of storyWorkIdMap) {
+            workIdMap.set(guestWorkId, userWorkId);
+        }
+    }
+
+    const guestAnchor = await prisma.guestPlaybackAnchor.findUnique({
         where: { guestId },
     });
-    if (!guestProgress) {
-        return false;
-    }
-
-    let canonicalKind: 'draft' | 'work';
-    try {
-        canonicalKind = canonicalizeSourceKind(guestProgress.sourceKind);
-    } catch {
-        // 未知 kind：fail-closed，不创建、不更新。
-        return false;
-    }
-
-    let mappedSourceId = guestProgress.sourceId;
-
-    if (canonicalKind === 'work') {
-        // fail-closed canonical 文本校验（SQL 等价：String(CAST(sourceId AS INTEGER)) === sourceId AND id > 0）。
-        const rawId = guestProgress.sourceId;
-        const numericId = Number(rawId);
-        if (
-            typeof rawId !== 'string' ||
-            rawId.length === 0 ||
-            !Number.isSafeInteger(numericId) ||
-            numericId <= 0 ||
-            String(numericId) !== rawId
-        ) {
-            return false;
-        }
-        const guestWorkId = numericId;
-        let userWorkId: number | undefined;
-
-        if (storyWorkIdMap && storyWorkIdMap.has(guestWorkId)) {
-            userWorkId = storyWorkIdMap.get(guestWorkId);
-        } else {
-            // 从持久化迁移记录表中查询映射
-            const mapping = await prisma.storyWorkMigration.findUnique({
-                where: {
-                    guestId_guestStoryWorkId: {
-                        guestId,
-                        guestStoryWorkId: guestWorkId,
-                    },
-                },
-            });
-            if (mapping) {
-                userWorkId = mapping.userStoryWorkId;
-            }
-        }
-
-        if (userWorkId !== undefined) {
-            mappedSourceId = String(userWorkId);
-        } else {
-            // Fail closed: 不创建、不更新用户 playback anchor，并返回 false（保持原 anchor 完全不变）
-            return false;
-        }
-    }
-
-    await prisma.userPlaybackAnchor.upsert({
-        where: { userId },
-        create: {
-            userId,
-            sourceKind: canonicalKind,
-            sourceId: mappedSourceId,
-            sessionId: guestProgress.sessionId,
-            title: guestProgress.title,
-            contentHash: guestProgress.contentHash,
-            segmentationVersion: guestProgress.segmentationVersion,
-            lastCompletedParagraphIndex: guestProgress.lastCompletedParagraphIndex,
-            nextParagraphIndex: guestProgress.nextParagraphIndex,
-            totalParagraphs: guestProgress.totalParagraphs,
-            voiceId: guestProgress.voiceId,
-            speed: guestProgress.speed,
-            remainingAllowedMs: guestProgress.remainingAllowedMs,
-            totalAllowedMs: guestProgress.totalAllowedMs,
-            isOneShot: guestProgress.isOneShot,
-        },
-        update: {
-            sourceKind: canonicalKind,
-            sourceId: mappedSourceId,
-            sessionId: guestProgress.sessionId,
-            title: guestProgress.title,
-            contentHash: guestProgress.contentHash,
-            segmentationVersion: guestProgress.segmentationVersion,
-            lastCompletedParagraphIndex: guestProgress.lastCompletedParagraphIndex,
-            nextParagraphIndex: guestProgress.nextParagraphIndex,
-            totalParagraphs: guestProgress.totalParagraphs,
-            voiceId: guestProgress.voiceId,
-            speed: guestProgress.speed,
-            remainingAllowedMs: guestProgress.remainingAllowedMs,
-            totalAllowedMs: guestProgress.totalAllowedMs,
-            isOneShot: guestProgress.isOneShot,
-        },
+    // Guest Progress 行经 GuestStoryWork → guest 归属（两表 id 序列独立，须先取本 guest
+    // 的 work ids 再圈定，绝不按裸 storyWorkId 跨表猜）。
+    const guestWorks = await prisma.guestStoryWork.findMany({
+        where: { guestId },
+        select: { id: true },
     });
+    const guestWorkIdSet = new Set(guestWorks.map((w) => w.id));
+    const guestProgresses =
+        guestWorkIdSet.size === 0
+            ? []
+            : await prisma.guestStoryPlaybackProgress.findMany({
+                  where: { storyWorkId: { in: [...guestWorkIdSet] } },
+              });
+
+    // —— Anchor remap 判定（fail-closed：非法/未映射 → null，不写脏行）——
+    let remappedAnchor: { sourceKind: 'draft' | 'work'; sourceId: string } | null = null;
+    if (guestAnchor) {
+        try {
+            const canonicalKind = canonicalizeSourceKind(guestAnchor.sourceKind);
+            if (canonicalKind === 'draft') {
+                if (isValidDraftMessageId(guestAnchor.sourceId)) {
+                    remappedAnchor = { sourceKind: 'draft', sourceId: guestAnchor.sourceId };
+                }
+            } else {
+                // fail-closed canonical 文本校验（SQL 等价：String(CAST(sourceId AS INTEGER)) === sourceId AND id > 0）。
+                const rawId = guestAnchor.sourceId;
+                const numericId = Number(rawId);
+                if (
+                    typeof rawId === 'string' &&
+                    rawId.length > 0 &&
+                    Number.isSafeInteger(numericId) &&
+                    numericId > 0 &&
+                    String(numericId) === rawId
+                ) {
+                    const userWorkId = workIdMap.get(numericId);
+                    if (userWorkId !== undefined) {
+                        remappedAnchor = { sourceKind: 'work', sourceId: String(userWorkId) };
+                    }
+                }
+            }
+        } catch {
+            remappedAnchor = null;
+        }
+    }
+
+    // —— Progress remap 配对（无映射逐行跳过，Guest 行保留；有映射的随事务搬迁）——
+    const progressRemaps: { guestStoryWorkId: number; userStoryWorkId: number }[] = [];
+    for (const p of guestProgresses) {
+        const userWorkId = workIdMap.get(p.storyWorkId);
+        if (userWorkId === undefined) continue;
+        progressRemaps.push({ guestStoryWorkId: p.storyWorkId, userStoryWorkId: userWorkId });
+    }
+
+    if (!remappedAnchor && progressRemaps.length === 0) {
+        return false;
+    }
+
+    await prisma.$transaction(
+        async (tx) => {
+            // 顺序：Anchor 先，Progress 后（任务 4c）。
+            if (guestAnchor && remappedAnchor) {
+                const anchorState = guestAnchor.anchorState === 'ended' ? 'ended' : 'ready';
+                const anchorData = {
+                    sourceKind: remappedAnchor.sourceKind,
+                    sourceId: remappedAnchor.sourceId,
+                    sessionId: guestAnchor.sessionId,
+                    anchorState,
+                    title: guestAnchor.title,
+                    contentHash: guestAnchor.contentHash,
+                    segmentationVersion: guestAnchor.segmentationVersion,
+                    lastCompletedParagraphIndex: guestAnchor.lastCompletedParagraphIndex,
+                    nextParagraphIndex: guestAnchor.nextParagraphIndex,
+                    totalParagraphs: guestAnchor.totalParagraphs,
+                    voiceId: guestAnchor.voiceId,
+                    speed: guestAnchor.speed,
+                    remainingAllowedMs: guestAnchor.remainingAllowedMs,
+                    totalAllowedMs: guestAnchor.totalAllowedMs,
+                    isOneShot: guestAnchor.isOneShot,
+                };
+                await tx.userPlaybackAnchor.upsert({
+                    where: { userId },
+                    create: { userId, ...anchorData },
+                    update: anchorData,
+                });
+            }
+            for (const pr of progressRemaps) {
+                const guestRow = guestProgresses.find((g) => g.storyWorkId === pr.guestStoryWorkId);
+                if (!guestRow) continue;
+                const incoming = {
+                    contentHash: guestRow.contentHash ?? '',
+                    segmentationVersion: guestRow.segmentationVersion ?? 'v1',
+                    lastCompletedParagraphIndex: guestRow.lastCompletedParagraphIndex,
+                    nextParagraphIndex: guestRow.nextParagraphIndex,
+                    totalParagraphs: guestRow.totalParagraphs,
+                    completedAt: guestRow.completedAt ? guestRow.completedAt.toISOString() : null,
+                    lastPlayedAt: guestRow.lastPlayedAt ? guestRow.lastPlayedAt.toISOString() : null,
+                };
+                const existing = await tx.storyPlaybackProgress.findUnique({
+                    where: { storyWorkId: pr.userStoryWorkId },
+                });
+                if (!existing) {
+                    await tx.storyPlaybackProgress.create({
+                        data: {
+                            storyWorkId: pr.userStoryWorkId,
+                            contentHash: incoming.contentHash,
+                            segmentationVersion: incoming.segmentationVersion,
+                            lastCompletedParagraphIndex: incoming.lastCompletedParagraphIndex,
+                            nextParagraphIndex: incoming.nextParagraphIndex,
+                            totalParagraphs: incoming.totalParagraphs,
+                            completedAt: guestRow.completedAt ?? null,
+                            lastPlayedAt: guestRow.lastPlayedAt ?? new Date(),
+                        },
+                    });
+                } else {
+                    // 任务 4g：User 已有同 work 进度 → max(next) 合并，不覆盖。
+                    const merged = mergeRemappedWorkProgress(
+                        {
+                            contentHash: existing.contentHash ?? '',
+                            segmentationVersion: existing.segmentationVersion ?? 'v1',
+                            lastCompletedParagraphIndex: existing.lastCompletedParagraphIndex,
+                            nextParagraphIndex: existing.nextParagraphIndex,
+                            totalParagraphs: existing.totalParagraphs,
+                            completedAt: existing.completedAt ? existing.completedAt.toISOString() : null,
+                            lastPlayedAt: existing.lastPlayedAt ? existing.lastPlayedAt.toISOString() : null,
+                        },
+                        incoming
+                    );
+                    await tx.storyPlaybackProgress.update({
+                        where: { storyWorkId: pr.userStoryWorkId },
+                        data: {
+                            contentHash: merged.contentHash,
+                            segmentationVersion: merged.segmentationVersion,
+                            lastCompletedParagraphIndex: merged.lastCompletedParagraphIndex,
+                            nextParagraphIndex: merged.nextParagraphIndex,
+                            totalParagraphs: merged.totalParagraphs,
+                            completedAt: merged.completedAt ? new Date(merged.completedAt) : null,
+                            lastPlayedAt: merged.lastPlayedAt ? new Date(merged.lastPlayedAt) : existing.lastPlayedAt,
+                        },
+                    });
+                }
+            }
+            // Guest 侧清除（仅已迁移部分；未映射行保留，由 GC 兜底）。
+            if (guestAnchor && remappedAnchor) {
+                await tx.guestPlaybackAnchor.delete({ where: { guestId } });
+            }
+            if (progressRemaps.length > 0) {
+                await tx.guestStoryPlaybackProgress.deleteMany({
+                    where: { storyWorkId: { in: progressRemaps.map((p) => p.guestStoryWorkId) } },
+                });
+            }
+        },
+        { timeout: 30000 }
+    );
 
     return true;
 }

@@ -6,7 +6,9 @@
  * 2. 状态原样保真迁移：title / excerpt / contentHash / sourceMessageId / favoritedAt / deletedAt / createdAt 等全部保持；
  * 3. 逐行创建取得新 ID 并建立 guestStoryWorkId → userStoryWorkId 映射，持久可查询且正确落库；
  * 4. Legacy Playback 引用映射：断点若引用 guest generation ID，必须借本次 map 映射到新 User Work ID，且找不到时 fail closed 丢弃锚点；
- * 5. 迁移后 Guest 原始记录全量保留（用于审计与 30 天 GC，无删除）；
+ * 5. 迁移后 Guest 作品/聊天原始记录全量保留（用于审计与 30 天 GC，无删除）；
+ *    M5-08 起播放侧为 move 语义：成功迁移的 Guest Anchor/Progress 随单事务清除
+ *    （未映射行保留，fail-closed），见 §3 尾部断言；
  * 6. 既有账号登录绝不触发 merge，主体隔离不渗漏；
  * 7. 边界与幂等性：空 guest 安全无动作；重复调用幂等不产生重复记录。
  */
@@ -347,10 +349,12 @@ async function runGuestRegistrationMigrationTests() {
     guestWorksBefore[0].favoritedAt?.toISOString() ?? null
   );
 
+  // M5-08 move 语义：成功迁移的 Guest Anchor 随单事务清除（作品/聊天行仍保留审计）；
+  // 未映射行保留（见 B1/B2/B3 fail-closed 断言）。
   const preservedGuestProgress = await prisma.guestPlaybackAnchor.findUnique({
     where: { guestId: guestId1 },
   });
-  assert.ok(preservedGuestProgress !== null, '迁移后访客断点记录依然保留');
+  assert.strictEqual(preservedGuestProgress, null, 'M5-08：已迁移的访客断点记录必须清除（move 语义）');
   console.log('PASS: 迁移后访客行数据全部保留（兼容旧引用）');
 
   console.log('=== 4. 既有账号登录绝不触发 merge Guest Work ===');

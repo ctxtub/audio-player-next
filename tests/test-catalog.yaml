@@ -549,7 +549,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [auth, migrate]
     spec_path: docs/e2e/05-认证授权与会话生命周期/01-访客注册三步迁移与数据保真.md
-    executable_ids: [exec-guest-creative-sync, exec-story-work-guest-registration]
+    executable_ids: [exec-guest-creative-sync, exec-story-work-guest-registration, exec-playback-subject-remap, exec-playback-remap-merge]
     fixtures: []
     owner: auth-session
   - case_id: register-interrupt-orphan-rollback
@@ -802,7 +802,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-work, library, mutation, lifecycle, trash]
     spec_path: docs/e2e/07-故事库与作品资产/04-StoryWork生命周期操作.md
-    executable_ids: [exec-story-work-lifecycle]
+    executable_ids: [exec-story-work-lifecycle, exec-playback-lifecycle-trash]
     fixtures: []
     owner: story-library
   - case_id: library-public-api-facade
@@ -1236,6 +1236,18 @@ executables:
     display_name_zh: 检查点CAS内容标识绑定
     layer: L2
     path: ./tests/integration/playback/playback-checkpoint-content-identity.integration.test.ts
+  - executable_id: exec-playback-lifecycle-trash
+    display_name_zh: 播放Trash生命周期与永久删除边界
+    layer: L2
+    path: ./tests/integration/playback/playback-lifecycle-trash.integration.test.ts
+  - executable_id: exec-playback-subject-remap
+    display_name_zh: 播放主体迁移重映射
+    layer: L2
+    path: ./tests/integration/playback/playback-subject-remap.integration.test.ts
+  - executable_id: exec-playback-remap-merge
+    display_name_zh: 重映射进度合并纯领域
+    layer: L1
+    path: ./tests/unit/playback/playback-remap-merge.unit.test.ts
   - executable_id: exec-main-navigation
     display_name_zh: 主导航路由契约
     layer: L1

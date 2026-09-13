@@ -264,10 +264,14 @@ async function runDraftTranscriptUnit(): Promise<void> {
         assert.ok(src.indexOf('<PlaybackControls') > src.indexOf('<TranscriptView'), 'PlaybackControls 位于 controls 分支（互斥）');
         assert.ok(src.indexOf('<PlaybackTimeline') > src.indexOf('<TranscriptView'), 'Timeline 位于 controls 分支（互斥）');
         // 开合只动局部 view：两回调段内无 Session/Transport/路由/播放写面。
+        //（M7-04-03 收窄：handler 段精确截至闭包结束，避免 800 字符窗口误吞
+        // 后续 handleBackToCreation 的合法 push。）
         for (const handler of ['handleViewTranscript', 'handleBackToControls']) {
-            const at = src.indexOf(handler);
+            const at = src.indexOf(`const ${handler}`);
             assert.ok(at >= 0, `${handler} 存在`);
-            const seg = src.slice(at, at + 800);
+            const end = src.indexOf('}, []', at);
+            assert.ok(end > at, `${handler} 闭包结束存在`);
+            const seg = src.slice(at, end + 5);
             assert.ok(!seg.includes('router.push'), `${handler} 不得导航`);
             assert.ok(!seg.includes('pause'), `${handler} 不得 pause`);
             assert.ok(!seg.includes('closeExpanded'), `${handler} 不得关闭 Expanded（局部切换，面板保持打开）`);
@@ -279,32 +283,58 @@ async function runDraftTranscriptUnit(): Promise<void> {
         // promotion：局部 view 只按 sessionId 与开关重置（source 变化不重置 → 保持打开）。
         assert.ok(src.includes('viewModel.sessionId'), '重置键为 sessionId（promotion 同 id 保持）');
         assert.ok(src.includes('transcriptOpenDetail') || src.includes('onOpenWorkDetail'), 'promotion 入口接线');
-        // 路由唯一出口仍为查看正文一处 push（promotion 入口复用同一 handler，不过界）。
-        assert.strictEqual(src.split('router.push').length - 1, 1, '唯一路由出口：查看正文一处 push（promotion 复用）');
+        // M7-04-03 supersede（定向最强，非放宽）：路由出口由一处增至两处——
+        // 查看正文（handleViewStory → Library）+ 返回创作（handleBackToCreation → /chat）；
+        // promotion 入口仍复用查看正文同一 handler（不过界），返回创作零自动发送。
+        assert.strictEqual(src.split('router.push').length - 1, 2, '两处路由出口：查看正文 + 返回创作（各司其职）');
         assert.ok(src.indexOf('router.push', src.indexOf('handleViewStory')) >= 0, 'push 位于查看正文动作内');
+        assert.ok(src.includes('handleBackToCreation'), 'M7-04-03 Draft 返回创作回调存在');
+        assert.ok(src.includes('onBackToCreation'), '返回创作经 Actions 接线（与查看正文并存）');
+        assert.ok(src.indexOf('router.push', src.indexOf('handleBackToCreation')) >= 0, 'push 位于返回创作动作内');
+        {
+            const backAt = src.indexOf('handleBackToCreation');
+            const backSeg = src.slice(backAt, backAt + 800);
+            assert.ok(backSeg.includes('handleClose'), '返回创作先 closeExpanded（§44）');
+            assert.ok(backSeg.indexOf('handleClose') < backSeg.indexOf('router.push'), '返回创作顺序：close 先于 push');
+            assert.ok(!backSeg.toLowerCase().includes('send'), '返回创作零 send（不自动发送）');
+            assert.ok(!backSeg.includes('dispatch') && !backSeg.includes('pendingAutoSend'), '返回创作无预填即发/消息追加');
+            assert.ok(!backSeg.includes('storyText') && !backSeg.includes('prompt'), '返回创作不拼 continuation Prompt');
+            assert.ok(!backSeg.includes('pause'), '返回创作不得 pause（播放继续）');
+        }
+        assert.ok(!src.includes('continueFromStoryWork('), '无真实 continuation 调用（行为归 M4）');
+        assert.ok(!src.includes('onContinueCreation'), 'Work 继续创作未缝合（隐藏，不伪造）');
+        assert.ok(!src.includes('请继续'), 'M7 内禁拼 continuation Prompt');
         // 全局 Store 零新增：Expanded 不写 UI Store 新字段，store 文件无 transcript 字段。
         const storeSrc = stripComments(readRepoText('stores/nowPlayingUiStore.ts'));
         assert.ok(!storeSrc.includes('transcript') && !storeSrc.includes('Transcript'), 'global UI Store 不新增 transcript 字段');
         assert.ok(!storeSrc.includes('expandedView') && !storeSrc.includes('localView'), 'global UI Store 不存局部 view');
         assert.ok(!src.includes("push('/player')") && !src.includes('push("/player")'), '不得碰 /player（04 职责）');
-        assert.ok(!src.includes("push('/chat')") && !src.includes('push("/chat")'), '不得顺手导航创作面（03 职责）');
         assert.ok(!src.includes('/library/fake') && !src.includes('fake-id'), '任何路径无 fake-id 形态');
-        assert.ok(!src.includes('continueFromStoryWork'), '不碰继续创作（03 职责）');
         console.log('PASS: M7-04-02-U6 local view no-global-store');
     }
 
-    console.log('=== M7-04-02-U7: 无 scope creep（03/04 边界） ===');
+    console.log('=== M7-04-02-U7: 无 scope creep（03/04 边界；M7-04-03 定向最强） ===');
     {
         const actionsSrc = stripComments(readRepoText('components/NowPlaying/NowPlayingActions.tsx'));
         const helperSrc = stripComments(readRepoText('components/NowPlaying/draftTranscript.ts'));
         const transcriptSrc = stripComments(readRepoText('components/NowPlaying/TranscriptView.tsx'));
         const expandedSrc = stripComments(readRepoText('components/NowPlaying/ExpandedNowPlaying.tsx'));
-        for (const token of ['上一段', '下一段', 'nextParagraph', 'continueFromStoryWork']) {
+        for (const token of ['上一段', '下一段', 'nextParagraph']) {
             assert.ok(!actionsSrc.includes(token), `Actions 不得含 ${token}`);
             assert.ok(!helperSrc.includes(token), `helper 不得含 ${token}`);
             assert.ok(!transcriptSrc.includes(token), `TranscriptView 不得含 ${token}`);
         }
-        assert.ok(!expandedSrc.includes('continueFromStoryWork'), 'Expanded 不碰继续创作（03 职责）');
+        // M7-04-03 定向最强（非放宽）：03 职责由 creationActions 承接——
+        // Work 继续创作隐藏（无真实调用）+ Draft 返回创作存在且零 send。
+        for (const src of [actionsSrc, helperSrc, transcriptSrc, expandedSrc]) {
+            assert.ok(!src.includes('continueFromStoryWork('), '无真实 continuation 调用（fail-closed）');
+            assert.ok(!src.includes('请继续'), '禁拼 continuation Prompt');
+            assert.ok(!src.includes('AUTO_CONTINUE_PROMPT'), '不得引用自动续写常量');
+        }
+        assert.ok(actionsSrc.includes('shouldShowDraftBackToCreation'), 'M7-04-03 Actions 承接返回创作（Draft 双口并存）');
+        assert.ok(actionsSrc.includes('shouldShowWorkContinueCreation'), 'M7-04-03 Actions 预留继续创作判定（恒隐藏）');
+        assert.ok(expandedSrc.includes('handleBackToCreation'), 'M7-04-03 Expanded 承接返回创作（close + push /chat）');
+        assert.ok(!expandedSrc.includes('onContinueCreation'), 'Work 继续创作未缝合（隐藏，不伪造）');
         assert.ok(!expandedSrc.includes('/player'), 'Expanded 不碰 /player（04 职责）');
         console.log('PASS: M7-04-02-U7 no scope creep');
     }

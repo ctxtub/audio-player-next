@@ -1177,6 +1177,18 @@ cases:
     executable_ids: [exec-draft-transcript, exec-draft-transcript-view, exec-l3-draft-transcript]
     fixtures: []
     owner: smoke-baseline
+  - case_id: expanded-creation-actions
+    display_name_zh: Expanded创作动作边界返回创作与继续隐藏
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: Draft返回创作先关后导chat零发送且Work继续创作隐藏播放继续
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [ui, playback, session, navigation, creation]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/19-Expanded创作动作边界M7-04-03.md
+    executable_ids: [exec-creation-actions, exec-creation-actions-view, exec-l3-creation-actions]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1592,6 +1604,18 @@ executables:
     display_name_zh: L3 Expanded草稿正文Transcript全链路
     layer: L3
     path: ./tests/system/browser/scenarios/draft-transcript.spec.ts
+  - executable_id: exec-creation-actions
+    display_name_zh: 创作动作返回创作与继续隐藏静态守卫
+    layer: L1
+    path: ./tests/unit/now-playing/creation-actions.unit.test.ts
+  - executable_id: exec-creation-actions-view
+    display_name_zh: 创作动作关导同一性与零发送穿越
+    layer: L2
+    path: ./tests/integration/now-playing/creation-actions-view.integration.test.ts
+  - executable_id: exec-l3-creation-actions
+    display_name_zh: L3 Expanded创作动作边界全链路
+    layer: L3
+    path: ./tests/system/browser/scenarios/creation-actions.spec.ts
   - executable_id: exec-l3-desktop-floating-mode
     display_name_zh: L3桌面悬浮拖拽吸附收官
     layer: L3

@@ -42,6 +42,16 @@
  *   viewStoryTarget 非空时 transcript 内展示「打开作品详情」入口（复用
  *   handleViewStory 同一路由出口；M4 真实 promotion 触发面在 Expanded 外，
  *   本文件只保证不强制关闭 + 入口复用，不越界）。
+ *
+ * M7-04-03 Creation Actions Boundary（spec §36/§36.2/§37/§75/M7-P07 additive）：
+ * - Draft「返回创作」（§37）：Draft 面经 Actions 与「查看正文」同容器并存
+ *   （独立 testid）；点击 = handleBackToCreation（closeExpanded 先行 →
+ *   router.push('/chat')），绝不自动发送新 Prompt（无 send 调用、无预填
+ *   即发、无消息追加），播放继续（不 pause，会话/进度/音频宿主全不变）；
+ * - Work「继续创作」（§36.2/M7-P07）：只消费 M4 `continueFromStoryWork`
+ *   契约；契约未落地前隐藏 CTA（fail-closed，本文件不装配 continuation
+ *   Prompt、不直调任何 continuation，不暂停播放 §36.3）；M4 落地后经预留
+ *   onContinueCreation 缝合即可，不改播放架构。
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -58,6 +68,7 @@ import { PlaybackRateControl } from './PlaybackRateControl';
 import { SleepTimerControl } from './SleepTimerControl';
 import { NowPlayingActions } from './NowPlayingActions';
 import { TranscriptView } from './TranscriptView';
+import { CHAT_ROUTE } from './creationActions';
 import { isSameLibraryDetail } from './workViewStoryNavigation';
 import { PlaybackTimeline, EXPANDED_TIMELINE_KEYBOARD_STEP_SECONDS } from './PlaybackTimeline';
 import { useExpandedPlaybackControls } from './useExpandedPlaybackControls';
@@ -164,6 +175,17 @@ export const ExpandedNowPlaying: React.FC = () => {
     const handleBackToControls = useCallback(() => {
         setExpandedView('controls');
     }, []);
+
+    /**
+     * M7-04-03 Draft 返回创作（spec §37 / §44）：
+     * closeExpanded() 先行 → router.push('/chat')；绝不自动发送新 Prompt
+     * （无 send 调用、无预填即发、无消息追加），播放继续（不 pause，
+     * 不改 Session/Transport/Audio，只动 UI 开关与路由）。
+     */
+    const handleBackToCreation = useCallback(() => {
+        handleClose();
+        router.push(CHAT_ROUTE);
+    }, [handleClose, router]);
 
     // M7-04-02 局部 view 重置（只按 sessionId 与 Expanded 开关）：
     // - 新 Session（sessionId 变化）→ 回落 controls；
@@ -386,7 +408,11 @@ export const ExpandedNowPlaying: React.FC = () => {
                             />
                             {/* M7-04-01 Work 查看正文（spec §34：Work 导航口冻结）+
                                 M7-04-02 Draft 查看正文（spec §35：Transcript 口，
-                                同文案独立 testid，点击只切局部 view，不导航）。
+                                同文案独立 testid，点击只切局部 view，不导航）+
+                                M7-04-03 Draft 返回创作（spec §37：与查看正文同容器
+                                并存，独立 testid，点击先关后导 /chat，零自动发送）/
+                                Work 继续创作隐藏（spec §36.2 fail-closed：本文件不传
+                                onContinueCreation，不拼 continuation Prompt）。
                                 transcript view 下不渲染（互斥，与「打开作品详情」不并存）。 */}
                             <NowPlayingActions
                                 source={viewModel.source}
@@ -394,6 +420,7 @@ export const ExpandedNowPlaying: React.FC = () => {
                                 storyText={viewModel.transcriptText}
                                 status={viewModel.sessionStatus}
                                 onViewTranscript={handleViewTranscript}
+                                onBackToCreation={handleBackToCreation}
                                 disabled={!viewModel.hasSession}
                             />
                             {viewModel.isEnded ? (

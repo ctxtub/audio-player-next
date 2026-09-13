@@ -125,6 +125,22 @@ export {
     type WorkViewStoryNavigationDecision,
 } from './workViewStoryNavigation';
 export {
+    BACK_TO_CREATION_LABEL,
+    CONTINUE_CREATION_LABEL,
+    EXPANDED_BACK_TO_CREATION_BUTTON_TESTID,
+    EXPANDED_CONTINUE_CREATION_BUTTON_TESTID,
+    CHAT_ROUTE,
+    shouldShowDraftBackToCreation,
+    shouldShowWorkContinueCreation,
+    resolveBackToCreationTarget,
+    decideDraftBackToCreation,
+    decideWorkContinueCreation,
+    type DraftBackToCreationDecision,
+    type DraftBackToCreationDecisionInput,
+    type WorkContinueCreationDecision,
+    type WorkContinueCreationDecisionInput,
+} from './creationActions';
+export {
     NOW_PLAYING_BREAKPOINT_PX,
     resolveNowPlayingLayoutMode,
     resolveViewportMode,

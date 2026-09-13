@@ -358,7 +358,9 @@
 
 .body [data-testid='expanded-view-transcript-button'],
 .body [data-testid='expanded-transcript-back-button'],
-.body [data-testid='expanded-open-work-detail-button'] {
+.body [data-testid='expanded-open-work-detail-button'],
+.body [data-testid='expanded-back-to-creation-button'],
+.body [data-testid='expanded-continue-creation-button'] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -376,14 +378,18 @@
 
 .body [data-testid='expanded-view-transcript-button']:disabled,
 .body [data-testid='expanded-transcript-back-button']:disabled,
-.body [data-testid='expanded-open-work-detail-button']:disabled {
+.body [data-testid='expanded-open-work-detail-button']:disabled,
+.body [data-testid='expanded-back-to-creation-button']:disabled,
+.body [data-testid='expanded-continue-creation-button']:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 .body [data-testid='expanded-view-transcript-button']:focus-visible,
 .body [data-testid='expanded-transcript-back-button']:focus-visible,
-.body [data-testid='expanded-open-work-detail-button']:focus-visible {
+.body [data-testid='expanded-open-work-detail-button']:focus-visible,
+.body [data-testid='expanded-back-to-creation-button']:focus-visible,
+.body [data-testid='expanded-continue-creation-button']:focus-visible {
   outline: 2px solid var(--border-accent);
   outline-offset: 2px;
 }

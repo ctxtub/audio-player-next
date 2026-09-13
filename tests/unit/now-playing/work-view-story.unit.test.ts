@@ -251,7 +251,26 @@ async function runWorkViewStoryUnit(): Promise<void> {
         // 播放继续：查看正文路径不得 pause/改 Session/碰 audio。
         assert.ok(!handlerSeg.includes('pause'), '查看正文不得 pause');
         assert.ok(!src.includes('/player'), '不得碰 /player（后续子项职责）');
-        assert.ok(!src.includes("push('/chat')") && !src.includes('push("/chat")'), '不得顺手导航创作面');
+        // M7-04-03 supersede（定向最强，非放宽）：Draft 返回创作（§37）为唯一合法
+        // /chat 导航（closeExpanded 先行 → push('/chat')，零自动发送）；Work 查看正文
+        // 本身不导 /chat（仍只导 Library），Work 继续创作隐藏（fail-closed）。
+        assert.ok(src.includes('handleBackToCreation'), 'M7-04-03 Draft 返回创作回调存在');
+        assert.ok(src.includes('onBackToCreation'), 'Actions 接线 onBackToCreation（与查看正文并存）');
+        assert.ok(src.includes('CHAT_ROUTE') || src.includes("'/chat'"), '返回目标经 /chat 单源');
+        const backAt = src.indexOf('handleBackToCreation');
+        assert.ok(backAt >= 0, '返回创作 handler 存在');
+        const backSeg = src.slice(backAt, backAt + 800);
+        assert.ok(backSeg.includes('handleClose'), '返回创作先 closeExpanded');
+        assert.ok(backSeg.includes('router.push'), '返回创作再 push');
+        assert.ok(
+            backSeg.indexOf('handleClose') < backSeg.indexOf('router.push'),
+            '返回创作顺序固定：close 先于 push（§44）'
+        );
+        assert.ok(!backSeg.toLowerCase().includes('send'), '返回创作零 send（不自动发送）');
+        assert.ok(!backSeg.includes('dispatch') && !backSeg.includes('pendingAutoSend'), '返回创作无预填即发/消息追加');
+        assert.ok(!backSeg.includes('storyText') && !backSeg.includes('prompt'), '返回创作不拼 continuation Prompt');
+        assert.ok(!handlerSeg.includes('/chat'), 'Work 查看正文不导 /chat（仍只导 Library）');
+        assert.ok(!src.includes('continueFromStoryWork('), '无真实 continuation 调用（行为归 M4）');
         assert.ok(!src.includes('AudioController'), '不得操作 <audio>');
         assert.ok(!src.includes('sourceMessageId') && !src.includes('contentHash'), '不得猜 workId');
         console.log('PASS: M7-04-01-U7 close-then-push playback-continues');
@@ -267,11 +286,21 @@ async function runWorkViewStoryUnit(): Promise<void> {
             assert.ok(!actionsSrc.includes(token), `Actions 不得含 ${token}`);
             assert.ok(!helperSrc.includes(token), `helper 不得含 ${token}`);
         }
-        // Draft Transcript（02）与继续创作（03）不在本轮：Expanded 不得新增其入口。
-        // M7-04-02 supersede：Draft Transcript 已由 02 接管（Expanded 挂载 TranscriptView
-        // + 局部 view，Work 导航口冻结不变）；继续创作仍归 03，Expanded 不得碰。
+        // Draft Transcript（02）与创作边界（03） supersede：
+        // M7-04-02：Draft Transcript 已由 02 接管（Expanded 挂载 TranscriptView
+        // + 局部 view，Work 导航口冻结不变）；
+        // M7-04-03 定向最强（非放宽）：Work 继续创作隐藏（fail-closed）+ Draft
+        // 返回创作存在且零 send（close + push /chat，无发送/拼 Prompt）。
         assert.ok(expandedSrc.includes('TranscriptView'), 'M7-04-02 起 Expanded 挂载 TranscriptView（02 接管，Work 口冻结）');
-        assert.ok(!expandedSrc.includes('continueFromStoryWork'), '本轮不碰继续创作（03 职责）');
+        assert.ok(!expandedSrc.includes('continueFromStoryWork('), '无真实 continuation 调用（M4 契约缺失，隐藏）');
+        assert.ok(expandedSrc.includes('handleBackToCreation'), 'M7-04-03 Draft 返回创作存在（close + push /chat）');
+        assert.ok(expandedSrc.includes('onBackToCreation'), '返回创作经 Actions 接线（与查看正文并存）');
+        assert.ok(!expandedSrc.includes('onContinueCreation'), 'Work 继续创作未缝合（隐藏，不伪造）');
+        const backAt03 = expandedSrc.indexOf('handleBackToCreation');
+        assert.ok(backAt03 >= 0, '返回创作 handler 存在');
+        const backSeg03 = expandedSrc.slice(backAt03, backAt03 + 800);
+        assert.ok(!backSeg03.toLowerCase().includes('send'), '返回创作零 send');
+        assert.ok(!expandedSrc.includes('请继续'), 'M7 内禁拼 continuation Prompt');
         console.log('PASS: M7-04-01-U8 no scope creep');
     }
 

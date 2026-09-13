@@ -335,12 +335,19 @@ async function runExpandedUiStateTests(): Promise<void> {
         assert.ok(!src.includes('AudioController'), 'Expanded 不得直调 Audio');
         // M7-04-01 收窄（spec §34/§44）：唯一允许的路由出口是查看正文动作
         //（handleViewStory 内先 close 后按需 push 精确 /library 目标）；
+        // M7-04-03 supersede（定向最强，非放宽）：新增 Draft 返回创作第二出口
+        //（handleBackToCreation 内先 close 后 push /chat，零自动发送）；
         // open/close/Escape/backdrop/drag 路径仍不得导航，/player 永不得出现。
         assert.ok(!src.includes("push('/player')") && !src.includes('push("/player")'), 'Expanded 永不得 push /player（M9 边界）');
-        assert.strictEqual(src.split('router.push').length - 1, 1, '唯一路由出口：查看正文一处 push');
+        assert.strictEqual(src.split('router.push').length - 1, 2, '两处路由出口：查看正文 + 返回创作（M7-04-03）');
         assert.ok(
             src.indexOf('router.push', src.indexOf('handleViewStory')) >= 0,
             'push 必须位于查看正文动作内（先关后导）'
+        );
+        assert.ok(src.includes('handleBackToCreation'), 'M7-04-03 返回创作出口存在（close + push /chat，零 send）');
+        assert.ok(
+            src.indexOf('router.push', src.indexOf('handleBackToCreation')) >= 0,
+            'push 必须位于返回创作动作内（先关后导）'
         );
         // Handle-only：bind 仅 spread 到 Header handle（内容区注释锁定）。
         const headerSrc = stripComments(readRepoText('components/NowPlaying/NowPlayingHeader.tsx'));

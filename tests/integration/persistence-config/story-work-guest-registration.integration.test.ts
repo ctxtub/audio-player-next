@@ -202,10 +202,10 @@ async function runGuestRegistrationMigrationTests() {
   // 2.3 Legacy Playback 引用映射（场景 A：有效引用 guest generation ID）
   const targetGuestWork = guestWorksBefore[42];
   const mappedExpectedUserId = migrationResult.storyWorkIdMap.get(targetGuestWork.id)!;
-  await prisma.guestPlaybackProgress.create({
+  await prisma.guestPlaybackAnchor.create({
     data: {
       guestId: guestId1,
-      sourceType: 'generation',
+      sourceKind: 'generation',
       sourceId: String(targetGuestWork.id), // 访客回放历史时存的是访客作品 ID
       title: targetGuestWork.title,
       contentHash: targetGuestWork.contentHash,
@@ -226,11 +226,11 @@ async function runGuestRegistrationMigrationTests() {
   );
   assert.strictEqual(playbackMigrated, true, '断点播放进度应成功迁移');
 
-  const userProgress = await prisma.userPlaybackProgress.findUnique({
+  const userProgress = await prisma.userPlaybackAnchor.findUnique({
     where: { userId: testUser1.id },
   });
   assert.ok(userProgress !== null, '用户断点播放进度必须已落库');
-  assert.strictEqual(userProgress.sourceType, 'generation', 'sourceType 必须保持 generation');
+  assert.strictEqual(userProgress.sourceKind, 'generation', 'sourceType 必须保持 generation');
   // 核心契约：sourceId 必须通过 ID Map 映射为新用户作品 ID，严禁原样保留旧 guest ID！
   assert.strictEqual(
     userProgress.sourceId,
@@ -250,10 +250,10 @@ async function runGuestRegistrationMigrationTests() {
     data: { username: `u_unmapped_${tag1}`, password: 'Password123!' },
   })).id;
 
-  await prisma.guestPlaybackProgress.create({
+  await prisma.guestPlaybackAnchor.create({
     data: {
       guestId: unmappedGuestId,
-      sourceType: 'generation',
+      sourceKind: 'generation',
       sourceId: '9999999', // 未在 map 中的 generation ID
       title: 'Unmapped Generation Story',
     },
@@ -261,7 +261,7 @@ async function runGuestRegistrationMigrationTests() {
 
   const unmappedMigrateRes = await migrateGuestPlaybackProgressToUser(unmappedGuestId, unmappedUserId);
   assert.strictEqual(unmappedMigrateRes, false, '未映射的 generation ID 必须 fail closed 返回 false');
-  const unmappedUserProgress = await prisma.userPlaybackProgress.findUnique({
+  const unmappedUserProgress = await prisma.userPlaybackAnchor.findUnique({
     where: { userId: unmappedUserId },
   });
   assert.strictEqual(unmappedUserProgress, null, '目标用户不得生成悬空未映射的 playback progress 记录');
@@ -270,10 +270,10 @@ async function runGuestRegistrationMigrationTests() {
   const existingAnchorUserId = (await prisma.user.create({
     data: { username: `u_anchor_${tag1}`, password: 'Password123!' },
   })).id;
-  await prisma.userPlaybackProgress.create({
+  await prisma.userPlaybackAnchor.create({
     data: {
       userId: existingAnchorUserId,
-      sourceType: 'generation',
+      sourceKind: 'generation',
       sourceId: '12345',
       title: 'Original User Anchor Story',
       nextParagraphIndex: 3,
@@ -282,10 +282,10 @@ async function runGuestRegistrationMigrationTests() {
   });
 
   const anchorGuestId = `g_unmapped_anchor_${tag1}`;
-  await prisma.guestPlaybackProgress.create({
+  await prisma.guestPlaybackAnchor.create({
     data: {
       guestId: anchorGuestId,
-      sourceType: 'generation',
+      sourceKind: 'generation',
       sourceId: '8888888',
       title: 'Unmapped Guest Anchor Story',
       nextParagraphIndex: 1,
@@ -296,7 +296,7 @@ async function runGuestRegistrationMigrationTests() {
   const anchorMigrateRes = await migrateGuestPlaybackProgressToUser(anchorGuestId, existingAnchorUserId);
   assert.strictEqual(anchorMigrateRes, false, '未映射的 generation ID 必须 fail closed 返回 false');
 
-  const unchangedUserProgress = await prisma.userPlaybackProgress.findUnique({
+  const unchangedUserProgress = await prisma.userPlaybackAnchor.findUnique({
     where: { userId: existingAnchorUserId },
   });
   assert.ok(unchangedUserProgress !== null, '目标用户原有 anchor 必须保留');
@@ -311,10 +311,10 @@ async function runGuestRegistrationMigrationTests() {
     data: { username: `u_magic_${tag1}`, password: 'Password123!' },
   })).id;
 
-  await prisma.guestPlaybackProgress.create({
+  await prisma.guestPlaybackAnchor.create({
     data: {
       guestId: magicGuestId,
-      sourceType: 'generation',
+      sourceKind: 'generation',
       sourceId: '3001',
       title: 'Magic Bypass Regression Story',
     },
@@ -322,7 +322,7 @@ async function runGuestRegistrationMigrationTests() {
 
   const magicMigrateRes = await migrateGuestPlaybackProgressToUser(magicGuestId, magicUserId);
   assert.strictEqual(magicMigrateRes, false, 'sourceId=3001 无 mapping 时必须 fail closed 返回 false');
-  const magicUserProgress = await prisma.userPlaybackProgress.findUnique({
+  const magicUserProgress = await prisma.userPlaybackAnchor.findUnique({
     where: { userId: magicUserId },
   });
   assert.strictEqual(magicUserProgress, null, 'sourceId=3001 无 mapping 时严禁创建 UserPlaybackProgress 记录');
@@ -346,7 +346,7 @@ async function runGuestRegistrationMigrationTests() {
     guestWorksBefore[0].favoritedAt?.toISOString() ?? null
   );
 
-  const preservedGuestProgress = await prisma.guestPlaybackProgress.findUnique({
+  const preservedGuestProgress = await prisma.guestPlaybackAnchor.findUnique({
     where: { guestId: guestId1 },
   });
   assert.ok(preservedGuestProgress !== null, '迁移后访客断点记录依然保留');
@@ -502,10 +502,10 @@ async function runGuestRegistrationMigrationTests() {
     },
   });
   // 建立关联断点（引用 g1 作品）
-  await prisma.guestPlaybackProgress.create({
+  await prisma.guestPlaybackAnchor.create({
     data: {
       guestId: e2eGuestId,
-      sourceType: 'generation',
+      sourceKind: 'generation',
       sourceId: String(g1.id),
       title: 'E2E 标题 1',
       contentHash: 'e2e_hash_1',
@@ -544,7 +544,7 @@ async function runGuestRegistrationMigrationTests() {
     where: { username: e2eUsername },
     include: {
       storyWorks: true,
-      playbackProgress: true,
+      playbackAnchor: true,
       storyWorkMigrations: true,
     },
   });
@@ -560,10 +560,10 @@ async function runGuestRegistrationMigrationTests() {
   assert.strictEqual(uWork2.deletedAt?.toISOString(), g2.deletedAt?.toISOString(), 'E2E: deletedAt 保真');
 
   // 验证断点映射
-  assert.ok(e2eUser.playbackProgress !== null);
-  assert.strictEqual(e2eUser.playbackProgress.sourceType, 'generation');
+  assert.ok(e2eUser.playbackAnchor !== null);
+  assert.strictEqual(e2eUser.playbackAnchor.sourceKind, 'generation');
   assert.strictEqual(
-    e2eUser.playbackProgress.sourceId,
+    e2eUser.playbackAnchor.sourceId,
     String(uWork1.id),
     'E2E: 注册后断点 sourceId 必须精确映射为新创建的 User Work ID'
   );

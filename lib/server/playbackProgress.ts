@@ -14,7 +14,9 @@ import type {
 } from '@/lib/trpc/schemas/playback';
 
 type PlaybackProgressRow = {
-  sourceType: string;
+  // M5-02：Prisma 逻辑字段已 rename 为 sourceKind（物理列仍为 sourceType，经 @map 保留）。
+  // DTO 仍为 sourceType（lib/trpc 契约后续 slice 才演进），此处做机械映射，行为语义不变。
+  sourceKind: string;
   sourceId: string;
   sessionId: string | null;
   title: string;
@@ -32,7 +34,7 @@ type PlaybackProgressRow = {
 };
 
 const toDto = (row: PlaybackProgressRow): PlaybackProgressDTO => ({
-  sourceType: row.sourceType as PlaybackSourceType,
+  sourceType: row.sourceKind as PlaybackSourceType,
   sourceId: row.sourceId,
   sessionId: row.sessionId,
   title: row.title,
@@ -53,12 +55,13 @@ export const getPlaybackProgressForSubject = async (
   subject: Subject
 ): Promise<PlaybackProgressDTO | null> => {
   if (subject.type === 'user') {
-    const row = await prisma.userPlaybackProgress.findUnique({
+    // M5-02：逻辑模型 UserPlaybackProgress → UserPlaybackAnchor（物理表不变）。
+    const row = await prisma.userPlaybackAnchor.findUnique({
       where: { userId: subject.id },
     });
     return row ? toDto(row) : null;
   }
-  const row = await prisma.guestPlaybackProgress.findUnique({
+  const row = await prisma.guestPlaybackAnchor.findUnique({
     where: { guestId: subject.id },
   });
   return row ? toDto(row) : null;
@@ -69,18 +72,19 @@ export const savePlaybackProgressForSubject = async (
   input: SavePlaybackProgressInput
 ): Promise<PlaybackProgressDTO> => {
   if (subject.type === 'user') {
-    const existing = await prisma.userPlaybackProgress.findUnique({
+    const existing = await prisma.userPlaybackAnchor.findUnique({
       where: { userId: subject.id },
     });
 
-    if (existing && existing.sourceType === input.sourceType && existing.sourceId === input.sourceId) {
+    // M5-02：比较经 sourceKind（物理列 sourceType），输入仍为 DTO sourceType（chat|generation），原样存入，不做 canonicalize（后续 slice 才收敛写路径）。
+    if (existing && existing.sourceKind === input.sourceType && existing.sourceId === input.sourceId) {
       if (!input.forceReset && input.nextParagraphIndex < existing.nextParagraphIndex) {
         return toDto(existing);
       }
     }
 
     const data = {
-      sourceType: input.sourceType,
+      sourceKind: input.sourceType,
       sourceId: input.sourceId,
       sessionId: input.sessionId ?? null,
       title: input.title,
@@ -96,7 +100,7 @@ export const savePlaybackProgressForSubject = async (
       isOneShot: input.isOneShot ?? false,
     };
 
-    const saved = await prisma.userPlaybackProgress.upsert({
+    const saved = await prisma.userPlaybackAnchor.upsert({
       where: { userId: subject.id },
       create: {
         userId: subject.id,
@@ -107,18 +111,18 @@ export const savePlaybackProgressForSubject = async (
     return toDto(saved);
   }
 
-  const existing = await prisma.guestPlaybackProgress.findUnique({
+  const existing = await prisma.guestPlaybackAnchor.findUnique({
     where: { guestId: subject.id },
   });
 
-  if (existing && existing.sourceType === input.sourceType && existing.sourceId === input.sourceId) {
+  if (existing && existing.sourceKind === input.sourceType && existing.sourceId === input.sourceId) {
     if (!input.forceReset && input.nextParagraphIndex < existing.nextParagraphIndex) {
       return toDto(existing);
     }
   }
 
   const data = {
-    sourceType: input.sourceType,
+    sourceKind: input.sourceType,
     sourceId: input.sourceId,
     sessionId: input.sessionId ?? null,
     title: input.title,
@@ -134,7 +138,7 @@ export const savePlaybackProgressForSubject = async (
     isOneShot: input.isOneShot ?? false,
   };
 
-  const saved = await prisma.guestPlaybackProgress.upsert({
+  const saved = await prisma.guestPlaybackAnchor.upsert({
     where: { guestId: subject.id },
     create: {
       guestId: subject.id,
@@ -149,12 +153,12 @@ export const clearPlaybackProgressForSubject = async (
   subject: Subject
 ): Promise<boolean> => {
   if (subject.type === 'user') {
-    await prisma.userPlaybackProgress.deleteMany({
+    await prisma.userPlaybackAnchor.deleteMany({
       where: { userId: subject.id },
     });
     return true;
   }
-  await prisma.guestPlaybackProgress.deleteMany({
+  await prisma.guestPlaybackAnchor.deleteMany({
     where: { guestId: subject.id },
   });
   return true;

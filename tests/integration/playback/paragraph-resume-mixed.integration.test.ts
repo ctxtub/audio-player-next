@@ -260,7 +260,7 @@ async function runParagraphResumeTests() {
     assert(newUser !== null);
 
     // Verify UserPlaybackProgress was migrated
-    const migratedProgress = await prisma.userPlaybackProgress.findUnique({
+    const migratedProgress = await prisma.userPlaybackAnchor.findUnique({
         where: { userId: newUser.id },
     });
     assert(migratedProgress !== null, 'UserPlaybackProgress must be migrated');
@@ -278,20 +278,20 @@ async function runParagraphResumeTests() {
     assert.strictEqual(migratedProgress.contentHash, 'hashmig12345');
 
     // Verify GuestPlaybackProgress row remains intact in guest table (for 30d GC)
-    const guestOriginal = await prisma.guestPlaybackProgress.findUnique({
+    const guestOriginal = await prisma.guestPlaybackAnchor.findUnique({
         where: { guestId: guestId5 },
     });
     assert(guestOriginal !== null, 'Guest original progress must be retained for GC');
 
     // 6.1 Rollback Contract (Cascade on user deletion)
     await prisma.user.delete({ where: { id: newUser.id } });
-    const userProgressAfterDelete = await prisma.userPlaybackProgress.findUnique({
+    const userProgressAfterDelete = await prisma.userPlaybackAnchor.findUnique({
         where: { userId: newUser.id },
     });
     assert.strictEqual(userProgressAfterDelete, null, 'UserPlaybackProgress must cascade delete with user');
 
     // Guest progress must still be intact
-    const guestProgressAfterRollback = await prisma.guestPlaybackProgress.findUnique({
+    const guestProgressAfterRollback = await prisma.guestPlaybackAnchor.findUnique({
         where: { guestId: guestId5 },
     });
     assert(guestProgressAfterRollback !== null, 'Guest progress must survive user rollback');
@@ -389,10 +389,10 @@ async function runParagraphResumeTests() {
     const thirtyOneDaysAgo = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
 
     // Create expired record
-    await prisma.guestPlaybackProgress.create({
+    await prisma.guestPlaybackAnchor.create({
         data: {
             guestId: guestExpired,
-            sourceType: 'generation',
+            sourceKind: 'generation',
             sourceId: 'exp_1',
             title: '过期故事',
             contentHash: 'exphash',
@@ -402,10 +402,10 @@ async function runParagraphResumeTests() {
     });
 
     // Create active record
-    await prisma.guestPlaybackProgress.create({
+    await prisma.guestPlaybackAnchor.create({
         data: {
             guestId: guestActive,
-            sourceType: 'generation',
+            sourceKind: 'generation',
             sourceId: 'act_1',
             title: '活跃故事',
             contentHash: 'acthash',
@@ -417,13 +417,13 @@ async function runParagraphResumeTests() {
     const purgeRes = await purgeExpiredGuestData();
     assert(purgeRes.playbackProgressDeleted >= 1, 'Must purge expired playback progress');
 
-    const expCheck = await prisma.guestPlaybackProgress.findUnique({ where: { guestId: guestExpired } });
+    const expCheck = await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestExpired } });
     assert.strictEqual(expCheck, null, 'Expired guest progress must be deleted');
 
-    const actCheck = await prisma.guestPlaybackProgress.findUnique({ where: { guestId: guestActive } });
+    const actCheck = await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestActive } });
     assert(actCheck !== null, 'Active guest progress must remain untouched');
 
-    await prisma.guestPlaybackProgress.deleteMany({ where: { guestId: guestActive } });
+    await prisma.guestPlaybackAnchor.deleteMany({ where: { guestId: guestActive } });
     console.log('PASS: TC-P2-10 verified');
 
     console.log('=== TC-P2-11: 匿名未授权请求 401 拦截 ===');

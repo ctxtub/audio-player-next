@@ -213,15 +213,17 @@ export async function migrateGuestCreativeRecordsToUser(
  * 将指定 guestId 的断点播放进度迁移至指定用户（单行）。
  * 保留访客原表记录供回滚/审计，由 30 天 GC 自然清理。
  *
- * 若 source 为 generation，借本次 ID map 映射 guestStoryWorkId → userStoryWorkId；
+ * 若 source 为 generation/work（M5-02 起 DB  canonical 值为 work，兼容期同时接受 generation），
+ * 借本次 ID map 映射 guestStoryWorkId → userStoryWorkId；
  * 找不到对应映射时必须 drop Anchor（fail closed，不产生悬空断点）。
+ * M5-02 仅做 Prisma 逻辑 rename 机械适配（delegate + sourceKind），映射语义不变，kind 原样透传。
  */
 export async function migrateGuestPlaybackProgressToUser(
     guestId: string,
     userId: number,
     storyWorkIdMap?: Map<number, number>
 ): Promise<boolean> {
-    const guestProgress = await prisma.guestPlaybackProgress.findUnique({
+    const guestProgress = await prisma.guestPlaybackAnchor.findUnique({
         where: { guestId },
     });
     if (!guestProgress) {
@@ -230,7 +232,7 @@ export async function migrateGuestPlaybackProgressToUser(
 
     let mappedSourceId = guestProgress.sourceId;
 
-    if (guestProgress.sourceType === 'generation') {
+    if (guestProgress.sourceKind === 'generation' || guestProgress.sourceKind === 'work') {
         const guestWorkId = Number(guestProgress.sourceId);
         let userWorkId: number | undefined;
 
@@ -261,11 +263,11 @@ export async function migrateGuestPlaybackProgressToUser(
         }
     }
 
-    await prisma.userPlaybackProgress.upsert({
+    await prisma.userPlaybackAnchor.upsert({
         where: { userId },
         create: {
             userId,
-            sourceType: guestProgress.sourceType,
+            sourceKind: guestProgress.sourceKind,
             sourceId: mappedSourceId,
             sessionId: guestProgress.sessionId,
             title: guestProgress.title,
@@ -281,7 +283,7 @@ export async function migrateGuestPlaybackProgressToUser(
             isOneShot: guestProgress.isOneShot,
         },
         update: {
-            sourceType: guestProgress.sourceType,
+            sourceKind: guestProgress.sourceKind,
             sourceId: mappedSourceId,
             sessionId: guestProgress.sessionId,
             title: guestProgress.title,

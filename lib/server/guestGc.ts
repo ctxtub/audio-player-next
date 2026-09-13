@@ -20,6 +20,8 @@ export interface PurgeResult {
 
 /**
  * 清理指定截止时间前未更新的访客数据（默认 30 天前）。
+ * M5-02：Anchor delegate 逻辑 rename（物理表不变）；Guest Work Progress 以 Work FK cascade 为主，
+ * 随 GuestStoryWork 物理删除级联清理，此处无需额外 deleteMany（保持既有 GC 语义不变）。
  */
 export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeResult> {
     const threshold = cutoffDate ?? new Date(Date.now() - THIRTY_DAYS_MS);
@@ -33,7 +35,7 @@ export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeRes
             where: { updatedAt: { lt: threshold } },
         }),
         prisma.guestPromptHistory.deleteMany({ where: { updatedAt: { lt: threshold } } }),
-        prisma.guestPlaybackProgress.deleteMany({ where: { updatedAt: { lt: threshold } } }),
+        prisma.guestPlaybackAnchor.deleteMany({ where: { updatedAt: { lt: threshold } } }),
     ]);
 
     return {

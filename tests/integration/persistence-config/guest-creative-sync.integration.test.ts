@@ -385,10 +385,10 @@ async function runGuestCreativeSyncTests() {
             createdAt: (m as { createdAt?: string }).createdAt ?? null,
         })),
     });
-    await prisma.guestPlaybackProgress.create({
+    await prisma.guestPlaybackAnchor.create({
         data: {
             guestId: guestMigrate,
-            sourceType: 'chat',
+            sourceKind: 'chat',
             sourceId: 'gm_2',
             sessionId: 'gm_2',
             title: '音频故事',
@@ -454,7 +454,7 @@ async function runGuestCreativeSyncTests() {
             chatMessages: { orderBy: { position: 'asc' } },
             storyWorks: true,
             promptHistory: true,
-            playbackProgress: true,
+            playbackAnchor: true,
         },
     });
     assert(newUser !== null, 'New user must exist');
@@ -481,13 +481,13 @@ async function runGuestCreativeSyncTests() {
     assert.strictEqual(migratedCardParts[0].storyText, 'Guest response 1', 'parts.storyText 保真');
     assert.strictEqual(migratedCardParts[0].audioUrl, '', 'parts.audioUrl 保持 sanitize 语义（空串）');
     // 进度行保真（nextParagraphIndex / remainingAllowedMs）
-    assert(newUser.playbackProgress !== null, 'UserPlaybackProgress must be migrated');
-    assert.strictEqual(newUser.playbackProgress.nextParagraphIndex, 2, 'nextParagraphIndex=2 保真');
-    assert.strictEqual(newUser.playbackProgress.remainingAllowedMs, 120000, 'remainingAllowedMs 保真');
-    assert.strictEqual(newUser.playbackProgress.lastCompletedParagraphIndex, 1, 'lastCompletedParagraphIndex 保真');
-    assert.strictEqual(newUser.playbackProgress.totalParagraphs, 4, 'totalParagraphs 保真');
-    assert.strictEqual(newUser.playbackProgress.sourceId, 'gm_2', 'sourceId 保真');
-    assert.strictEqual(newUser.playbackProgress.contentHash, 'migratehash12345', 'contentHash 保真');
+    assert(newUser.playbackAnchor !== null, 'UserPlaybackProgress must be migrated');
+    assert.strictEqual(newUser.playbackAnchor.nextParagraphIndex, 2, 'nextParagraphIndex=2 保真');
+    assert.strictEqual(newUser.playbackAnchor.remainingAllowedMs, 120000, 'remainingAllowedMs 保真');
+    assert.strictEqual(newUser.playbackAnchor.lastCompletedParagraphIndex, 1, 'lastCompletedParagraphIndex 保真');
+    assert.strictEqual(newUser.playbackAnchor.totalParagraphs, 4, 'totalParagraphs 保真');
+    assert.strictEqual(newUser.playbackAnchor.sourceId, 'gm_2', 'sourceId 保真');
+    assert.strictEqual(newUser.playbackAnchor.contentHash, 'migratehash12345', 'contentHash 保真');
     assert.strictEqual(newUser.storyWorks.length, 1, '1 GenerationHistory must be migrated');
     assert.strictEqual(newUser.storyWorks[0].prompt, 'Guest story 1');
     assert.strictEqual(newUser.storyWorks[0].storyText, 'Guest text 1');
@@ -511,7 +511,7 @@ async function runGuestCreativeSyncTests() {
     const preservedGuestChat = await prisma.guestChatMessage.count({ where: { guestId: guestMigrate } });
     assert.strictEqual(preservedGuestChat, 6, 'Guest records must be preserved for audit then GC-expired');
     assert(await prisma.guestConfig.findUnique({ where: { guestId: guestMigrate } }), 'Guest 配置行保留');
-    assert(await prisma.guestPlaybackProgress.findUnique({ where: { guestId: guestMigrate } }), 'Guest 进度行保留');
+    assert(await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestMigrate } }), 'Guest 进度行保留');
 
     // 6.2 Registration Rollback Safety
     const guestRollback = `g_rb_${Date.now()}`;

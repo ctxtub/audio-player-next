@@ -216,20 +216,20 @@ async function runStoryWorkRetentionTests() {
   });
 
   // 3.5 Guest PlaybackProgress: 一条 29d（保留），一条 31d（删除）
-  const guestPlay29d = await prisma.guestPlaybackProgress.create({
+  const guestPlay29d = await prisma.guestPlaybackAnchor.create({
     data: {
       guestId: `g_play_29d_${tag}`,
-      sourceType: 'chat',
+      sourceKind: 'chat',
       sourceId: '90001',
       title: '29天播放进度',
       createdAt: twentyNineDaysAgo,
       updatedAt: twentyNineDaysAgo,
     },
   });
-  const guestPlay31d = await prisma.guestPlaybackProgress.create({
+  const guestPlay31d = await prisma.guestPlaybackAnchor.create({
     data: {
       guestId: `g_play_31d_${tag}`,
-      sourceType: 'chat',
+      sourceKind: 'chat',
       sourceId: '90002',
       title: '31天播放进度',
       createdAt: thirtyOneDaysAgo,
@@ -259,7 +259,7 @@ async function runStoryWorkRetentionTests() {
   const checkGuestCfg29d = await prisma.guestConfig.findUnique({ where: { id: guestCfg29d.id } });
   assert.ok(checkGuestCfg29d !== null, '29天的 Guest Config 必须保留');
 
-  const checkGuestPlay29d = await prisma.guestPlaybackProgress.findUnique({ where: { id: guestPlay29d.id } });
+  const checkGuestPlay29d = await prisma.guestPlaybackAnchor.findUnique({ where: { id: guestPlay29d.id } });
   assert.ok(checkGuestPlay29d !== null, '29天的 Guest Playback 必须保留');
 
   // 校验 31d 记录确凿被物理删除
@@ -275,7 +275,7 @@ async function runStoryWorkRetentionTests() {
   const checkGuestCfg31d = await prisma.guestConfig.findUnique({ where: { id: guestCfg31d.id } });
   assert.strictEqual(checkGuestCfg31d, null, '31天的 Guest Config 必须被删除');
 
-  const checkGuestPlay31d = await prisma.guestPlaybackProgress.findUnique({ where: { id: guestPlay31d.id } });
+  const checkGuestPlay31d = await prisma.guestPlaybackAnchor.findUnique({ where: { id: guestPlay31d.id } });
   assert.strictEqual(checkGuestPlay31d, null, '31天的 Guest Playback 必须被删除');
 
   // 校验 User 数据绝不受 Guest GC 任何影响

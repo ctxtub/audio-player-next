@@ -91,6 +91,9 @@ const getStoryFlow = () =>
  * §28 continuation 唯一门 continuationMode==='extendable'（flow 侧零旧 guard 读取）；
  * §50 client stale async TTS 丢弃（含 legacy 合成路径）；
  * §52 三权分立（Session SSOT / Transport / Per-Work durable）。
+ * §53 Probe 收敛 E2E-only default-off（M5-10 fixup-2 architecture regression：
+ * normal runtime 开关缺席→关闭、无 window global、无 DOM 锚点、layout 不挂载；
+ * E2E runtime 显式开启后可用；E2E 侧存在性由 A/B browser 场景天然覆盖）。
  * 纯内存＋桩 fetchAudio，不触库、不调网络。
  */
 
@@ -469,6 +472,60 @@ async function runPlaybackRuntimeOrchestrationTests(): Promise<void> {
     'Session SSOT 不得依赖编排层（§52 单向依赖）',
   );
   console.log('PASS: responsibility split verified');
+
+  // —— §53 Probe 收敛 E2E-only default-off（M5-10 fixup-2 architecture regression） ——
+  console.log('--- §53 PlaybackSessionProbe E2E-only default-off ---');
+  const probeFlag = nodeRequire('../../../components/PlaybackSessionProbe/probeFlag') as typeof import('../../../components/PlaybackSessionProbe/probeFlag');
+  // 行为：开关缺席/空/非法值一律关闭（fail closed），仅严格 '1' 开启。
+  const prevProbeEnv = process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE;
+  try {
+    delete process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE;
+    assert.strictEqual(probeFlag.isPlaybackProbeEnabled(), false, '开关缺席必须关闭（normal runtime 无 probe）');
+    assert.strictEqual(probeFlag.isBrowserTestRuntime(), false, 'isBrowserTestRuntime 缺席必须 false');
+    assert.strictEqual(probeFlag.isPlaybackProbeEnabled({}), false, '空环境表必须关闭');
+    for (const off of ['', '0', 'false', 'true', 'yes', '2']) {
+      assert.strictEqual(
+        probeFlag.isPlaybackProbeEnabled({ NEXT_PUBLIC_E2E_PLAYBACK_PROBE: off }),
+        false,
+        `非法值必须 fail closed：${off === '' ? '<empty>' : off}`,
+      );
+    }
+    assert.strictEqual(
+      probeFlag.isPlaybackProbeEnabled({ NEXT_PUBLIC_E2E_PLAYBACK_PROBE: '1' }),
+      true,
+      '显式 1 必须开启（E2E runtime）',
+    );
+    process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE = '1';
+    assert.strictEqual(probeFlag.isBrowserTestRuntime(), true, 'E2E runtime 开启后探针可用');
+  } finally {
+    if (prevProbeEnv === undefined) delete process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE;
+    else process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE = prevProbeEnv;
+  }
+  // 结构双保险：Probe 内守卫（无开关不写 window global、不建 DOM 锚点）+ layout 条件挂载。
+  const probeSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'components/PlaybackSessionProbe/index.tsx'),
+    'utf8',
+  );
+  const probeCode = stripComments(probeSource);
+  assert.ok(probeCode.includes('isBrowserTestRuntime'), 'Probe 必须经 isBrowserTestRuntime 内守卫判定');
+  assert.ok(/if\s*\(!enabled\)\s*return\s*null/.test(probeCode), 'Probe 无开关必须 return null（不渲染）');
+  assert.ok(/if\s*\(!enabled\)\s*return;/.test(probeCode), 'Probe effect 无开关必须提前返回（不写 window global/DOM）');
+  const guardPos = probeCode.indexOf('if (!enabled) return;');
+  const globalPos = probeCode.indexOf('__M5PlaybackProbe');
+  const anchorPos = probeCode.indexOf('m5-playback-probe');
+  assert.ok(guardPos >= 0 && globalPos > guardPos, 'window probe global 必须位于内守卫之后（normal runtime 不可达）');
+  assert.ok(anchorPos > guardPos, 'DOM 探针锚点必须位于内守卫之后（normal runtime 不可达）');
+  const mainLayoutSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'app/(main)/layout.tsx'),
+    'utf8',
+  );
+  const mainLayoutCode = stripComments(mainLayoutSource);
+  assert.ok(mainLayoutCode.includes('isBrowserTestRuntime'), 'layout 必须条件挂载 Probe');
+  assert.ok(
+    /isBrowserTestRuntime\(\)\s*\?\s*<PlaybackSessionProbe/.test(mainLayoutCode),
+    'layout 无开关不得挂载 Probe（普通 runtime 不进组件执行路径）',
+  );
+  console.log('PASS: probe E2E-only default-off verified');
 
   resetPlaybackWorld();
   console.log('\nALL M5-10 RUNTIME ORCHESTRATION TESTS PASSED!');

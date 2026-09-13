@@ -16,6 +16,7 @@ import { createConnection } from 'node:net';
 import {
     existsSync,
     mkdirSync,
+    readFileSync,
     rmSync,
     symlinkSync,
     writeFileSync,
@@ -172,6 +173,25 @@ export function assertArchivePreconditions({ expectedSha, cwd } = {}) {
 }
 
 /**
+ * 快照 ready 标记中的 probe 开启令牌（M5-10 fixup-2）。
+ * 无此令牌的旧快照一律视为不可复用并重建（防无 probe 构建被复用导致 A/B 场景取不到探针）。
+ */
+export const PROBE_BUILD_TOKEN = 'probe=e2e-playback-v1';
+
+/**
+ * 快照 ready 判定：marker 存在且含 probe 开启令牌。
+ * @param readyMarker marker 文件路径
+ * @returns 可复用返回 true
+ */
+function isSnapshotReady(readyMarker) {
+    if (!existsSync(readyMarker)) return false;
+    try {
+        return readFileSync(readyMarker, 'utf8').includes(PROBE_BUILD_TOKEN);
+    } catch {
+        return false;
+    }
+}
+/**
  * 简单目录锁（mkdir 原子性；超时抛错）。
  * @param lockDir 锁目录路径
  * @param timeoutMs 超时毫秒
@@ -213,6 +233,7 @@ function runInSnapshot(snapshotDir, bin, args, env) {
  * WS4：取锁之前 fast-path 先验守卫、取锁之后锁内复验守卫 + ready marker（防 TOCTOU）；
  * 脏树即使快照已就绪也拒绝复用。快照键为 full SHA（目录名透传 short/full 均兼容，
  * marker 与日志记 full）；sha 缺失/'unknown' 直接抛 BLOCKED，不得回退缓存。
+ * M5-10 fixup-2：缓存复用要求 marker 含 probe 开启令牌（旧构建无 probe，一律重建）。
  * @param sha commit SHA（full；short 透传仅作目录兼容）
  * @param env 合成环境（含 SESSION_SECRET/OPENAI_*，DATABASE_URL 另行按库覆写）
  * @param opts 选项 { cwd?, snapshotBase? }（测试注入用；缺省仓库根与运行时 snapshots）
@@ -228,14 +249,16 @@ export async function ensureSnapshot(sha, env, opts = {}) {
     assertArchivePreconditions({ cwd: root });
     const snapshotDir = join(snapshotsBase, sha);
     const readyMarker = join(snapshotDir, '.snapshot-ready');
-    if (existsSync(readyMarker)) return snapshotDir;
+    // 中文注释：M5-10 fixup-2——仅复用含 probe 开启令牌的快照；旧格式 marker（无令牌，
+    // 构建物无 probe）一律重建，防 A/B 场景取不到探针。
+    if (isSnapshotReady(readyMarker)) return snapshotDir;
     const lockDir = join(snapshotsBase, `${sha}.lock`);
     mkdirSync(snapshotsBase, { recursive: true });
     await acquireDirLock(lockDir);
     try {
         // 中文注释：锁内复验守卫 + ready marker（防 TOCTOU）。
         assertArchivePreconditions({ cwd: root });
-        if (existsSync(readyMarker)) return snapshotDir;
+        if (isSnapshotReady(readyMarker)) return snapshotDir;
             rmSync(snapshotDir, { recursive: true, force: true });
             mkdirSync(snapshotDir, { recursive: true });
             // 中文注释：仅 tracked 文件进快照（.env*/.db/.next/node_modules 天然排除）。
@@ -259,9 +282,9 @@ export async function ensureSnapshot(sha, env, opts = {}) {
             rmSync(buildDb, { force: true });
             runInSnapshot(snapshotDir, nodeBin, [prismaBin, 'migrate', 'deploy'], { ...env, DATABASE_URL: `file:${buildDb}` });
             runInSnapshot(snapshotDir, nodeBin, [nextBin, 'build'], { ...env, DATABASE_URL: `file:${buildDb}` });
-            // 中文注释：marker 与日志记 full SHA（目录名透传 short/full 均兼容）。
+            // 中文注释：marker 与日志记 full SHA（目录名透传 short/full 均兼容）+ probe 开启令牌。
             const builtFull = currentFullSha(root);
-            writeFileSync(readyMarker, `${builtFull === 'unknown' ? sha : builtFull}\n`);
+            writeFileSync(readyMarker, `${builtFull === 'unknown' ? sha : builtFull}\n${PROBE_BUILD_TOKEN}\n`);
             return snapshotDir;
         } finally {
             releaseDirLock(lockDir);
@@ -270,11 +293,16 @@ export async function ensureSnapshot(sha, env, opts = {}) {
 
 /**
  * 构造快照子进程合成环境（隔离库 + 合成 secret + 全合成假上游）。
+ * M5-10 fixup-2：统一注入 probe 显式开启信号（构建时内联进 client/server 产物，
+ * 运行时同样可见）；缺省 ambient 即使含该变量亦被覆盖为开启（harness 内恒开）。
  * @param dbFile 本次启动独占的隔离库文件
  * @param mockBaseUrl mock 上游 baseURL（如 http://localhost:PORT/v1）
  * @returns 合成环境
  */
-function buildSnapshotEnv(dbFile, mockBaseUrl) {
+export function buildSnapshotEnv(dbFile, mockBaseUrl) {
+    return {
+        ...process.env,
+        NEXT_PUBLIC_E2E_PLAYBACK_PROBE: '1',
     return {
         ...process.env,
         SESSION_SECRET: randomBytes(32).toString('hex'),

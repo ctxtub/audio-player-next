@@ -17,6 +17,8 @@ import { createConnection } from 'node:net';
  *    预置 ready 快照亦拒绝复用（fast-path 守卫），且未产生/覆盖快照；
  * 6. EXPECTED_TARGET_SHA 绑定：失配抛 BLOCKED（含 expected/actual 短 SHA），短前缀等价放行，未设置不阻断；
  * 7. 干净树放行：干净 fixture 走到守卫通过点（不跑完整 build），untracked 不阻断。
+ * 8. M5-10 fixup-2 probe 开启信号：buildSnapshotEnv 恒注入显式开启值；
+ *    含 probe 令牌的 ready marker 直接复用，旧格式 marker 一律重建（不信任旧构建）。
  *
  * 隔离约束：全程仅 localhost；app-server 用 31120-31150 范围空闲端口，
  * mock 用随机空闲端口；禁止触碰 :31111/:9301/:38080、prisma/dev.db、.env*；
@@ -372,7 +374,54 @@ async function caseCleanTreePasses(): Promise<void> {
 }
 
 /**
- * 测试入口：串行执行 7 个用例（端口/快照互斥，避免交叉干扰）。
+ * M5-10 fixup-2 用例 8：probe E2E-only 开启信号由 harness 合成环境承载。
+ * - buildSnapshotEnv 恒注入 NEXT_PUBLIC_E2E_PLAYBACK_PROBE='1'（ambient 亦不得覆盖）；
+ * - 含 probe 令牌的 ready marker 直接复用（不重建）；
+ * - 旧格式 marker（无令牌）不可复用（进入重建路径；fixture 非 next 应用故重建失败，
+ *   但旧 marker 已被回收即证未复用旧构建）。
+ */
+async function caseProbeEnableSignal(): Promise<void> {
+    const mod = await import(path.join(harnessDir, 'app-server.mjs'));
+    assert.strictEqual(typeof mod.buildSnapshotEnv, 'function', 'app-server 必须导出 buildSnapshotEnv（probe 开启信号接线验证用）');
+    assert.strictEqual(typeof mod.PROBE_BUILD_TOKEN, 'string', 'app-server 必须导出 PROBE_BUILD_TOKEN');
+    const prevProbe: string | undefined = process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE;
+    try {
+        const env = mod.buildSnapshotEnv('/tmp/synthetic-harness.db', 'http://localhost:9/v1') as Record<string, unknown>;
+        assert.strictEqual(env['NEXT_PUBLIC_E2E_PLAYBACK_PROBE'], '1', '合成环境必须显式开启 probe');
+        process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE = '0';
+        const forced = mod.buildSnapshotEnv('/tmp/synthetic-harness.db', 'http://localhost:9/v1') as Record<string, unknown>;
+        assert.strictEqual(forced['NEXT_PUBLIC_E2E_PLAYBACK_PROBE'], '1', 'ambient 关闭值不得覆盖 harness 开启信号');
+    } finally {
+        if (prevProbe === undefined) delete process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE;
+        else process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE = prevProbe;
+    }
+    // 中文注释：含令牌 marker 复用（干净 fixture，不触发构建）。
+    const { dir, fullSha } = makeTempGitRepo();
+    try {
+        const snapshotBase: string = path.join(dir, '.probe-snapshots');
+        const snapshotDir: string = path.join(snapshotBase, fullSha);
+        mkdirSync(snapshotDir, { recursive: true });
+        const marker: string = path.join(snapshotDir, '.snapshot-ready');
+        const token: string = mod.PROBE_BUILD_TOKEN as string;
+        writeFileSync(marker, `${fullSha}\n${token}\n`);
+        const reused = (await mod.ensureSnapshot(fullSha, {}, { cwd: dir, snapshotBase })) as string;
+        assert.strictEqual(reused, snapshotDir, '含 probe 令牌的快照必须直接复用');
+        assert.strictEqual(readFileSync(marker, 'utf8'), `${fullSha}\n${token}\n`, '复用不得改写 marker');
+        // 中文注释：旧格式 marker（无令牌）不可复用——进入重建路径（fixture 非 next 应用，
+        // 重建在 prisma generate 即失败；旧 marker 已被回收即证未复用旧构建）。
+        writeFileSync(marker, `${fullSha}\n`);
+        await assert.rejects(
+            mod.ensureSnapshot(fullSha, {}, { cwd: dir, snapshotBase }),
+            '无令牌旧快照不得复用（须进入重建）',
+        );
+        assert.ok(!existsSync(marker), '重建路径必须回收旧 marker（不信任旧构建）');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+/**
+ * 测试入口：串行执行 8 个用例（端口/快照互斥，避免交叉干扰）。
  */
 async function main(): Promise<void> {
     await caseAppServerLifecycle();
@@ -389,6 +438,8 @@ async function main(): Promise<void> {
     console.log('PASS: 用例6 EXPECTED_TARGET_SHA 失配拒绝/前缀等价放行/未设置不阻断');
     await caseCleanTreePasses();
     console.log('PASS: 用例7 干净树守卫通过（untracked 不阻断）');
+    await caseProbeEnableSignal();
+    console.log('PASS: 用例8 probe 开启信号合成环境承载/令牌复用/旧快照重建');
     console.log('ALL BROWSER HARNESS TESTS PASSED');
 }
 

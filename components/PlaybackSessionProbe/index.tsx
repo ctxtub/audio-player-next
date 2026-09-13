@@ -3,9 +3,15 @@
 import { useEffect } from 'react';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
+import { isBrowserTestRuntime } from './probeFlag';
 
 /**
  * M5-10 fixup 最小真实 browser 闭环稳定挂点（评审 Blocking 1）。
+ *
+ * M5-10 fixup-2（E2E-only default-off）：本组件仅在 browser test runtime
+ *（构建时显式注入 `NEXT_PUBLIC_E2E_PLAYBACK_PROBE=1`）挂载；普通 production
+ * runtime 由 layout 侧条件挂载拦截（组件执行路径不进），此处再设内守卫双保险
+ *（fail closed：开关缺席/非法值一律 return null，不写 window global、不建 DOM 锚点）。
  *
  * 仅为 L3 聚合场景暴露只读快照 + 真实运行时入口（Session Flow / Transport），
  * 不改变任何产品行为：渲染 null（另附隐藏 data-testid 锚点供轮询），无日志、
@@ -19,7 +25,10 @@ import { usePlaybackStore } from '@/stores/playbackStore';
  * 边界），故保留既有 L1 确定性覆盖（exec-playback-runtime-orchestration §50），此处不设 browser 版。
  */
 export default function PlaybackSessionProbe(): null {
+  // 中文注释：双保险之二——组件内守卫（layout 侧已条件挂载，此处 fail closed 兜底）。
+  const enabled = isBrowserTestRuntime();
   useEffect(() => {
+    if (!enabled) return;
     let disposed = false;
     let anchorEl: HTMLDivElement | null = null;
     const w = window as unknown as Record<string, unknown>;
@@ -100,6 +109,7 @@ export default function PlaybackSessionProbe(): null {
         // 忽略清理异常。
       }
     };
-  }, []);
+  }, [enabled]);
+  if (!enabled) return null;
   return null;
 }

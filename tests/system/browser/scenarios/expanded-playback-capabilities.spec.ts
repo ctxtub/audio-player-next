@@ -257,4 +257,27 @@ test("Expanded 播放能力 P3A", async ({ page, harnessEnv, evidence }) => {
     await expect(page.getByTestId("mini-title")).toContainText(expandedTitle.slice(0, 6), { timeout: 15000 });
     await expect.poll(async () => (await readProbe(page)).sessionId, { timeout: 15000 }).toBe(restartedId);
     recorder.step("Mini 同步", {});
+
+    // 【M7-02 fixup 回归 B】焦点掉出 overlay（busy 控件 disabled 后的浏览器行为）：
+    // document fallback 必须接管关闭（Blocking 3 收窄后的定向验证）。
+    await page.getByTestId("mini-metadata-button").click({ timeout: 15000 });
+    await expect(page.getByTestId("expanded-now-playing")).toBeVisible({ timeout: 15000 });
+    await page.evaluate(() => {
+        const el = document.activeElement as HTMLElement | null;
+        if (el && typeof el.blur === "function") el.blur();
+        (document.body as HTMLElement).focus?.();
+    });
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("expanded-now-playing")).toHaveCount(0, { timeout: 15000 });
+    recorder.step("焦点掉 body → Escape 关闭（fallback）", {});
+
+    // 【M7-02 fixup 回归 C】焦点在 nested menu（overlay 内）：fallback 让行，
+    // Escape 仍由 RAC 语义关闭面板（不抢先、不重复关闭）。
+    await page.getByTestId("mini-metadata-button").click({ timeout: 15000 });
+    await expect(page.getByTestId("expanded-now-playing")).toBeVisible({ timeout: 15000 });
+    await page.getByTestId("expanded-rate-pill").click({ timeout: 15000 });
+    await expect(page.getByTestId("expanded-rate-menu")).toBeVisible({ timeout: 15000 });
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("expanded-now-playing")).toHaveCount(0, { timeout: 15000 });
+    recorder.step("menu 内 Escape → 关闭（RAC 语义，fallback 让行）", {});
 });

@@ -730,54 +730,56 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
   restart: async () => {
     const state = get();
     if (!state.source) return;
-    // M7-02 P3A 从头播放（spec §38/§38.1）：
-    // - Work：经 server beginSession mode=restart（新 UUID + position 0 + completedAt 保留，
-    //   M5 §16.3/§30 由 server 持有），再从 paragraph 0 显式起播；
-    // - Draft：重播当前已存在文本从 paragraph 0 开始，并强制此次 restart 为 finite
-    //  （消费操作，到结尾停止，不得触发 AI continuation；本地复位，不新开 server 会话，
-    //   不误写 StoryWork/progress identity）。
+    // M7-02 P3A 从头播放（spec §38/§38.1；复审 Blocking 1 收口为 server-authoritative）：
+    // restart 一律经 server beginSession mode=restart 建新会话（新 UUID + position 0；
+    // Work 侧 completedAt 由 server 保留）。begin 失败时保持原 session 原样并向上抛错
+    // （由调用方 Toast 呈现），绝不本地伪造 Session——无 server Anchor 的本地 UUID
+    // 会造成 stale-write / 刷新回旧 Anchor。
+    const speed = state.speed ?? 1.0;
     if (state.source.kind === 'work') {
       const workId = state.source.workId;
-      const speed = state.speed ?? 1.0;
-      try {
-        await get().beginPlayback({
-          source: { kind: 'work', workId },
-          mode: 'restart',
-          speed,
-        });
-        // begin 已水合新 Session（status=ready，position 0，transport idle + rate 已同步）。
-      } catch (err) {
-        // 离线/单测容错（M6-02 既有集成经 setActiveStory 本地种子、无 server Anchor）：
-        // server 不可达时本地生成新 UUID + position 0，保证“新 UUID + 从头播放”语义不退化；
-        // 在线真实路径仍以 server 为准（completedAt 由 server 保留）。
-        console.warn('[playbackSessionStore] restart begin failed, fallback local', err);
-        abortPrefetch();
-        set({
-          sessionId: createPlaybackSessionId(),
-          nextParagraphIndex: 0,
-          lastCompletedParagraphIndex: -1,
-          prefetchedAudioUrl: null,
-          prefetchingIndex: null,
-        });
-        try {
-          usePlaybackStore.getState().setPlaybackRate(speed);
-        } catch {
-          // ignore
-        }
-      }
+      await get().beginPlayback({
+        source: { kind: 'work', workId },
+        mode: 'restart',
+        speed,
+      });
       await get().playParagraph(0, { explicit: true });
       return;
     }
-    // Draft 本地 restart：段落复位 + 强制 finite（spec §38.1），同 Session 内从头播放。
-    abortPrefetch();
-    set({
-      nextParagraphIndex: 0,
-      lastCompletedParagraphIndex: -1,
-      continuationMode: 'finite',
-      prefetchedAudioUrl: null,
-      prefetchingIndex: null,
+    const messageId = state.source.messageId;
+    if (messageId.startsWith('replay-text-')) {
+      // 瞬态 replay-text-* 被 server 明确拒绝持久化（§16.4），无 server 会话语义：
+      // 保持既有本地重播行为（同一本地上下文从头播放 + finite），不发起 server begin。
+      abortPrefetch();
+      set({
+        nextParagraphIndex: 0,
+        lastCompletedParagraphIndex: -1,
+        continuationMode: 'finite',
+        prefetchedAudioUrl: null,
+        prefetchingIndex: null,
+      });
+      await get().playParagraph(0, { explicit: true });
+      return;
+    }
+    // Draft：同样走 server-authoritative restart（新 UUID，§16.4 draft begin 天然 position 0）；
+    // snapshot 取当前已水合会话的 canonical metadata（重播当前已存在文本，§38.1），
+    // 随后强制 finite：到结尾停止、不触发 AI continuation（续写必须走单独 CTA）。
+    const draftSnapshot =
+      state.title && state.contentHash && state.totalParagraphs >= 1
+        ? {
+            title: state.title.slice(0, 100),
+            contentHash: state.contentHash,
+            totalParagraphs: state.totalParagraphs,
+            voiceId: (state.voiceId || '').slice(0, 64),
+          }
+        : undefined;
+    await get().beginPlayback({
+      source: { kind: 'draft', messageId },
+      mode: 'restart',
+      speed,
+      draftSnapshot,
     });
-    await get().saveCheckpointImmediate({ forceReset: true });
+    set({ continuationMode: 'finite' });
     await get().playParagraph(0, { explicit: true });
   },
 
@@ -838,7 +840,9 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     clearDebounceTimer();
     const state = get();
     if (!state.sessionId || !state.source) return;
-    const saveKey = `${state.sessionId}:${state.nextParagraphIndex}:${options?.forceReset ? 'force' : 'normal'}`;
+    // Blocking 2（M7-02 复审）：dedupe key 必须覆盖 speed——同 paragraph 内改倍速
+    // 也必须真实落盘（否则 Session/Transport 已 1.5x 而 Anchor 仍旧值，刷新回退）。
+    const saveKey = `${state.sessionId}:${state.nextParagraphIndex}:${state.speed}:${options?.forceReset ? 'force' : 'normal'}`;
     if (!options?.forceReset && state.lastSavedKey === saveKey) return;
     const playbackStore = usePlaybackStore.getState();
     try {

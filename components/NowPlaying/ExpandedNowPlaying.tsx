@@ -83,6 +83,10 @@ export const ExpandedNowPlaying: React.FC = () => {
     const [isDragging, setIsDragging] = useState(false);
     const dragOffsetRef = useRef(0);
     dragOffsetRef.current = dragOffsetY;
+    // Escape 兜底的事实判断锚点（Blocking 3）：用真实 overlay/dialog ref 做 contains，
+    // 不依赖 testid query。
+    const overlayRef = useRef<HTMLDivElement | null>(null);
+    const dialogRef = useRef<HTMLElement | null>(null);
 
     const handleClose = useCallback(() => {
         // 只关闭 UI，不暂停/不 clear Session（spec §9：播放继续）。
@@ -101,14 +105,16 @@ export const ExpandedNowPlaying: React.FC = () => {
     );
 
     /**
-     * Escape 兜底（M7-02 复验修复）：
+     * Escape 兜底（M7-02 复验修复 + Blocking 3 收窄）：
      * RAC overlay 的 Escape 语义要求焦点位于 overlay 内；真实浏览器中，点击
      * 「从头播放」等操作会让 busy 控件 disabled，浏览器随即把焦点移到 body
      * （标准行为），窗口期内 Escape 冒泡不经过 overlay → RAC handler 不触发
-     * → 面板无法关闭（spec §6/§77「Escape close」契约缺口；chromium 重复运行
-     * 复现率约 1/5–1/8，焦点掉 body 时 100% 复现）。
-     * 本监听为纯兜底：RAC 已处理时事件已被 preventDefault/stopPropagation，
-     * 直接让行（不重复关闭）；仅当焦点掉出 overlay 时走同一 handleClose。
+     * → 面板无法关闭。
+     * 本监听为纯兜底且必须收窄为「焦点确实不在 Expanded overlay 内」才接管：
+     * - RAC 已处理（焦点在 overlay 内）时事件已 preventDefault → 让行；
+     * - 焦点仍在 overlay/dialog 内（含 nested menu/popover）→ 让行（交由
+     *   RAC 与局部控件处理，不得抢先关闭整个面板）；
+     * - 仅当焦点逃出 overlay（如掉到 body）才走同一 handleClose。
      * 不改变任何焦点行为，不替代/复制 RAC 的 focus containment（spec §10.1）。
      */
     useEffect(() => {
@@ -117,6 +123,14 @@ export const ExpandedNowPlaying: React.FC = () => {
         }
         const onDocumentKeyDown = (event: KeyboardEvent): void => {
             if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) {
+                return;
+            }
+            const active = typeof document !== 'undefined' ? (document.activeElement as Node | null) : null;
+            const insideOverlay =
+                overlayRef.current !== null && active !== null && overlayRef.current.contains(active);
+            const insideDialog =
+                dialogRef.current !== null && active !== null && dialogRef.current.contains(active);
+            if (insideOverlay || insideDialog) {
                 return;
             }
             handleClose();
@@ -178,6 +192,7 @@ export const ExpandedNowPlaying: React.FC = () => {
 
     return (
         <ModalOverlay
+            ref={overlayRef}
             className={styles.overlay}
             isOpen={isExpanded}
             onOpenChange={handleOverlayOpenChange}
@@ -191,6 +206,7 @@ export const ExpandedNowPlaying: React.FC = () => {
                 style={sheetStyle}
             >
                 <Dialog
+                    ref={dialogRef}
                     className={styles.dialog}
                     aria-label={EXPANDED_DIALOG_ARIA_LABEL}
                     data-testid="expanded-now-playing"

@@ -404,9 +404,24 @@ async function runMiniSessionIntegration(): Promise<void> {
             '重新播放'
         );
         rendered.unmount();
+        // M7-02 fixup 后 restart 走 server-authoritative beginPlayback（Blocking 1）：
+        // 本测试无 server，注入桩模拟 server restart（新 UUID + position 0）成功。
+        const originalBegin = useSession.getState().beginPlayback as (p: Record<string, unknown>) => Promise<void>;
+        useSession.setState({
+            beginPlayback: async (params: Record<string, unknown>) => {
+                useSession.setState({
+                    sessionId: 'b47ac10b-58cc-4372-a567-0e02b2c3d482',
+                    source: params.source,
+                    nextParagraphIndex: 0,
+                    lastCompletedParagraphIndex: -1,
+                    status: 'ready',
+                });
+            },
+        });
         await flowMod.restartPlayback();
         assert.strictEqual(useSession.getState().status as string, 'playing', 'restart 后回到 playing');
         assert.ok(playCalls >= 1, 'restart 必须出声');
+        useSession.setState({ beginPlayback: originalBegin });
 
         // error → retry。
         resetAll();

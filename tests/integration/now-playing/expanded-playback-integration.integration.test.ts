@@ -409,6 +409,63 @@ async function runExpandedPlaybackIntegration(): Promise<void> {
         console.log('PASS: M7-02-I3 speed sync');
     }
 
+    console.log('=== M7-02-I3b: speed checkpoint 去重修正（同 paragraph 改 speed 必须真实落盘；Blocking 2） ===');
+    {
+        resetAll();
+        seedWorkSession();
+        installController();
+        useSession.getState().setStatus('paused');
+        // 1) 首次 normal checkpoint 落盘（同 paragraph 位置）。
+        checkpointSpeeds.length = 0;
+        await useSession.getState().saveCheckpointImmediate({ forceReset: false });
+        const savesAfterFirst = checkpointSpeeds.length;
+        assert.ok(savesAfterFirst >= 1, '首次 checkpoint 必须落盘');
+        assert.strictEqual(checkpointSpeeds[checkpointSpeeds.length - 1], 1.0, '首保携带初始 speed');
+        // 2) 同 paragraph 内改 speed：dedupe key 若不含 speed 会被误去重（Blocking 2 场景）。
+        await flowMod.setPlaybackRate(1.5);
+        assert.ok(
+            checkpointSpeeds.length > savesAfterFirst,
+            '同 paragraph 改 speed 必须触发新落盘（不得被 position-only dedupe 吞掉）'
+        );
+        assert.strictEqual(checkpointSpeeds[checkpointSpeeds.length - 1], 1.5, '落盘携带新 speed（server Anchor 即时更新）');
+        // 3) 同段落同 speed 重复保存：正常去重（不重复落盘）。
+        const savesAfterSpeed = checkpointSpeeds.length;
+        await useSession.getState().saveCheckpointImmediate({ forceReset: false });
+        assert.strictEqual(checkpointSpeeds.length, savesAfterSpeed, '同位置同 speed 仍去重');
+        // 4) rehydrate 复读：以 server 侧新值（speed 1.5）水合后，本地即新 speed（刷新不回退）。
+        const ok = await useSession.getState().hydrateFromAnchor(
+            {
+                sessionId: WORK_SESSION_ID,
+                source: { kind: 'work', workId: 481 },
+                state: 'ready',
+                title: '月球上的小狐狸',
+                contentHash: 'hash-seed',
+                segmentationVersion: 'v1',
+                lastCompletedParagraphIndex: 0,
+                nextParagraphIndex: 1,
+                totalParagraphs: 4,
+                voiceId: 'alloy',
+                speed: 1.5,
+                remainingAllowedMs: null,
+                totalAllowedMs: null,
+                updatedAt: new Date().toISOString(),
+            } as Record<string, unknown>,
+            {
+                getWork: async () => ({
+                    title: '月球上的小狐狸',
+                    storyText: STORY_2,
+                    voiceId: 'alloy',
+                    contentHash: 'hash-seed',
+                }),
+                ensureChatLoaded: async () => {},
+            }
+        );
+        assert.strictEqual(ok, true, 'rehydrate 成功');
+        assert.strictEqual(useSession.getState().speed as number, 1.5, 'rehydrate 后仍为新 speed（刷新不回退）');
+        assert.strictEqual(useTransport.getState().playbackRate as number, 1.5, 'rehydrate 同步 Transport');
+        console.log('PASS: M7-02-I3b speed checkpoint dedupe');
+    }
+
     console.log('=== M7-02-I4: rehydrate 无特殊分支 + rate/badge 即时（验收 6/7） ===');
     {
         resetAll();
@@ -453,10 +510,10 @@ async function runExpandedPlaybackIntegration(): Promise<void> {
         console.log('PASS: M7-02-I4 rehydrate');
     }
 
-    console.log('=== M7-02-I5: Draft restart 有限 + 到结尾不续写（验收 8） ===');
+    console.log('=== M7-02-I5: Draft restart 新 UUID + finite + 到结尾不续写（验收 8；Blocking 1 契约） ===');
     {
         resetAll();
-        // Draft 会话：显式 extendable 起播，restart 后必须强制 finite。
+        // Draft 会话：显式 extendable 起播，restart 后必须走 server 新 UUID 并强制 finite。
         useSession.getState().setActiveStory({
             source: { kind: 'draft', messageId: 'msg_draft_restart_01' },
             sessionId: 'f47ac10b-58cc-4372-a567-0e02b2c3d480',
@@ -470,15 +527,36 @@ async function runExpandedPlaybackIntegration(): Promise<void> {
         installController();
         ttsSynthCount = 0;
         const sessionBefore = useSession.getState().sessionId as string;
+        // 桩 beginPlayback：模拟 server draft restart（新 UUID + position 0；canonical snapshot 随行）。
+        let beginArgs: Record<string, unknown> | null = null;
+        const originalBegin = useSession.getState().beginPlayback;
+        (useSession as unknown as { setState: (p: Record<string, unknown>) => void }).setState({
+            beginPlayback: async (params: Record<string, unknown>) => {
+                beginArgs = params as Record<string, unknown>;
+                assert.strictEqual((params.source as { kind: string }).kind, 'draft', 'Draft restart 源为 draft');
+                assert.strictEqual(params.mode, 'restart', 'Draft restart 必须 mode=restart（新 UUID）');
+                const snap = params.draftSnapshot as Record<string, unknown> | undefined;
+                assert.ok(snap && typeof snap.contentHash === 'string' && snap.contentHash.length > 0, 'Draft restart 携带 canonical snapshot');
+                useSession.setState({
+                    sessionId: 'f47ac10b-58cc-4372-a567-0e02b2c3d489',
+                    source: params.source,
+                    nextParagraphIndex: 0,
+                    lastCompletedParagraphIndex: -1,
+                    status: 'ready',
+                });
+            },
+        });
         await useSession.getState().restart();
+        assert.ok(beginArgs !== null, 'Draft restart 必须经 beginPlayback（server-authoritative，Blocking 1）');
+        assert.notStrictEqual(useSession.getState().sessionId as string, sessionBefore, 'Draft restart 新 UUID（Blocking 1 契约）');
         assert.strictEqual(useSession.getState().nextParagraphIndex as number, 0, 'Draft restart 回 0');
         assert.strictEqual(useSession.getState().continuationMode as string, 'finite', 'Draft restart 强制 finite（§38.1）');
-        assert.strictEqual(useSession.getState().sessionId as string, sessionBefore, 'Draft 本地 restart 不换 UUID（当前文本从头播放）');
         assert.ok(playCalls >= 1, 'restart 必须出声（首段合成）');
         // 到结尾不触发 AI continuation：finite 唯一门关闭。
         assert.strictEqual(flowMod.shouldAllowAiContinuation('finite'), false, 'finite 禁止 continuation');
         assert.strictEqual(flowMod.shouldAllowAiContinuation('extendable'), true, 'sanity：extendable 才允许');
-        console.log('PASS: M7-02-I5 draft restart finite');
+        (useSession as unknown as { setState: (p: Record<string, unknown>) => void }).setState({ beginPlayback: originalBegin });
+        console.log('PASS: M7-02-I5 draft restart new uuid finite');
     }
 
     console.log('=== M7-02-I6: Work restart 新 UUID + position 0（验收 1/8，§38/§73） ===');
@@ -518,6 +596,30 @@ async function runExpandedPlaybackIntegration(): Promise<void> {
             beginPlayback: originalBegin,
         });
         console.log('PASS: M7-02-I6 work restart new uuid');
+    }
+
+    console.log('=== M7-02-I6b: Work restart server 失败 → 保持旧 session + error surfaced（Blocking 1 验收） ===');
+    {
+        resetAll();
+        seedWorkSession();
+        const oldId = useSession.getState().sessionId as string;
+        const originalBegin = useSession.getState().beginPlayback;
+        (useSession as unknown as { setState: (p: Record<string, unknown>) => void }).setState({
+            beginPlayback: async () => {
+                throw new Error('server unavailable');
+            },
+        });
+        let threw = false;
+        try {
+            await useSession.getState().restart();
+        } catch {
+            threw = true;
+        }
+        assert.strictEqual(threw, true, 'Work restart 失败必须向上抛错（error surfaced）');
+        assert.strictEqual(useSession.getState().sessionId as string, oldId, '失败保持旧 sessionId（绝不本地伪造 Session）');
+        assert.ok(useSession.getState().source !== null, 'source 保持原样');
+        (useSession as unknown as { setState: (p: Record<string, unknown>) => void }).setState({ beginPlayback: originalBegin });
+        console.log('PASS: M7-02-I6b work restart fail-closed');
     }
 
     console.log('=== M7-02-I7: Mini/Expanded 同源即时同步（验收 9 变体：同 Session/Transport） ===');

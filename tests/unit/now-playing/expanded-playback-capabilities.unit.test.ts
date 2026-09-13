@@ -316,6 +316,12 @@ async function runExpandedPlaybackCapabilitiesUnit(): Promise<void> {
         assert.ok(!expandedSrc.includes('playbackProgressStore'), 'UI 不碰 legacy progress');
         assert.ok(!expandedSrc.includes('generationHistory'), 'UI 不碰 History');
         assert.ok(!expandedSrc.includes('storyFlow'), 'UI 不拼 continuation Prompt');
+        // Blocking 3：Escape document fallback 必须收窄为"焦点确实不在 overlay/dialog 内"
+        // （用真实 ref 做 contains 事实判断，不拿 defaultPrevented 代替）。
+        assert.ok(expandedSrc.includes('overlayRef'), 'fallback 持有 overlay ref');
+        assert.ok(expandedSrc.includes('dialogRef'), 'fallback 持有 dialog ref');
+        assert.ok(expandedSrc.includes('.contains('), 'fallback 做 contains 事实判断');
+        assert.ok(expandedSrc.includes('insideOverlay') && expandedSrc.includes('insideDialog'), 'fallback 收窄条件双保险');
         for (const f of ['PlaybackTimeline.tsx', 'PlaybackControls.tsx', 'PlaybackRateControl.tsx', 'ParagraphStatus.tsx', 'useExpandedPlaybackControls.ts']) {
             const s = stripComments(readRepoText(`components/NowPlaying/${f}`));
             assert.ok(!s.includes('isRehydratedReady'), `${f} 无 rehydrated 分支`);

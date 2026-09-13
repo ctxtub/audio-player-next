@@ -23,12 +23,16 @@ import { makeGuestId } from '../../support/builders/auth-subject.builder';
  *    User Anchor=work(481)+Progress=work(481)，无 work(35) dangling；
  *    sessionId 原样沿用（4a）；单事务 Anchor 先 Progress 后（4b/4c）；
  *    remap 后 getAnchor/Checkpoint/batch 一路正常（4f）；
- *    Guest 侧已迁移 Anchor/Progress 清除完毕（4h）；
+ *    Guest 侧已迁移 Anchor 清除（4h），Guest Progress copy/remap 保留到 Guest GC
+ *    （§31.4：storyWorkId/hash/version/paragraph/completedAt 不变，FK Cascade 清理）；
+ *    同一 remap 重复调用幂等（User 不重复不倒退，Guest 仍不变）；
  * 2. §31.1：Draft Anchor messageId 原样迁移；
  * 3. §31.3：无映射 work Anchor → drop（false，用户侧无行，Guest 原样保留）；
  * 4. §31.4/4g：User 已有同 work 进度 → max(next) 合并，不覆盖（ahead 保持/behind 推进，
  *    completedAt 首完保留）；
  * 5. 无 guest 行 → false；他用户数据逐字节不受影响（4h no-leak 侧）。
+ *    §47：Guest→新用户注册=remap 且 Guest Progress 保留；Guest 身份登录已有账号=
+ *    不触发本函数（见 story-work-guest-registration §4 登录不迁移，本文件不直接调 login）。
  * 全程隔离库（runner 注入 DATABASE_URL），不碰 dev.db/app.db。
  */
 
@@ -130,6 +134,10 @@ async function runPlaybackSubjectRemapTests(): Promise<void> {
   const u1 = creative.storyWorkIdMap.get(w1.id);
   const u2 = creative.storyWorkIdMap.get(w2.id);
   assert(u1 !== undefined && u2 !== undefined, '前置：map 必须含两作品');
+  const guestProgressesBefore = await prisma.guestStoryPlaybackProgress.findMany({
+    where: { storyWorkId: { in: [w1.id, w2.id] } },
+  });
+  assert.strictEqual(guestProgressesBefore.length, 2, '前置：Guest Progress 两行存在');
   const remapped = await migrateGuestPlaybackProgressToUser(guest.id, freshUser.id, creative.storyWorkIdMap);
   assert.strictEqual(remapped, true, '§46：remap 应成功');
 
@@ -153,18 +161,109 @@ async function runPlaybackSubjectRemapTests(): Promise<void> {
     [u1, u2].sort((a, b) => (a as number) - (b as number)),
     'User Progress 键集合必须恰为 map dst，无悬空 guest 键'
   );
-  // Guest 侧已迁移部分清除完毕（4h）。
+  // Guest 侧：Anchor 清除（4h）；Progress copy/remap 保留到 Guest GC（§31.4）。
   assert.strictEqual(
     await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guest.id } }),
     null,
     '4h：Guest Anchor 必须清除'
   );
+  // §31.4 copy 语义：Guest Progress rows still exist 且原 storyWorkId/hash/version/paragraph/completedAt 不变。
+  const guestProgressesAfter = await prisma.guestStoryPlaybackProgress.findMany({
+    where: { storyWorkId: { in: [w1.id, w2.id] } },
+  });
   assert.strictEqual(
-    await prisma.guestStoryPlaybackProgress.count({
-      where: { storyWorkId: { in: [w1.id, w2.id] } },
-    }),
-    0,
-    '4h：Guest Progress 必须清除'
+    guestProgressesAfter.length,
+    2,
+    '§31.4 copy：Guest Progress 必须保留（Guest GC 负责最终删除）'
+  );
+  const beforeByGuestWorkId = new Map(guestProgressesBefore.map((p) => [p.storyWorkId, p]));
+  const afterByGuestWorkId = new Map(guestProgressesAfter.map((p) => [p.storyWorkId, p]));
+  for (const gid of [w1.id, w2.id]) {
+    const before = beforeByGuestWorkId.get(gid);
+    const after = afterByGuestWorkId.get(gid);
+    assert(before !== undefined && after !== undefined, `Guest Progress work(${gid}) 必须存在`);
+    assert.strictEqual(after.storyWorkId, before.storyWorkId, 'storyWorkId 不变');
+    assert.strictEqual(after.contentHash, before.contentHash, 'contentHash 不变');
+    assert.strictEqual(after.segmentationVersion, before.segmentationVersion, 'segmentationVersion 不变');
+    assert.strictEqual(
+      after.lastCompletedParagraphIndex,
+      before.lastCompletedParagraphIndex,
+      'lastCompletedParagraphIndex 不变'
+    );
+    assert.strictEqual(after.nextParagraphIndex, before.nextParagraphIndex, 'nextParagraphIndex 不变');
+    assert.strictEqual(after.totalParagraphs, before.totalParagraphs, 'totalParagraphs 不变');
+    assert.strictEqual(
+      after.completedAt?.toISOString() ?? null,
+      before.completedAt?.toISOString() ?? null,
+      'completedAt 不变'
+    );
+  }
+  // §31.4 位置保真抽查：w1 next=2 / w2 next=1 与 remap 前一致。
+  assert.strictEqual(afterByGuestWorkId.get(w1.id)?.nextParagraphIndex, 2, 'Guest w1 Progress 位置不变');
+  assert.strictEqual(afterByGuestWorkId.get(w2.id)?.nextParagraphIndex, 1, 'Guest w2 Progress 位置不变');
+  // 幂等回归：再次调用 remap → User Progress 不重复不倒退 + Guest Progress 仍不变
+  //（mergeRemappedWorkProgress 完整 tuple winner + 保留 completedAt + 较晚 lastPlayedAt 天然幂等）。
+  const userSnapshotBeforeSecond = await prisma.storyPlaybackProgress.findMany({
+    where: { storyWorkId: { in: [u1, u2] } },
+  });
+  const normUserProgress = (p: {
+    storyWorkId: number;
+    contentHash: string | null;
+    segmentationVersion: string | null;
+    lastCompletedParagraphIndex: number;
+    nextParagraphIndex: number;
+    totalParagraphs: number;
+    completedAt: Date | null;
+    lastPlayedAt: Date | null;
+  }) => ({
+    storyWorkId: p.storyWorkId,
+    contentHash: p.contentHash ?? '',
+    segmentationVersion: p.segmentationVersion ?? 'v1',
+    lastCompletedParagraphIndex: p.lastCompletedParagraphIndex,
+    nextParagraphIndex: p.nextParagraphIndex,
+    totalParagraphs: p.totalParagraphs,
+    completedAt: p.completedAt?.toISOString() ?? null,
+    lastPlayedAt: p.lastPlayedAt?.toISOString() ?? null,
+  });
+  assert.strictEqual(
+    await migrateGuestPlaybackProgressToUser(guest.id, freshUser.id, creative.storyWorkIdMap),
+    true,
+    '幂等：重复 remap 仍返回 true（Guest Progress 保留故仍可迁移）'
+  );
+  const userProgressesAfterSecond = await prisma.storyPlaybackProgress.findMany({
+    where: { storyWorkId: { in: [u1, u2] } },
+  });
+  assert.strictEqual(userProgressesAfterSecond.length, 2, '幂等：User Progress 不重复');
+  assert.deepStrictEqual(
+    userProgressesAfterSecond.map(normUserProgress).sort((a, b) => a.storyWorkId - b.storyWorkId),
+    userSnapshotBeforeSecond.map(normUserProgress).sort((a, b) => a.storyWorkId - b.storyWorkId),
+    '幂等：User Progress 不倒退（完整 tuple winner + completedAt 首完 + 较晚 lastPlayedAt 天然幂等）'
+  );
+  const guestProgressesAfterSecond = await prisma.guestStoryPlaybackProgress.findMany({
+    where: { storyWorkId: { in: [w1.id, w2.id] } },
+  });
+  assert.strictEqual(guestProgressesAfterSecond.length, 2, '幂等：Guest Progress 仍保留');
+  const normGuestProgress = (p: {
+    storyWorkId: number;
+    contentHash: string | null;
+    segmentationVersion: string | null;
+    lastCompletedParagraphIndex: number;
+    nextParagraphIndex: number;
+    totalParagraphs: number;
+    completedAt: Date | null;
+  }) => ({
+    storyWorkId: p.storyWorkId,
+    contentHash: p.contentHash,
+    segmentationVersion: p.segmentationVersion,
+    lastCompletedParagraphIndex: p.lastCompletedParagraphIndex,
+    nextParagraphIndex: p.nextParagraphIndex,
+    totalParagraphs: p.totalParagraphs,
+    completedAt: p.completedAt?.toISOString() ?? null,
+  });
+  assert.deepStrictEqual(
+    guestProgressesAfterSecond.map(normGuestProgress).sort((a, b) => a.storyWorkId - b.storyWorkId),
+    guestProgressesAfter.map(normGuestProgress).sort((a, b) => a.storyWorkId - b.storyWorkId),
+    '幂等：Guest Progress 仍不变'
   );
   // remap 后用户侧一路正常（4f：getAnchor/Checkpoint/batch，无 guest 残留查询）。
   const rehydrated = await getPlaybackAnchorForSubject(userSubject);

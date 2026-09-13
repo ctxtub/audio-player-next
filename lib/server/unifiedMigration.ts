@@ -215,11 +215,13 @@ export async function migrateGuestCreativeRecordsToUser(
 /**
  * 将指定 guestId 的播放状态迁移至指定用户（Anchor + Per-Work Progress，M5-08 §31）。
  *
- * M5-08 move 语义（同一浏览器身 subject 键切换，不算跨人 merge，M2 no-leak 保持）：
- * 成功迁移的部分以单事务完成 User 侧 upsert + Guest 侧 delete（deleteMany guest +
- * upsert user，Anchor 先 Progress 后，每 workId 保持配对）；未映射部分逐项跳过
- * （Guest 行保留，GC 兜底），绝不产生悬空 User 状态。注册后 Guest 侧已迁移的
- * Anchor/Progress 即清除完毕（§47：登录既有账号仍不触发任何迁移/删除，见 login 不调本函数）。
+ * M5-08 copy/remap 语义（同一浏览器身 subject 键切换，不算跨人 merge，M2 no-leak 保持）：
+ * 成功迁移的部分以单事务完成 User 侧 upsert/create/idempotent merge（Anchor 先 Progress 后，
+ * 每 workId 保持配对）；未映射部分逐项跳过（Guest 行保留，GC 兜底），绝不产生悬空 User 状态。
+ * §31.4 GuestStoryPlaybackProgress remap 后 Guest 原记录保留到 Guest GC（GC 删过期
+ * GuestStoryWork → FK onDelete: Cascade 清理），本函数绝不删除 Guest Progress 行。
+ * 注册后 Guest 侧已迁移的 Anchor 即清除完毕（Anchor 注册后清理不作 blocker，保持现状）；
+ * Guest Progress 由 Guest GC 负责最终删除（§47：登录既有账号仍不触发任何迁移/删除，见 login 不调本函数）。
  *
  * - sessionId 原样沿用（不改 session 键域，只改 subject 键；null 由 getAnchor §33 repair）。
  * - M5-03 canonical 锁定：读兼容四值（chat|generation|draft|work，经 canonicalizeSourceKind
@@ -305,7 +307,8 @@ export async function migrateGuestPlaybackProgressToUser(
         }
     }
 
-    // —— Progress remap 配对（无映射逐行跳过，Guest 行保留；有映射的随事务搬迁）——
+    // —— Progress remap 配对（copy/remap 语义：无映射逐行跳过；有映射的在 User 侧 create/idempotent merge，
+    // Guest 侧 Progress 原记录保留到 Guest GC，本函数不删除）——
     const progressRemaps: { guestStoryWorkId: number; userStoryWorkId: number }[] = [];
     for (const p of guestProgresses) {
         const userWorkId = workIdMap.get(p.storyWorkId);
@@ -401,14 +404,10 @@ export async function migrateGuestPlaybackProgressToUser(
                     });
                 }
             }
-            // Guest 侧清除（仅已迁移部分；未映射行保留，由 GC 兜底）。
+            // Guest 侧：Anchor 注册后清理（保持现状）；Progress copy/remap 语义下原记录保留到 Guest GC
+            //（GC 删过期 GuestStoryWork → FK onDelete: Cascade 清理），此处不删除 Guest Progress 行。
             if (guestAnchor && remappedAnchor) {
                 await tx.guestPlaybackAnchor.delete({ where: { guestId } });
-            }
-            if (progressRemaps.length > 0) {
-                await tx.guestStoryPlaybackProgress.deleteMany({
-                    where: { storyWorkId: { in: progressRemaps.map((p) => p.guestStoryWorkId) } },
-                });
             }
         },
         { timeout: 30000 }

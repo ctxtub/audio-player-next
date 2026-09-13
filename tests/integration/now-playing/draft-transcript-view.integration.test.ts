@@ -324,7 +324,21 @@ async function runDraftTranscriptIntegration(): Promise<void> {
         const transcript = rendered.getByTestId('expanded-transcript');
         assert.ok(transcript, 'TranscriptView 已打开');
         assert.strictEqual(rendered.getByTestId('expanded-now-playing').getAttribute('data-view'), 'transcript', '局部 view = transcript');
+        // §35/§72 互斥：transcript open 时 controls 元素完全不渲染。
+        assert.strictEqual(rendered.queryByTestId('expanded-playback-controls'), null, '互斥：transcript 下无播放控制');
+        assert.strictEqual(rendered.queryByTestId('expanded-timeline'), null, '互斥：transcript 下无时间轴');
+        assert.strictEqual(rendered.queryByTestId('expanded-actions'), null, '互斥：transcript 下无动作区');
         assert.deepStrictEqual(snapshotPlayback(), before, '打开不改变 Session/Transport');
+        // 返回后 controls 重新出现（仍是同一 Expanded，会话不变）。
+        act(() => {
+            rendered.getByTestId('expanded-transcript-back-button').click();
+        });
+        assert.strictEqual(rendered.queryByTestId('expanded-transcript'), null, '返回后 transcript 收起');
+        assert.ok(rendered.getByTestId('expanded-playback-controls'), '返回后播放控制重新出现');
+        assert.ok(rendered.getByTestId('expanded-timeline'), '返回后时间轴重新出现');
+        assert.ok(rendered.getByTestId('expanded-actions'), '返回后动作区重新出现');
+        assert.ok(rendered.getByTestId('expanded-view-transcript-button'), '返回后 Draft 查看正文重新出现');
+        assert.deepStrictEqual(snapshotPlayback(), before, '往返不改变 Session/Transport');
         rendered.unmount();
         console.log('PASS: M7-04-02-I1 draft open in-expanded no-nav');
     }
@@ -399,7 +413,7 @@ async function runDraftTranscriptIntegration(): Promise<void> {
         console.log('PASS: M7-04-02-I4 no-fake-id');
     }
 
-    console.log('=== M7-04-02-I5: promotion 保持打开 + 打开作品详情复用出口（验收 5，§35.1） ===');
+    console.log('=== M7-04-02-I5a: promotion 保持打开 + 单 CTA + 返回 Work controls（验收 5，§35.1） ===');
     {
         resetAll();
         seedDraftSession();
@@ -421,6 +435,37 @@ async function runDraftTranscriptIntegration(): Promise<void> {
         // promotion 后出现打开作品详情入口（复用 Work 先关后导 handler）。
         const openDetail = rendered.getByTestId('expanded-open-work-detail-button');
         assert.strictEqual(openDetail.textContent?.includes('打开作品详情'), true);
+        // §35.1 单 CTA 不变量：同一 Work Detail 不得双入口并存。
+        assert.strictEqual(rendered.queryByTestId('expanded-view-story-button'), null, 'promotion 后 transcript 内无 Work 查看正文（单 CTA）');
+        assert.strictEqual(rendered.queryByTestId('expanded-actions'), null, 'promotion 后 transcript 内无动作区（互斥）');
+        assert.strictEqual(rendered.queryByTestId('expanded-playback-controls'), null, 'promotion 后 transcript 内无播放控制（互斥）');
+        // 返回控制 → 进入 Work controls view → Work 查看正文正常出现。
+        act(() => {
+            rendered.getByTestId('expanded-transcript-back-button').click();
+        });
+        assert.strictEqual(rendered.queryByTestId('expanded-transcript'), null, '返回后 transcript 收起');
+        assert.strictEqual(rendered.getByTestId('expanded-now-playing').getAttribute('data-view'), 'controls', '返回后局部 view = controls');
+        assert.strictEqual(useUi.getState().isExpanded as boolean, true, '返回控制不关闭 Expanded');
+        assert.ok(rendered.getByTestId('expanded-view-story-button'), '返回后 Work 查看正文出现');
+        assert.deepStrictEqual(pushedUrls, [], '返回控制不导航');
+        assert.strictEqual((useSession.getState().sessionId as string), sessionIdBefore, '返回控制 sessionId 不变');
+        rendered.unmount();
+        console.log('PASS: M7-04-02-I5a promote keep-open single-cta back-to-work');
+    }
+
+    console.log('=== M7-04-02-I5b: 打开作品详情 push 精确目标（§35.1 同一路由出口） ===');
+    {
+        resetAll();
+        seedDraftSession();
+        const rendered = renderExpanded();
+        act(() => {
+            rendered.getByTestId('expanded-view-transcript-button').click();
+        });
+        const sessionIdBefore = useSession.getState().sessionId as string;
+        act(() => {
+            useSession.setState({ source: { kind: 'work', workId: 481 } });
+        });
+        const openDetail = rendered.getByTestId('expanded-open-work-detail-button');
         const before = snapshotPlayback();
         assert.strictEqual(before.sessionId, sessionIdBefore, 'promotion 模拟 sessionId 不变');
         act(() => {
@@ -430,7 +475,7 @@ async function runDraftTranscriptIntegration(): Promise<void> {
         assert.strictEqual(useUi.getState().isExpanded as boolean, false, '打开详情先关 Expanded');
         assert.strictEqual((useSession.getState().sessionId as string), sessionIdBefore, '打开详情不改变 Session');
         rendered.unmount();
-        console.log('PASS: M7-04-02-I5 promote keep-open open-detail');
+        console.log('PASS: M7-04-02-I5b open-detail exact push');
     }
 
     console.log('=== M7-04-02-I6: fail-closed（验收 6：无正文/idle 不展示或空态） ===');

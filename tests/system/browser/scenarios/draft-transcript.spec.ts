@@ -143,6 +143,10 @@ test("Expanded Draft Transcript 只读面", async ({ page, harnessEnv, evidence 
     const transcriptText = await page.getByTestId("expanded-transcript-text").textContent();
     expect(transcriptText).toBe(draftStory);
     expect(await page.getByTestId("expanded-transcript-empty").count()).toBe(0);
+    // §35/§72 互斥：transcript 下 controls 元素完全不渲染。
+    expect(await page.getByTestId("expanded-playback-controls").count()).toBe(0);
+    expect(await page.getByTestId("expanded-timeline").count()).toBe(0);
+    expect(await page.getByTestId("expanded-actions").count()).toBe(0);
     // 只读：无可编辑元素。
     expect(await page.locator('[data-testid="expanded-transcript"] textarea').count()).toBe(0);
     expect(await page.locator('[data-testid="expanded-transcript"] input').count()).toBe(0);
@@ -159,10 +163,14 @@ test("Expanded Draft Transcript 只读面", async ({ page, harnessEnv, evidence 
     expect(await page.getByTestId("expanded-open-work-detail-button").count()).toBe(0);
     recorder.step("Transcript 只读打开", {});
 
-    // 返回控制：Session/Transport/Audio 零变化（验收 3），URL 不变。
+    // 返回控制：Session/Transport/Audio 零变化（验收 3），URL 不变；controls 重新出现。
     await page.getByTestId("expanded-transcript-back-button").click({ timeout: 15000 });
     await expect(page.getByTestId("expanded-transcript")).toHaveCount(0, { timeout: 15000 });
     await expect(page.getByTestId("expanded-now-playing")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("expanded-playback-controls")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("expanded-timeline")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("expanded-actions")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("expanded-view-transcript-button")).toBeVisible({ timeout: 15000 });
     expect(page.url()).toBe(urlBefore);
     const afterBack = await readProbe(page);
     expect(afterBack.sessionId).toBe(draftSessionId);
@@ -191,7 +199,50 @@ test("Expanded Draft Transcript 只读面", async ({ page, harnessEnv, evidence 
     expect((await page.getByTestId("expanded-transcript-text").textContent())).toBe(draftStory);
     expect((await readProbe(page)).sessionId).toBe(draftSessionId);
     await expect(page.getByTestId("expanded-open-work-detail-button")).toContainText("打开作品详情", { timeout: 15000 });
+    // §35.1 单 CTA 不变量：同一 Work Detail 不得双入口并存。
+    expect(await page.getByTestId("expanded-open-work-detail-button").count()).toBe(1);
+    expect(await page.getByTestId("expanded-view-story-button").count()).toBe(0);
+    expect(await page.getByTestId("expanded-actions").count()).toBe(0);
+    expect(await page.getByTestId("expanded-playback-controls").count()).toBe(0);
     recorder.step("promotion 保持打开", {});
+
+    // 返回控制 → 进入 Work controls view → Work「查看正文」正常出现。
+    await page.getByTestId("expanded-transcript-back-button").click({ timeout: 15000 });
+    await expect(page.getByTestId("expanded-transcript")).toHaveCount(0, { timeout: 15000 });
+    await expect(page.getByTestId("expanded-now-playing")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("expanded-view-story-button")).toContainText("查看正文", { timeout: 15000 });
+    expect(page.url()).toBe(urlBefore);
+    expect((await readProbe(page)).sessionId).toBe(draftSessionId);
+    recorder.step("返回进入Work控制面", {});
+
+    // 重建 Draft transcript 以验证打开作品详情出口（Expanded 保持打开，直接重 seed）。
+    const draftMessageId2 = `msg_draft_transcript2_${runKey}`;
+    await page.evaluate(
+        (input: { messageId: string; title: string; storyText: string }) => {
+            const w = window as unknown as Record<
+                string,
+                {
+                    seedDraftTranscript: (i: { messageId: string; title: string; storyText: string }) => ProbeSnapshot;
+                }
+            >;
+            return w["__M5PlaybackProbe"].seedDraftTranscript(input);
+        },
+        { messageId: draftMessageId2, title: draftTitle, storyText: draftStory },
+    );
+    await expect
+        .poll(async () => (await readProbe(page)).source?.kind, { timeout: 15000 })
+        .toBe("draft");
+    await page.getByTestId("expanded-view-transcript-button").click({ timeout: 15000 });
+    await expect(page.getByTestId("expanded-transcript")).toBeVisible({ timeout: 15000 });
+    await page.evaluate((workId: number) => {
+        const w = window as unknown as Record<string, { simulateDraftPromotedToWork: (id: number) => ProbeSnapshot }>;
+        return w["__M5PlaybackProbe"].simulateDraftPromotedToWork(workId);
+    }, targetWork.id);
+    await expect
+        .poll(async () => (await readProbe(page)).source?.kind, { timeout: 15000 })
+        .toBe("work");
+    await expect(page.getByTestId("expanded-transcript")).toBeVisible({ timeout: 15000 });
+    const draftSessionId2 = (await readProbe(page)).sessionId as string;
 
     // 打开作品详情：复用同一路由出口 → 精确 /library/[workId]，会话同一。
     beginSessionCount = 0;
@@ -204,7 +255,7 @@ test("Expanded Draft Transcript 只读面", async ({ page, harnessEnv, evidence 
     expect(page.url()).toContain(`/library/${targetWork.id}`);
     seenLibraryUrls.push(page.url());
     const afterNav = await readProbe(page);
-    expect(afterNav.sessionId).toBe(draftSessionId);
+    expect(afterNav.sessionId).toBe(draftSessionId2);
     expect(afterNav.audioCount).toBe(audioCountBefore);
     expect(beginSessionCount).toBe(0);
     expect(ttsSynthCount).toBe(0);

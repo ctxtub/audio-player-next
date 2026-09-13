@@ -255,6 +255,14 @@ async function runDraftTranscriptUnit(): Promise<void> {
         assert.ok(src.includes('useState') && (src.includes("'transcript'") || src.includes('"transcript"')), 'view 含 transcript 态');
         assert.ok(src.includes('handleViewTranscript'), 'Draft 查看正文统一回调');
         assert.ok(src.includes('handleBackToControls'), '返回控制统一回调');
+        // §35/§72 互斥分支：transcript 与 controls 二选一（非追加）——
+        // TranscriptView 位于 transcript 三元分支内，Actions/PlaybackControls/
+        // Timeline 位于 controls 分支内（源码顺序：transcript 分支先，controls 后）。
+        assert.ok(src.includes("expandedView === 'transcript'"), '分支条件为 expandedView === transcript');
+        assert.ok(src.indexOf('<TranscriptView') > src.indexOf("expandedView === 'transcript'"), 'TranscriptView 位于 transcript 分支内');
+        assert.ok(src.indexOf('<NowPlayingActions') > src.indexOf('<TranscriptView'), 'Actions 位于 controls 分支（transcript 后，互斥）');
+        assert.ok(src.indexOf('<PlaybackControls') > src.indexOf('<TranscriptView'), 'PlaybackControls 位于 controls 分支（互斥）');
+        assert.ok(src.indexOf('<PlaybackTimeline') > src.indexOf('<TranscriptView'), 'Timeline 位于 controls 分支（互斥）');
         // 开合只动局部 view：两回调段内无 Session/Transport/路由/播放写面。
         for (const handler of ['handleViewTranscript', 'handleBackToControls']) {
             const at = src.indexOf(handler);

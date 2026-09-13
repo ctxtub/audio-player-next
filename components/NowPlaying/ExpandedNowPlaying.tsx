@@ -321,6 +321,20 @@ export const ExpandedNowPlaying: React.FC = () => {
                             // 内容区滚动手势不触发 dismiss（spec §10.2/§78）：
                             // 此处不 spread 任何 drag 绑定，仅 Handle 可发起。
                         >
+                            {expandedView === 'transcript' ? (
+                                /* M7-04-02 Draft Transcript 只读面（spec §35/§72：
+                                   与 controls 互斥的 Expanded-local view：
+                                   transcript open 时 controls 元素完全不渲染；
+                                   内容 = Session.storyText 原文；返回控制只切局部 view；
+                                   promotion 后仅「打开作品详情」CTA，不与「查看正文」并存）。 */
+                                <TranscriptView
+                                    storyText={viewModel.transcriptText}
+                                    onBack={handleBackToControls}
+                                    onOpenWorkDetail={transcriptOpenDetail}
+                                    disabled={!viewModel.hasSession}
+                                />
+                            ) : (
+                                <>
                             <div className={styles.statusLine} data-testid="expanded-status">
                                 {viewModel.isEnded ? '播放完成' : subtitle}
                             </div>
@@ -370,19 +384,10 @@ export const ExpandedNowPlaying: React.FC = () => {
                                 onSelect={controls.setSleepTimer}
                                 disabled={!viewModel.hasSession}
                             />
-                            {expandedView === 'transcript' ? (
-                                /* M7-04-02 Draft Transcript 只读面（spec §35/§72：
-                                   内容 = Session.storyText 原文；返回控制只切局部 view）。 */
-                                <TranscriptView
-                                    storyText={viewModel.transcriptText}
-                                    onBack={handleBackToControls}
-                                    onOpenWorkDetail={transcriptOpenDetail}
-                                    disabled={!viewModel.hasSession}
-                                />
-                            ) : null}
                             {/* M7-04-01 Work 查看正文（spec §34：Work 导航口冻结）+
                                 M7-04-02 Draft 查看正文（spec §35：Transcript 口，
-                                同文案独立 testid，点击只切局部 view，不导航）。 */}
+                                同文案独立 testid，点击只切局部 view，不导航）。
+                                transcript view 下不渲染（互斥，与「打开作品详情」不并存）。 */}
                             <NowPlayingActions
                                 source={viewModel.source}
                                 onViewStory={handleViewStory}
@@ -402,6 +407,8 @@ export const ExpandedNowPlaying: React.FC = () => {
                             <div className={styles.hintLine} data-testid="expanded-hint">
                                 关闭后播放继续
                             </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 </Dialog>

@@ -484,6 +484,256 @@ async function runPlaybackAnchorBeginSessionTests(): Promise<void> {
   assert.strictEqual(isValidPlaybackSessionId(userRepaired.sessionId), true);
   console.log('PASS: user symmetry verified');
 
+  // —— 9. begin identity guard（评审 Blocking 1：restart / source-switch 必须新会话） ——
+  // guard 发生在 restart Progress reset 之前：前两条须断言 Anchor/Progress DB unchanged。
+  console.log('--- beginSession: identity guard (restart / source-switch new-session) ---');
+  // 9.1 Work A/S → restart A/S → BAD_REQUEST，Anchor/Progress unchanged。
+  const guestGuardRestart: Subject = { type: 'guest', id: makeGuestId('m505_guard_restart') };
+  const guardRestartWork = await createStoryWorkForSubject(guestGuardRestart, {
+    prompt: 'guard restart 提示词',
+    storyText: STORY_TEXT,
+  });
+  const guardRestartSession = newSessionId();
+  await beginPlaybackSessionForSubject(guestGuardRestart, {
+    sessionId: guardRestartSession,
+    source: { kind: 'work', workId: guardRestartWork.id },
+    mode: 'resume',
+    speed: 1.0,
+  });
+  // 构造非零进度，使“若 guard 在 reset 之后”必可观测到脏写；快照后复用同 session restart 必须拒绝。
+  await prisma.guestStoryPlaybackProgress.upsert({
+    where: { storyWorkId: guardRestartWork.id },
+    create: {
+      storyWorkId: guardRestartWork.id,
+      contentHash: guardRestartWork.contentHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: 0,
+      nextParagraphIndex: 1,
+      totalParagraphs: expectedTotalFor(STORY_TEXT),
+      completedAt: null,
+      lastPlayedAt: new Date('2026-09-10T00:00:00.000Z'),
+    },
+    update: {
+      contentHash: guardRestartWork.contentHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: 0,
+      nextParagraphIndex: 1,
+      totalParagraphs: expectedTotalFor(STORY_TEXT),
+      completedAt: null,
+    },
+  });
+  const guardRestartAnchorBefore = await prisma.guestPlaybackAnchor.findUnique({
+    where: { guestId: guestGuardRestart.id },
+  });
+  const guardRestartProgressBefore = await prisma.guestStoryPlaybackProgress.findUnique({
+    where: { storyWorkId: guardRestartWork.id },
+  });
+  assert(guardRestartAnchorBefore !== null && guardRestartProgressBefore !== null);
+  assert.strictEqual(guardRestartAnchorBefore.sessionId, guardRestartSession);
+  await assert.rejects(
+    () =>
+      beginPlaybackSessionForSubject(guestGuardRestart, {
+        sessionId: guardRestartSession,
+        source: { kind: 'work', workId: guardRestartWork.id },
+        mode: 'restart',
+        speed: 1.0,
+      }),
+    (err: unknown) => {
+      assert(err instanceof TRPCError);
+      assert.strictEqual(err.code, 'BAD_REQUEST');
+      return true;
+    },
+    'restart with reused sessionId must BAD_REQUEST',
+  );
+  const guardRestartAnchorAfter = await prisma.guestPlaybackAnchor.findUnique({
+    where: { guestId: guestGuardRestart.id },
+  });
+  const guardRestartProgressAfter = await prisma.guestStoryPlaybackProgress.findUnique({
+    where: { storyWorkId: guardRestartWork.id },
+  });
+  assert.deepStrictEqual(guardRestartAnchorAfter, guardRestartAnchorBefore);
+  assert.deepStrictEqual(guardRestartProgressAfter, guardRestartProgressBefore);
+  console.log('PASS: restart reuse rejected, Anchor/Progress unchanged');
+
+  // 9.2 Work A/S → Work B/S → BAD_REQUEST，Anchor 仍 A，B progress 不产生/不修改。
+  const guestGuardSwitch: Subject = { type: 'guest', id: makeGuestId('m505_guard_switch') };
+  const guardWorkA = await createStoryWorkForSubject(guestGuardSwitch, {
+    prompt: 'guard switch A 提示词',
+    storyText: STORY_TEXT,
+  });
+  const guardWorkB = await createStoryWorkForSubject(guestGuardSwitch, {
+    prompt: 'guard switch B 提示词',
+    storyText: STORY_TEXT,
+  });
+  const guardSwitchSession = newSessionId();
+  await beginPlaybackSessionForSubject(guestGuardSwitch, {
+    sessionId: guardSwitchSession,
+    source: { kind: 'work', workId: guardWorkA.id },
+    mode: 'resume',
+    speed: 1.0,
+  });
+  // B 尚无进度：切换必须拒绝且不产生 B 进度。
+  assert.strictEqual(
+    await prisma.guestStoryPlaybackProgress.findUnique({ where: { storyWorkId: guardWorkB.id } }),
+    null,
+  );
+  const guardSwitchAnchorBefore = await prisma.guestPlaybackAnchor.findUnique({
+    where: { guestId: guestGuardSwitch.id },
+  });
+  assert(guardSwitchAnchorBefore !== null);
+  assert.strictEqual(guardSwitchAnchorBefore.sessionId, guardSwitchSession);
+  assert.strictEqual(guardSwitchAnchorBefore.sourceId, String(guardWorkA.id));
+  await assert.rejects(
+    () =>
+      beginPlaybackSessionForSubject(guestGuardSwitch, {
+        sessionId: guardSwitchSession,
+        source: { kind: 'work', workId: guardWorkB.id },
+        mode: 'resume',
+        speed: 1.0,
+      }),
+    (err: unknown) => {
+      assert(err instanceof TRPCError);
+      assert.strictEqual(err.code, 'BAD_REQUEST');
+      return true;
+    },
+    'source-switch with reused sessionId must BAD_REQUEST',
+  );
+  const guardSwitchAnchorAfterNoCreate = await prisma.guestPlaybackAnchor.findUnique({
+    where: { guestId: guestGuardSwitch.id },
+  });
+  assert.deepStrictEqual(guardSwitchAnchorAfterNoCreate, guardSwitchAnchorBefore);
+  assert.strictEqual(
+    await prisma.guestStoryPlaybackProgress.findUnique({ where: { storyWorkId: guardWorkB.id } }),
+    null,
+    'B progress must not be created on rejected switch',
+  );
+  // B 已有进度：切换必须拒绝且不修改 B 进度。
+  await prisma.guestStoryPlaybackProgress.create({
+    data: {
+      storyWorkId: guardWorkB.id,
+      contentHash: guardWorkB.contentHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: 0,
+      nextParagraphIndex: 1,
+      totalParagraphs: expectedTotalFor(STORY_TEXT),
+      completedAt: null,
+      lastPlayedAt: new Date('2026-09-10T00:00:00.000Z'),
+    },
+  });
+  const guardWorkBProgressBefore = await prisma.guestStoryPlaybackProgress.findUnique({
+    where: { storyWorkId: guardWorkB.id },
+  });
+  assert(guardWorkBProgressBefore !== null);
+  await assert.rejects(
+    () =>
+      beginPlaybackSessionForSubject(guestGuardSwitch, {
+        sessionId: guardSwitchSession,
+        source: { kind: 'work', workId: guardWorkB.id },
+        mode: 'resume',
+        speed: 1.0,
+      }),
+    (err: unknown) => {
+      assert(err instanceof TRPCError);
+      assert.strictEqual(err.code, 'BAD_REQUEST');
+      return true;
+    },
+    'source-switch with reused sessionId must BAD_REQUEST (existing B progress)',
+  );
+  assert.deepStrictEqual(
+    await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestGuardSwitch.id } }),
+    guardSwitchAnchorBefore,
+  );
+  assert.deepStrictEqual(
+    await prisma.guestStoryPlaybackProgress.findUnique({ where: { storyWorkId: guardWorkB.id } }),
+    guardWorkBProgressBefore,
+  );
+  console.log('PASS: source-switch reuse rejected, Anchor kept A, B progress untouched');
+
+  // 9.3 Work A/S → resume A/S → allowed（continue 保持 session）。
+  const guestGuardResume: Subject = { type: 'guest', id: makeGuestId('m505_guard_resume') };
+  const guardResumeWork = await createStoryWorkForSubject(guestGuardResume, {
+    prompt: 'guard resume 提示词',
+    storyText: STORY_TEXT,
+  });
+  await prisma.guestStoryPlaybackProgress.create({
+    data: {
+      storyWorkId: guardResumeWork.id,
+      contentHash: guardResumeWork.contentHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: 0,
+      nextParagraphIndex: 1,
+      totalParagraphs: expectedTotalFor(STORY_TEXT),
+      completedAt: null,
+      lastPlayedAt: new Date('2026-09-10T00:00:00.000Z'),
+    },
+  });
+  const guardResumeSession = newSessionId();
+  const guardResumeFirst = await beginPlaybackSessionForSubject(guestGuardResume, {
+    sessionId: guardResumeSession,
+    source: { kind: 'work', workId: guardResumeWork.id },
+    mode: 'resume',
+    speed: 1.0,
+  });
+  assert.strictEqual(guardResumeFirst.sessionId, guardResumeSession);
+  assert.strictEqual(guardResumeFirst.nextParagraphIndex, 1);
+  const guardResumeSecond = await beginPlaybackSessionForSubject(guestGuardResume, {
+    sessionId: guardResumeSession,
+    source: { kind: 'work', workId: guardResumeWork.id },
+    mode: 'resume',
+    speed: 1.0,
+  });
+  assert.strictEqual(guardResumeSecond.sessionId, guardResumeSession);
+  assert.strictEqual(guardResumeSecond.nextParagraphIndex, 1);
+  assert.strictEqual(guardResumeSecond.lastCompletedParagraphIndex, 0);
+  console.log('PASS: same-source resume keeps session allowed');
+
+  // 9.4 Work A/S → restart A/S2 → allowed，position 0，completedAt 保留。
+  const guestGuardRestartNew: Subject = { type: 'guest', id: makeGuestId('m505_guard_new') };
+  const guardNewWork = await createStoryWorkForSubject(guestGuardRestartNew, {
+    prompt: 'guard new session 提示词',
+    storyText: STORY_TEXT,
+  });
+  const guardNewTotal = expectedTotalFor(STORY_TEXT);
+  const guardCompletedAt = new Date('2026-09-01T00:00:00.000Z');
+  await prisma.guestStoryPlaybackProgress.create({
+    data: {
+      storyWorkId: guardNewWork.id,
+      contentHash: guardNewWork.contentHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: guardNewTotal - 1,
+      nextParagraphIndex: guardNewTotal,
+      totalParagraphs: guardNewTotal,
+      completedAt: guardCompletedAt,
+      lastPlayedAt: new Date('2026-09-02T00:00:00.000Z'),
+    },
+  });
+  const guardNewSession = newSessionId();
+  const guardNewSession2 = newSessionId();
+  assert.notStrictEqual(guardNewSession2, guardNewSession);
+  await beginPlaybackSessionForSubject(guestGuardRestartNew, {
+    sessionId: guardNewSession,
+    source: { kind: 'work', workId: guardNewWork.id },
+    mode: 'resume',
+    speed: 1.0,
+  });
+  const guardNewRestart = await beginPlaybackSessionForSubject(guestGuardRestartNew, {
+    sessionId: guardNewSession2,
+    source: { kind: 'work', workId: guardNewWork.id },
+    mode: 'restart',
+    speed: 1.0,
+  });
+  assert.strictEqual(guardNewRestart.sessionId, guardNewSession2);
+  assert.strictEqual(guardNewRestart.nextParagraphIndex, 0);
+  assert.strictEqual(guardNewRestart.lastCompletedParagraphIndex, -1);
+  const guardNewProgressAfter = await prisma.guestStoryPlaybackProgress.findUnique({
+    where: { storyWorkId: guardNewWork.id },
+  });
+  assert(guardNewProgressAfter?.completedAt instanceof Date);
+  assert.strictEqual(guardNewProgressAfter?.completedAt?.toISOString(), guardCompletedAt.toISOString());
+  assert.strictEqual(guardNewProgressAfter?.nextParagraphIndex, 0);
+  assert.strictEqual(guardNewProgressAfter?.lastCompletedParagraphIndex, -1);
+  console.log('PASS: restart with new session allowed, position 0, completedAt kept');
+
   console.log('\nALL PLAYBACK ANCHOR BEGIN SESSION TEST CASES PASSED SUCCESSFULLY!');
 }
 

@@ -35,11 +35,14 @@ import {
 } from '@/lib/playback/session';
 import {
   REPLAY_TEXT_PREFIX,
+  equalPlaybackSource,
   isValidDraftMessageId,
+  type PlaybackSourceRef,
 } from '@/lib/playback/source';
 import {
   canonicalizeSourceKind,
   parseLegacyWorkId,
+  tryParseLegacyPlaybackSource,
 } from '@/lib/playback/legacy';
 import {
   SEGMENTATION_VERSION,
@@ -152,6 +155,48 @@ const toAnchorDto = (row: AnchorRow): PlaybackAnchorDTO | null => {
   };
 };
 
+/**
+ * §4 / §30 begin 新会话 identity 守卫（纯 helper，不触库）。
+ *
+ * 核心规则（评审 Blocking 1）：
+ * - restart → 必须 new UUID（same sessionId reuse 即 BAD_REQUEST）；
+ * - source changed → 必须 new UUID（same sessionId reuse 即 BAD_REQUEST）；
+ * - same-source resume → 可保持旧 UUID（continue 保持 session，与 §4/§30 一致）。
+ *
+ * server 不生成 UUID（API 已要求 client 提供 v4），只拒绝 session reuse。
+ * currentAnchor 不存在（null 行）或 currentSessionId 为空时直接放行；
+ * sessionId 不同（已换新 UUID）时直接放行，不看 mode/source。
+ * dangling Anchor（source 不可解析 → null）视为 source changed：
+ * 同 session resume 亦拒绝（fail-closed），restart 同 session 本就拒绝。
+ */
+export type BeginSessionTransitionArgs = {
+  currentSessionId: string | null | undefined;
+  currentSource: PlaybackSourceRef | null | undefined;
+  requestedSessionId: string;
+  requestedSource: PlaybackSourceRef;
+  mode: 'resume' | 'restart';
+};
+
+export const assertValidBeginSessionTransition = (args: BeginSessionTransitionArgs): void => {
+  const { currentSessionId, currentSource, requestedSessionId, requestedSource, mode } = args;
+  if (currentSessionId == null) return;
+  if (requestedSessionId !== currentSessionId) return;
+  // 同一 sessionId 被复用：restart 一律拒绝（§30 new-session identity）。
+  if (mode === 'restart') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '[playback-session] restart 必须使用新 sessionId（§30 new-session identity），拒绝 session reuse',
+    });
+  }
+  // 同一 sessionId 被复用：source 切换一律拒绝（§4 source-switch invariant）。
+  if (!equalPlaybackSource(currentSource, requestedSource)) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '[playback-session] 切换 source 必须使用新 sessionId（§4 source-switch invariant），拒绝 session reuse',
+    });
+  }
+};
+
 /** §15 playback.getAnchor：读取当前 Subject 唯一 Anchor（含 legacy repair，M5-05 落地）。 */
 export const getPlaybackAnchorForSubject = async (
   subject: Subject,
@@ -237,6 +282,26 @@ export const beginPlaybackSessionForSubject = async (
   // 新写入全部要求 UUID（router zod 已校验，此处再做领域锁形，双保险 fail-closed）。
   if (!isValidPlaybackSessionId(input.sessionId)) {
     throw new TRPCError({ code: 'BAD_REQUEST', message: '非法 sessionId（须为 UUID v4）' });
+  }
+  // §4 / §30 begin identity guard：读取当期 Subject Anchor 后、
+  // 任何 restart Progress reset 之前执行（前两条回归 DB unchanged 断言依赖此顺序）。
+  // restart 同 session → BAD_REQUEST；source-switch 同 session → BAD_REQUEST；
+  // same-source resume 可保持旧 UUID。server 不生成 UUID，只拒绝 session reuse。
+  const currentAnchorRow =
+    subject.type === 'user'
+      ? await prisma.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
+      : await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+  if (currentAnchorRow) {
+    assertValidBeginSessionTransition({
+      currentSessionId: currentAnchorRow.sessionId,
+      currentSource: tryParseLegacyPlaybackSource(
+        currentAnchorRow.sourceKind,
+        currentAnchorRow.sourceId,
+      ),
+      requestedSessionId: input.sessionId,
+      requestedSource: input.source,
+      mode: input.mode,
+    });
   }
   const remainingAllowedMs = input.remainingAllowedMs ?? null;
   const totalAllowedMs = input.totalAllowedMs ?? null;

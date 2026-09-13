@@ -187,10 +187,11 @@ async function runPlaybackAnchorBeginSessionTests(): Promise<void> {
   const workRehydrated = await getPlaybackAnchorForSubject(guestWork);
   assert.deepStrictEqual(workRehydrated, workAnchor);
   // Work 携 draftSnapshot 即 BAD_REQUEST（§16：snapshot 仅限 Draft）。
+  // 用 same-session resume（保持 session）直达 snapshot 门禁，避免被 resume guard 误拦。
   await assert.rejects(
     () =>
       beginPlaybackSessionForSubject(guestWork, {
-        sessionId: newSessionId(),
+        sessionId: workSession,
         source: { kind: 'work', workId: created.id },
         mode: 'resume',
         speed: 1.0,
@@ -255,6 +256,8 @@ async function runPlaybackAnchorBeginSessionTests(): Promise<void> {
     storyText: STORY_TEXT,
   });
   const resumeTotal = expectedTotalFor(STORY_TEXT);
+  // same-source resume 必须保持 session（resume guard）：drift 系列全程复用同一 sessionId。
+  const resumeSession = newSessionId();
   // 先建立一致进度（next=1），resume 应继续。
   await prisma.guestStoryPlaybackProgress.create({
     data: {
@@ -269,7 +272,7 @@ async function runPlaybackAnchorBeginSessionTests(): Promise<void> {
     },
   });
   const resumeKept = await beginPlaybackSessionForSubject(guestResume, {
-    sessionId: newSessionId(),
+    sessionId: resumeSession,
     source: { kind: 'work', workId: resumeWork.id },
     mode: 'resume',
     speed: 1.0,
@@ -288,7 +291,7 @@ async function runPlaybackAnchorBeginSessionTests(): Promise<void> {
     },
   });
   const resumeReset = await beginPlaybackSessionForSubject(guestResume, {
-    sessionId: newSessionId(),
+    sessionId: resumeSession,
     source: { kind: 'work', workId: resumeWork.id },
     mode: 'resume',
     speed: 1.0,
@@ -313,7 +316,7 @@ async function runPlaybackAnchorBeginSessionTests(): Promise<void> {
     },
   });
   const versionReset = await beginPlaybackSessionForSubject(guestResume, {
-    sessionId: newSessionId(),
+    sessionId: resumeSession,
     source: { kind: 'work', workId: resumeWork.id },
     mode: 'resume',
     speed: 1.0,
@@ -733,6 +736,100 @@ async function runPlaybackAnchorBeginSessionTests(): Promise<void> {
   assert.strictEqual(guardNewProgressAfter?.nextParagraphIndex, 0);
   assert.strictEqual(guardNewProgressAfter?.lastCompletedParagraphIndex, -1);
   console.log('PASS: restart with new session allowed, position 0, completedAt kept');
+
+  // 9.5 Work A/S1 → resume Work A/S2 → BAD_REQUEST，Anchor/Progress unchanged
+  //（评审复审：resume 换 UUID 破坏 sessionId stale ownership 安全边界，必须拦截）。
+  const guestGuardResumeNew: Subject = { type: 'guest', id: makeGuestId('m505_guard_resume_new') };
+  const guardResumeNewWork = await createStoryWorkForSubject(guestGuardResumeNew, {
+    prompt: 'guard resume new 提示词',
+    storyText: STORY_TEXT,
+  });
+  const guardResumeNewSession = newSessionId();
+  const guardResumeNewSession2 = newSessionId();
+  assert.notStrictEqual(guardResumeNewSession2, guardResumeNewSession);
+  await beginPlaybackSessionForSubject(guestGuardResumeNew, {
+    sessionId: guardResumeNewSession,
+    source: { kind: 'work', workId: guardResumeNewWork.id },
+    mode: 'resume',
+    speed: 1.0,
+  });
+  await prisma.guestStoryPlaybackProgress.upsert({
+    where: { storyWorkId: guardResumeNewWork.id },
+    create: {
+      storyWorkId: guardResumeNewWork.id,
+      contentHash: guardResumeNewWork.contentHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: 0,
+      nextParagraphIndex: 1,
+      totalParagraphs: expectedTotalFor(STORY_TEXT),
+      completedAt: null,
+      lastPlayedAt: new Date('2026-09-10T00:00:00.000Z'),
+    },
+    update: {
+      contentHash: guardResumeNewWork.contentHash,
+      segmentationVersion: SEGMENTATION_VERSION,
+      lastCompletedParagraphIndex: 0,
+      nextParagraphIndex: 1,
+      totalParagraphs: expectedTotalFor(STORY_TEXT),
+      completedAt: null,
+    },
+  });
+  const guardResumeNewAnchorBefore = await prisma.guestPlaybackAnchor.findUnique({
+    where: { guestId: guestGuardResumeNew.id },
+  });
+  const guardResumeNewProgressBefore = await prisma.guestStoryPlaybackProgress.findUnique({
+    where: { storyWorkId: guardResumeNewWork.id },
+  });
+  assert(guardResumeNewAnchorBefore !== null && guardResumeNewProgressBefore !== null);
+  assert.strictEqual(guardResumeNewAnchorBefore.sessionId, guardResumeNewSession);
+  await assert.rejects(
+    () =>
+      beginPlaybackSessionForSubject(guestGuardResumeNew, {
+        sessionId: guardResumeNewSession2,
+        source: { kind: 'work', workId: guardResumeNewWork.id },
+        mode: 'resume',
+        speed: 1.0,
+      }),
+    (err: unknown) => {
+      assert(err instanceof TRPCError);
+      assert.strictEqual(err.code, 'BAD_REQUEST');
+      return true;
+    },
+    'same-source resume with new sessionId must BAD_REQUEST',
+  );
+  assert.deepStrictEqual(
+    await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestGuardResumeNew.id } }),
+    guardResumeNewAnchorBefore,
+  );
+  assert.deepStrictEqual(
+    await prisma.guestStoryPlaybackProgress.findUnique({
+      where: { storyWorkId: guardResumeNewWork.id },
+    }),
+    guardResumeNewProgressBefore,
+  );
+  console.log('PASS: same-source resume with new session rejected, Anchor/Progress unchanged');
+
+  // 9.6 无 current Anchor → begin Work A/S1 → allowed（首次播放不被 resume guard 误伤）。
+  const guestGuardFirst: Subject = { type: 'guest', id: makeGuestId('m505_guard_first') };
+  const guardFirstWork = await createStoryWorkForSubject(guestGuardFirst, {
+    prompt: 'guard first 提示词',
+    storyText: STORY_TEXT,
+  });
+  assert.strictEqual(
+    await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestGuardFirst.id } }),
+    null,
+  );
+  const guardFirstSession = newSessionId();
+  const guardFirstAnchor = await beginPlaybackSessionForSubject(guestGuardFirst, {
+    sessionId: guardFirstSession,
+    source: { kind: 'work', workId: guardFirstWork.id },
+    mode: 'resume',
+    speed: 1.0,
+  });
+  assert.strictEqual(guardFirstAnchor.sessionId, guardFirstSession);
+  assert.deepStrictEqual(guardFirstAnchor.source, { kind: 'work', workId: guardFirstWork.id });
+  assert.strictEqual(guardFirstAnchor.nextParagraphIndex, 0);
+  console.log('PASS: first begin without anchor allowed');
 
   console.log('\nALL PLAYBACK ANCHOR BEGIN SESSION TEST CASES PASSED SUCCESSFULLY!');
 }

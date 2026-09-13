@@ -158,15 +158,15 @@ const toAnchorDto = (row: AnchorRow): PlaybackAnchorDTO | null => {
 /**
  * §4 / §30 begin 新会话 identity 守卫（纯 helper，不触库）。
  *
- * 核心规则（评审 Blocking 1）：
- * - restart → 必须 new UUID（same sessionId reuse 即 BAD_REQUEST）；
- * - source changed → 必须 new UUID（same sessionId reuse 即 BAD_REQUEST）；
- * - same-source resume → 可保持旧 UUID（continue 保持 session，与 §4/§30 一致）。
+ * 有 current Anchor（currentSessionId 合法）时最终规则：
+ * - same source + resume → requestedSessionId === currentSessionId（必须保持）
+ * - same source + restart → requestedSessionId !== currentSessionId（必须新）
+ * - different source → requestedSessionId !== currentSessionId（必须新，mode 无关）
  *
- * server 不生成 UUID（API 已要求 client 提供 v4），只拒绝 session reuse。
- * currentAnchor 不存在（null 行）或 currentSessionId 为空时直接放行；
- * sessionId 不同（已换新 UUID）时直接放行，不看 mode/source。
- * dangling Anchor（source 不可解析 → null）视为 source changed：
+ * 无 current Anchor（null 行）或 currentSessionId 为空/非法时直接放行
+ * （首次 begin 不挡；非法 session 由 getAnchor §33 repair 负责，不在此抢 ownership）。
+ * server 不生成 UUID（API 已要求 client 提供 v4），只拒绝 illegal transition。
+ * dangling Anchor（source 不可解析 → null）视为 different source：
  * 同 session resume 亦拒绝（fail-closed），restart 同 session 本就拒绝。
  */
 export type BeginSessionTransitionArgs = {
@@ -180,16 +180,27 @@ export type BeginSessionTransitionArgs = {
 export const assertValidBeginSessionTransition = (args: BeginSessionTransitionArgs): void => {
   const { currentSessionId, currentSource, requestedSessionId, requestedSource, mode } = args;
   if (currentSessionId == null) return;
-  if (requestedSessionId !== currentSessionId) return;
+  if (!isValidPlaybackSessionId(currentSessionId)) return;
+  const sameSource = equalPlaybackSource(currentSource, requestedSource);
+  const sameSession = requestedSessionId === currentSessionId;
+  // same source + resume → 必须保持当前 session；换 UUID 即 BAD_REQUEST
+  //（§4 stale ownership 安全边界：A/S1 播放中→pause→resume 传 S2 会使 S1 未完成
+  // async TTS/checkpoint 全部 stale，且使 resume 与开新 Session 服务端不可区分）。
+  if (mode === 'resume' && sameSource && !sameSession) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '[playback-session] resume must preserve current playback session（§4 session ownership），拒绝换 sessionId',
+    });
+  }
   // 同一 sessionId 被复用：restart 一律拒绝（§30 new-session identity）。
-  if (mode === 'restart') {
+  if (mode === 'restart' && sameSession) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: '[playback-session] restart 必须使用新 sessionId（§30 new-session identity），拒绝 session reuse',
     });
   }
   // 同一 sessionId 被复用：source 切换一律拒绝（§4 source-switch invariant）。
-  if (!equalPlaybackSource(currentSource, requestedSource)) {
+  if (sameSession && !sameSource) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: '[playback-session] 切换 source 必须使用新 sessionId（§4 source-switch invariant），拒绝 session reuse',
@@ -284,9 +295,10 @@ export const beginPlaybackSessionForSubject = async (
     throw new TRPCError({ code: 'BAD_REQUEST', message: '非法 sessionId（须为 UUID v4）' });
   }
   // §4 / §30 begin identity guard：读取当期 Subject Anchor 后、
-  // 任何 restart Progress reset 之前执行（前两条回归 DB unchanged 断言依赖此顺序）。
-  // restart 同 session → BAD_REQUEST；source-switch 同 session → BAD_REQUEST；
-  // same-source resume 可保持旧 UUID。server 不生成 UUID，只拒绝 session reuse。
+  // 任何 restart Progress reset 之前执行（拒绝回归 DB unchanged 断言依赖此顺序）。
+  // 有 current Anchor：same source + resume → 必须保持（换 UUID 即 BAD_REQUEST）；
+  // same source + restart → 必须新；different source → 必须新（mode 无关）。
+  // 无 Anchor 或 current sessionId 非法时放行（首次 begin 不挡）。server 不生成 UUID。
   const currentAnchorRow =
     subject.type === 'user'
       ? await prisma.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })

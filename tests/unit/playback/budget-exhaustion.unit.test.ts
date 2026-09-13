@@ -102,6 +102,9 @@ async function runH08Tests(): Promise<void> {
       _lastTickAt: null,
     });
     usePlaybackStore.getState().start();
+    // M7-03 fixup（复审 Blocking 1）：countdown 门=audioActive（buffering 不扣），
+    // 此用例驱动真实 tick 耗尽，须模拟 playing 事件使音频处于“实际推进”态。
+    usePlaybackStore.getState().reportAudioActive(true);
     assert.strictEqual(
       usePlaybackStore.getState().isPlaying,
       true,

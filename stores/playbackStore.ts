@@ -59,6 +59,12 @@ type PlaybackStoreBaseState = {
   /** @deprecated M5-09：session identity 已迁移至 PlaybackSessionStore.sessionId，本字段仅兼容镜像。 */
   sessionId: string | null;
   isPlaying: boolean;
+  /**
+   * M7-03 fixup（复审 Blocking 1 / §25.1）：音频“实际推进”的纯运行时信号（Host 上报 buffering 生命周期）。
+   * waiting/stalled/pause/ended → false；playing → true。仅用于 countdown 门使 buffering 不计入
+   * “再听 N 分钟”，不参与 Session 语义状态（waiting ≠ 用户暂停，status 不改、不 checkpoint）。
+   */
+  audioActive: boolean;
   currentSegmentIndex: number;
   playbackRate: number;
   remainingMs: number | null;
@@ -137,6 +143,8 @@ type PlaybackStoreActions = {
   ) => void;
   start: () => void;
   pause: () => void;
+  /** M7-03 fixup（§25.1）：Host 上报音频实际推进信号（waiting/stalled=false；playing=true）。 */
+  reportAudioActive: (active: boolean) => void;
   updateProgress: (payload: { currentTime: number; duration: number }) => void;
   setPlaybackRate: (rate: number, options?: { applyToController?: boolean }) => void;
   advanceSegment: () => void;
@@ -204,6 +212,7 @@ export type PlaybackStore = PlaybackStoreBaseState & PlaybackStoreActions;
 const INITIAL_STATE: PlaybackStoreBaseState = {
   sessionId: null,
   isPlaying: false,
+  audioActive: false,
   currentSegmentIndex: 0,
   playbackRate: 1,
   remainingMs: null,
@@ -270,9 +279,19 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
 
     const tick = () => {
       const state = get();
-      // M7-03：mode 门 + 真实播放门（paused/synthesizing/network wait/ready 不扣）。
-      if (state.sleepTimerMode !== 'minutes' || !state.isPlaying || state.remainingMs === null) {
+      if (state.sleepTimerMode !== 'minutes' || state.remainingMs === null) {
         clearCountdown();
+        return;
+      }
+      if (!state.isPlaying) {
+        // 用户暂停：停表（恢复播放由 start() 重新挂表，现状语义）。
+        clearCountdown();
+        return;
+      }
+      if (!state.audioActive) {
+        // M7-03 fixup（复审 Blocking 1 / §25.1）：network wait / buffering 不是用户暂停——
+        // 不扣减、不拆表、不触 expiry、不 checkpoint；刷新锚点防等待时长在恢复后被补扣。
+        set({ _lastTickAt: Date.now() });
         return;
       }
 
@@ -382,6 +401,16 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
      */
     pause: () => {
       set({ isPlaying: false });
+    },
+    /**
+     * M7-03 fixup（复审 Blocking 1 / §25.1）：Host 上报音频实际推进信号（buffering 生命周期）。
+     * 幂等；不改 Session 语义状态（waiting ≠ 用户暂停：status 保持、无 checkpoint、无 Toast）。
+     */
+    reportAudioActive: (active) => {
+      if (get().audioActive === active) {
+        return;
+      }
+      set({ audioActive: active });
     },
     /**
      * 更新播放器的当前进度，用于展示或后续逻辑计算。

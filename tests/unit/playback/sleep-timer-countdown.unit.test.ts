@@ -84,6 +84,7 @@ function resetTransport(): void {
         _tickIntervalId: null,
         _lastTickAt: null,
         isPlaying: false,
+        audioActive: false,
     });
 }
 
@@ -96,6 +97,7 @@ async function runSleepTimerCountdownTests(): Promise<void> {
         resetTransport();
         usePlaybackStore.getState().setSleepTimerState('minutes', 1800000, 1800000);
         usePlaybackStore.getState().start();
+        usePlaybackStore.getState().reportAudioActive(true);
         assert.strictEqual(usePlaybackStore.getState().isPlaying, true);
         advanceTick(5000);
         assert.strictEqual(usePlaybackStore.getState().remainingMs, 1795000, '播放 5s 应扣 5s');
@@ -110,6 +112,7 @@ async function runSleepTimerCountdownTests(): Promise<void> {
         assert.strictEqual(usePlaybackStore.getState().remainingMs, frozen, '暂停期间 remaining 不得减少');
         // resume 后继续：重新 start 起表，继续扣减。
         usePlaybackStore.getState().start();
+        usePlaybackStore.getState().reportAudioActive(true);
         advanceTick(3000);
         assert.strictEqual(
             usePlaybackStore.getState().remainingMs,
@@ -164,6 +167,7 @@ async function runSleepTimerCountdownTests(): Promise<void> {
         });
         usePlaybackStore.getState().setSleepTimerState('minutes', 2000, 1800000);
         usePlaybackStore.getState().start();
+        usePlaybackStore.getState().reportAudioActive(true);
         advanceTick(2500);
         const expired = usePlaybackStore.getState();
         assert.strictEqual(expired.isPlaying, false, '到期 UI 回暂停态');
@@ -182,11 +186,55 @@ async function runSleepTimerCountdownTests(): Promise<void> {
         resetTransport();
         usePlaybackStore.getState().setSleepTimerState('minutes', 1800000, 1800000);
         usePlaybackStore.getState().start();
+        usePlaybackStore.getState().reportAudioActive(true);
         advanceTick(1000);
         usePlaybackStore.getState().setSleepTimerState('off', null, null);
         assert.strictEqual(capturedTick, null, '切 off 必须停掉在途 countdown');
         assert.strictEqual(usePlaybackStore.getState().isPlaying, true, '切 off 不暂停播放本身');
         console.log('PASS: switch stops countdown');
+
+        // —— 7. network wait 不扣（复审 Blocking 1 / §25.1：buffering 不计入“再听 N 分钟”） ——
+        console.log('--- §25.1: buffering (network wait) does not decrement ---');
+        resetTransport();
+        let ctrlPauseCount = 0;
+        let expiryCount = 0;
+        usePlaybackStore.getState().registerAudioController({
+            unlock: async () => {},
+            play: async () => {},
+            resume: async () => {},
+            pause: () => {
+                ctrlPauseCount += 1;
+            },
+            seek: () => {},
+            setPlaybackRate: () => {},
+        });
+        usePlaybackStore.getState().registerSleepTimerExpiryHandler(() => {
+            expiryCount += 1;
+        });
+        usePlaybackStore.getState().setSleepTimerState('minutes', 600000, 600000);
+        usePlaybackStore.getState().start();
+        usePlaybackStore.getState().reportAudioActive(true);
+        advanceTick(3000);
+        assert.strictEqual(usePlaybackStore.getState().remainingMs, 597000, 'playing 3s 扣 3s');
+        // waiting：audioActive=false，但 isPlaying 仍 true（waiting ≠ 用户暂停）。
+        usePlaybackStore.getState().reportAudioActive(false);
+        const beforeWait = usePlaybackStore.getState().remainingMs;
+        advanceTick(10000);
+        assert.strictEqual(usePlaybackStore.getState().remainingMs, beforeWait, 'waiting 10s 不得扣减');
+        assert.strictEqual(usePlaybackStore.getState().isPlaying, true, 'waiting 保持 isPlaying（非暂停语义）');
+        assert.strictEqual(usePlaybackStore.getState().sleepTimerMode, 'minutes', 'waiting 不得 clear Timer');
+        assert.ok(capturedTick !== null, 'waiting 不得拆表（恢复后继续计）');
+        assert.strictEqual(ctrlPauseCount, 0, 'waiting 不得触发物理 pause');
+        assert.strictEqual(expiryCount, 0, 'waiting 不得触发 expiry（无 checkpoint / Toast）');
+        // 恢复 playing：继续扣减，等待时长不补扣。
+        usePlaybackStore.getState().reportAudioActive(true);
+        advanceTick(2000);
+        assert.strictEqual(
+            usePlaybackStore.getState().remainingMs,
+            (beforeWait as number) - 2000,
+            '恢复后继续扣 2s（waiting 时长不补扣）',
+        );
+        console.log('PASS: buffering no-decrement');
 
         resetTransport();
         usePlaybackStore.getState().registerAudioController(null);

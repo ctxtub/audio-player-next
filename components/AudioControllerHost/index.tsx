@@ -11,6 +11,7 @@ import {
   handleEnded as handleSessionEnded,
   pausePlayback as pauseViaSessionFlow,
   registerSleepTimerExpiryHandler,
+  reportAudioActive,
   reportPlaybackPause,
   reportPlaybackStart,
   reportProgress,
@@ -289,6 +290,7 @@ const AudioControllerHost: React.FC = () => {
       }
       // M5-09：segment / continuation / checkpoint 由 flow 决定，Host 只报告 ended。
       reportPlaybackPause();
+      reportAudioActive(false);
       try {
         await handleSessionEnded(handlePlay);
       } catch (error) {
@@ -297,14 +299,33 @@ const AudioControllerHost: React.FC = () => {
       }
     };
 
+    // M7-03 fixup（复审 Blocking 1 / §25.1）：buffering 生命周期 → Transport.audioActive。
+    // playing（实际推进中）→ true；waiting/stalled（网络等待）→ false；pause → false。
+    // 仅用于 sleep timer countdown 门；不映射为 Session 语义状态（waiting ≠ 用户暂停）。
+    const handleAudioPlaying = () => {
+      reportAudioActive(true);
+    };
+
+    const handleAudioInactive = () => {
+      reportAudioActive(false);
+    };
+
     audioEl.addEventListener('timeupdate', handleTimeUpdate);
     audioEl.addEventListener('loadedmetadata', handleLoadedMetadata);
     audioEl.addEventListener('ended', handleEnded);
+    audioEl.addEventListener('playing', handleAudioPlaying);
+    audioEl.addEventListener('waiting', handleAudioInactive);
+    audioEl.addEventListener('stalled', handleAudioInactive);
+    audioEl.addEventListener('pause', handleAudioInactive);
 
     return () => {
       audioEl.removeEventListener('timeupdate', handleTimeUpdate);
       audioEl.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audioEl.removeEventListener('ended', handleEnded);
+      audioEl.removeEventListener('playing', handleAudioPlaying);
+      audioEl.removeEventListener('waiting', handleAudioInactive);
+      audioEl.removeEventListener('stalled', handleAudioInactive);
+      audioEl.removeEventListener('pause', handleAudioInactive);
     };
   }, [handlePlay]);
 

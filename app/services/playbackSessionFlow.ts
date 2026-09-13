@@ -214,6 +214,15 @@ export function reportPlaybackPause(): void {
   usePlaybackStore.getState().pause();
 }
 
+/**
+ * M7-03 fixup（复审 Blocking 1 / §25.1）：Host 上报音频“实际推进”运行时信号
+ * （playing → true；waiting / stalled / pause / ended → false）。
+ * 仅用于 sleep timer countdown 门使 buffering 不计入“再听 N 分钟”，不改变 Session 语义状态。
+ */
+export function reportAudioActive(active: boolean): void {
+  usePlaybackStore.getState().reportAudioActive(active);
+}
+
 /** 播放进度推进（供 timeupdate/loadedmetadata 复用）。 */
 export function reportProgress(payload: { currentTime: number; duration: number }): void {
   usePlaybackStore.getState().updateProgress(payload);

@@ -206,22 +206,34 @@ async function runDesktopMigrationTests() {
     assert.ok(mapHits.length >= 2, `User/Guest 必须各一处 @map("floatingPlayerEnabled")（得 ${mapHits.length}）`);
     console.log('PASS: M6-01-F schema guard');
 
-    console.log('=== M6-01-G: FloatingPlayer 行为回归（仅字段 rename）===');
+    console.log('=== M6-01-G: FloatingPlayer 兼容面回归（M6-02 命名切换后）===');
+    // M6-02 切面：正式实现=MiniNowPlaying；FloatingPlayer 仅为兼容 re-export（无独立实现）。
+    // 本用例锁定：配置仍读新字段（经 Mini），兼容路径仍可编译且无旧实现残留。
     const fpSrc = fs.readFileSync(
         path.join(process.cwd(), 'components', 'FloatingPlayer', 'index.tsx'),
         'utf8'
     );
-    assert.ok(fpSrc.includes('state.apiConfig.desktopFloatingPlayerEnabled'), 'FloatingPlayer 必须读新字段');
+    assert.ok(
+        fpSrc.includes('MiniNowPlaying as FloatingPlayer'),
+        'FloatingPlayer 必须 re-export MiniNowPlaying（M6-02 命名切换）'
+    );
+    assert.ok(
+        fpSrc.includes("from '@/components/NowPlaying/MiniNowPlaying'"),
+        '兼容必须指向正式实现'
+    );
+    assert.ok(!fpSrc.includes('useState') && !fpSrc.includes('useDrag'), '兼容不得承载独立实现');
     const fpStripped = fpSrc.split('desktopFloatingPlayerEnabled').join('').split('isDesktopFloatingPlayerEnabled').join('');
-    assert.ok(!fpStripped.includes('floatingPlayerEnabled'), 'FloatingPlayer 不得残留旧字段引用');
-    // 行为骨架不变：三条件显隐 + show/hide 联动 + drag/clamp + hasTrack。
-    assert.ok(fpSrc.includes('shouldShowFloatingPanel'), '显隐变量保留');
-    assert.ok(fpSrc.includes('isVisible && hasTrack'), '三条件显隐保留');
-    assert.ok(fpSrc.includes('currentAudioUrl !== null || isRehydratedReady'), 'hasTrack 推导保留');
-    assert.ok(fpSrc.includes('useDrag'), 'drag 保留');
-    assert.ok(fpSrc.includes('clampValue'), 'clamp 保留');
-    assert.ok(fpSrc.includes('show()') && fpSrc.includes('hide()'), 'show/hide 联动保留');
-    console.log('PASS: M6-01-G FloatingPlayer regression');
+    assert.ok(!fpStripped.includes('floatingPlayerEnabled'), '兼容不得残留旧字段引用');
+    // 新字段改由 Mini 正式实现消费（只决定 layoutMode，不决定存在性）。
+    const miniSrc = fs.readFileSync(
+        path.join(process.cwd(), 'components', 'NowPlaying', 'MiniNowPlaying.tsx'),
+        'utf8'
+    );
+    assert.ok(
+        miniSrc.includes('state.apiConfig.desktopFloatingPlayerEnabled'),
+        'Mini 必须读新字段（仅供 layoutMode）'
+    );
+    console.log('PASS: M6-01-G FloatingPlayer compat regression');
 
     console.log('\nALL DESKTOP CONFIG MIGRATION INTEGRATION TESTS PASSED SUCCESSFULLY!');
 }

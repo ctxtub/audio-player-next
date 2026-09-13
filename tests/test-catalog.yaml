@@ -1081,6 +1081,18 @@ cases:
     executable_ids: [exec-now-playing-foundation]
     fixtures: []
     owner: smoke-baseline
+  - case_id: mini-semantic-core-naming-cutover
+    display_name_zh: Mini 语义核心与命名切换
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: 有会话即现 Mini 且标题动作进度语义冻结命名切换不断
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [ui, playback, session, contract]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/11-Mini语义核心与命名切换.md
+    executable_ids: [exec-mini-now-playing-semantic, exec-mini-now-playing-session]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1404,6 +1416,14 @@ executables:
     display_name_zh: Mini 响应式断点与键盘基础
     layer: L1
     path: ./tests/unit/now-playing/now-playing-foundation.unit.test.ts
+  - executable_id: exec-mini-now-playing-semantic
+    display_name_zh: Mini 语义核心 ViewModel 与架构守卫
+    layer: L1
+    path: ./tests/unit/now-playing/mini-now-playing-semantic.unit.test.ts
+  - executable_id: exec-mini-now-playing-session
+    display_name_zh: Mini 会话派生与 Flow 委托集成
+    layer: L2
+    path: ./tests/integration/now-playing/mini-now-playing-session.integration.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

@@ -4,7 +4,7 @@ import MainTabBar from '@/components/MainTabBar';
 import AudioControllerHost from '@/components/AudioControllerHost';
 import PlaybackSessionProbe from '@/components/PlaybackSessionProbe';
 import { isBrowserTestRuntime } from '@/components/PlaybackSessionProbe/probeFlag';
-import { FloatingPlayer } from '@/components/FloatingPlayer';
+import { MiniNowPlaying } from '@/components/NowPlaying/MiniNowPlaying';
 import AccountSyncProvider from '@/components/AccountSyncProvider';
 import ServerStateProvider from '@/components/ServerStateProvider';
 import ThemeConfigBridge from '@/components/ThemeConfigBridge';
@@ -29,7 +29,7 @@ export default function MainLayout({
         <AudioControllerHost />
         {/* M5-10 fixup-2 双保险之一：普通 runtime 不挂载 Probe（组件执行路径不进）；仅显式开启的 browser test runtime 挂载。 */}
         {isBrowserTestRuntime() ? <PlaybackSessionProbe /> : null}
-        <FloatingPlayer />
+        <MiniNowPlaying />
       </ServerStateProvider>
     </AccountSyncProvider>
   );

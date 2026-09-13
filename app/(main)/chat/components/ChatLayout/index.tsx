@@ -7,7 +7,7 @@ import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
 import { resetStoryFlow } from '@/app/services/storyFlow';
 import { useChatStore } from '@/stores/chatStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
-import { useFloatingPlayer } from '@/components/FloatingPlayer';
+import { useFloatingPlayer } from '@/stores/playbackStore';
 
 import HeaderArea from './HeaderArea';
 import OnboardingModal from '../OnboardingModal';

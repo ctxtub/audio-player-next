@@ -1,0 +1,60 @@
+/* M6-02 MiniNowPlaying 语义核心样式（spec §2.1/§26/§27）。
+ * 本项只做语义承载的最小 presentation（Liquid Glass + z-floating + 44px 热区）；
+ * App Chrome 布局（docked/floating 位置、bottom-chrome 预留、键盘抑制位移、drag/snap）归 M6-03。
+ */
+
+.miniRoot {
+  position: fixed;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: var(--tab-bar-safe-bottom);
+  z-index: var(--z-floating);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-full);
+  border: 0.5px solid var(--glass-border);
+  background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+  box-shadow: var(--glass-highlight), var(--shadow-lg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.miniRoot button {
+  min-height: var(--size-touch-target);
+}
+
+.miniRoot button:first-child {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.miniRoot button:last-child {
+  flex-shrink: 0;
+  width: var(--size-touch-target);
+  height: var(--size-touch-target);
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.miniRoot button:last-child:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

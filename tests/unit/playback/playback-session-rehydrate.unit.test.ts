@@ -361,6 +361,248 @@ async function runPlaybackSessionRehydrateTests(): Promise<void> {
   assert.strictEqual(useSession.getState().source, null);
   console.log('PASS: Work missing fail-closed verified');
 
+  // —— M5-09 fixup R1-R4：canonical resolver（Modern first → Legacy fallback，fail-closed） ——
+  console.log('--- M5-09 fixup R1: Modern StoryArtifact Draft 全链 via canonical resolver ---');
+  const getChatStoreMod = () =>
+    nodeRequire('../../../stores/chatStore') as typeof import('../../../stores/chatStore');
+  const resolverMod = nodeRequire(
+    '../../../lib/client/playbackDraftSnapshot',
+  ) as typeof import('../../../lib/client/playbackDraftSnapshot');
+  const useChat = getChatStoreMod().useChatStore;
+  const NOW_ISO = '2026-09-13T00:00:00.000Z';
+  const makeModernMsg = (id: string, storyText: string) =>
+    ({
+      id,
+      role: 'assistant',
+      content: storyText,
+      parts: [
+        {
+          type: 'storyArtifact',
+          artifact: {
+            id: `artifact-${id}`,
+            artifactType: 'story',
+            status: 'complete',
+            sourceMessageId: id,
+            storyText,
+            title: '现代标题',
+            voiceId: 'alloy',
+            createdAt: NOW_ISO,
+            updatedAt: NOW_ISO,
+          },
+        },
+      ],
+      status: 'delivered',
+      createdAt: NOW_ISO,
+    }) as never;
+  const makeLegacyMsg = (id: string, storyText: string) =>
+    ({
+      id,
+      role: 'assistant',
+      content: storyText,
+      parts: [{ type: 'storyCard', storyText, audioUrl: '' }],
+      status: 'delivered',
+      createdAt: NOW_ISO,
+    }) as never;
+  // R1：Modern 全链（ChatStore 真实消息 + 默认 canonical resolver，不注入 findDraft* fake）。
+  __resetPlaybackSessionTestHooks();
+  useSession.getState().reset();
+  useTransport.getState().reset();
+  useChat.getState().reset();
+  useChat.setState({ messages: [makeModernMsg('msg-modern-1', STORY_4P)] });
+  const snapModern = resolverMod.resolvePlaybackDraftSnapshot('msg-modern-1');
+  assert(snapModern && snapModern.storyText === STORY_4P, 'Modern snapshot 必须经校验面 resolve');
+  assert.strictEqual(snapModern.title, '现代标题');
+  assert.strictEqual(snapModern.voiceId, 'alloy');
+  cleared = [];
+  driftNotified = 0;
+  const draftModernAnchor = buildAnchor({
+    source: { kind: 'draft', messageId: 'msg-modern-1' },
+    title: '草稿故事',
+  });
+  const okModern = await useSession.getState().hydrateFromAnchor(draftModernAnchor as never, {
+    ensureChatLoaded: async () => {},
+    clearAnchor: async (sid: string) => {
+      cleared.push(sid);
+    },
+    notifyDrift: () => {
+      driftNotified += 1;
+    },
+  });
+  assert.strictEqual(okModern, true, 'R1 Modern Draft 必须 rehydrate success');
+  assert.strictEqual(useSession.getState().sessionId, VALID_UUID, 'R1 必须 same sessionId');
+  assert.strictEqual(useSession.getState().status, 'ready', 'R1 status=ready');
+  assert.strictEqual(useSession.getState().continuationMode, 'finite', 'R1 continuationMode=finite');
+  assert.deepStrictEqual(useSession.getState().source, { kind: 'draft', messageId: 'msg-modern-1' });
+  {
+    const t = useTransport.getState();
+    assert.strictEqual(
+      isRehydrateTransportIdle({
+        isPlaying: t.isPlaying,
+        audioUrl: t.currentAudioUrl,
+        currentTime: t.currentTime,
+        duration: t.duration,
+      }),
+      true,
+      'R1 transport 必须 idle（不 autoplay）',
+    );
+    assert.strictEqual(t.isPlaying, false, 'R1 不 autoplay');
+  }
+  console.log('PASS: R1 Modern full chain verified');
+
+  // R1 附加：Modern-first 优先级（Legacy 在前、Modern 在后，仍取 Modern）。
+  console.log('--- M5-09 fixup R1-priority: Modern wins over Legacy ---');
+  const LEGACY_TEXT = '历史兼容卡正文：仅用于优先级对照，现代胜出时不得被选中。';
+  useChat.getState().reset();
+  useChat.setState({
+    messages: [
+      {
+        id: 'msg-mixed-1',
+        role: 'assistant',
+        content: STORY_4P,
+        parts: [
+          { type: 'storyCard', storyText: LEGACY_TEXT, audioUrl: '' },
+          {
+            type: 'storyArtifact',
+            artifact: {
+              id: 'artifact-msg-mixed-1',
+              artifactType: 'story',
+              status: 'complete',
+              sourceMessageId: 'msg-mixed-1',
+              storyText: STORY_4P,
+              title: '现代标题',
+              voiceId: 'alloy',
+              createdAt: NOW_ISO,
+              updatedAt: NOW_ISO,
+            },
+          },
+        ],
+        status: 'delivered',
+        createdAt: NOW_ISO,
+      } as never,
+    ],
+  });
+  const snapMixed = resolverMod.resolvePlaybackDraftSnapshot('msg-mixed-1');
+  assert(snapMixed && snapMixed.storyText === STORY_4P, 'Modern-first：Legacy 在前也必须取 Modern');
+  assert.notStrictEqual(snapMixed?.storyText, LEGACY_TEXT, '不得以 Legacy 为 canonical source');
+  console.log('PASS: Modern-first priority verified');
+
+  // R2：Legacy fallback（无 Modern、仅合法 Legacy，仍可恢复；不要求新写）。
+  console.log('--- M5-09 fixup R2: Legacy StoryCard fallback ---');
+  __resetPlaybackSessionTestHooks();
+  useSession.getState().reset();
+  useTransport.getState().reset();
+  useChat.getState().reset();
+  useChat.setState({ messages: [makeLegacyMsg('msg-legacy-1', STORY_4P)] });
+  const snapLegacy = resolverMod.resolvePlaybackDraftSnapshot('msg-legacy-1');
+  assert(snapLegacy && snapLegacy.storyText === STORY_4P, 'Legacy fallback 必须 resolve');
+  cleared = [];
+  const draftLegacyAnchor = buildAnchor({
+    source: { kind: 'draft', messageId: 'msg-legacy-1' },
+    title: '草稿故事',
+  });
+  const okLegacy = await useSession.getState().hydrateFromAnchor(draftLegacyAnchor as never, {
+    ensureChatLoaded: async () => {},
+    clearAnchor: async (sid: string) => {
+      cleared.push(sid);
+    },
+  });
+  assert.strictEqual(okLegacy, true, 'R2 Legacy Draft 必须仍可恢复');
+  assert.deepStrictEqual(useSession.getState().source, { kind: 'draft', messageId: 'msg-legacy-1' });
+  assert.strictEqual(useSession.getState().status, 'ready');
+  assert.strictEqual(useSession.getState().continuationMode, 'finite');
+  console.log('PASS: R2 Legacy fallback verified');
+
+  // R3：两者皆无 → dangling → clearAnchor → fail-closed。
+  console.log('--- M5-09 fixup R3: dangling fail-closed via canonical resolver ---');
+  __resetPlaybackSessionTestHooks();
+  useSession.getState().reset();
+  useTransport.getState().reset();
+  useChat.getState().reset();
+  useChat.setState({
+    messages: [
+      {
+        id: 'msg-empty-1',
+        role: 'assistant',
+        content: 'hello',
+        parts: [{ type: 'text', content: 'hello' }],
+        status: 'delivered',
+        createdAt: NOW_ISO,
+      } as never,
+    ],
+  });
+  assert.strictEqual(
+    resolverMod.resolvePlaybackDraftSnapshot('msg-empty-1'),
+    null,
+    '无 Modern/Legacy 必须 null',
+  );
+  assert.strictEqual(
+    resolverMod.resolvePlaybackDraftSnapshot('msg-missing-404'),
+    null,
+    '缺消息必须 null',
+  );
+  cleared = [];
+  const draftDanglingAnchor = buildAnchor({
+    source: { kind: 'draft', messageId: 'msg-empty-1' },
+    title: '草稿故事',
+  });
+  const okDanglingCanonical = await useSession.getState().hydrateFromAnchor(
+    draftDanglingAnchor as never,
+    {
+      ensureChatLoaded: async () => {},
+      clearAnchor: async (sid: string) => {
+        cleared.push(sid);
+      },
+    },
+  );
+  assert.strictEqual(okDanglingCanonical, false, 'R3 必须 dangling 返回 false');
+  assert.deepStrictEqual(cleared, [VALID_UUID], 'R3 必须 clearAnchor');
+  assert.strictEqual(useSession.getState().status, 'idle', 'R3 fail-closed 复位 idle');
+  assert.strictEqual(useSession.getState().source, null, 'R3 fail-closed 清 source');
+  console.log('PASS: R3 dangling fail-closed verified');
+
+  // R4：架构守卫（store/新模块不直解 wire，经 resolver 间接消费）。
+  console.log('--- M5-09 fixup R4: architecture guard ---');
+  const storeSrc = fs.readFileSync(
+    path.resolve(process.cwd(), 'stores/playbackSessionStore.ts'),
+    'utf8',
+  );
+  assert.ok(!/['"]storyCard['"]/.test(storeSrc), 'store 不得直读 wire 字面量');
+  assert.ok(!/StoryCardPart/.test(storeSrc), 'store 不得出现 Legacy 类型');
+  assert.ok(!/decodeLegacyStoryCard/.test(storeSrc), 'store 不得直调 decoder（须经 resolver 间接）');
+  assert.ok(
+    !/part\.type\s*===\s*['"]storyCard['"]/.test(storeSrc),
+    'store 不得检查 part.type wire',
+  );
+  assert.ok(
+    !/part\.type\s*===\s*['"]storyArtifact['"]/.test(storeSrc),
+    'store 不得检查 modern wire',
+  );
+  assert.ok(
+    storeSrc.includes('resolvePlaybackDraftSnapshot') || storeSrc.includes('findDraftSnapshot'),
+    'store 必须消费 canonical resolver',
+  );
+  const resolverSrc = fs.readFileSync(
+    path.resolve(process.cwd(), 'lib/client/playbackDraftSnapshot.ts'),
+    'utf8',
+  );
+  assert.ok(!/['"]storyCard['"]/.test(resolverSrc), 'resolver 不得直写 wire 字面量（须经 helper）');
+  assert.ok(!/StoryCardPart/.test(resolverSrc), 'resolver 不得引入 Legacy 类型');
+  assert.ok(
+    !/type\s*:\s*['"]storyCard['"]/.test(resolverSrc),
+    'resolver 不得构造 Legacy',
+  );
+  assert.ok(
+    resolverSrc.includes('rehydrateStoryArtifactPart'),
+    'resolver Modern 必须经 M4 校验面',
+  );
+  assert.ok(resolverSrc.includes('decodeLegacyStoryCard'), 'resolver Legacy 必须经 compatibility reader');
+  assert.ok(
+    resolverSrc.includes('resolvePlaybackDraftSnapshot'),
+    'resolver 必须导出 canonical 入口',
+  );
+  console.log('PASS: R4 architecture guard verified');
+  useChat.getState().reset();
+
   console.log('\nALL M5-09 REHYDRATE UNIT TESTS PASSED!');
 }
 

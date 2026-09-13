@@ -4,8 +4,9 @@
  * 新客户端会话唯一事实源：server 四表 + Anchor DTO 为持久化 SSOT，
  * 本 store 为运行时 SSOT。Work 路径按 workId 经 library.get 精确 resolve
  *（§25.1，严禁走 generationHistoryStore 最近 N 条 find(id) 旧路径）；
- * Draft 路径按 messageId 查 StoryCard 检查正文，缺失清 dangling Anchor
- *（§25.2 fail-closed）。Hash 统一 segmentation SSOT（§25.3），Title 变化
+ * Draft 路径按 messageId 经 canonical resolver 取快照（Modern first、
+ * Legacy 只读 fallback，见 lib/client/playbackDraftSnapshot），缺失清
+ * dangling Anchor（§25.2 fail-closed）。Hash 统一 segmentation SSOT（§25.3），Title 变化
  * 只更新 title 不重置 progress（§25.4），成功后 status=ready + transport idle
  * 不 autoplay（§25.5）。
  *
@@ -58,7 +59,10 @@ import { usePlaybackStore } from '@/stores/playbackStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useConfigStore } from '@/stores/configStore';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
-import type { ChatMessage } from '@/types/chat';
+import {
+  resolvePlaybackDraftSnapshot,
+  type PlaybackDraftSnapshot,
+} from '@/lib/client/playbackDraftSnapshot';
 
 /** §10 PlaybackSessionStatus（运行态 playing/synthesizing/error 不持久化）。 */
 export type PlaybackSessionStatus =
@@ -150,6 +154,15 @@ export interface SessionRehydrateDeps {
     contentHash: string;
   }>;
   ensureChatLoaded?: () => Promise<void>;
+  /**
+   * M5-09 fixup canonical：Draft 快照解析（Modern first → Legacy fallback）。
+   * 生产默认经 resolvePlaybackDraftSnapshot；测试可注入 fake snapshot。
+   */
+  findDraftSnapshot?: (messageId: string) => PlaybackDraftSnapshot | null;
+  /**
+   * @deprecated 仅为旧测试注入兼容保留（string 形态绕过 canonical 快照）。
+   * 新代码一律用 findDraftSnapshot；hydrate 优先 snapshot，其次才看本字段。
+   */
   findDraftStoryText?: (messageId: string) => string | null;
   clearAnchor?: (sessionId: string) => Promise<unknown>;
   notifyDrift?: () => void;
@@ -195,26 +208,17 @@ const abortPrefetch = () => {
   }
 };
 
-/** 默认 Draft 正文查找：ChatStore delivered 消息的 storyCard/storyArtifact 正文。 */
+/**
+ * M5-09 fixup：Draft 快照默认解析——只消费 canonical resolver，不再理解 wire 结构。
+ * Modern-first 优先级与 Legacy 只读 fallback 均收敛在 Chat domain 层。
+ */
+function defaultFindDraftSnapshot(messageId: string): PlaybackDraftSnapshot | null {
+  return resolvePlaybackDraftSnapshot(messageId);
+}
+
+/** @deprecated 兼容垫片：经 canonical snapshot 派生 string（保留旧注入形态）。 */
 function defaultFindDraftStoryText(messageId: string): string | null {
-  const msg = useChatStore
-    .getState()
-    .messages.find((m: ChatMessage) => m.id === messageId) as ChatMessage | undefined;
-  if (!msg || (msg.status !== undefined && msg.status !== 'delivered')) return null;
-  const parts = msg.parts ?? [];
-  for (const part of parts) {
-    if (part.type === 'storyCard' && typeof (part as { storyText?: unknown }).storyText === 'string') {
-      const text = (part as { storyText: string }).storyText;
-      if (text && text.length > 0) return text;
-    }
-    if (part.type === 'storyArtifact') {
-      const artifact = (part as { artifact?: { storyText?: unknown } }).artifact;
-      if (artifact && typeof artifact.storyText === 'string' && artifact.storyText.length > 0) {
-        return artifact.storyText;
-      }
-    }
-  }
-  return null;
+  return resolvePlaybackDraftSnapshot(messageId)?.storyText ?? null;
 }
 
 const defaultDeps: Required<SessionRehydrateDeps> = {
@@ -231,6 +235,7 @@ const defaultDeps: Required<SessionRehydrateDeps> = {
   ensureChatLoaded: async () => {
     await useChatStore.getState().initForUser();
   },
+  findDraftSnapshot: (messageId: string) => defaultFindDraftSnapshot(messageId),
   findDraftStoryText: (messageId: string) => defaultFindDraftStoryText(messageId),
   clearAnchor: (sessionId: string) => clearPlaybackAnchor({ sessionId }),
   notifyDrift: () => {
@@ -243,10 +248,31 @@ function resolveDeps(deps?: SessionRehydrateDeps): Required<SessionRehydrateDeps
     getAnchor: deps?.getAnchor ?? defaultDeps.getAnchor,
     getWork: deps?.getWork ?? defaultDeps.getWork,
     ensureChatLoaded: deps?.ensureChatLoaded ?? defaultDeps.ensureChatLoaded,
+    findDraftSnapshot: deps?.findDraftSnapshot ?? defaultDeps.findDraftSnapshot,
     findDraftStoryText: deps?.findDraftStoryText ?? defaultDeps.findDraftStoryText,
     clearAnchor: deps?.clearAnchor ?? defaultDeps.clearAnchor,
     notifyDrift: deps?.notifyDrift ?? defaultDeps.notifyDrift,
   };
+}
+
+/**
+ * Draft 快照 canonical 消费（M5-09 fixup）：
+ * 显式注入 findDraftSnapshot 优先；仅注入旧 string 时做一次性适配；
+ * 两者皆无注入时走默认 canonical resolver。Store 不再理解 wire 结构。
+ */
+function resolveDraftSnapshotForHydrate(
+  messageId: string,
+  deps: SessionRehydrateDeps | undefined,
+  resolved: Required<SessionRehydrateDeps>,
+): PlaybackDraftSnapshot | null {
+  if (deps?.findDraftSnapshot) {
+    return deps.findDraftSnapshot(messageId);
+  }
+  if (deps?.findDraftStoryText) {
+    const text = deps.findDraftStoryText(messageId);
+    return typeof text === 'string' && text.length > 0 ? { storyText: text } : null;
+  }
+  return resolved.findDraftSnapshot(messageId);
 }
 
 /** dangling 清理（fail-closed）：本地 + transport 复位，best-effort 清 server Anchor。 */
@@ -327,8 +353,9 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         console.warn('[playbackSessionStore] draft chat load failed', err);
       }
       if (get().hydrationEpoch !== epochAtStart) return false;
-      const found = d.findDraftStoryText(anchor.source.messageId);
-      if (!found) {
+      // M5-09 fixup：只消费 canonical resolver 输出（snapshot），不解析 wire。
+      const snapshot = resolveDraftSnapshotForHydrate(anchor.source.messageId, deps, d);
+      if (!snapshot || typeof snapshot.storyText !== 'string' || snapshot.storyText.length === 0) {
         return dropDanglingAnchor(
           get,
           set,
@@ -337,8 +364,12 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
           `draft:${anchor.source.messageId}`,
         );
       }
-      storyText = found;
-      liveTitle = null;
+      storyText = snapshot.storyText;
+      liveTitle =
+        typeof snapshot.title === 'string' && snapshot.title.length > 0 ? snapshot.title : null;
+      if (!liveVoiceId && typeof snapshot.voiceId === 'string' && snapshot.voiceId.length > 0) {
+        liveVoiceId = snapshot.voiceId;
+      }
     } else {
       // §25.1：严禁走 generationHistoryStore 最近 N 条 find(id)；
       // library.get(workId) 精确 resolve（分页后 Anchor 可指向任意页）。

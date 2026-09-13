@@ -78,6 +78,7 @@ const SUITES = [
     { id: 'conversation-conflict-refresh', path: './tests/integration/persistence-config/conversation-conflict-refresh.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'paragraph-segmentation', path: './tests/unit/playback/paragraph-segmentation.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'playback-identity-domain', path: './tests/unit/playback/playback-identity-domain.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'playback-session-contract', path: './tests/unit/playback/playback-session-contract.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'main-navigation', path: './tests/unit/navigation/main-navigation.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'story-work-domain', path: './tests/unit/persistence-config/story-work-domain.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'story-work-read', path: './tests/integration/persistence-config/story-work-read.integration.test.ts', group: 'integration', needs_db: true },

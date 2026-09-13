@@ -1,9 +1,10 @@
 // case_id: desktop-floating-mode-closure
 // journey: smoke-baseline
-// M6-04 Desktop Floating Mode & M6 Closure（聚合单场景，spec §18/§19/§49）。
+// M6-04 Desktop Floating Mode & M6 Closure（聚合单场景，spec §18/§19/§49）
+// + M6-04-FIXUP 位置持久化（评审 Blocking 1：localStorage 持久化 + refresh restore）。
 // 1280 + pref true → wide-floating 默认右下、Grip-only drag、clamp、edge snap；
 // 越界拖拽仍完全可见；缩窗 re-clamp；pref false → wide-docked（固定 TabBar 上方、Grip 消失、不可拖）；
-// 跨 767↔1280 往返同一 Session、drag 不残留；reload 回默认右下（内存态）。
+// 跨 767↔1280 往返同一 Session、drag 不残留；drag→reload→位置恢复（clamp 后）。
 // 慢沙箱一律确定性轮询（expect.poll），无长 sleep；Chromium/WebKit 双跑，不重试。
 import { test, expect } from "../harness/fixtures";
 import type { Page } from "@playwright/test";
@@ -335,7 +336,7 @@ test("Desktop Floating 拖拽吸附与 M6 收官全链路", async ({ page, harne
     expect(backGeo.right).toBeLessThanOrEqual(backGeo.viewportW + 1);
     recorder.step("跨 768 往返同一会话", { backGeo });
 
-    // 7) 重新开启 floating，再 reload 回默认右下（内存态，不跨刷新持久化）。
+    // 7) 重新开启 floating，拖到位置 A 后 reload → 位置恢复为 A（localStorage 持久化 + refresh restore，FIXUP）。
     await page.getByRole("tab", { name: "设置" }).click({ timeout: 15000 }).catch(() => {});
     // 已在 setting：DOM click 再次切换回 true（以 layoutmode 为真 oracle）。
     const floatSwitch2 = page.getByLabel("桌面悬浮播放开关");
@@ -345,7 +346,7 @@ test("Desktop Floating 拖拽吸附与 M6 收官全链路", async ({ page, harne
         .poll(async () => page.getByTestId("main-chrome").getAttribute("data-layoutmode"), { timeout: 15000 })
         .toBe("wide-floating");
     expect((await readProbe(page)).sessionId).toBe(sessionId);
-    // 等待 500ms 防抖回写落库后再 reload（否则刷新读到旧偏好 wide-docked）。
+    // 等待 500ms 防抖回写落库后再继续（否则刷新读到旧偏好 wide-docked）。
     await expect.poll(async () => page.evaluate(async () => {
         try {
             const res = await fetch(
@@ -362,6 +363,40 @@ test("Desktop Floating 拖拽吸附与 M6 收官全链路", async ({ page, harne
             return "error";
         }
     }), { timeout: 15000 }).toBe("persisted-true");
+    await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("mini-drag-grip")).toBeVisible({ timeout: 15000 });
+    // 拖到位置 A：向左大幅拖后释放，贴左或右一边（snap 伴随 200ms 过渡，轮询等待）。
+    const gripRestore = page.getByTestId("mini-drag-grip");
+    const gripRestoreBox = await gripRestore.boundingBox();
+    expect(gripRestoreBox).not.toBeNull();
+    const restoreStartX = (gripRestoreBox as { x: number; y: number; width: number; height: number }).x + (gripRestoreBox as { width: number }).width / 2;
+    const restoreStartY = (gripRestoreBox as { y: number; height: number }).y + (gripRestoreBox as { height: number }).height / 2;
+    await page.mouse.move(restoreStartX, restoreStartY);
+    await page.mouse.down();
+    await page.mouse.move(restoreStartX - 500, restoreStartY + 40, { steps: 12 });
+    await page.mouse.up();
+    await expect.poll(async () => (await readMiniGeometry(page)).dragged, { timeout: 15000 }).toBe("true");
+    await expect.poll(async () => {
+        const g = await readMiniGeometry(page);
+        return Math.min(Math.abs(g.left - 16), Math.abs(g.viewportW - g.right - 16));
+    }, { timeout: 15000 }).toBeLessThan(8);
+    const posA = await readMiniGeometry(page);
+    expect(posA.left).toBeGreaterThanOrEqual(-1);
+    expect(posA.right).toBeLessThanOrEqual(posA.viewportW + 1);
+    // 位置已落盘：localStorage 存在且与几何一致（容差 8px，覆盖 snap 过渡时序）。
+    const storedA = await page.evaluate(() => {
+        try {
+            return window.localStorage.getItem("mini-floating-position-v1");
+        } catch {
+            return null;
+        }
+    });
+    expect(typeof storedA === "string" && (storedA as string).length > 0).toBe(true);
+    const parsedA = JSON.parse(storedA as string) as { x: number; y: number };
+    expect(Number.isFinite(parsedA.x) && Number.isFinite(parsedA.y)).toBe(true);
+    expect(Math.abs(parsedA.x - posA.left)).toBeLessThan(8);
+    expect(Math.abs(parsedA.y - posA.top)).toBeLessThan(8);
+    recorder.step("拖到位置A并落盘", { posA, storedA });
     await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
     await dismissOnboarding(page);
     await page.waitForFunction(
@@ -376,13 +411,21 @@ test("Desktop Floating 拖拽吸附与 M6 收官全链路", async ({ page, harne
         .poll(async () => page.getByTestId("main-chrome").getAttribute("data-layoutmode"), { timeout: 30000 })
         .toBe("wide-floating");
     await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 15000 });
-    // reload 后回默认：data-dragged=false，且右贴边 16±8。
-    await expect.poll(async () => (await readMiniGeometry(page)).dragged, { timeout: 15000 }).toBe("false");
+    // reload 后恢复为 A（clamp 后）：data-dragged=true，且 left/top 与 A 一致（容差 12px，覆盖 clamp/measure 误差）。
+    await expect.poll(async () => (await readMiniGeometry(page)).dragged, { timeout: 15000 }).toBe("true");
+    await expect.poll(async () => {
+        const g = await readMiniGeometry(page);
+        const dx = Math.abs(g.left - posA.left);
+        const dy = Math.abs(g.top - posA.top);
+        return dx < 12 && dy < 12 ? "restored" : `dx=${dx},dy=${dy}`;
+    }, { timeout: 15000 }).toBe("restored");
     const reloaded = await readMiniGeometry(page);
-    expect(reloaded.viewportW - reloaded.right).toBeGreaterThanOrEqual(8);
-    expect(reloaded.viewportW - reloaded.right).toBeLessThan(28);
+    expect(reloaded.left).toBeGreaterThanOrEqual(-1);
+    expect(reloaded.top).toBeGreaterThanOrEqual(-1);
+    expect(reloaded.right).toBeLessThanOrEqual(reloaded.viewportW + 1);
+    expect(reloaded.bottom).toBeLessThanOrEqual(reloaded.viewportH + 1);
     const probeReloaded = await readProbe(page);
     expect(probeReloaded.sessionId).toBe(sessionId);
     expect(probeReloaded.source?.kind).toBe("work");
-    recorder.step("刷新回默认右下", { reloaded });
+    recorder.step("刷新恢复位置A", { posA, reloaded });
 });

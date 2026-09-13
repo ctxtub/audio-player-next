@@ -405,9 +405,9 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 
 > 内容区通过 `padding-bottom: var(--tab-bar-safe-bottom)` 留出底部安全距离。Chat 页的 Composer 自行管理底部间距。
 
-### 3.7 Mini Now Playing — 胶囊风格（M6 收官；旧 FloatingPlayer 已退出正式命名）
+### 3.7 Mini Now Playing — 胶囊风格（M6 收官；FloatingPlayer 仅留 deprecated 兼容 shim，M9 删除）
 
-全局迷你播放入口：是否存在由播放 Session 派生（`source 非空且 status 非 idle`），标题仅取 Session.title，睡眠预算字段不在 Mini 展示，粗进度为段落加权近似（不可 seek），主动作经 M5 Flow 委托。移动端与宽屏关闭态固定 TabBar 上方（不可拖），宽屏开启态为可拖悬浮（仅 Grip 绑定 `useDrag`，播放/元数据按钮不参与）。
+全局迷你播放入口：是否存在由播放 Session 派生（`source 非空且 status 非 idle`），标题仅取 Session.title，睡眠预算字段不在 Mini 展示，粗进度为段落加权近似（不可 seek），主动作经 M5 Flow 委托。移动端与宽屏关闭态固定 TabBar 上方（不可拖），宽屏开启态为可拖悬浮（仅 Grip 绑定 `useDrag`，播放/元数据按钮不参与；位置 localStorage 持久化 + refresh restore，无值回默认右下，非法值容错）。
 
 | 属性 | Token |
 |------|-------|
@@ -426,7 +426,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 | Docked 高度 | `var(--size-mini-now-playing-height)` = 68px（参与 `--bottom-chrome-safe-bottom` 预留计算，页面不得 hardcode） |
 | Floating 宽度 | `var(--size-mini-now-playing-wide)` = 360px（`wide-floating` 固定宽，`max-width: calc(100vw - 32px)` 防溢出） |
 | Docked 最大宽 | `var(--size-mini-now-playing-docked-max)` = 776px（居中胶囊上限） |
-| Floating 默认位 | `right: var(--space-4)` + `bottom: calc(var(--tab-bar-safe-bottom) + var(--space-4))`（无 JS 固定像素；首次 drag 后转 `left/top`） |
+| Floating 默认位 | `right: var(--space-4)` + `bottom: calc(var(--tab-bar-safe-bottom) + var(--space-4))`（无 JS 固定像素；首次 drag 后转 `left/top`，localStorage 持久化 + refresh restore） |
 | DragGrip | 克制竖点（`var(--space-6)` 宽、`touch-action: none`、`cursor: grab/grabbing`，`focus-visible` 描边），仅 `wide-floating` 渲染 |
 | 断点 | `<768` compact-docked / `>=768` wide（`--breakpoint-lg` = 768px，与 `$breakpoint-lg` / `NOW_PLAYING_BREAKPOINT_PX` 三方同值） |
 
@@ -677,7 +677,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 | 视口 + 偏好 | 形态 | 位置 | 预留 |
 |-------------|------|------|------|
 | `<768`（偏好无关） | `compact-docked` | 固定 TabBar 上方，不可拖，无 Grip | `--bottom-chrome-safe-bottom` 抬高（Mini 高 + 间距） |
-| `>=768` + `desktopFloatingPlayerEnabled=true` | `wide-floating` | 默认右下悬浮，仅 Grip 可拖（clamp + 水平吸附 + resize repair，内存态） | 不占位（兼容浮层） |
+| `>=768` + `desktopFloatingPlayerEnabled=true` | `wide-floating` | 默认右下悬浮，仅 Grip 可拖（clamp + 水平吸附 + resize repair，localStorage 持久化 + refresh restore） | 不占位（兼容浮层） |
 | `>=768` + `desktopFloatingPlayerEnabled=false` | `wide-docked` | 固定 TabBar 上方，不可拖，无 Grip（与移动端一致） | 同 docked 预留（Mini 不因关闭而消失） |
 
 BottomChrome 统一承载 Mini slot + TabBar（`display: contents`，不引入额外布局盒）；内容区与 Composer 一律消费 `--bottom-chrome-safe-bottom`，禁止各自 hardcode Mini 高度。

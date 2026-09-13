@@ -1,5 +1,6 @@
 /**
- * M6-04 NowPlaying 正式 import surface（命名迁移收官：FloatingPlayer 适配器已删除）。
+ * M6-04 NowPlaying 正式 import surface（命名迁移收官 + FIXUP：
+ * FloatingPlayer 仅留 deprecated 兼容 shim，见 components/FloatingPlayer/index.tsx，M9 删除）。
  */
 
 export { MiniNowPlaying, default } from './MiniNowPlaying';

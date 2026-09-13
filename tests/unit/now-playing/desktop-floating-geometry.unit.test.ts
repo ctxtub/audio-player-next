@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 // 中文注释：M6-04 Desktop Floating Mode 单元契约（L1，纯函数 + 源码架构守卫，不触库/网络/DOM）。
-// 覆盖 spec §18（默认右下 CSS / grip-only drag / clamp / edge snap / resize repair / session-only / 纯 presentation）
+// 覆盖 spec §18（默认右下 CSS / grip-only drag / clamp / edge snap / resize repair / localStorage 持久化 + refresh restore / 纯 presentation）
 // + §19（wide-docked 预留）+ §49/C（跨 768 往返同一 Session、drag 不残留）。
 import {
     MINI_FLOATING_MARGIN_X_PX,
@@ -144,7 +144,7 @@ async function runDesktopFloatingTests(): Promise<void> {
         console.log('PASS: M6-04-04 tri-state + reservation');
     }
 
-    console.log('=== M6-04-05: 源码架构守卫（grip-only / CSS 默认 / session-only / 纯 presentation）===');
+    console.log('=== M6-04-05: 源码架构守卫（grip-only / CSS 默认 / localStorage 持久化 / 纯 presentation）===');
     {
         const miniSrc = readRepoText('components/NowPlaying/MiniNowPlaying.tsx');
         const miniExec = stripComments(miniSrc);
@@ -193,13 +193,39 @@ async function runDesktopFloatingTests(): Promise<void> {
         // clamp + snap 委托纯函数。
         assert.ok(hookExec.includes('clampFloatingPosition'), 'hook 必须委托 clamp');
         assert.ok(hookExec.includes('resolveFloatingDragEnd'), 'hook 必须委托 drag end（clamp+snap）');
-        // session-only：内存 useState，不写 DB/UserConfig/localStorage。
-        assert.ok(hookExec.includes('useState'), '位置须内存态（useState）');
-        for (const token of ['localStorage', 'UserConfig', 'GuestConfig', 'prisma', '@map']) {
+        // localStorage 持久化 + refresh restore（M6-04-FIXUP 评审 Blocking 1）：
+        // hook 经 localStorage 读写坐标（容错 fallback 默认右下），geometry 仍保持纯函数。
+        assert.ok(hookExec.includes('useState'), '位置须 state 持有（含持久化恢复）');
+        assert.ok(hookExec.includes('localStorage'), 'hook 必须经 localStorage 持久化位置');
+        assert.ok(
+            hookExec.includes('MINI_FLOATING_POSITION_STORAGE_KEY'),
+            'hook 必须经版本化 storage key 读写'
+        );
+        assert.ok(hookSrc.includes('mini-floating-position-v1'), 'storage key 须为 mini-floating-position-v1');
+        // 读写容错：解析失败/非法值 fallback 默认右下，绝不 throw。
+        assert.ok(hookExec.includes('try'), 'hook 读写必须 try/catch 容错');
+        assert.ok(hookExec.includes('catch'), 'hook 读写必须 catch fallback');
+        assert.ok(
+            hookSrc.includes('loadPersistedFloatingPosition') || hookSrc.includes('parseStoredPosition'),
+            'hook 初始化必须读取并校验持久化值'
+        );
+        assert.ok(
+            hookSrc.includes('persistFloatingPosition') || hookSrc.includes('setItem'),
+            'hook position 变更时必须持久化'
+        );
+        // 初始化 clamp 到当前 viewport（防跨屏/缩窗出界）。
+        assert.ok(
+            hookSrc.includes('clampFloatingPosition'),
+            'hook 初始化/恢复必须 clamp 到 viewport'
+        );
+        // hook 仍不得触 DB/UserConfig（仅允许 localStorage 坐标面）。
+        for (const token of ['UserConfig', 'GuestConfig', 'prisma', '@map']) {
             assert.ok(!hookExec.includes(token), `hook 不得触持久化 ${token}`);
             assert.ok(!geomExec.includes(token), `geometry 不得触持久化 ${token}`);
         }
-        assert.ok(!miniExec.includes('localStorage.setItem'), 'Mini 不得写 localStorage');
+        // geometry 纯函数层仍不得触 localStorage（持久化归 hook）。
+        assert.ok(!geomExec.includes('localStorage'), 'geometry 不得触 localStorage（持久化归 hook）');
+        assert.ok(!miniExec.includes('localStorage.setItem'), 'Mini 不得直写 localStorage（归 hook）');
         // 纯 presentation：hook/geometry 不 mutation session/transport。
         for (const token of [
             'usePlaybackSessionStore',

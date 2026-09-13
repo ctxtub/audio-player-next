@@ -7,8 +7,9 @@
  * - resize 缩窗 re-clamp（调用方监听 window.resize + visualViewport.resize）。
  *
  * 本文件为纯函数层：不 import 任何 store / router / DOM /
- * localStorage / DB / UserConfig；位置仅当前浏览 session 内存保持
- * （spec §18.5：不写 DB/UserConfig/localStorage，reload 回默认右下）。
+ * localStorage / DB / UserConfig；位置持久化由 useMiniFloatingDrag 经
+ * localStorage 完成（localStorage 持久化 + refresh restore），本层仅提供
+ * clamp/snap 纯函数（调用方负责读写与容错）。
  * 边距与 CSS token 对齐：水平 16px = var(--space-4)（初始 right:var(--space-4) 与
  * 吸附边距同源）；垂直 8px = var(--space-2)（最小可视保留，不复刻 tab-bar 高度，
  * floating 为 viewport overlay，不参与 BottomChrome 预留）。

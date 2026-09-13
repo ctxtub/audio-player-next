@@ -206,13 +206,13 @@ async function runDesktopMigrationTests() {
     assert.ok(mapHits.length >= 2, `User/Guest 必须各一处 @map("floatingPlayerEnabled")（得 ${mapHits.length}）`);
     console.log('PASS: M6-01-F schema guard');
 
-    console.log('=== M6-01-G: FloatingPlayer 适配器已删除（M6-04 收官）===');
-    // M6-04 Legacy cleanup（spec §2.2/§35/M6-F）：适配器目录整体删除，
-    // 本用例锁定不存在（替代旧 compat re-export 回归）；配置仍读新字段（经 Mini）。
+    console.log('=== M6-01-G: FloatingPlayer deprecated 兼容 shim（M6-04-FIXUP）===');
+    // FIXUP（评审 Blocking 2）：正式命名收官后 shim 短期兼容期保留（M9 删除），
+    // 仅薄 re-export；配置仍读新字段（经 Mini）。
     assert.strictEqual(
-        fs.existsSync(path.join(process.cwd(), 'components', 'FloatingPlayer')),
-        false,
-        'components/FloatingPlayer 适配器必须不存在（M6-04 已删除）'
+        fs.existsSync(path.join(process.cwd(), 'components', 'FloatingPlayer', 'index.tsx')),
+        true,
+        'components/FloatingPlayer/index.tsx 兼容 shim 必须存在（M9 前保留）'
     );
     // 新字段改由 Mini 正式实现消费（只决定 layoutMode，不决定存在性）。
     const miniSrc = fs.readFileSync(
@@ -222,6 +222,21 @@ async function runDesktopMigrationTests() {
     assert.ok(
         miniSrc.includes('state.apiConfig.desktopFloatingPlayerEnabled'),
         'Mini 必须读新字段（仅供 layoutMode）'
+    );
+    // shim 薄契约：re-export 正式 Mini + store 别名，不得重建旧 CSS/旧实现。
+    const shimSrc = fs.readFileSync(
+        path.join(process.cwd(), 'components', 'FloatingPlayer', 'index.tsx'),
+        'utf8'
+    );
+    assert.ok(
+        shimSrc.includes('MiniNowPlaying as FloatingPlayer'),
+        'shim 必须 re-export MiniNowPlaying as FloatingPlayer'
+    );
+    assert.ok(!shimSrc.includes('isFloatingVisible'), 'shim 不得重建旧显隐 state');
+    assert.strictEqual(
+        fs.existsSync(path.join(process.cwd(), 'components', 'FloatingPlayer', 'index.module.scss')),
+        false,
+        '不得重建旧 CSS'
     );
     console.log('PASS: M6-01-G FloatingPlayer compat regression');
 

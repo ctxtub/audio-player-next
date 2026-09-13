@@ -451,19 +451,69 @@ async function runMiniSemanticTests(): Promise<void> {
     }
     console.log('PASS: M6-02-09 legacy import guard');
 
-    console.log('=== M6-02-10: FloatingPlayer 适配器已删除 + 命名迁移收官（M6-04）===');
+    console.log('=== M6-02-10: FloatingPlayer deprecated 兼容 shim 契约（M6-04-FIXUP）===');
     {
-        // M6-04 Legacy cleanup（spec §2.2/§35/M6-F）：rg 已确认无真实 import，
-        // 本用例锁定适配器不存在（目录级），替代旧「compat re-export」断言。
+        // M6-04-FIXUP（评审 Blocking 2）：MiniNowPlaying 正式命名完成，但 legacy import
+        // 仍处于短期兼容期（M9 删除）。shim 必须存在且为极薄 re-export，绝不能重建
+        // FloatingPlayer 专属 state/旧 CSS/drag/isFloatingVisible。
         assert.strictEqual(
             fs.existsSync(path.resolve(process.cwd(), 'components/FloatingPlayer')),
-            false,
-            'components/FloatingPlayer 适配器必须不存在（M6-04 已删除）'
+            true,
+            'components/FloatingPlayer 兼容 shim 目录必须存在（M9 前保留）'
         );
+        const shimPath = path.resolve(process.cwd(), 'components/FloatingPlayer/index.tsx');
         assert.strictEqual(
-            fs.existsSync(path.resolve(process.cwd(), 'components/FloatingPlayer/index.tsx')),
-            false,
-            'FloatingPlayer/index.tsx 必须不存在'
+            fs.existsSync(shimPath),
+            true,
+            'FloatingPlayer/index.tsx 兼容 shim 必须存在'
+        );
+        const shimSrc = readRepoText('components/FloatingPlayer/index.tsx');
+        // 必须 re-export MiniNowPlaying as FloatingPlayer（identity 指向正式实现，import 可编译由 tsc 门覆盖）。
+        assert.ok(
+            shimSrc.includes('MiniNowPlaying as FloatingPlayer'),
+            'shim 必须 re-export MiniNowPlaying as FloatingPlayer'
+        );
+        assert.ok(
+            shimSrc.includes('MiniNowPlaying') && shimSrc.includes("from '@/components/NowPlaying/MiniNowPlaying'"),
+            'shim identity 必须指向正式 MiniNowPlaying surface'
+        );
+        assert.ok(
+            shimSrc.includes('useFloatingPlayer') && shimSrc.includes("from '@/stores/playbackStore'"),
+            'shim 必须 re-export useFloatingPlayer（store 兼容别名）'
+        );
+        // 文件头 @deprecated：Use MiniNowPlaying from components/NowPlaying. Remove in M9.
+        assert.ok(shimSrc.includes('@deprecated'), 'shim 文件头必须含 @deprecated');
+        assert.ok(
+            shimSrc.includes('Use MiniNowPlaying') && shimSrc.includes('Remove in M9'),
+            'shim 必须注明 Use MiniNowPlaying from components/NowPlaying. Remove in M9'
+        );
+        // 极薄：不得重新引入专属 state/旧 CSS/drag/isFloatingVisible/show-hide。
+        for (const token of [
+            'isFloatingVisible',
+            'isMiniVisible',
+            'showFloatingPlayer',
+            'hideFloatingPlayer',
+            'showPlayer',
+            'showMiniPlayer',
+            'useDrag',
+            'useState',
+            'create(',
+            '.module.scss',
+            'index.module',
+            'localStorage',
+        ]) {
+            assert.ok(!shimSrc.includes(token), `shim 不得重新引入 ${token}`);
+        }
+        assert.ok(
+            shimSrc.split('\n').length <= 30,
+            `shim 必须极薄（<=30 行，实际 ${shimSrc.split('\n').length}）`
+        );
+        // 旧 CSS/旧实现不得重建（目录下仅允许 index.tsx 单文件）。
+        const shimDirFiles = fs.readdirSync(path.resolve(process.cwd(), 'components/FloatingPlayer'));
+        assert.deepStrictEqual(
+            shimDirFiles.sort(),
+            ['index.tsx'],
+            `FloatingPlayer 目录仅允许 index.tsx shim（实际 ${shimDirFiles.join(',')}）`
         );
         const layoutSrc = readRepoText('app/(main)/layout.tsx');
         // M6-03 演进：Mini 已收进 MainChrome/BottomChrome slot（spec §16/§34），

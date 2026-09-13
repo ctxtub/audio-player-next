@@ -19,8 +19,9 @@
  *   z-index:var(--z-floating)）；初始 CSS 右下（right:var(--space-4)；
  *   bottom:calc(tab-bar-safe-bottom + var(--space-4))），用户首次 drag 后转
  *   left/top 内联坐标；仅 DragGrip 绑定 useDrag，Playback/Metadata 按钮不参与；
- *   drag 期间/结束 clamp，结束吸附最近水平边，resize re-clamp；位置仅内存态
- *   （不写 DB/UserConfig/localStorage）；纯 presentation，不 mutation
+ *   drag 期间/结束 clamp，结束吸附最近水平边，resize re-clamp；位置 localStorage
+ *   持久化 + refresh restore（useMiniFloatingDrag，容错 fallback 默认右下）；
+ *   纯 presentation，不 mutation
  *   session/transport。
  * - Wide Docked（§19）：pref=false → wide-docked，固定 TabBar 上方（与移动端一致）；
  *   配置只决定桌面是否漂浮，不决定 Now Playing 是否存在。
@@ -79,7 +80,7 @@ const useMiniPrimaryAction = (primaryAction: 'play' | 'pause' | 'restart' | 'ret
 };
 
 /**
- * Global Mini Now Playing（M6-04 收官：FloatingPlayer 适配器已删除，正式命名唯一）。
+ * Global Mini Now Playing（M6-04 收官 + FIXUP：FloatingPlayer 仅留 deprecated 兼容 shim，正式命名唯一）。
  * 无 current session → 返回 null（不渲染）；config 只决定 layoutMode，不决定存在性。
  * Wide Floating 坐标仅在 wide-floating + 已拖拽时以内联 left/top 应用；
  * docked/compact 一律走 CSS 默认（旧 floating 坐标不残留，跨 768 往返合法）。

@@ -997,6 +997,18 @@ cases:
     executable_ids: [exec-artifact-chat-ui]
     fixtures: []
     owner: creation-artifact
+  - case_id: artifact-history-round-trip
+    display_name_zh: Artifact History 持久化规范与 Reload 恢复
+    legacy_aliases: [E2E-08-06]
+    journey_id: creation-artifact
+    user_goal: Chat Artifact 稳定态跨 reload 精确 round-trip 且瞬态在持久化边界安全降级，脏数据 fail-closed 且恢复零副作用不影响本地存活 attempt
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [chat, artifact, history, rehydration, persistence, fail-closed]
+    spec_path: docs/e2e/08-创作Artifact/06-HistoryRoundTrip.md
+    executable_ids: [exec-artifact-history-rehydration]
+    fixtures: []
+    owner: creation-artifact
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1240,6 +1252,10 @@ executables:
     display_name_zh: Artifact Chat UI 与 Promotion 状态呈现
     layer: L1
     path: ./tests/unit/creation-chat/artifact-chat-ui.unit.test.ts
+  - executable_id: exec-artifact-history-rehydration
+    display_name_zh: Artifact History 持久化与恢复
+    layer: L1
+    path: ./tests/unit/creation-chat/artifact-history-rehydration.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

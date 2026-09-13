@@ -4,7 +4,6 @@ import { devtools } from 'zustand/middleware';
 import type {
   ChatConversationMessage,
   ChatMessage,
-  ChatMessageRole,
   ChatStreamDoneEvent,
   MessagePart,
   StoryArtifactPart,
@@ -41,6 +40,10 @@ import {
 } from '@/utils/chatUtils';
 import type { ChatMessageInput } from '@/lib/trpc/schemas/chatConversation';
 import { fetchMyConversation, saveMyConversation } from '@/lib/client/chatConversation';
+import {
+  rehydrateServerMessages,
+  serializePartsForHistory,
+} from '@/lib/client/chatArtifactHistory';
 
 /**
  * 聊天 Store 的 Action 定义，统一管理所有对单条目消息状态的变更操作。
@@ -477,6 +480,10 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
 
   /**
    * 取完成态消息构造保存快照（含 summary 锚点，便于恢复后压缩上下文；storyCard 的音频置空不存）。
+   * M4-06 History persistence boundary：落盘前经 serializePartsForHistory 做
+   * history canonicalization（draft→interrupted、complete/promoting→promotion_failed，
+   * stable exact；storyCard audioUrl 清空保持）。serialize 为纯 clone，绝不 mutate
+   * live store：内存 promoting 仍保持 promoting，直到真实 M4-04 settlement 改它。
    * @param messages 当前消息列表。
    */
   const toSnapshot = (messages: ChatMessage[]): ChatMessageInput[] =>
@@ -486,9 +493,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         (message) => message.status === undefined || message.status === 'delivered',
       )
       .map((message) => {
-        const parts = message.parts?.map((part) =>
-          part.type === 'storyCard' ? { ...part, audioUrl: '' } : part,
-        );
+        const parts = serializePartsForHistory(message.parts) as ChatMessageInput['parts'];
         return {
           messageId: message.id,
           role: message.role,
@@ -1189,15 +1194,16 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       if (epoch !== accountEpoch) {
         return; // 账号已切（登出/401）→ 放弃回写（项 4）
       }
-      const serverMessages: ChatMessage[] = dtos.map((dto) => ({
-        id: dto.messageId,
-        role: dto.role as ChatMessageRole,
-        content: dto.content,
-        parts: dto.parts as MessagePart[] | undefined,
-        status: 'delivered',
-        createdAt: dto.createdAt,
-        metadata: dto.agentType ? { agentType: dto.agentType as AgentType } : undefined,
-      }));
+      // M4-06 History rehydration boundary：只 normalize 服务端 fetch 结果。
+      // server DTO 逐条经 rehydrateServerMessages 防御性恢复（transient 降级 +
+      // 非法 storyArtifact part fail-closed + valid Artifact wins 同步 content）；
+      // await 窗口内本地新增（appendedLocally）绝不进 normalization，否则会把真实
+      // 存活的 draft/promoting 误杀为 interrupted/promotion_failed（blocking）。
+      // 恢复纯读零副作用：不 generation、不 promotion、不 Library mutation、不 playback、
+      // 不自动 retry、不 save-back（直接 set，不触发 scheduleSave）。
+      const serverMessages: ChatMessage[] = rehydrateServerMessages(
+        dtos as unknown as Parameters<typeof rehydrateServerMessages>[0],
+      );
       // 中文注释：H-15 读取成功记基线（内存，不持久化），供下次保存透传。
       baselineMessageIds = dtos.map((dto) => dto.messageId);
       // await 窗口内本地新增（非 baseline）的消息，需在恢复后保留（项 3）

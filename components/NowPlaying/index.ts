@@ -47,6 +47,8 @@ export {
     deriveExpandedTimeline,
     deriveExpandedPlaybackRate,
     deriveExpandedCanRestart,
+    deriveExpandedCanViewStory,
+    deriveWorkLibraryTarget,
     EXPANDED_NOW_PLAYING_FALLBACK_TITLE,
     EXPANDED_VOICE_FALLBACK_LABEL,
     useExpandedNowPlayingViewModel,
@@ -85,6 +87,20 @@ export {
     type SleepTimerControlProps,
     type SleepTimerSelection,
 } from './SleepTimerControl';
+export { NowPlayingActions, type NowPlayingActionsProps } from './NowPlayingActions';
+export {
+    VIEW_STORY_LABEL,
+    EXPANDED_ACTIONS_TESTID,
+    EXPANDED_VIEW_STORY_BUTTON_TESTID,
+    LIBRARY_ROUTE_BASE,
+    resolveWorkLibraryTarget,
+    shouldShowWorkViewStory,
+    normalizeLibraryPathname,
+    isSameLibraryDetail,
+    decideWorkViewStoryNavigation,
+    type WorkViewStoryNavigationInput,
+    type WorkViewStoryNavigationDecision,
+} from './workViewStoryNavigation';
 export {
     NOW_PLAYING_BREAKPOINT_PX,
     resolveNowPlayingLayoutMode,

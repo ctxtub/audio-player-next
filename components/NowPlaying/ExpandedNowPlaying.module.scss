@@ -290,6 +290,40 @@
   min-height: var(--size-touch-target);
 }
 
+/* M7-04-01 Work 查看正文动作区（additive，不改既有 Surface 布局/断点）。
+ * 内容导航按钮延续 glass/typography，触控热区 >=44px，与既有控制同口径。 */
+.body [data-testid='expanded-actions'] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.body [data-testid='expanded-view-story-button'] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--size-touch-target);
+  width: 100%;
+  border-radius: var(--radius-md);
+  border: 0.5px solid var(--border-default);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.body [data-testid='expanded-view-story-button']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.body [data-testid='expanded-view-story-button']:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+}
+
 /* Reduced Motion：关闭弹簧/位移动画，drag dismiss 立即收起（spec §10.3）。 */
 @media (prefers-reduced-motion: reduce) {
   .overlay,

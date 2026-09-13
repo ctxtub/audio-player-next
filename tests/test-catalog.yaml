@@ -1153,6 +1153,18 @@ cases:
     executable_ids: [exec-sleep-timer-semantics, exec-sleep-timer-control, exec-sleep-timer-countdown, exec-sleep-timer-session, exec-l3-expanded-sleep-timer]
     fixtures: []
     owner: smoke-baseline
+  - case_id: expanded-work-view-story
+    display_name_zh: Expanded查看正文Work导航
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: Work会话经查看正文先关后导精确详情且播放继续同详情只关Draft隐藏
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [ui, playback, session, navigation, library]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/17-Expanded查看正文Work导航M7-04-01.md
+    executable_ids: [exec-work-view-story, exec-work-view-story-navigation, exec-l3-work-view-story]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1544,6 +1556,18 @@ executables:
     display_name_zh: L3 Expanded睡眠定时P3C全链路
     layer: L3
     path: ./tests/system/browser/scenarios/expanded-sleep-timer.spec.ts
+  - executable_id: exec-work-view-story
+    display_name_zh: 查看正文workId直派生去重与命令面守卫
+    layer: L1
+    path: ./tests/unit/now-playing/work-view-story.unit.test.ts
+  - executable_id: exec-work-view-story-navigation
+    display_name_zh: 查看正文关推顺序与同详情去重复穿
+    layer: L2
+    path: ./tests/integration/now-playing/work-view-story-navigation.integration.test.ts
+  - executable_id: exec-l3-work-view-story
+    display_name_zh: L3 Expanded查看正文Work导航全链路
+    layer: L3
+    path: ./tests/system/browser/scenarios/work-view-story.spec.ts
   - executable_id: exec-l3-desktop-floating-mode
     display_name_zh: L3桌面悬浮拖拽吸附收官
     layer: L3

@@ -21,6 +21,11 @@
  * - sleepTimer = Session.sleepTimerMode + Transport.remainingMs + isWork
  *  （story_end 选项门；展示见 SleepTimerControl）。
  *
+ * M7-04-01 Work 查看正文增补（spec §33-§34 additive，不破既有字段）：
+ * - canViewStory/viewStoryTarget = source.workId 直接派生（`/library/${workId}`），
+ *   Draft/空 source 一律隐藏（绝不拼凑目标）；同 Detail 去重由调用方经
+ *   isSameLibraryDetail 判定（只 close，不重复 push）。
+ *
  * 纯派生见 deriveExpandedNowPlayingViewModel（可独立测试）；
  * Hook 层只做 selector 派生，不 mutation Session/Transport/Config。
  */
@@ -34,6 +39,7 @@ import { MINI_NOW_PLAYING_FALLBACK_TITLE } from './types';
 import { deriveExpandedPlaybackAction, type ExpandedPlaybackAction } from './PlaybackControls';
 import { EXPANDED_TIMELINE_MODE } from './PlaybackTimeline';
 import { isValidSleepTimerMode, type SleepTimerMode } from '@/lib/playback/sleepTimer';
+import { resolveWorkLibraryTarget } from './workViewStoryNavigation';
 
 export type { ExpandedPlaybackAction };
 export { deriveExpandedPlaybackAction };
@@ -84,6 +90,10 @@ export type ExpandedNowPlayingViewModel = {
     isPlaying: boolean;
     /** M7-03 当前 Session Sleep Timer（mode+remaining+isWork，spec §32）。 */
     sleepTimer: ExpandedSleepTimerViewModel;
+    /** M7-04-01 是否展示查看正文（Work 合法目标存在，spec §34）。 */
+    canViewStory: boolean;
+    /** M7-04-01 查看正文 Library 目标（source.workId 直接派生；其余 null）。 */
+    viewStoryTarget: string | null;
 };
 
 /** M7-03 Expanded SleepTimer ViewModel（spec §32；纯展示派生，不复制 Timer 状态）。 */
@@ -242,6 +252,29 @@ export const deriveExpandedSleepTimer = (
 };
 
 /**
+ * M7-04-01 纯函数：查看正文 Library 目标派生（spec §34）。
+ * 唯一合法派生点：source.workId 直接消费（`resolveWorkLibraryTarget` 经
+ * isValidWorkId 校验）；Draft/空/非法一律 null。
+ */
+export const deriveWorkLibraryTarget = (
+    source: PlaybackSourceRef | null
+): string | null => resolveWorkLibraryTarget(source);
+
+/**
+ * M7-04-01 纯函数：是否展示查看正文（spec §34）。
+ * 有可展示会话（source 非空且 status 非 idle）且目标合法即 true。
+ */
+export const deriveExpandedCanViewStory = (
+    source: PlaybackSourceRef | null,
+    status: PlaybackSessionStatus
+): boolean => {
+    if (source === null || status === 'idle') {
+        return false;
+    }
+    return resolveWorkLibraryTarget(source) !== null;
+};
+
+/**
  * 纯函数：ViewModel 总装（不复制 Store，只做展示派生）。
  */
 export const deriveExpandedNowPlayingViewModel = (
@@ -278,6 +311,8 @@ export const deriveExpandedNowPlayingViewModel = (
             transport.remainingMs ?? null,
             session.source
         ),
+        canViewStory: deriveExpandedCanViewStory(session.source, session.status),
+        viewStoryTarget: deriveWorkLibraryTarget(session.source),
     };
 };
 

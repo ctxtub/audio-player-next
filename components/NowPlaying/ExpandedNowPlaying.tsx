@@ -23,11 +23,18 @@
  * - 不直调 playbackSessionFlow / AudioControllerHost / playbackStore 写面 /
  *   <audio> / Session 字段（全部经 facade → flow → Session+Host）；
  * - 不建 Expanded-local speed state；不写回 UserConfig；不触 StoryWork/progress identity。
+ *
+ * M7-04-01 Work 查看正文（spec §33-§34 / §44 additive）：
+ * - Work source 即展示「查看正文」（目标 = ViewModel.viewStoryTarget，
+ *   由 source.workId 直接派生）；Draft/空 source 不展示；
+ * - 点击顺序固定：closeExpanded() 先行 → 已在同一 /library/[workId] 则止步，
+ *   否则 router.push(target)；全程不改播放状态（播放继续）。
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, Modal as AriaModal, ModalOverlay } from 'react-aria-components';
 import { useDrag } from '@use-gesture/react';
+import { usePathname, useRouter } from 'next/navigation';
 
 import { useNowPlayingUiStore } from '@/stores/nowPlayingUiStore';
 
@@ -36,6 +43,8 @@ import { ParagraphStatus } from './ParagraphStatus';
 import { PlaybackControls } from './PlaybackControls';
 import { PlaybackRateControl } from './PlaybackRateControl';
 import { SleepTimerControl } from './SleepTimerControl';
+import { NowPlayingActions } from './NowPlayingActions';
+import { isSameLibraryDetail } from './workViewStoryNavigation';
 import { PlaybackTimeline, EXPANDED_TIMELINE_KEYBOARD_STEP_SECONDS } from './PlaybackTimeline';
 import { useExpandedPlaybackControls } from './useExpandedPlaybackControls';
 import { useExpandedNowPlayingViewModel } from './useExpandedNowPlayingViewModel';
@@ -79,6 +88,9 @@ export const ExpandedNowPlaying: React.FC = () => {
     const viewModel = useExpandedNowPlayingViewModel();
     // M7-02 P3A facade：唯一播放写面（UI→flow→Session+Host；本文件不直调 store/audio）。
     const controls = useExpandedPlaybackControls();
+    // M7-04-01 内容导航路由（查看正文 push 唯一来源；播放写面仍走 facade）。
+    const router = useRouter();
+    const pathname = usePathname();
 
     const [dragOffsetY, setDragOffsetY] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
@@ -95,6 +107,23 @@ export const ExpandedNowPlaying: React.FC = () => {
         setIsDragging(false);
         closeExpanded();
     }, [closeExpanded]);
+
+    /**
+     * M7-04-01 查看正文（spec §34 / §44）：
+     * closeExpanded() 先行 → 同 Detail 去重（只 close）→ 否则 push 目标。
+     * 只动 UI 开关与路由，不触播放状态（播放继续，不 pause）。
+     */
+    const handleViewStory = useCallback(() => {
+        const target = viewModel.viewStoryTarget;
+        if (target === null) {
+            return;
+        }
+        handleClose();
+        if (typeof pathname === 'string' && isSameLibraryDetail(pathname, target)) {
+            return;
+        }
+        router.push(target);
+    }, [viewModel.viewStoryTarget, handleClose, pathname, router]);
 
     const handleOverlayOpenChange = useCallback(
         (open: boolean) => {
@@ -277,6 +306,12 @@ export const ExpandedNowPlaying: React.FC = () => {
                                 remainingMs={viewModel.sleepTimer.remainingMs}
                                 isWork={viewModel.sleepTimer.isWork}
                                 onSelect={controls.setSleepTimer}
+                                disabled={!viewModel.hasSession}
+                            />
+                            {/* M7-04-01 Work 查看正文（spec §34：Work 即展示，Draft 不展示；点击先关后导，播放继续）。 */}
+                            <NowPlayingActions
+                                source={viewModel.source}
+                                onViewStory={handleViewStory}
                                 disabled={!viewModel.hasSession}
                             />
                             {viewModel.isEnded ? (

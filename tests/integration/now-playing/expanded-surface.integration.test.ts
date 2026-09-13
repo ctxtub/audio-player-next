@@ -171,6 +171,21 @@ async function runExpandedSurfaceIntegration(): Promise<void> {
         },
     } as unknown as NodeModule;
 
+    // M7-04-01 next/navigation 打桩：Expanded 查看正文经 useRouter/usePathname
+    //（L2 隔离路由上下文，useRouter 在无 Provider 时抛错；跨路由与 push 目标由 L3 覆盖）。
+    const navigationPath = (nodeRequire as unknown as { resolve: (id: string) => string }).resolve('next/navigation');
+    cache[navigationPath] = {
+        id: navigationPath,
+        filename: navigationPath,
+        loaded: true,
+        exports: {
+            __esModule: true,
+            useRouter: () => ({ push: () => {}, replace: () => {}, prefetch: () => {} }),
+            usePathname: () => null,
+            useSearchParams: () => null,
+        },
+    } as unknown as NodeModule;
+
     const factory = nodeRequire('jiti') as unknown as JitiFactory;
     const innerJiti = factory(path.join(repoRoot, 'index.js'), {
         alias: { '@': repoRoot },

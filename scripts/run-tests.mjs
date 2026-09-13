@@ -128,6 +128,8 @@ const SUITES = [
     { id: 'expanded-surface', path: './tests/integration/now-playing/expanded-surface.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'expanded-playback-capabilities', path: './tests/unit/now-playing/expanded-playback-capabilities.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'expanded-playback-integration', path: './tests/integration/now-playing/expanded-playback-integration.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'work-view-story', path: './tests/unit/now-playing/work-view-story.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'work-view-story-navigation', path: './tests/integration/now-playing/work-view-story-navigation.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'sleep-timer-semantics', path: './tests/unit/now-playing/sleep-timer-semantics.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'sleep-timer-control', path: './tests/unit/now-playing/sleep-timer-control.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'sleep-timer-countdown', path: './tests/unit/playback/sleep-timer-countdown.unit.test.ts', group: 'unit', needs_db: false },

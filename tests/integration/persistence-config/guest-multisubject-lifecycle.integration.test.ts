@@ -45,19 +45,30 @@ async function runBrowserE2eHarnessTests() {
     const tabBPrompt = promptHistoryRouter.createCaller(guestContext);
 
     // --- Scenario 1: Tab A Creates Story & Prompts ---
+    // M4-08：经 save 路径新建 storyCard 已被 provenance guard 禁止；Tab A 的旧故事卡
+    // 以直写 seeding 模拟 pre-M4-08 已持久历史（已 sanitize 形态 audioUrl=''），有意绕过 guard。
+    // 下游断言（Tab B 水合 audioUrl=''、注册迁移保真）保持不变。
     console.log('1. Tab A produces creative work');
-    await tabAChat.saveConversation({
-        messages: [
-            { messageId: 'e2e_m1', role: 'user', content: 'Tell me about the ocean depths' },
+    await prisma.guestChatMessage.createMany({
+        data: [
             {
+                guestId: browserGuestId,
+                position: 0,
+                messageId: 'e2e_m1',
+                role: 'user',
+                content: 'Tell me about the ocean depths',
+            },
+            {
+                guestId: browserGuestId,
+                position: 1,
                 messageId: 'e2e_m2',
                 role: 'assistant',
                 content: 'In the deep abyss, bioluminescent creatures glow.',
-                parts: [{
+                parts: JSON.stringify([{
                     type: 'storyCard',
                     storyText: 'In the deep abyss, bioluminescent creatures glow.',
-                    audioUrl: 'blob:http://localhost:3000/temp-audio-url',
-                }],
+                    audioUrl: '',
+                }]),
             },
         ],
     });

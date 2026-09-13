@@ -57,6 +57,9 @@ async function runGuestCreativeSyncTests() {
     await prisma.guestPromptHistory.deleteMany({ where: { guestId: guestId1 } });
 
     // 1.1 Chat Save and Reload with Audio URL Sanitization
+    // M4-08：经 save 路径新建 storyCard 已被 provenance guard 禁止；旧历史以直写
+    // seeding 模拟 pre-M4-08 持久形态（含历史 temp audioUrl），再经 guard 路径
+    // round-trip（audioUrl='' 续存）验证 sanitize 与续存语义。
     const messagesInput = [
         {
             messageId: 'msg_1',
@@ -79,7 +82,29 @@ async function runGuestCreativeSyncTests() {
         },
     ];
 
-    await saveConversationForSubject({ type: 'guest', id: guestId1 }, messagesInput);
+    // M4-08 seeding：旧历史直写 DB（含历史 temp audioUrl 的持久形态），有意绕过 guard。
+    await prisma.guestChatMessage.createMany({
+        data: messagesInput.map((m, index) => {
+            const parts = (m as { parts?: unknown }).parts;
+            return {
+                guestId: guestId1,
+                position: index,
+                messageId: m.messageId,
+                role: m.role,
+                content: m.content,
+                parts: parts !== undefined ? JSON.stringify(parts) : null,
+                createdAt: (m as { createdAt?: string }).createdAt ?? null,
+            };
+        }),
+    });
+    // 现代客户端续存：同卡 audioUrl='' 经 guard 路径 round-trip（fingerprint 不含 audioUrl）。
+    await saveConversationForSubject({ type: 'guest', id: guestId1 }, messagesInput.map((m) => {
+        const parts = (m as { parts?: Array<Record<string, unknown>> }).parts;
+        return {
+            ...m,
+            parts: parts?.map((p) => (p.type === 'storyCard' ? { ...p, audioUrl: '' } : p)),
+        };
+    }));
 
     const reloadedChat = await getConversationForSubject({ type: 'guest', id: guestId1 });
     assert.strictEqual(reloadedChat.length, 2, 'Should reload exactly 2 chat messages');
@@ -328,26 +353,38 @@ async function runGuestCreativeSyncTests() {
     });
     const gmT0 = new Date('2026-08-01T10:00:00.000Z');
     const gmT1 = new Date('2026-08-01T10:01:00.000Z');
-    await saveConversationForSubject({ type: 'guest', id: guestMigrate }, [
-        { messageId: 'gm_1', role: 'user', content: 'Guest message 1', createdAt: gmT0.toISOString() },
-        {
-            messageId: 'gm_2',
-            role: 'assistant',
-            content: 'Guest response 1',
-            parts: [
-                {
-                    type: 'storyCard',
-                    storyText: 'Guest response 1',
-                    audioUrl: 'blob:http://localhost:3000/should-be-excluded-blob-uuid',
-                },
-            ],
-            createdAt: gmT1.toISOString(),
-        },
-        { messageId: 'gm_3', role: 'user', content: 'Guest message 2', createdAt: gmT1.toISOString() },
-        { messageId: 'gm_4', role: 'assistant', content: 'Guest response 2', createdAt: gmT1.toISOString() },
-        { messageId: 'gm_5', role: 'user', content: 'Guest message 3', createdAt: gmT1.toISOString() },
-        { messageId: 'gm_6', role: 'assistant', content: 'Guest response 3', createdAt: gmT1.toISOString() },
-    ]);
+    // M4-08 seeding：6 条旧历史直写 DB（gm_2 为已 sanitize 持久形态 audioUrl=''），有意绕过 guard；
+    // 经 save 路径新建 storyCard 已被禁止，迁移保真基线只能来自既有持久行。
+    await prisma.guestChatMessage.createMany({
+        data: [
+            { messageId: 'gm_1', role: 'user', content: 'Guest message 1', createdAt: gmT0.toISOString() },
+            {
+                messageId: 'gm_2',
+                role: 'assistant',
+                content: 'Guest response 1',
+                parts: JSON.stringify([
+                    {
+                        type: 'storyCard',
+                        storyText: 'Guest response 1',
+                        audioUrl: '',
+                    },
+                ]),
+                createdAt: gmT1.toISOString(),
+            },
+            { messageId: 'gm_3', role: 'user', content: 'Guest message 2', createdAt: gmT1.toISOString() },
+            { messageId: 'gm_4', role: 'assistant', content: 'Guest response 2', createdAt: gmT1.toISOString() },
+            { messageId: 'gm_5', role: 'user', content: 'Guest message 3', createdAt: gmT1.toISOString() },
+            { messageId: 'gm_6', role: 'assistant', content: 'Guest response 3', createdAt: gmT1.toISOString() },
+        ].map((m, index) => ({
+            guestId: guestMigrate,
+            position: index,
+            messageId: m.messageId,
+            role: m.role,
+            content: m.content,
+            parts: (m as { parts?: string }).parts ?? null,
+            createdAt: (m as { createdAt?: string }).createdAt ?? null,
+        })),
+    });
     await prisma.guestPlaybackProgress.create({
         data: {
             guestId: guestMigrate,

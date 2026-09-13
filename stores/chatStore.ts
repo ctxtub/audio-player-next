@@ -7,7 +7,8 @@ import type {
   ChatStreamDoneEvent,
   MessagePart,
   StoryArtifactPart,
-  // Legacy 只读：选择器/快照仍需识别历史 storyCard（M4-02 新写链已不再创建，正式 cutover 放 M4-08）。
+  // M4-08 cutover：Legacy read compatibility only——选择器/快照仍需识别历史 storyCard
+  //（只读，不新写；新写链自 M4-02 起只产 storyArtifact，新 Legacy 由服务端 provenance guard 拒绝）。
   StoryCardPart,
 } from '@/types/chat';
 import {
@@ -1272,7 +1273,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       }
 
       // 从当前消息的下一条开始查找助手消息（包含历史故事卡片；M4-02 起 Modern Artifact 无 audioUrl，天然返回 null）。
-      // Legacy 只读保留，正式 cutover 放 M4-08。
+      // M4-08 cutover：Legacy read compatibility only，此 selector 行为冻结，不现代化为 StoryWork。
       for (let i = currentIndex + 1; i < messages.length; i++) {
         const msg = messages[i];
         if (msg.role === 'assistant' && msg.parts) {

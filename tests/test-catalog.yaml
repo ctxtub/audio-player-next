@@ -1021,6 +1021,18 @@ cases:
     executable_ids: [exec-history-ui-relocation]
     fixtures: []
     owner: creation-artifact
+  - case_id: legacy-storycard-cutover
+    display_name_zh: Legacy StoryCard 只读切换与新写封禁
+    legacy_aliases: [E2E-08-08]
+    journey_id: creation-artifact
+    user_goal: 新故事只写 StoryArtifact 且旧 StoryCard 可读可续存，服务端以持久化血缘永久拒绝任何新增篡改或复制扩增的 StoryCard
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [chat, artifact, legacy, cutover, provenance, persistence]
+    spec_path: docs/e2e/08-创作Artifact/08-LegacyCutover.md
+    executable_ids: [exec-legacy-cutover, exec-legacy-cutover-guard]
+    fixtures: []
+    owner: creation-artifact
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1272,6 +1284,14 @@ executables:
     display_name_zh: History UI 回迁 Chat-owned Surface
     layer: L1
     path: ./tests/unit/creation-chat/history-ui-relocation.unit.test.ts
+  - executable_id: exec-legacy-cutover
+    display_name_zh: Legacy StoryCard 只读切换与新写封禁
+    layer: L1
+    path: ./tests/unit/creation-chat/legacy-cutover.unit.test.ts
+  - executable_id: exec-legacy-cutover-guard
+    display_name_zh: Legacy 血缘守卫服务端对称
+    layer: L2
+    path: ./tests/integration/persistence-config/legacy-cutover-guard.integration.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

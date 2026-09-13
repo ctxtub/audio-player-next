@@ -60,7 +60,6 @@ async function runParagraphResumeTests() {
         clearPlaybackProgressForSubject,
     } = await import('../../../lib/server/playbackProgress');
     const { purgeExpiredGuestData } = await import('../../../lib/server/guestGc');
-    const { saveConversationForSubject } = await import('../../../lib/server/chatConversation');
     console.log('=== TC-P2-01: 具名访客硬刷新段落断点恢复 ===');
     // 中文注释：访客身份与消息 ID 均取自 tracked 合成主体构造器。
     const guestId1 = makeGuestId('resume_tc01');
@@ -73,9 +72,19 @@ async function runParagraphResumeTests() {
     const storyHash1 = computeStoryContentHash(storyText1);
 
     // Save story to guest chat in DB
-    await saveConversationForSubject({ type: 'guest', id: guestId1 }, [
-        buildStoryChatMessage(storyMessageId1, storyText1),
-    ]);
+    // M4-08：经 save 路径新建 storyCard 已被 provenance guard 禁止；旧故事卡直写 seeding
+    // 模拟 pre-M4-08 已持久历史（buildStoryChatMessage 本就是 audioUrl='' 的持久形态），有意绕过 guard。
+    const seed1 = buildStoryChatMessage(storyMessageId1, storyText1);
+    await prisma.guestChatMessage.create({
+        data: {
+            guestId: guestId1,
+            position: 0,
+            messageId: seed1.messageId,
+            role: seed1.role,
+            content: seed1.content,
+            parts: JSON.stringify(seed1.parts),
+        },
+    });
 
     // Save progress: stopped at paragraph index 2 (third paragraph), completed paragraph 1
     await callerGuest1.saveProgress(buildParagraphProgressSeed(storyMessageId1, storyHash1));
@@ -528,14 +537,17 @@ async function runParagraphResumeTests() {
     const originalStory = "旧版故事第一段。\n旧版故事第二段。";
     const editedStory = "新版故事第一段，被用户或重新生成修改了。\n新版故事第二段。";
 
-    await saveConversationForSubject({ type: 'guest', id: guestId16 }, [
-        {
+    // M4-08：同上，旧故事卡直写 seeding（有意绕过 guard），漂移检测只读该行。
+    await prisma.guestChatMessage.create({
+        data: {
+            guestId: guestId16,
+            position: 0,
             messageId: msgId16,
             role: 'assistant',
             content: editedStory,
-            parts: [{ type: 'storyCard', storyText: editedStory, audioUrl: '' }],
+            parts: JSON.stringify([{ type: 'storyCard', storyText: editedStory, audioUrl: '' }]),
         },
-    ]);
+    });
 
     // DTO has the old content hash
     const oldHash = computeStoryContentHash(originalStory);

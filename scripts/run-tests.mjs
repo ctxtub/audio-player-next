@@ -87,6 +87,7 @@ const SUITES = [
     { id: 'playback-subject-remap', path: './tests/integration/playback/playback-subject-remap.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'playback-remap-merge', path: './tests/unit/playback/playback-remap-merge.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'playback-session-rehydrate', path: './tests/unit/playback/playback-session-rehydrate.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'playback-runtime-orchestration', path: './tests/unit/playback/playback-runtime-orchestration.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'playback-session-rehydrate-server', path: './tests/integration/playback/playback-session-rehydrate-server.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'main-navigation', path: './tests/unit/navigation/main-navigation.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'story-work-domain', path: './tests/unit/persistence-config/story-work-domain.unit.test.ts', group: 'unit', needs_db: false },

@@ -393,7 +393,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [history, replay]
     spec_path: docs/e2e/03-播放状态与内核一致性/10-历史恢复卡回放重合成.md
-    executable_ids: [exec-storycard-resume, exec-paragraph-segmentation]
+    executable_ids: [exec-storycard-resume, exec-paragraph-segmentation, exec-playback-identity-domain]
     fixtures: []
     owner: playback-kernel
   - case_id: old-card-replay-no-consume-preload
@@ -1212,6 +1212,10 @@ executables:
     display_name_zh: 段落切分
     layer: L1
     path: ./tests/unit/playback/paragraph-segmentation.unit.test.ts
+  - executable_id: exec-playback-identity-domain
+    display_name_zh: 播放Identity纯领域契约
+    layer: L1
+    path: ./tests/unit/playback/playback-identity-domain.unit.test.ts
   - executable_id: exec-main-navigation
     display_name_zh: 主导航路由契约
     layer: L1

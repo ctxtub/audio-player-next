@@ -71,7 +71,13 @@ export function shouldAllowAiContinuation(mode: SessionContinuationMode): boolea
   return mode === 'extendable';
 }
 
-/** 显式暂停（transport + checkpoint debounce）。 */
+/**
+ * 物理停重入 guard：AudioControllerHost.pause 会经 pauseViaSessionFlow 回调本函数，
+ * 置位期间跳过二次物理停，避免互调死循环（幂等 1 次物理停 + 幂等逻辑停）。
+ */
+let physicalPauseReentry = false;
+
+/** 显式暂停（transport 逻辑停 + 音频物理停 + checkpoint debounce）。 */
 export function pausePlayback(): void {
   try {
     usePlaybackStore.getState().pause();
@@ -82,6 +88,16 @@ export function pausePlayback(): void {
     usePlaybackSessionStore.getState().handleExplicitPause();
   } catch {
     // ignore
+  }
+  if (!physicalPauseReentry) {
+    physicalPauseReentry = true;
+    try {
+      // 声画一致：显式暂停必须停住物理播放（否则 paused=false 的 audio 会继续播到段尾、
+      // 触发 ended → 段落推进）；无 controller 时 no-op（幂等）。
+      usePlaybackStore.getState().audioController?.pause();
+    } finally {
+      physicalPauseReentry = false;
+    }
   }
 }
 

@@ -2,6 +2,7 @@ import React from 'react';
 import styles from '@/styles/app.module.scss';
 import MainTabBar from '@/components/MainTabBar';
 import AudioControllerHost from '@/components/AudioControllerHost';
+import PlaybackSessionProbe from '@/components/PlaybackSessionProbe';
 import { FloatingPlayer } from '@/components/FloatingPlayer';
 import AccountSyncProvider from '@/components/AccountSyncProvider';
 import ServerStateProvider from '@/components/ServerStateProvider';
@@ -25,6 +26,7 @@ export default function MainLayout({
           <MainTabBar />
         </div>
         <AudioControllerHost />
+        <PlaybackSessionProbe />
         <FloatingPlayer />
       </ServerStateProvider>
     </AccountSyncProvider>

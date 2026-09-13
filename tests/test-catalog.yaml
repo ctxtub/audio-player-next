@@ -378,10 +378,10 @@ cases:
     journey_id: playback-kernel
     user_goal: 客户端切路由时同一音频连续不重置
     priority: P1
-    lifecycle_status: PLANNED
+    lifecycle_status: ACTIVE
     risk_tags: [playback, router]
     spec_path: docs/e2e/03-播放状态与内核一致性/09-客户端路由导航播放连续性.md
-    executable_ids: []
+    executable_ids: [exec-l3-playback-session-survives-navigation]
     fixtures: []
     owner: playback-kernel
   - case_id: history-restore-card-resynth
@@ -393,7 +393,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [history, replay]
     spec_path: docs/e2e/03-播放状态与内核一致性/10-历史恢复卡回放重合成.md
-    executable_ids: [exec-storycard-resume, exec-paragraph-segmentation, exec-playback-identity-domain, exec-playback-session-contract, exec-playback-anchor-begin-session, exec-playback-checkpoint-guards, exec-playback-session-lifecycle-promotion, exec-playback-checkpoint-content-identity, exec-playback-session-rehydrate, exec-playback-session-rehydrate-server, exec-playback-runtime-orchestration]
+    executable_ids: [exec-storycard-resume, exec-paragraph-segmentation, exec-playback-identity-domain, exec-playback-session-contract, exec-playback-anchor-begin-session, exec-playback-checkpoint-guards, exec-playback-session-lifecycle-promotion, exec-playback-checkpoint-content-identity, exec-playback-session-rehydrate, exec-playback-session-rehydrate-server, exec-playback-runtime-orchestration, exec-l3-playback-pause-refresh-resume]
     fixtures: []
     owner: playback-kernel
   - case_id: old-card-replay-no-consume-preload
@@ -1396,3 +1396,11 @@ executables:
     display_name_zh: L3故事库完整生命周期旅程
     layer: L3
     path: ./tests/system/browser/scenarios/library-lifecycle-journey.spec.ts
+  - executable_id: exec-l3-playback-session-survives-navigation
+    display_name_zh: L3播放会话跨路由导航存活
+    layer: L3
+    path: ./tests/system/browser/scenarios/playback-session-survives-navigation.spec.ts
+  - executable_id: exec-l3-playback-pause-refresh-resume
+    display_name_zh: L3暂停刷新后同会话就绪恢复
+    layer: L3
+    path: ./tests/system/browser/scenarios/playback-pause-refresh-resume.spec.ts

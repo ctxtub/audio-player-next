@@ -82,6 +82,7 @@ const SUITES = [
     { id: 'playback-anchor-begin-session', path: './tests/integration/playback/playback-anchor-begin-session.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'playback-checkpoint-guards', path: './tests/integration/playback/playback-checkpoint-guards.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'playback-session-lifecycle-promotion', path: './tests/integration/playback/playback-session-lifecycle-promotion.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'playback-checkpoint-content-identity', path: './tests/integration/playback/playback-checkpoint-content-identity.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'main-navigation', path: './tests/unit/navigation/main-navigation.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'story-work-domain', path: './tests/unit/persistence-config/story-work-domain.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'story-work-read', path: './tests/integration/persistence-config/story-work-read.integration.test.ts', group: 'integration', needs_db: true },

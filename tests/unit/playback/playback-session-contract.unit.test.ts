@@ -45,7 +45,8 @@ import {
  * 绝不含 storyText/audioUrl/currentTime/isPlaying）+ WorkProgress DTO（§13.3）
  * + 7 新 procedures 输入输出 + 旧 API 保留 + 双层外观 7 方法 +
  * facade 分态：getAnchor / beginSession 真逻辑（M5-05，经 prisma + M2 边界），
- * saveCheckpoint 真逻辑（M5-06：Stale/Monotonic/Work 事务），
+ * saveCheckpoint 真逻辑（M5-06：Stale/Monotonic/Work 事务；M5-07 FIXUP：CAS 再绑
+ * content identity，防 promotion 竞态复活 §24.1），
  * completeSession / clearAnchor / promoteDraftToWork / getWorkProgressBatch
  * 真逻辑（M5-07：§19 ended + §21 session-CAS + §24 三校验 + §22 只读批量）。
  * 纯契约：不触库、不调网络；router / server 侧经源码文本断言
@@ -541,6 +542,15 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   assert.match(serverText, /guestStoryPlaybackProgress\.upsert/, 'transaction must UPSERT guest progress (symmetric)');
   // Draft 按 Anchor identity，不做 Work progress（源码含 draft 分支且 draft 路径无 progress upsert）。
   assert.match(serverText, /source\.kind\s*===\s*['"]draft['"]/, 'draft checkpoint must branch by anchor identity');
+  // M5-07 FIXUP：checkpoint CAS 绑定 content identity（评审 Blocking 1 promotion 竞态）。
+  // Stale + Monotonic 之外，同一 WHERE 必须再绑 contentHash + segmentationVersion；
+  // 快速路径（预读 fast-path）同判定，保证 fast-path 与 CAS 一致；CAS 失败分流
+  // 按 DB 当前值区分 identity 失配（accepted:true 安全 no-op，不伪装 STALE）。
+  assert.match(serverText, /contentHash:\s*expectedContentHash/, 'CAS must bind contentHash in the same WHERE');
+  assert.match(serverText, /segmentationVersion:\s*expectedSegmentationVersion/, 'CAS must bind segmentationVersion in the same WHERE');
+  assert.match(serverText, /currentRow\.contentHash\s*!==\s*contentHash/, 'fast-path must compare contentHash');
+  assert.match(serverText, /currentRow\.segmentationVersion\s*!==\s*segmentationVersion/, 'fast-path must compare segmentationVersion');
+  assert.match(serverText, /latest\.contentHash\s*!==\s*expectedContentHash/, 'CAS-failure resolve must distinguish identity mismatch by DB value');
   // M5-07 真逻辑执行面（源码文本锁死§19/§21/§22/§24；unit 不直连 DB，真写由 L2 覆盖）。
   // 注意：7 procedures 全部已落真逻辑（触库），unit 不再直调其中任何一个
   //（直调将触 prisma；由 L2 集成覆盖），此处仅断言函数存在 + 源码执行面。

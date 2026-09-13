@@ -31,6 +31,11 @@
  *   现有 Anchor，accepted:true，新 input 根本无此字段，
  *   透传亦忽略）；预读仅 fast-path，权威判定下沉 conditional write CAS
  *   （WHERE sessionId + next lte，以 DB 当前值为准，消除 TOCTOU）；
+ *   M5-07 FIXUP 再绑 content identity（WHERE contentHash +
+ *   segmentationVersion，同一原子子句）：seamless promotion 是唯一 source
+ *   identity 改变而 sessionId 不变的 transition，promotion 前发出的旧包晚到时
+ *   必须因 identity 失配 CAS 失败而 no-op，绝不把 Anchor 拉回旧 hash/next
+ *   （§24.1）；hash/version 完全一致的 seamless 老包不受影响，继续被吸收；
  *   Work 时同一事务内先 CAS Anchor、成功才 UPSERT Progress
  *   （prisma.$transaction，用户/访客对称，completedAt 保留，lastPlayedAt=now）；
  *   Draft 按 Anchor identity 只 conditional 更新 Anchor，不做 Work progress。
@@ -565,14 +570,18 @@ export const beginPlaybackSessionForSubject = async (
 };
 
 /**
- * M5-06 FIXUP conditional-write (CAS) helpers（评审 Blocking 1：消除 TOCTOU）。
+ * M5-06 FIXUP conditional-write (CAS) helpers（评审 Blocking 1：消除 TOCTOU；
+ * M5-07 FIXUP 再绑 content identity：消除 promotion 竞态）。
  *
  * 预读快照只做 fast-path 早退与 source 定路（不具权威性）；最终写入一律经
  * conditional updateMany 原子绑定，以数据库当前值（而非几毫秒前快照）为准：
  * - Stale CAS：anchor.sessionId === expectedSessionId
  * - Monotonic CAS：currentAnchor.nextParagraphIndex <= incomingNext
- * 两者同时下沉到同一 WHERE，count===1 方为成功，count===0 则按当前 DB 值
- * 区分 STALE_SESSION / monotonic no-op（见 resolveConditionalCheckpointFailure）。
+ * - Identity CAS（M5-07 FIXUP）：currentAnchor.contentHash === expectedContentHash
+ *   AND currentAnchor.segmentationVersion === expectedSegmentationVersion
+ * 三者同时下沉到同一 WHERE，count===1 方为成功，count===0 则按当前 DB 值
+ * 区分 STALE_SESSION / identity no-op / monotonic no-op
+ * （见 resolveConditionalCheckpointFailure）。
  */
 export type CheckpointAnchorWriteData = {
   contentHash: string;
@@ -586,21 +595,33 @@ export type CheckpointAnchorWriteData = {
 };
 
 /**
- * 构造 CAS 子句（Stale + Monotonic），调用方再拼 subject identity
- *（userId / guestId）即得完整 updateMany WHERE。Draft 直写与 Work 事务内
- * CAS 共用同一构造，杜绝漂移。
+ * 构造 CAS 子句（Stale + Monotonic + Content-Identity），调用方再拼 subject
+ * identity（userId / guestId）即得完整 updateMany WHERE。Draft 直写与 Work
+ * 事务内 CAS 共用同一构造，杜绝漂移。
+ *
+ * Identity 维度说明：checkpoint 不得变更 content identity（promotion 是唯一
+ * 合法变更面，且由 promoteDraftToWork 专属执行）；旧包晚到时 DB identity 已
+ * 变则本子句整体失配，调用方按 DB 当前值 no-op，绝不复活旧 hash/next。
  */
 export const buildConditionalAnchorCasClause = (
   expectedSessionId: string,
   incomingNextParagraphIndex: number,
+  expectedContentHash: string,
+  expectedSegmentationVersion: string,
 ) => ({
   sessionId: expectedSessionId,
   nextParagraphIndex: { lte: incomingNextParagraphIndex },
+  contentHash: expectedContentHash,
+  segmentationVersion: expectedSegmentationVersion,
 });
 
 /**
  * 非事务 conditional anchor 更新（Draft 路径与 regression 直验共用）。
  * 返回命中行数：1 为 CAS 成功，0 为 CAS 失败（调用方再读区分原因）。
+ *
+ * Identity 绑定由 data 自带（data.contentHash / data.segmentationVersion 即
+ * input 原样透传的待写值）：签名保持四参，R1/R2 直验不受影响，且 Draft/Work
+ * 两路不可能出现“写值与期望值分离”的漂移。
  */
 export const conditionalUpdatePlaybackAnchorForSubject = async (
   subject: Subject,
@@ -608,7 +629,12 @@ export const conditionalUpdatePlaybackAnchorForSubject = async (
   incomingNextParagraphIndex: number,
   data: CheckpointAnchorWriteData,
 ): Promise<number> => {
-  const cas = buildConditionalAnchorCasClause(expectedSessionId, incomingNextParagraphIndex);
+  const cas = buildConditionalAnchorCasClause(
+    expectedSessionId,
+    incomingNextParagraphIndex,
+    data.contentHash,
+    data.segmentationVersion,
+  );
   const res =
     subject.type === 'user'
       ? await prisma.userPlaybackAnchor.updateMany({
@@ -623,15 +649,21 @@ export const conditionalUpdatePlaybackAnchorForSubject = async (
 };
 
 /**
- * CAS 失败后按数据库当前值区分原因（绝不写）：
+ * CAS 失败后按数据库当前值区分原因（绝不写；不扩 API reason、不改 M5-04
+ * contract：identity 失配与 monotonic 落后统一为 accepted:true + 当前 Anchor）：
  * - 无行 / session 已变化 → {accepted:false, reason:'STALE_SESSION'}
- * - session 相同（CAS 失败即 DB next > incoming）→ {accepted:true} + 当前 Anchor
- *  （维持 monotonic no-op 语义；异常交错下 DB next <= incoming 亦只读返回当前值）。
+ * - session 相同但 contentHash / segmentationVersion 已变化（promotion 唯一
+ *   合法变更面，§24.1）→ {accepted:true} + 当前 Anchor（安全 no-op，不伪装成
+ *   STALE；hash/version 一致的 seamless 老包走不到这里，早被 CAS 吸收）
+ * - session/hash/version 相同（CAS 失败即 DB next > incoming，或异常交错下
+ *   收敛）→ {accepted:true} + 当前 Anchor（维持 monotonic no-op 语义）。
  */
 const resolveConditionalCheckpointFailureForSubject = async (
   subject: Subject,
   expectedSessionId: string,
   incomingNextParagraphIndex: number,
+  expectedContentHash: string,
+  expectedSegmentationVersion: string,
 ): Promise<SavePlaybackCheckpointResult> => {
   const latest =
     subject.type === 'user'
@@ -651,6 +683,16 @@ const resolveConditionalCheckpointFailureForSubject = async (
   if (!latestDto) {
     return { accepted: false, reason: STALE_SESSION };
   }
+  // session 相同但 content identity 已变化 → 安全 no-op（accepted:true + 当前
+  // Anchor，不复活旧 hash/next；异常交错下 DB 值即权威，只读返回）。
+  if (
+    latest.contentHash !== expectedContentHash ||
+    latest.segmentationVersion !== expectedSegmentationVersion
+  ) {
+    return { accepted: true, anchor: latestDto };
+  }
+  // session/hash/version 相同：monotonic no-op（CAS 失败即 DB next > incoming；
+  // 异常交错下 DB next <= incoming 亦只读返回当前值）。
   if (latest.nextParagraphIndex > incomingNextParagraphIndex) {
     return { accepted: true, anchor: latestDto };
   }
@@ -671,6 +713,13 @@ const resolveConditionalCheckpointFailureForSubject = async (
  *    不允许回退（保持旧 server 保护性质；accepted:true + 现有 Anchor 原样返回，
  *    不写 Anchor、不碰 Progress；新 input 无此字段，透传亦忽略）。
  *    预读回退直接 no-op 返回；预读放行仍须经 CAS lte 子句复核（防同 Session 竞争回写）。
+ * 2b. Content-Identity Guard（M5-07 FIXUP）：同 Session 但 incoming
+ *    contentHash / segmentationVersion 与现有 Anchor 不一致 → 安全 no-op
+ *    （accepted:true + 现有 Anchor 原样返回，不写 Anchor、不碰 Progress，
+ *    不伪装成 STALE_SESSION）。promotion 是唯一合法变更面（§24.1）；
+ *    hash/version 一致的 seamless 老包不受影响，继续下沉 CAS 吸收。
+ *    预读失配直接 no-op 返回；预读放行仍须经 CAS identity 子句以 DB 当前值
+ *    复核（防 guard 后 promotion 穿透）。
  * 3. Work 行为（§18）：source.kind==work 时一事务内先 conditional CAS Anchor，
  *    CAS 成功才 UPSERT Progress，CAS 失败绝不碰 Progress
  *    （prisma.$transaction；completedAt 保留，lastPlayedAt=now；用户/
@@ -724,6 +773,17 @@ export const savePlaybackCheckpointForSubject = async (
   // §17.2：同 Session 单调守卫 fast-path——incoming.next < existing.next → 不回退。
   // 保持旧 server 保护性质：不写 Anchor、不碰 Progress，原样返回现有 Anchor。
   // 放行（>=）仍须经 CAS lte 子句以 DB 当前值复核，防同 Session 竞争回写。
+  // Content-identity fast-path（M5-07 FIXUP，与 CAS 同判定，非权威）：
+  // session 相同但 DB hash/version 已与 input 不一致（promotion 唯一合法变更面，
+  // §24.1）→ accepted:true + 现有 Anchor 安全 no-op，不伪装 STALE；hash/version
+  // 一致的 seamless 老包不受影响，继续下沉 CAS 吸收。放行仍须经 CAS identity
+  // 子句复核，防 guard 后 promotion 穿透。
+  if (
+    currentRow.contentHash !== contentHash ||
+    currentRow.segmentationVersion !== segmentationVersion
+  ) {
+    return { accepted: true, anchor: existingDto };
+  }
   if (nextParagraphIndex < currentRow.nextParagraphIndex) {
     return { accepted: true, anchor: existingDto };
   }
@@ -748,7 +808,13 @@ export const savePlaybackCheckpointForSubject = async (
       anchorData,
     );
     if (casCount === 0) {
-      return resolveConditionalCheckpointFailureForSubject(subject, sessionId, nextParagraphIndex);
+      return resolveConditionalCheckpointFailureForSubject(
+        subject,
+        sessionId,
+        nextParagraphIndex,
+        contentHash,
+        segmentationVersion,
+      );
     }
     const fresh =
       subject.type === 'user'
@@ -773,7 +839,12 @@ export const savePlaybackCheckpointForSubject = async (
   // missing/foreign/trash 统一 NOT_FOUND 原样透出（fail-closed，无 partial 写）。
   await getStoryWorkForSubject(subject, workId);
   const casTx = await prisma.$transaction(async (tx) => {
-    const cas = buildConditionalAnchorCasClause(sessionId, nextParagraphIndex);
+    const cas = buildConditionalAnchorCasClause(
+      sessionId,
+      nextParagraphIndex,
+      contentHash,
+      segmentationVersion,
+    );
     const casRes =
       subject.type === 'user'
         ? await tx.userPlaybackAnchor.updateMany({
@@ -826,7 +897,13 @@ export const savePlaybackCheckpointForSubject = async (
     return { casApplied: true as const, row: fresh };
   });
   if (!casTx.casApplied) {
-    return resolveConditionalCheckpointFailureForSubject(subject, sessionId, nextParagraphIndex);
+    return resolveConditionalCheckpointFailureForSubject(
+      subject,
+      sessionId,
+      nextParagraphIndex,
+      contentHash,
+      segmentationVersion,
+    );
   }
   if (!casTx.row) {
     return { accepted: false, reason: STALE_SESSION };

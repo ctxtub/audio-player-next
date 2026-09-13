@@ -30,7 +30,7 @@ const userConfigModule = nodeRequire('../../../lib/client/userConfig') as {
         playDuration: number;
         voiceId: string;
         speed: number;
-        floatingPlayerEnabled: boolean;
+        desktopFloatingPlayerEnabled: boolean;
         themeMode: 'dark' | 'light' | 'system';
     }>;
 };
@@ -53,7 +53,7 @@ async function runH14Tests(): Promise<void> {
             playDuration: 30,
             voiceId: 'alloy',
             speed: 1.0,
-            floatingPlayerEnabled: true,
+            desktopFloatingPlayerEnabled: true,
             themeMode: 'dark' as const,
         };
 

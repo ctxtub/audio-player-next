@@ -8,7 +8,7 @@ import { useConfigStore } from '@/stores/configStore';
 import { useAuthStore } from '@/stores/authStore';
 import styles from './index.module.scss';
 import BasicConfigSection from './components/BasicConfigSection';
-import FloatingPlayerSection from './components/FloatingPlayerSection';
+import DesktopFloatingPlayerSection from './components/DesktopFloatingPlayerSection';
 import ThemeModeSection from './components/ThemeModeSection';
 import VoiceServiceSection from './components/VoiceServiceSection';
 import SpeedConfigSection from './components/SpeedConfigSection';
@@ -59,11 +59,11 @@ const ConfigPage: React.FC = () => {
   const playDuration = useMemo(() => apiConfig.playDuration, [apiConfig.playDuration]);
 
   /**
-   * 是否开启浮动播放器。
+   * 是否在宽屏启用悬浮迷你播放器（M6 语义；移动端始终 docked）。
    */
-  const isFloatingPlayerEnabled = useMemo(
-    () => apiConfig.floatingPlayerEnabled,
-    [apiConfig.floatingPlayerEnabled]
+  const isDesktopFloatingPlayerEnabled = useMemo(
+    () => apiConfig.desktopFloatingPlayerEnabled,
+    [apiConfig.desktopFloatingPlayerEnabled]
   );
 
   const handlePlayDurationChange = useCallback(
@@ -107,15 +107,15 @@ const ConfigPage: React.FC = () => {
     [apiConfig.speed, isConfigLoaded, updateConfig]
   );
 
-  const handleFloatingPlayerToggle = useCallback((enabled: boolean) => {
+  const handleDesktopFloatingPlayerToggle = useCallback((enabled: boolean) => {
     if (!isConfigLoaded) {
       return;
     }
-    if (enabled === apiConfig.floatingPlayerEnabled) {
+    if (enabled === apiConfig.desktopFloatingPlayerEnabled) {
       return;
     }
-    updateConfig({ floatingPlayerEnabled: enabled });
-  }, [apiConfig.floatingPlayerEnabled, isConfigLoaded, updateConfig]);
+    updateConfig({ desktopFloatingPlayerEnabled: enabled });
+  }, [apiConfig.desktopFloatingPlayerEnabled, isConfigLoaded, updateConfig]);
 
   /**
    * 主题切换：既更新 ThemeProvider（即时生效），又写回 configStore（登录态下防抖同步服务端）。
@@ -156,9 +156,9 @@ const ConfigPage: React.FC = () => {
           speed={apiConfig.speed}
           onSpeedChange={handleSpeedChange}
         />
-        <FloatingPlayerSection
-          value={isFloatingPlayerEnabled}
-          onChange={handleFloatingPlayerToggle}
+        <DesktopFloatingPlayerSection
+          value={isDesktopFloatingPlayerEnabled}
+          onChange={handleDesktopFloatingPlayerToggle}
         />
         <VoiceServiceSection
           value={selectedVoice}

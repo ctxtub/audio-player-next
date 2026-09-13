@@ -5,7 +5,7 @@ import type { ThemeMode } from '@/types/theme';
 import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
 import type { VoiceOption } from '@/types/ttsGenerate';
 import { fetchAppConfig } from '@/lib/client/appConfig';
-import { DEFAULT_USER_CONFIG, type UserConfigPatch } from '@/lib/trpc/schemas/config';
+import { DEFAULT_USER_CONFIG, type NormalizedUserConfigPatch } from '@/lib/trpc/schemas/config';
 // H-14：经命名空间调用用户配置客户端，使 require.cache 先占桩在静态导入后仍经属性查找命中
 // （回应 R2“桩可能没拦截”：命名导入快照语义下事后变异可能失效，命名空间属性查找恒 live）。
 import * as userConfigClient from '@/lib/client/userConfig';
@@ -81,7 +81,7 @@ const createEmptyConfig = (): APIConfig => ({
   playDuration: 0,
   voiceId: '',
   speed: 1,
-  floatingPlayerEnabled: true,
+  desktopFloatingPlayerEnabled: true,
   themeMode: DEFAULT_USER_CONFIG.themeMode,
 });
 
@@ -92,7 +92,7 @@ const createDefaultConfig = (): APIConfig => ({
   playDuration: DEFAULT_USER_CONFIG.playDuration,
   voiceId: DEFAULT_USER_CONFIG.voiceId,
   speed: DEFAULT_USER_CONFIG.speed,
-  floatingPlayerEnabled: DEFAULT_USER_CONFIG.floatingPlayerEnabled,
+  desktopFloatingPlayerEnabled: DEFAULT_USER_CONFIG.desktopFloatingPlayerEnabled,
   themeMode: DEFAULT_USER_CONFIG.themeMode,
 });
 
@@ -118,7 +118,7 @@ const isValidConfig = (config: Partial<APIConfig> | undefined): config is APICon
     return false;
   }
 
-  if (typeof config.floatingPlayerEnabled !== 'boolean') {
+  if (typeof config.desktopFloatingPlayerEnabled !== 'boolean') {
     return false;
   }
 
@@ -154,10 +154,10 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
       ? partial.speed
       : base.speed ?? 1.0;
 
-  const floatingPlayerEnabled =
-    typeof partial.floatingPlayerEnabled === 'boolean'
-      ? partial.floatingPlayerEnabled
-      : base.floatingPlayerEnabled;
+  const desktopFloatingPlayerEnabled =
+    typeof partial.desktopFloatingPlayerEnabled === 'boolean'
+      ? partial.desktopFloatingPlayerEnabled
+      : base.desktopFloatingPlayerEnabled;
 
   const themeMode: ThemeMode =
     partial.themeMode === 'dark' ||
@@ -170,7 +170,7 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
     playDuration: nextPlayDuration,
     voiceId,
     speed,
-    floatingPlayerEnabled,
+    desktopFloatingPlayerEnabled,
     themeMode,
   };
 };
@@ -184,18 +184,18 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
 
   /** 防抖回写定时器与待写 patch 累积。 */
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
-  let pendingPatch: UserConfigPatch = {};
+  let pendingPatch: NormalizedUserConfigPatch = {};
   /** H-14 单调保存序列：每次 update 新编辑自增，发送时捕获代次，旧回滚按代次丢弃。 */
   let saveSeq = 0;
 
   /**
    * 将完整配置映射为可作为 patch 的形状。
    */
-  const toPatch = (config: APIConfig): UserConfigPatch => ({
+  const toPatch = (config: APIConfig): NormalizedUserConfigPatch => ({
     playDuration: config.playDuration,
     voiceId: config.voiceId,
     speed: config.speed,
-    floatingPlayerEnabled: config.floatingPlayerEnabled,
+    desktopFloatingPlayerEnabled: config.desktopFloatingPlayerEnabled,
     themeMode: config.themeMode,
   });
 
@@ -204,7 +204,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
    * H-14：单调 saveSeq 守卫——发送捕获 seqAtSend，回滚仅当无新编辑（seq 未变）才应用；
    * 在途/乱序旧回滚一律丢弃，新编辑不被旧回滚覆盖。
    */
-  const scheduleSave = (patch: UserConfigPatch) => {
+  const scheduleSave = (patch: NormalizedUserConfigPatch) => {
     pendingPatch = { ...pendingPatch, ...patch };
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
@@ -234,7 +234,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
                 playDuration: server.playDuration,
                 voiceId: server.voiceId,
                 speed: server.speed,
-                floatingPlayerEnabled: server.floatingPlayerEnabled,
+                desktopFloatingPlayerEnabled: server.desktopFloatingPlayerEnabled,
                 themeMode: server.themeMode,
               },
             });
@@ -286,7 +286,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
         playDuration: mine.playDuration,
         voiceId: resolvedVoice,
         speed: mine.speed,
-        floatingPlayerEnabled: mine.floatingPlayerEnabled,
+        desktopFloatingPlayerEnabled: mine.desktopFloatingPlayerEnabled,
         themeMode: mine.themeMode,
       };
 

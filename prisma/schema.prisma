@@ -108,8 +108,8 @@ model UserConfig {
   voiceId               String   @default("")
   /// 播放速率，范围 0.25-4.0，默认 1.0
   speed                 Float    @default(1.0)
-  /// 是否启用浮动播放器
-  floatingPlayerEnabled Boolean  @default(true)
+  /// 是否在宽屏启用悬浮迷你播放器（M6 领域语义；false=wide-docked，物理列仍为 floatingPlayerEnabled，不做 migration）
+  desktopFloatingPlayerEnabled Boolean  @default(true) @map("floatingPlayerEnabled")
   /// 主题模式：dark | light | system
   themeMode             String   @default("system")
   /// 预留扩展字段，存储 JSON 格式的未来配置项
@@ -128,8 +128,8 @@ model GuestConfig {
   voiceId               String   @default("")
   /// 播放速率，范围 0.25-4.0，默认 1.0
   speed                 Float    @default(1.0)
-  /// 是否启用浮动播放器
-  floatingPlayerEnabled Boolean  @default(true)
+  /// 是否在宽屏启用悬浮迷你播放器（M6 领域语义；false=wide-docked，物理列仍为 floatingPlayerEnabled，不做 migration）
+  desktopFloatingPlayerEnabled Boolean  @default(true) @map("floatingPlayerEnabled")
   /// 主题模式：dark | light | system
   themeMode             String   @default("system")
   /// 预留扩展字段，存储 JSON 格式的配置项

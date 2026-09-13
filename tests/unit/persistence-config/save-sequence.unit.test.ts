@@ -27,7 +27,7 @@ type ServerConfig = {
     playDuration: number;
     voiceId: string;
     speed: number;
-    floatingPlayerEnabled: boolean;
+    desktopFloatingPlayerEnabled: boolean;
     themeMode: 'dark' | 'light' | 'system';
 };
 let saveCalls = 0;
@@ -39,7 +39,7 @@ const serverTruth: ServerConfig = {
     playDuration: 30,
     voiceId: 'alloy',
     speed: 1.0,
-    floatingPlayerEnabled: true,
+    desktopFloatingPlayerEnabled: true,
     themeMode: 'dark',
 };
 const userConfigPath = path.resolve(process.cwd(), 'lib/client/userConfig.ts');

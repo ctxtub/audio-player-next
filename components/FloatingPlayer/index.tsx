@@ -38,8 +38,8 @@ export const FloatingPlayer: React.FC = () => {
   const isRehydratedReady = usePlaybackStore((state) => state.isRehydratedReady);
   const currentParagraphIndex = usePlaybackStore((state) => state.currentParagraphIndex);
   const totalParagraphs = usePlaybackStore((state) => state.totalParagraphs);
-  const isFloatingPlayerEnabled = useConfigStore(
-    (state) => state.apiConfig.floatingPlayerEnabled
+  const isDesktopFloatingPlayerEnabled = useConfigStore(
+    (state) => state.apiConfig.desktopFloatingPlayerEnabled
   );
 
   useEffect(() => {
@@ -145,7 +145,7 @@ export const FloatingPlayer: React.FC = () => {
   }, [isPlaying, isRehydratedReady, pause, resume]);
 
   useEffect(() => {
-    if (isFloatingPlayerEnabled) {
+    if (isDesktopFloatingPlayerEnabled) {
       if (!isVisible) {
         show();
       }
@@ -154,7 +154,7 @@ export const FloatingPlayer: React.FC = () => {
     if (isVisible) {
       hide();
     }
-  }, [hide, isFloatingPlayerEnabled, isVisible, show]);
+  }, [hide, isDesktopFloatingPlayerEnabled, isVisible, show]);
 
   // 剩余播放时长文本，转化为 mm:ss 样式
   const remainingTimeLabel = useMemo(() => {
@@ -172,7 +172,7 @@ export const FloatingPlayer: React.FC = () => {
   // 仅在「开启浮窗 + 处于可见态 + 已加载音轨或断点就绪」时显示；
   // 空闲（无音轨）时不渲染，避免“待创作”胶囊在各页面默认位置遮挡正文内容。
   const hasTrack = currentAudioUrl !== null || isRehydratedReady;
-  const shouldShowFloatingPanel = isFloatingPlayerEnabled && isVisible && hasTrack;
+  const shouldShowFloatingPanel = isDesktopFloatingPlayerEnabled && isVisible && hasTrack;
 
   // 浮窗标题展示内容，依据播放状态切换默认文案与倒计时
   const floatingTitleLabel = useMemo(() => {

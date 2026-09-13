@@ -49,7 +49,7 @@ async function runGuestConfigTests() {
     assert.strictEqual(initialGuestConfig.playDuration, 30);
     assert.strictEqual(initialGuestConfig.voiceId, '');
     assert.strictEqual(initialGuestConfig.speed, 1.0);
-    assert.strictEqual(initialGuestConfig.floatingPlayerEnabled, true);
+    assert.strictEqual(initialGuestConfig.desktopFloatingPlayerEnabled, true);
     assert.strictEqual(initialGuestConfig.themeMode, 'system');
 
     const dbGuestRow = await prisma.guestConfig.findUnique({ where: { guestId: guestId1 } });
@@ -62,12 +62,12 @@ async function runGuestConfigTests() {
     // 1.2 updateConfig updates fields
     const updatedGuestConfig = await updateConfig(
         { type: 'guest', id: guestId1 },
-        { playDuration: 60, speed: 1.5, themeMode: 'dark', floatingPlayerEnabled: false, voiceId: 'alloy' }
+        { playDuration: 60, speed: 1.5, themeMode: 'dark', desktopFloatingPlayerEnabled: false, voiceId: 'alloy' }
     );
     assert.strictEqual(updatedGuestConfig.playDuration, 60);
     assert.strictEqual(updatedGuestConfig.speed, 1.5);
     assert.strictEqual(updatedGuestConfig.themeMode, 'dark');
-    assert.strictEqual(updatedGuestConfig.floatingPlayerEnabled, false);
+    assert.strictEqual(updatedGuestConfig.desktopFloatingPlayerEnabled, false);
     assert.strictEqual(updatedGuestConfig.voiceId, 'alloy');
 
     // 1.3 getOrCreateConfig retrieves persisted values
@@ -109,7 +109,7 @@ async function runGuestConfigTests() {
             speed: 1.25,
             themeMode: 'dark',
             voiceId: 'shimmer',
-            floatingPlayerEnabled: false,
+            desktopFloatingPlayerEnabled: false,
         },
     });
 
@@ -154,7 +154,7 @@ async function runGuestConfigTests() {
     assert.strictEqual(createdUser.config.speed, 1.25, 'speed must be migrated from guest');
     assert.strictEqual(createdUser.config.themeMode, 'dark', 'themeMode must be migrated from guest');
     assert.strictEqual(createdUser.config.voiceId, 'shimmer', 'voiceId must be migrated from guest');
-    assert.strictEqual(createdUser.config.floatingPlayerEnabled, false, 'floatingPlayerEnabled must be migrated from guest');
+    assert.strictEqual(createdUser.config.desktopFloatingPlayerEnabled, false, 'desktopFloatingPlayerEnabled must be migrated from guest');
 
     // Verify original guest config remains intact
     const originalGuestConfig = await prisma.guestConfig.findUnique({
@@ -384,7 +384,7 @@ async function runGuestConfigTests() {
                 playDuration: 60,
                 voiceId: 'alloy',
                 speed: 1.5,
-                floatingPlayerEnabled: true,
+                desktopFloatingPlayerEnabled: true,
                 themeMode: 'system',
             },
             isLoaded: true,

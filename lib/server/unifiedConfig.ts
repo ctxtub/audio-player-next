@@ -2,6 +2,8 @@
  * 统一配置服务层
  *
  * 为已登录用户（UserConfig）与具名访客（GuestConfig）提供多主体的统一配置抽象。
+ * M6-01：领域字段 desktopFloatingPlayerEnabled（Prisma 逻辑名，物理列仍为
+ * floatingPlayerEnabled via @map）；legacy patch 别名仅在此 boundary 收敛。
  */
 
 import { TRPCError } from '@trpc/server';
@@ -10,6 +12,7 @@ import type { ThemeMode } from '@/types/theme';
 import { prisma } from '@/lib/db';
 import {
     DEFAULT_USER_CONFIG,
+    normalizeUserConfigPatch,
     type UserConfigDTO,
     type UserConfigPatch,
 } from '@/lib/trpc/schemas/config';
@@ -22,7 +25,7 @@ type ConfigRow = {
     playDurationMinutes: number;
     voiceId: string;
     speed: number;
-    floatingPlayerEnabled: boolean;
+    desktopFloatingPlayerEnabled: boolean;
     themeMode: string;
 };
 
@@ -35,34 +38,45 @@ export const normalizeThemeMode = (value: string): ThemeMode =>
         : DEFAULT_USER_CONFIG.themeMode;
 
 /**
- * DB 行 → 前端 DTO。
+ * DB 行 → 前端 DTO（只暴露新产品语义字段）。
  */
 export const toConfigDto = (row: ConfigRow): UserConfigDTO => ({
     playDuration: row.playDurationMinutes,
     voiceId: row.voiceId,
     speed: row.speed,
-    floatingPlayerEnabled: row.floatingPlayerEnabled,
+    desktopFloatingPlayerEnabled: row.desktopFloatingPlayerEnabled,
     themeMode: normalizeThemeMode(row.themeMode),
 });
 
 /**
  * 将 UserConfigPatch 映射到数据库字段名。
+ * M6-01 compatibility boundary：先经 normalizeUserConfigPatch 收敛 legacy 别名；
+ * 冲突（新旧不同值）抛 BAD_REQUEST。
  */
 export const mapPatchToDbFields = (patch: UserConfigPatch) => {
+    let normalized: ReturnType<typeof normalizeUserConfigPatch>;
+    try {
+        normalized = normalizeUserConfigPatch(patch);
+    } catch {
+        throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'CONFLICTING_FLOATING_PLAYER_FIELDS',
+        });
+    }
     const updateData: {
         playDurationMinutes?: number;
         voiceId?: string;
         speed?: number;
-        floatingPlayerEnabled?: boolean;
+        desktopFloatingPlayerEnabled?: boolean;
         themeMode?: string;
     } = {};
-    if (patch.playDuration !== undefined) updateData.playDurationMinutes = patch.playDuration;
-    if (patch.voiceId !== undefined) updateData.voiceId = patch.voiceId;
-    if (patch.speed !== undefined) updateData.speed = patch.speed;
-    if (patch.floatingPlayerEnabled !== undefined) {
-        updateData.floatingPlayerEnabled = patch.floatingPlayerEnabled;
+    if (normalized.playDuration !== undefined) updateData.playDurationMinutes = normalized.playDuration;
+    if (normalized.voiceId !== undefined) updateData.voiceId = normalized.voiceId;
+    if (normalized.speed !== undefined) updateData.speed = normalized.speed;
+    if (normalized.desktopFloatingPlayerEnabled !== undefined) {
+        updateData.desktopFloatingPlayerEnabled = normalized.desktopFloatingPlayerEnabled;
     }
-    if (patch.themeMode !== undefined) updateData.themeMode = patch.themeMode;
+    if (normalized.themeMode !== undefined) updateData.themeMode = normalized.themeMode;
     return updateData;
 };
 
@@ -90,7 +104,7 @@ export async function getOrCreateConfig(subject: ConfigSubject): Promise<UserCon
                 playDurationMinutes: DEFAULT_USER_CONFIG.playDuration,
                 voiceId: DEFAULT_USER_CONFIG.voiceId,
                 speed: DEFAULT_USER_CONFIG.speed,
-                floatingPlayerEnabled: DEFAULT_USER_CONFIG.floatingPlayerEnabled,
+                desktopFloatingPlayerEnabled: DEFAULT_USER_CONFIG.desktopFloatingPlayerEnabled,
                 themeMode: DEFAULT_USER_CONFIG.themeMode,
             },
         });
@@ -103,7 +117,7 @@ export async function getOrCreateConfig(subject: ConfigSubject): Promise<UserCon
                 playDurationMinutes: DEFAULT_USER_CONFIG.playDuration,
                 voiceId: DEFAULT_USER_CONFIG.voiceId,
                 speed: DEFAULT_USER_CONFIG.speed,
-                floatingPlayerEnabled: DEFAULT_USER_CONFIG.floatingPlayerEnabled,
+                desktopFloatingPlayerEnabled: DEFAULT_USER_CONFIG.desktopFloatingPlayerEnabled,
                 themeMode: DEFAULT_USER_CONFIG.themeMode,
             },
             update: {},
@@ -114,11 +128,21 @@ export async function getOrCreateConfig(subject: ConfigSubject): Promise<UserCon
 
 /**
  * 增量更新配置：统一 upsert。
+ * legacy 别名在此收敛；冲突抛 BAD_REQUEST。
  */
 export async function updateConfig(
     subject: ConfigSubject,
     patch: UserConfigPatch
 ): Promise<UserConfigDTO> {
+    let normalized: ReturnType<typeof normalizeUserConfigPatch>;
+    try {
+        normalized = normalizeUserConfigPatch(patch);
+    } catch {
+        throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'CONFLICTING_FLOATING_PLAYER_FIELDS',
+        });
+    }
     const fields = mapPatchToDbFields(patch);
 
     if (subject.type === 'user') {
@@ -126,12 +150,13 @@ export async function updateConfig(
             where: { userId: subject.id },
             create: {
                 userId: subject.id,
-                playDurationMinutes: patch.playDuration ?? DEFAULT_USER_CONFIG.playDuration,
-                voiceId: patch.voiceId ?? DEFAULT_USER_CONFIG.voiceId,
-                speed: patch.speed ?? DEFAULT_USER_CONFIG.speed,
-                floatingPlayerEnabled:
-                    patch.floatingPlayerEnabled ?? DEFAULT_USER_CONFIG.floatingPlayerEnabled,
-                themeMode: patch.themeMode ?? DEFAULT_USER_CONFIG.themeMode,
+                playDurationMinutes: normalized.playDuration ?? DEFAULT_USER_CONFIG.playDuration,
+                voiceId: normalized.voiceId ?? DEFAULT_USER_CONFIG.voiceId,
+                speed: normalized.speed ?? DEFAULT_USER_CONFIG.speed,
+                desktopFloatingPlayerEnabled:
+                    normalized.desktopFloatingPlayerEnabled ??
+                    DEFAULT_USER_CONFIG.desktopFloatingPlayerEnabled,
+                themeMode: normalized.themeMode ?? DEFAULT_USER_CONFIG.themeMode,
             },
             update: fields,
         });
@@ -141,12 +166,13 @@ export async function updateConfig(
             where: { guestId: subject.id },
             create: {
                 guestId: subject.id,
-                playDurationMinutes: patch.playDuration ?? DEFAULT_USER_CONFIG.playDuration,
-                voiceId: patch.voiceId ?? DEFAULT_USER_CONFIG.voiceId,
-                speed: patch.speed ?? DEFAULT_USER_CONFIG.speed,
-                floatingPlayerEnabled:
-                    patch.floatingPlayerEnabled ?? DEFAULT_USER_CONFIG.floatingPlayerEnabled,
-                themeMode: patch.themeMode ?? DEFAULT_USER_CONFIG.themeMode,
+                playDurationMinutes: normalized.playDuration ?? DEFAULT_USER_CONFIG.playDuration,
+                voiceId: normalized.voiceId ?? DEFAULT_USER_CONFIG.voiceId,
+                speed: normalized.speed ?? DEFAULT_USER_CONFIG.speed,
+                desktopFloatingPlayerEnabled:
+                    normalized.desktopFloatingPlayerEnabled ??
+                    DEFAULT_USER_CONFIG.desktopFloatingPlayerEnabled,
+                themeMode: normalized.themeMode ?? DEFAULT_USER_CONFIG.themeMode,
             },
             update: fields,
         });
@@ -174,7 +200,7 @@ export async function migrateGuestConfigToUser(
             playDurationMinutes: guestConfig.playDurationMinutes,
             voiceId: guestConfig.voiceId,
             speed: guestConfig.speed,
-            floatingPlayerEnabled: guestConfig.floatingPlayerEnabled,
+            desktopFloatingPlayerEnabled: guestConfig.desktopFloatingPlayerEnabled,
             themeMode: guestConfig.themeMode,
         },
     });

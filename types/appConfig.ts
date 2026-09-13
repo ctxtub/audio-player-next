@@ -3,12 +3,14 @@ import type { ThemeMode } from '@/types/theme';
 
 /**
  * 应用配置默认值定义（客户端持有的完整偏好）。
+ * M6-01：desktopFloatingPlayerEnabled 为唯一产品语义（true=宽屏可悬浮，false=宽屏 docked；
+ * 移动端始终 docked，不受该字段影响）。
  */
 export type AppConfigDefaults = {
   playDuration: number;
   voiceId: VoiceId;
   speed: number;
-  floatingPlayerEnabled: boolean;
+  desktopFloatingPlayerEnabled: boolean;
   themeMode: ThemeMode;
 };
 

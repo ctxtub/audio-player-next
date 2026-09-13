@@ -1057,6 +1057,30 @@ cases:
     executable_ids: [exec-artifact-module-closure]
     fixtures: []
     owner: creation-artifact
+  - case_id: desktop-floating-preference-migration
+    display_name_zh: 桌面悬浮偏好语义迁移
+    legacy_aliases: []
+    journey_id: cloud-storage
+    user_goal: 桌面悬浮偏好刷新保持且旧物理列无损
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [config, migration, contract]
+    spec_path: docs/e2e/04-云端存储与多端数据调和/11-桌面悬浮偏好语义迁移.md
+    executable_ids: [exec-desktop-config-migration]
+    fixtures: []
+    owner: cloud-storage
+  - case_id: mini-responsive-keyboard-foundation
+    display_name_zh: Mini 响应式断点与键盘抑制基础
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: 767为移动端768为桌面端且键盘 detector 可独立判定
+    priority: P2
+    lifecycle_status: ACTIVE
+    risk_tags: [ui, viewport, responsive, keyboard]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/10-Mini响应式断点与键盘抑制基础.md
+    executable_ids: [exec-now-playing-foundation]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1372,6 +1396,14 @@ executables:
     display_name_zh: Chat Artifact 模块端到端封板与契约冻结
     layer: L1
     path: ./tests/unit/creation-chat/artifact-module-closure.unit.test.ts
+  - executable_id: exec-desktop-config-migration
+    display_name_zh: 桌面悬浮偏好语义迁移
+    layer: L2
+    path: ./tests/integration/persistence-config/desktop-config-migration.integration.test.ts
+  - executable_id: exec-now-playing-foundation
+    display_name_zh: Mini 响应式断点与键盘基础
+    layer: L1
+    path: ./tests/unit/now-playing/now-playing-foundation.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

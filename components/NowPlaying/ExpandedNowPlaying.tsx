@@ -25,7 +25,7 @@
  * - 不建 Expanded-local speed state；不写回 UserConfig；不触 StoryWork/progress identity。
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, Modal as AriaModal, ModalOverlay } from 'react-aria-components';
 import { useDrag } from '@use-gesture/react';
 
@@ -99,6 +99,31 @@ export const ExpandedNowPlaying: React.FC = () => {
         },
         [handleClose]
     );
+
+    /**
+     * Escape 兜底（M7-02 复验修复）：
+     * RAC overlay 的 Escape 语义要求焦点位于 overlay 内；真实浏览器中，点击
+     * 「从头播放」等操作会让 busy 控件 disabled，浏览器随即把焦点移到 body
+     * （标准行为），窗口期内 Escape 冒泡不经过 overlay → RAC handler 不触发
+     * → 面板无法关闭（spec §6/§77「Escape close」契约缺口；chromium 重复运行
+     * 复现率约 1/5–1/8，焦点掉 body 时 100% 复现）。
+     * 本监听为纯兜底：RAC 已处理时事件已被 preventDefault/stopPropagation，
+     * 直接让行（不重复关闭）；仅当焦点掉出 overlay 时走同一 handleClose。
+     * 不改变任何焦点行为，不替代/复制 RAC 的 focus containment（spec §10.1）。
+     */
+    useEffect(() => {
+        if (!isExpanded) {
+            return undefined;
+        }
+        const onDocumentKeyDown = (event: KeyboardEvent): void => {
+            if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) {
+                return;
+            }
+            handleClose();
+        };
+        document.addEventListener('keydown', onDocumentKeyDown);
+        return () => document.removeEventListener('keydown', onDocumentKeyDown);
+    }, [isExpanded, handleClose]);
 
     // 移动 Sheet drag：仅 Handle 绑定（内容区/controls 不 spread）。
     // 向下拖超阈值释放 → 关闭；不足 → 回弹（reduced-motion 下立即收起/回弹，无弹簧）。

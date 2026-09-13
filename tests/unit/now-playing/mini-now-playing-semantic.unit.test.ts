@@ -451,20 +451,20 @@ async function runMiniSemanticTests(): Promise<void> {
     }
     console.log('PASS: M6-02-09 legacy import guard');
 
-    console.log('=== M6-02-10: FloatingPlayer 兼容 re-export + 命名迁移 ===');
+    console.log('=== M6-02-10: FloatingPlayer 适配器已删除 + 命名迁移收官（M6-04）===');
     {
-        const compat = readRepoText('components/FloatingPlayer/index.tsx');
-        assert.ok(
-            compat.includes('MiniNowPlaying as FloatingPlayer'),
-            'compat 必须 re-export MiniNowPlaying as FloatingPlayer'
+        // M6-04 Legacy cleanup（spec §2.2/§35/M6-F）：rg 已确认无真实 import，
+        // 本用例锁定适配器不存在（目录级），替代旧「compat re-export」断言。
+        assert.strictEqual(
+            fs.existsSync(path.resolve(process.cwd(), 'components/FloatingPlayer')),
+            false,
+            'components/FloatingPlayer 适配器必须不存在（M6-04 已删除）'
         );
-        assert.ok(
-            compat.includes("from '@/components/NowPlaying/MiniNowPlaying'"),
-            'compat 必须指向正式实现'
+        assert.strictEqual(
+            fs.existsSync(path.resolve(process.cwd(), 'components/FloatingPlayer/index.tsx')),
+            false,
+            'FloatingPlayer/index.tsx 必须不存在'
         );
-        assert.ok(!compat.includes('useState') && !compat.includes('useDrag'), 'compat 不得承载独立实现');
-        assert.ok(!compat.includes('GlassToast'), 'compat 不得保留旧播放逻辑');
-        assert.ok(compat.includes('useFloatingPlayer'), 'compat 须保留旧 hook 可编译');
         const layoutSrc = readRepoText('app/(main)/layout.tsx');
         // M6-03 演进：Mini 已收进 MainChrome/BottomChrome slot（spec §16/§34），
         // layout 经 MainChrome 编排，不再直引 Mini；正式命名链由 BottomChrome 持有。

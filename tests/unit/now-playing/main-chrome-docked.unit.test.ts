@@ -192,8 +192,9 @@ async function runMainChromeDockedTests(): Promise<void> {
             !mainChromeExec.includes('AudioControllerHost'),
             'MainChrome 内不得挂载第二 Host（唯一 owner 在 layout 平级）'
         );
-        assert.ok(!stripComments(chromeStateSrc).includes('useDrag'), 'M6-03 不得引入 useDrag');
-        assert.ok(!stripComments(bottomSrc).includes('useDrag'), 'BottomChrome 不得引入 useDrag');
+        // M6-04 收官：drag 仅 Mini floating Grip（useMiniFloatingDrag），MainChrome/BottomChrome 仍不得引入。
+        assert.ok(!stripComments(chromeStateSrc).includes('useDrag'), 'MainChrome state 不得引入 useDrag（drag 归 Mini floating）');
+        assert.ok(!stripComments(bottomSrc).includes('useDrag'), 'BottomChrome 不得引入 useDrag（drag 归 Mini floating）');
         assert.ok(layoutSrc.includes('AudioControllerHost'), 'layout 必须保留唯一 Host');
         assert.ok(layoutSrc.includes('MainChrome'), 'layout 必须经 MainChrome 编排');
         assert.ok(!layoutSrc.includes('MiniNowPlaying'), 'layout 不得直挂 Mini（必须经 BottomChrome slot）');
@@ -249,7 +250,9 @@ async function runMainChromeDockedTests(): Promise<void> {
             miniScss.includes('bottom: calc(var(--tab-bar-safe-bottom) + var(--space-2))'),
             'Mini docked 必须复用 tab-bar token + space-2（不重复加 safe-area）'
         );
-        assert.ok(!miniScss.includes('useDrag'), 'Mini 样式不得引入 drag');
+        // M6-04 收官：Mini floating 引入 DragGrip 样式（grip-only drag，spec §18.2），
+        // 不再禁止样式侧 drag 字样；完整 floating CSS 契约由 desktop-floating-geometry 单测锁定。
+        assert.ok(miniScss.includes('.dragGrip'), 'M6-04 Mini 须有 DragGrip 样式');
         console.log('PASS: M6-03-07 css contract');
     }
 

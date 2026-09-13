@@ -1,6 +1,5 @@
 /**
- * M6-02 NowPlaying 正式 import surface（命名迁移目标）。
- * FloatingPlayer 仅为 compatibility re-export（见 components/FloatingPlayer/index.tsx）。
+ * M6-04 NowPlaying 正式 import surface（命名迁移收官：FloatingPlayer 适配器已删除）。
  */
 
 export { MiniNowPlaying, default } from './MiniNowPlaying';
@@ -31,6 +30,19 @@ export {
     type NowPlayingViewportMode,
 } from './useNowPlayingLayoutMode';
 export { shouldTreatAsKeyboardOpen, useSoftKeyboardState } from './useSoftKeyboardState';
+export {
+    MINI_FLOATING_MARGIN_X_PX,
+    MINI_FLOATING_MARGIN_Y_PX,
+    clampFloatingPosition,
+    resolveFloatingDragEnd,
+    resolveFloatingSnapSide,
+    snapFloatingToEdge,
+    type MiniFloatingPanelSize,
+    type MiniFloatingPosition,
+    type MiniFloatingSnapSide,
+    type MiniFloatingViewportSize,
+} from './MiniFloatingGeometry';
+export { useMiniFloatingDrag, type MiniFloatingDrag } from './useMiniFloatingDrag';
 export {
     MINI_NOW_PLAYING_FALLBACK_TITLE,
     NOW_PLAYING_BREAKPOINT_PX as NOW_PLAYING_BREAKPOINT_PX_FROM_TYPES,

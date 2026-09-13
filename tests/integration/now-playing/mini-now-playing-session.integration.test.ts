@@ -172,10 +172,6 @@ async function runMiniSessionIntegration(): Promise<void> {
         MiniNowPlaying: React.ComponentType;
         default: React.ComponentType;
     };
-    const compatMod = innerJiti('./components/FloatingPlayer/index.tsx') as unknown as {
-        FloatingPlayer: React.ComponentType;
-        MiniNowPlaying: React.ComponentType;
-    };
 
     const useSession = sessionMod.usePlaybackSessionStore;
     const useTransport = transportMod.usePlaybackStore;
@@ -436,7 +432,7 @@ async function runMiniSessionIntegration(): Promise<void> {
         console.log('PASS: M6-02-I4 ended/error');
     }
 
-    console.log('=== M6-02-I5: 配置独立 + 兼容可编译 ===');
+    console.log('=== M6-02-I5: 配置独立 + 适配器不存在（M6-04 收官）===');
     {
         resetAll();
         seedWorkSession('月球上的小狐狸', 'paused');
@@ -444,14 +440,14 @@ async function runMiniSessionIntegration(): Promise<void> {
         const visFloating = readViewModel('wide-floating');
         assert.strictEqual(visDocked.visible, true);
         assert.strictEqual(visFloating.visible, true, '偏好只换形态，不换存在性');
-        assert.strictEqual(typeof compatMod.FloatingPlayer, 'function', '兼容 FloatingPlayer 可编译');
+        const fsMod = nodeRequire('node:fs') as typeof import('node:fs');
         assert.strictEqual(
-            compatMod.FloatingPlayer,
-            compatMod.MiniNowPlaying,
-            '兼容即正式实现（同一引用）'
+            fsMod.existsSync(path.join(repoRoot, 'components', 'FloatingPlayer')),
+            false,
+            'FloatingPlayer 适配器必须不存在（M6-04 已删除）'
         );
         assert.strictEqual(miniMod.MiniNowPlaying, miniMod.default, '正式命名默认/具名一致');
-        console.log('PASS: M6-02-I5 config + compat');
+        console.log('PASS: M6-02-I5 config + adapter-removed');
     }
 
     resetAll();

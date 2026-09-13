@@ -114,7 +114,7 @@ function resetAll() {
     }));
 }
 
-/** D1 阳性对照：不清，流完成应自动播放（play=1，浮窗出现）。 */
+/** D1 阳性对照：不清，流完成应自动播放（play=1，在播轨道落定；M6-04 已删显隐标记，不断言浮窗）。 */
 async function scenarioNoClear(): Promise<void> {
     console.log('--- D1: 阳性对照（不清，流完成应自动播放）---');
     resetAll();
@@ -128,8 +128,8 @@ async function scenarioNoClear(): Promise<void> {
     assert(result.audioUrl.startsWith('blob:'), '应产出音频 URL');
     assert.strictEqual(spy.play, 1, '阳性对照：不清时完成回调必须触发 1 次 play');
     assert.strictEqual(usePlaybackStore.getState().currentAudioUrl, result.audioUrl);
-    assert.strictEqual(usePlaybackStore.getState().isFloatingVisible, true, '浮窗应出现（对照组）');
-    console.log(`PASS: D1 positive control (play=${spy.play}, floating visible)`);
+    assert.ok(!('isFloatingVisible' in usePlaybackStore.getState()), 'M6-04：Transport 不得再持有显隐标记');
+    console.log(`PASS: D1 positive control (play=${spy.play}, audio url set)`);
 }
 
 /** D2 oracle 竞态：流式中清空 → 完成到达 → 不得孤儿播放。 */
@@ -158,7 +158,7 @@ async function scenarioClearMidStream(): Promise<void> {
 
     assert.strictEqual(spy.play, 0, '核心断言：清空后完成到达不得触发播放（no-orphan-after-clear）');
     assert.strictEqual(useChatStore.getState().messages.length, 0, '清空后聊天应保持为空（无诈尸卡片）');
-    assert.strictEqual(usePlaybackStore.getState().isFloatingVisible, false, '浮窗不应凭空出现');
+    assert.ok(!('isFloatingVisible' in usePlaybackStore.getState()), 'M6-04：Transport 不得再持有显隐标记');
     assert.strictEqual(usePlaybackStore.getState().currentAudioUrl, null, '无在播轨道');
     console.log('PASS: D2 no orphan playback after mid-stream clear');
 }

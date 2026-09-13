@@ -2,8 +2,7 @@
  * 统一配置服务层
  *
  * 为已登录用户（UserConfig）与具名访客（GuestConfig）提供多主体的统一配置抽象。
- * M6-01：领域字段 desktopFloatingPlayerEnabled（Prisma 逻辑名，物理列仍为
- * floatingPlayerEnabled via @map）；legacy patch 别名仅在此 boundary 收敛。
+ * M6-01：领域字段 desktopFloatingPlayerEnabled（Prisma 逻辑名，物理列仍为旧列 via @map）；legacy patch 别名仅在此 boundary 收敛。
  */
 
 import { TRPCError } from '@trpc/server';

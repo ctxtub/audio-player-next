@@ -4,10 +4,11 @@
  * 下列语义 identity 副本已 @deprecated（M6 presentation 收敛时移除，
  * M9 物理删除）：sessionId / currentMessageId / sourceType / sourceId /
  * title / isOneShot / isRehydratedReady / currentParagraphIndex /
- * totalParagraphs / isFloatingVisible。Transport 动作
- *（playAudio/resumeAudio/pauseAudio/seek/setPlaybackRate/ensureUnlocked/
- * registerAudioController + isPlaying/currentTime/duration/playbackRate/
- * remainingMs/totalAllowedMs）保持不变，仍为全局 <audio> 唯一 ownership。
+ * totalParagraphs。M6-04 已删除 spec §2.2 Mini 显隐三件套：Mini 显隐只由
+ * PlaybackSession 派生（spec §2.3/§30），Transport 不再持有第二套显隐标记。
+ * Transport 动作（playAudio/resumeAudio/pauseAudio/seek/setPlaybackRate/
+ * ensureUnlocked/registerAudioController + isPlaying/currentTime/duration/
+ * playbackRate/remainingMs/totalAllowedMs）保持不变，仍为全局 <audio> 唯一 ownership。
  * 旧字段仅作兼容镜像由 PlaybackSessionStore 同步写入，新代码禁止直接写入它们。
  */
 import { useCallback } from 'react';
@@ -36,11 +37,6 @@ type PlaybackStoreBaseState = {
   _tickIntervalId: number | null;
   _lastTickAt: number | null;
   audioController: AudioControllerHandle | null;
-  /**
-   * 浮动播放器是否展示。
-   * @deprecated M5-09：属 M6 presentation state，不再作为 playback engine 状态。新代码勿读。
-   */
-  isFloatingVisible: boolean;
   /**
    * 当前播放的音频地址。
    */
@@ -109,16 +105,6 @@ type PlaybackStoreActions = {
   resumeAudio: () => Promise<void>;
   pauseAudioPlayback: () => void;
   seekAudio: (time: number) => void;
-  /**
-   * 显示浮动播放器面板。
-   * @returns void
-   */
-  showFloatingPlayer: () => void;
-  /**
-   * 隐藏浮动播放器面板。
-   * @returns void
-   */
-  hideFloatingPlayer: () => void;
   setCurrentAudioUrl: (url: string | null) => void;
   syncPlaybackState: (url: string, messageId?: string) => void;
   /**
@@ -169,7 +155,6 @@ const INITIAL_STATE: PlaybackStoreBaseState = {
   _tickIntervalId: null,
   _lastTickAt: null,
   audioController: null,
-  isFloatingVisible: false,
   currentAudioUrl: null,
   currentMessageId: null,
   isOneShot: false,
@@ -266,7 +251,6 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         duration: 0,
         isPlaying: false,
         _lastTickAt: null,
-        isFloatingVisible: false,
         currentAudioUrl: null,
         currentMessageId: null,
         isOneShot: options?.oneShot ?? false,
@@ -395,7 +379,6 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         return;
       }
       set({
-        isFloatingVisible: true,
         currentAudioUrl: audioUrl,
         currentMessageId: messageId ?? null,
         isRehydratedReady: false,
@@ -417,7 +400,6 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
       if (resumeBudgetMs !== null && resumeBudgetMs <= 0) {
         return;
       }
-      set({ isFloatingVisible: true });
       await controller.resume();
     },
     /**
@@ -435,12 +417,6 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     seekAudio: (time: number) => {
       get().audioController?.seek(time);
     },
-    showFloatingPlayer: () => {
-      set({ isFloatingVisible: true });
-    },
-    hideFloatingPlayer: () => {
-      set({ isFloatingVisible: false });
-    },
     /**
      * 直接设置当前的音频 URL，用于同步播放状态（例如自动切歌时）。
      * @param url 音频地址或 null
@@ -450,7 +426,6 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     },
     syncPlaybackState: (url: string, messageId?: string) => {
       set({
-        isFloatingVisible: true,
         currentAudioUrl: url,
         currentMessageId: messageId ?? null,
       });
@@ -474,7 +449,6 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         currentAudioUrl: null,
         currentTime: 0,
         duration: 0,
-        isFloatingVisible: true,
       });
     },
     clearRehydratedReady: () => {
@@ -512,30 +486,28 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
 export const usePlaybackStore = create<PlaybackStore>()(devtools(playbackStoreCreator));
 
 /**
- * 浮动播放器控制 Hook，封装播放显隐等操作。
- * @returns 浮动播放器控制方法集合
+ * 播放控制 Hook（M6-04 收官：已删除 spec §2.2 显隐命令；
+ * Mini 显隐只由 PlaybackSession 派生，本 hook 仅保留 Transport 播放面
+ * play/resume/pause，供 ChatLayout/AudioPlayer 显式点播入口使用）。
+ * @returns 播放控制方法集合
  */
 export const useFloatingPlayer = () => {
   const ensureUnlocked = usePlaybackStore((state) => state.ensureUnlocked);
   const playAudio = usePlaybackStore((state) => state.playAudio);
   const resumeAudio = usePlaybackStore((state) => state.resumeAudio);
   const pauseAudioPlayback = usePlaybackStore((state) => state.pauseAudioPlayback);
-  const showFloatingPlayer = usePlaybackStore((state) => state.showFloatingPlayer);
-  const hideFloatingPlayer = usePlaybackStore((state) => state.hideFloatingPlayer);
 
   const play = useCallback(
     async (audioUrl: string, messageId?: string, options?: { explicit?: boolean }) => {
-      showFloatingPlayer();
-      // 中文注释：浮窗 play 即用户显式点播入口，缺省按显式放行（auto 须显式传 { explicit: false }）。
+      // 中文注释：play 即用户显式点播入口，缺省按显式放行（auto 须显式传 { explicit: false }）。
       await playAudio(audioUrl, messageId, { explicit: options?.explicit ?? true });
     },
-    [playAudio, showFloatingPlayer]
+    [playAudio]
   );
 
   const resume = useCallback(async () => {
-    showFloatingPlayer();
     await resumeAudio();
-  }, [resumeAudio, showFloatingPlayer]);
+  }, [resumeAudio]);
 
   const pause = useCallback(() => {
     pauseAudioPlayback();
@@ -546,7 +518,5 @@ export const useFloatingPlayer = () => {
     play,
     resume,
     pause,
-    show: showFloatingPlayer,
-    hide: hideFloatingPlayer,
   };
 };

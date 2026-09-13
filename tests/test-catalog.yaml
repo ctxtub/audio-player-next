@@ -1105,6 +1105,18 @@ cases:
     executable_ids: [exec-main-chrome-docked, exec-main-chrome-docked-layout, exec-l3-main-chrome-mobile-docked]
     fixtures: []
     owner: smoke-baseline
+  - case_id: desktop-floating-mode-closure
+    display_name_zh: 桌面悬浮拖拽吸附与M6收官
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: 桌面悬浮可拖吸附且关闭转固定跨端同会话刷新回默认并完成M6收官
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [ui, layout, session, drag, responsive, closure]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/13-桌面悬浮拖拽吸附与收官.md
+    executable_ids: [exec-desktop-floating-geometry, exec-l3-desktop-floating-mode]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1448,6 +1460,14 @@ executables:
     display_name_zh: L3移动端固定 Mini 全链路
     layer: L3
     path: ./tests/system/browser/scenarios/main-chrome-mobile-docked.spec.ts
+  - executable_id: exec-desktop-floating-geometry
+    display_name_zh: 桌面悬浮几何与拖拽契约
+    layer: L1
+    path: ./tests/unit/now-playing/desktop-floating-geometry.unit.test.ts
+  - executable_id: exec-l3-desktop-floating-mode
+    display_name_zh: L3桌面悬浮拖拽吸附收官
+    layer: L3
+    path: ./tests/system/browser/scenarios/desktop-floating-mode.spec.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

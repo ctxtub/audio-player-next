@@ -206,24 +206,14 @@ async function runDesktopMigrationTests() {
     assert.ok(mapHits.length >= 2, `User/Guest 必须各一处 @map("floatingPlayerEnabled")（得 ${mapHits.length}）`);
     console.log('PASS: M6-01-F schema guard');
 
-    console.log('=== M6-01-G: FloatingPlayer 兼容面回归（M6-02 命名切换后）===');
-    // M6-02 切面：正式实现=MiniNowPlaying；FloatingPlayer 仅为兼容 re-export（无独立实现）。
-    // 本用例锁定：配置仍读新字段（经 Mini），兼容路径仍可编译且无旧实现残留。
-    const fpSrc = fs.readFileSync(
-        path.join(process.cwd(), 'components', 'FloatingPlayer', 'index.tsx'),
-        'utf8'
+    console.log('=== M6-01-G: FloatingPlayer 适配器已删除（M6-04 收官）===');
+    // M6-04 Legacy cleanup（spec §2.2/§35/M6-F）：适配器目录整体删除，
+    // 本用例锁定不存在（替代旧 compat re-export 回归）；配置仍读新字段（经 Mini）。
+    assert.strictEqual(
+        fs.existsSync(path.join(process.cwd(), 'components', 'FloatingPlayer')),
+        false,
+        'components/FloatingPlayer 适配器必须不存在（M6-04 已删除）'
     );
-    assert.ok(
-        fpSrc.includes('MiniNowPlaying as FloatingPlayer'),
-        'FloatingPlayer 必须 re-export MiniNowPlaying（M6-02 命名切换）'
-    );
-    assert.ok(
-        fpSrc.includes("from '@/components/NowPlaying/MiniNowPlaying'"),
-        '兼容必须指向正式实现'
-    );
-    assert.ok(!fpSrc.includes('useState') && !fpSrc.includes('useDrag'), '兼容不得承载独立实现');
-    const fpStripped = fpSrc.split('desktopFloatingPlayerEnabled').join('').split('isDesktopFloatingPlayerEnabled').join('');
-    assert.ok(!fpStripped.includes('floatingPlayerEnabled'), '兼容不得残留旧字段引用');
     // 新字段改由 Mini 正式实现消费（只决定 layoutMode，不决定存在性）。
     const miniSrc = fs.readFileSync(
         path.join(process.cwd(), 'components', 'NowPlaying', 'MiniNowPlaying.tsx'),

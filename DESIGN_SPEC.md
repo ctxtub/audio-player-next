@@ -405,9 +405,9 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 
 > 内容区通过 `padding-bottom: var(--tab-bar-safe-bottom)` 留出底部安全距离。Chat 页的 Composer 自行管理底部间距。
 
-### 3.7 悬浮播放器 (FloatingPlayer) — 胶囊风格
+### 3.7 Mini Now Playing — 胶囊风格（M6 收官；旧 FloatingPlayer 已退出正式命名）
 
-紧凑胶囊形态，可拖拽定位，展示倒计时与播放控制。
+全局迷你播放入口：是否存在由播放 Session 派生（`source 非空且 status 非 idle`），标题仅取 Session.title，睡眠预算字段不在 Mini 展示，粗进度为段落加权近似（不可 seek），主动作经 M5 Flow 委托。移动端与宽屏关闭态固定 TabBar 上方（不可拖），宽屏开启态为可拖悬浮（仅 Grip 绑定 `useDrag`，播放/元数据按钮不参与）。
 
 | 属性 | Token |
 |------|-------|
@@ -418,8 +418,17 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 | 阴影 | `var(--glass-highlight), var(--shadow-lg)` |
 | 层级 | `var(--z-floating)` |
 | padding | `var(--space-2) var(--space-3)` |
-| 标题字号 | `var(--text-sm)`, `font-variant-numeric: tabular-nums`, `min-width: 3.5em` |
-| 播放按钮 | `32px`, `radius: var(--radius-full)`, `bg: var(--accent-primary)`, 图标 `16px` |
+| 标题字号 | `var(--text-sm)`（空回退“正在播放”） |
+| 二级文案 | 段落 `第 X / Y 段` / `正在播放` / `已暂停` / `播放完成` / `播放遇到问题` / `正在准备语音` |
+| 粗进度 | 非交互 `role=progressbar`，`aria-label` 故事段落进度（不展示百分比/精确时间） |
+| 播放按钮 | `var(--size-touch-target)` = 44px 热区，`radius: var(--radius-full)`，`bg: var(--accent-primary)`，图标 `18px`（视觉紧凑、热区达标） |
+| 元数据按钮 | 独立可达 `展开正在播放：{title}`（禁止 button 嵌套 button） |
+| Docked 高度 | `var(--size-mini-now-playing-height)` = 68px（参与 `--bottom-chrome-safe-bottom` 预留计算，页面不得 hardcode） |
+| Floating 宽度 | `var(--size-mini-now-playing-wide)` = 360px（`wide-floating` 固定宽，`max-width: calc(100vw - 32px)` 防溢出） |
+| Docked 最大宽 | `var(--size-mini-now-playing-docked-max)` = 776px（居中胶囊上限） |
+| Floating 默认位 | `right: var(--space-4)` + `bottom: calc(var(--tab-bar-safe-bottom) + var(--space-4))`（无 JS 固定像素；首次 drag 后转 `left/top`） |
+| DragGrip | 克制竖点（`var(--space-6)` 宽、`touch-action: none`、`cursor: grab/grabbing`，`focus-visible` 描边），仅 `wide-floating` 渲染 |
+| 断点 | `<768` compact-docked / `>=768` wide（`--breakpoint-lg` = 768px，与 `$breakpoint-lg` / `NOW_PLAYING_BREAKPOINT_PX` 三方同值） |
 
 ### 3.8 表单区域 (Auth Page)
 
@@ -562,7 +571,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
      ┌───────────────────┐
      │   TabBar 胶囊       │  ← fixed bottom, z-sticky
      └───────────────────┘      浮动在内容上方
-    (待创作) FloatingPlayer    ← fixed, z-floating, 可拖拽
+  Mini Now Playing         ← fixed, z-floating；docked 固定 TabBar 上方（预留），floating 默认右下可拖（Grip-only）
 ```
 
 ### 4.2 Home 页布局
@@ -621,7 +630,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 ├── section-gap ──────────────┤
 │     SpeedConfigSection      │
 ├── section-gap ──────────────┤
-│   FloatingPlayerSection     │
+│ DesktopFloatingPlayerSection│  ← 桌面悬浮播放（仅决定 wide floating/docked，不决定存在性；移动端始终 docked）
 ├── section-gap ──────────────┤
 │    VoiceServiceSection      │
 └─────────────────────────────┘
@@ -659,9 +668,19 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 |------------|-----|------|
 | `--breakpoint-sm` | `375px` | 小屏手机 |
 | `--breakpoint-md` | `428px` | 大屏手机 |
-| `--breakpoint-lg` | `768px` | 平板（暂不适配） |
+| `--breakpoint-lg` | `768px` | 平板/桌面分界（M6 冻结：`<768` compact，`>=768` wide；与 `$breakpoint-lg` / `NOW_PLAYING_BREAKPOINT_PX` 三方同值，禁止第二边界） |
 
 当前阶段只做 375–428px 适配。页面最大宽度 `480px`，居中展示。
+
+### 5.1 Mini Now Playing 三态（M6 收官）
+
+| 视口 + 偏好 | 形态 | 位置 | 预留 |
+|-------------|------|------|------|
+| `<768`（偏好无关） | `compact-docked` | 固定 TabBar 上方，不可拖，无 Grip | `--bottom-chrome-safe-bottom` 抬高（Mini 高 + 间距） |
+| `>=768` + `desktopFloatingPlayerEnabled=true` | `wide-floating` | 默认右下悬浮，仅 Grip 可拖（clamp + 水平吸附 + resize repair，内存态） | 不占位（兼容浮层） |
+| `>=768` + `desktopFloatingPlayerEnabled=false` | `wide-docked` | 固定 TabBar 上方，不可拖，无 Grip（与移动端一致） | 同 docked 预留（Mini 不因关闭而消失） |
+
+BottomChrome 统一承载 Mini slot + TabBar（`display: contents`，不引入额外布局盒）；内容区与 Composer 一律消费 `--bottom-chrome-safe-bottom`，禁止各自 hardcode Mini 高度。
 
 ---
 

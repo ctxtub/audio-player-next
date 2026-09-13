@@ -129,7 +129,7 @@ export const deriveMiniPlaybackAction = (
     return 'disabled';
 };
 
-/** 数值钳制（paragraph rail 专用，不复用 FloatingPlayer drag 工具）。 */
+/** 数值钳制（paragraph rail 专用，不复用 MiniFloatingGeometry 拖拽钳制）。 */
 const clamp01 = (value: number): number => {
     if (!Number.isFinite(value)) {
         return 0;

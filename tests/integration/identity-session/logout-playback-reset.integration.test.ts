@@ -62,7 +62,6 @@ async function runH06Tests(): Promise<void> {
         isPlaying: true,
         currentAudioUrl: 'blob:mock-h06-audio',
         currentMessageId: 'msg_h06',
-        isFloatingVisible: true,
     });
     assert.strictEqual(usePlaybackStore.getState().isPlaying, true, '前置条件：登出前应处于播放中');
     assert.ok(

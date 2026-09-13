@@ -44,8 +44,22 @@ test("生成历史本页单次回放", async ({ page, harnessEnv, evidence }) =>
     await composer.fill(prompt);
     await page.getByRole("button", { name: "发送" }).click({ timeout: 15000 });
     await expect(composer).toBeEnabled({ timeout: 90000 });
-    /** 回放前访客生成历史行数（DB 断言基线）。 */
-    const historyBefore: number = countTableRows(dbFile, "GuestGenerationHistory");
+    // 中文注释：创作 quiescence 等待——自动续写（请继续故事）是流完成后的合法产品行为，
+    // 其 trailing 落库可能晚于输入框恢复到达；必须等行数稳定后再取基线，否则基线读到
+    // 半程值造成误判（M6-04 hardening：只把基线取在静止点，oracle 本身不变）。
+    let historyBefore: number = countTableRows(dbFile, "GuestGenerationHistory");
+    const quiesceDeadline = Date.now() + 60000;
+    for (;;) {
+        await page.waitForTimeout(3000);
+        const recount: number = countTableRows(dbFile, "GuestGenerationHistory");
+        if (recount === historyBefore) {
+            break;
+        }
+        historyBefore = recount;
+        if (Date.now() >= quiesceDeadline) {
+            break;
+        }
+    }
     expect(historyBefore).toBeGreaterThanOrEqual(1);
     recorder.step("回放前基线", { historyBefore });
 

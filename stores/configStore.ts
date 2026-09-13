@@ -78,6 +78,8 @@ export type ConfigStore = ConfigStoreBaseState & ConfigStoreActions;
  * @returns 默认配置
  */
 const createEmptyConfig = (): APIConfig => ({
+  defaultSleepTimerMinutes: 0,
+  defaultSleepTimerEnabled: true,
   playDuration: 0,
   voiceId: '',
   speed: 1,
@@ -89,6 +91,8 @@ const createEmptyConfig = (): APIConfig => ({
  * 构造系统级默认配置对象（用于网络故障时的内存兜底）。
  */
 const createDefaultConfig = (): APIConfig => ({
+  defaultSleepTimerMinutes: DEFAULT_USER_CONFIG.defaultSleepTimerMinutes,
+  defaultSleepTimerEnabled: DEFAULT_USER_CONFIG.defaultSleepTimerEnabled,
   playDuration: DEFAULT_USER_CONFIG.playDuration,
   voiceId: DEFAULT_USER_CONFIG.voiceId,
   speed: DEFAULT_USER_CONFIG.speed,
@@ -106,7 +110,18 @@ const isValidConfig = (config: Partial<APIConfig> | undefined): config is APICon
     return false;
   }
 
-  if (typeof config.playDuration !== 'number' || config.playDuration <= 0) {
+  // M7-03：新语义 defaultSleepTimerMinutes（10-120）为准；旧 playDuration 只读兼容。
+  const rawMinutes =
+    typeof config.defaultSleepTimerMinutes === 'number' && config.defaultSleepTimerMinutes > 0
+      ? config.defaultSleepTimerMinutes
+      : typeof config.playDuration === 'number' && config.playDuration > 0
+        ? config.playDuration
+        : 0;
+  if (typeof rawMinutes !== 'number' || rawMinutes <= 0) {
+    return false;
+  }
+
+  if (typeof config.defaultSleepTimerEnabled !== 'boolean') {
     return false;
   }
 
@@ -135,6 +150,8 @@ const isValidConfig = (config: Partial<APIConfig> | undefined): config is APICon
 
 /**
  * 合并新旧配置，确保字段合法。
+ * M7-03：defaultSleepTimerMinutes/defaultSleepTimerEnabled 为准；
+ * playDuration 兼容别名写入时同步同值（保留一个发布周期，spec §30）。
  * @param base 当前配置。
  * @param partial 待合并的增量配置。
  */
@@ -144,10 +161,22 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
       ? partial.voiceId.trim()
       : base.voiceId;
 
-  const nextPlayDuration =
-    typeof partial.playDuration === 'number' && partial.playDuration > 0
-      ? partial.playDuration
-      : base.playDuration;
+  // 新字段优先；仅新旧都缺时回退旧别名；三者都缺保持 base。
+  const candidateMinutes =
+    typeof partial.defaultSleepTimerMinutes === 'number' && partial.defaultSleepTimerMinutes > 0
+      ? partial.defaultSleepTimerMinutes
+      : typeof partial.playDuration === 'number' && partial.playDuration > 0
+        ? partial.playDuration
+        : base.defaultSleepTimerMinutes > 0
+          ? base.defaultSleepTimerMinutes
+          : base.playDuration;
+  const nextSleepTimerMinutes =
+    typeof candidateMinutes === 'number' && candidateMinutes > 0 ? candidateMinutes : base.playDuration;
+
+  const nextSleepTimerEnabled =
+    typeof partial.defaultSleepTimerEnabled === 'boolean'
+      ? partial.defaultSleepTimerEnabled
+      : base.defaultSleepTimerEnabled;
 
   const speed =
     typeof partial.speed === 'number' && partial.speed >= 0.25 && partial.speed <= 4.0
@@ -167,7 +196,9 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
       : base.themeMode;
 
   return {
-    playDuration: nextPlayDuration,
+    defaultSleepTimerMinutes: nextSleepTimerMinutes,
+    defaultSleepTimerEnabled: nextSleepTimerEnabled,
+    playDuration: nextSleepTimerMinutes,
     voiceId,
     speed,
     desktopFloatingPlayerEnabled,
@@ -190,9 +221,11 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
 
   /**
    * 将完整配置映射为可作为 patch 的形状。
+   * M7-03：只发新语义字段（playDuration 别名不再下行，避免双字段漂移）。
    */
   const toPatch = (config: APIConfig): NormalizedUserConfigPatch => ({
-    playDuration: config.playDuration,
+    defaultSleepTimerMinutes: config.defaultSleepTimerMinutes,
+    defaultSleepTimerEnabled: config.defaultSleepTimerEnabled,
     voiceId: config.voiceId,
     speed: config.speed,
     desktopFloatingPlayerEnabled: config.desktopFloatingPlayerEnabled,
@@ -231,6 +264,8 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
             }
             set({
               apiConfig: {
+                defaultSleepTimerMinutes: server.defaultSleepTimerMinutes,
+                defaultSleepTimerEnabled: server.defaultSleepTimerEnabled,
                 playDuration: server.playDuration,
                 voiceId: server.voiceId,
                 speed: server.speed,
@@ -283,6 +318,8 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
       }
 
       const nextConfig: APIConfig = {
+        defaultSleepTimerMinutes: mine.defaultSleepTimerMinutes,
+        defaultSleepTimerEnabled: mine.defaultSleepTimerEnabled,
         playDuration: mine.playDuration,
         voiceId: resolvedVoice,
         speed: mine.speed,

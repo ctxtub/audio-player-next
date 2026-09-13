@@ -17,6 +17,10 @@
  * - playbackRate = Session.speed（当前 Session 级，spec §20.1）；
  * - primaryAction/canRestart/isPlaying（与 Mini 同映射，Mini/Expanded 同 Session 即时同步）。
  *
+ * M7-03 P3C 增补（spec §22/§32 additive，不破 M7-01/M7-02 字段）：
+ * - sleepTimer = Session.sleepTimerMode + Transport.remainingMs + isWork
+ *  （story_end 选项门；展示见 SleepTimerControl）。
+ *
  * 纯派生见 deriveExpandedNowPlayingViewModel（可独立测试）；
  * Hook 层只做 selector 派生，不 mutation Session/Transport/Config。
  */
@@ -29,6 +33,7 @@ import type { VoiceOption } from '@/types/ttsGenerate';
 import { MINI_NOW_PLAYING_FALLBACK_TITLE } from './types';
 import { deriveExpandedPlaybackAction, type ExpandedPlaybackAction } from './PlaybackControls';
 import { EXPANDED_TIMELINE_MODE } from './PlaybackTimeline';
+import { isValidSleepTimerMode, type SleepTimerMode } from '@/lib/playback/sleepTimer';
 
 export type { ExpandedPlaybackAction };
 export { deriveExpandedPlaybackAction };
@@ -77,8 +82,19 @@ export type ExpandedNowPlayingViewModel = {
     canRestart: boolean;
     /** M7-02 Transport 是否正在播放（Mini/Expanded 同源即时同步）。 */
     isPlaying: boolean;
+    /** M7-03 当前 Session Sleep Timer（mode+remaining+isWork，spec §32）。 */
+    sleepTimer: ExpandedSleepTimerViewModel;
 };
 
+/** M7-03 Expanded SleepTimer ViewModel（spec §32；纯展示派生，不复制 Timer 状态）。 */
+export type ExpandedSleepTimerViewModel = {
+    /** 当前三态（Session.sleepTimerMode）。 */
+    mode: SleepTimerMode;
+    /** minutes 剩余毫秒（Transport.remainingMs；off/story_end 为 null）。 */
+    remainingMs: number | null;
+    /** 是否为 Work（story_end 选项门，§22.1）。 */
+    isWork: boolean;
+};
 /** M7-02 P3A timeline ViewModel（恒 segment）。 */
 export type ExpandedTimelineViewModel = {
     mode: typeof EXPANDED_TIMELINE_MODE;
@@ -98,6 +114,8 @@ export type ExpandedSessionSnapshot = {
     totalParagraphs: number;
     /** M7-02 当前 Session 倍速（缺省 1.0，保持 M7-01 调用兼容）。 */
     speed?: number;
+    /** M7-03 当前 Session Sleep Timer 三态（缺省 off，保持旧调用兼容）。 */
+    sleepTimerMode?: SleepTimerMode;
 };
 
 /** Transport 快照输入（纯函数层）。 */
@@ -107,6 +125,8 @@ export type ExpandedTransportSnapshot = {
     duration: number;
     /** M7-02 Transport.playbackRate（纯函数回退用，缺省 1.0，保持三参兼容）。 */
     playbackRate?: number;
+    /** M7-03 Transport.remainingMs（minutes 剩余；缺省 null，保持旧调用兼容）。 */
+    remainingMs?: number | null;
 };
 
 /** 空标题回退（与 Mini 同一 fallback，保证跨 surface 一致）。 */
@@ -202,6 +222,26 @@ export const deriveExpandedCanRestart = (
 ): boolean => source !== null && status !== 'idle';
 
 /**
+ * M7-03 纯函数：SleepTimer ViewModel 派生（spec §22/§32）。
+ * mode 非法 → off（fail-closed）；remaining 非正/非法 → null（off/story_end 恒 null）。
+ */
+export const deriveExpandedSleepTimer = (
+    sleepTimerMode: unknown,
+    remainingMs: unknown,
+    source: PlaybackSourceRef | null
+): ExpandedSleepTimerViewModel => {
+    const mode: SleepTimerMode = isValidSleepTimerMode(sleepTimerMode) ? sleepTimerMode : 'off';
+    const remaining =
+        mode === 'minutes' &&
+        typeof remainingMs === 'number' &&
+        Number.isFinite(remainingMs) &&
+        remainingMs > 0
+            ? remainingMs
+            : null;
+    return { mode, remainingMs: remaining, isWork: source?.kind === 'work' };
+};
+
+/**
  * 纯函数：ViewModel 总装（不复制 Store，只做展示派生）。
  */
 export const deriveExpandedNowPlayingViewModel = (
@@ -233,6 +273,11 @@ export const deriveExpandedNowPlayingViewModel = (
         primaryAction: deriveExpandedPlaybackAction(session.status),
         canRestart: deriveExpandedCanRestart(session.source, session.status),
         isPlaying: transport.isPlaying,
+        sleepTimer: deriveExpandedSleepTimer(
+            session.sleepTimerMode ?? 'off',
+            transport.remainingMs ?? null,
+            session.source
+        ),
     };
 };
 
@@ -248,15 +293,17 @@ export const useExpandedNowPlayingViewModel = (): ExpandedNowPlayingViewModel =>
     const nextParagraphIndex = usePlaybackSessionStore((state) => state.nextParagraphIndex);
     const totalParagraphs = usePlaybackSessionStore((state) => state.totalParagraphs);
     const speed = usePlaybackSessionStore((state) => state.speed);
+    const sleepTimerMode = usePlaybackSessionStore((state) => state.sleepTimerMode);
     const isPlaying = usePlaybackStore((state) => state.isPlaying);
     const currentTime = usePlaybackStore((state) => state.currentTime);
     const duration = usePlaybackStore((state) => state.duration);
     const playbackRate = usePlaybackStore((state) => state.playbackRate);
+    const remainingMs = usePlaybackStore((state) => state.remainingMs);
     const voiceOptions = useConfigStore((state) => state.voiceOptions);
 
     return deriveExpandedNowPlayingViewModel(
-        { source, status, title, voiceId, nextParagraphIndex, totalParagraphs, speed },
-        { isPlaying, currentTime, duration, playbackRate } as unknown as ExpandedTransportSnapshot,
+        { source, status, title, voiceId, nextParagraphIndex, totalParagraphs, speed, sleepTimerMode },
+        { isPlaying, currentTime, duration, playbackRate, remainingMs } as unknown as ExpandedTransportSnapshot,
         voiceOptions
     );
 };

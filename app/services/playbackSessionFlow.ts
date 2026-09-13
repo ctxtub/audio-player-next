@@ -29,6 +29,7 @@ import { usePlaybackStore, clampSegmentSeekTarget } from '@/stores/playbackStore
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
 import type { SessionContinuationMode } from '@/stores/playbackSessionStore';
+import type { SleepTimerMode } from '@/lib/playback/sleepTimer';
 
 /** 可播放段落（legacy fallback 透传形态，与 storyFlow.PlayableSegment 同形）。 */
 export type SessionPlayableSegment = {
@@ -129,6 +130,43 @@ export function seekRelative(deltaSeconds: number): boolean {
  */
 export async function setPlaybackRate(rate: number): Promise<void> {
   await usePlaybackSessionStore.getState().setSpeed(rate);
+}
+
+/**
+ * M7-03 P3C 当前 Session Sleep Timer 设置（spec §24 additive，无新 SSOT）。
+ * 只改当前 Session Timer（经 playback.setSleepTimer 独立持久化），不自动改
+ * Settings 默认（§31.1）；stale（Session 已切换）返回 false（§24.1）。
+ * UI 只经此入口，不得直接操作 <audio> / Session 字段（评审约束 10）。
+ * @param mode 三态（story_end 仅 Work；Draft 由 Session 侧拒绝返回 false）
+ * @param minutes mode==minutes 时必填（10–120）
+ * @returns 是否设置成功（stale/非法返回 false）
+ */
+export async function setSleepTimer(mode: SleepTimerMode, minutes?: number): Promise<boolean> {
+  return usePlaybackSessionStore.getState().setSleepTimer(mode, minutes);
+}
+
+/**
+ * M7-03 Sleep Timer 到期承接（spec §26）。
+ * Transport 到期已 pause audio + 归一 off/null；此处承接 Session paused +
+ * checkpoint 持久化 + Toast。Session 保留 paused，之后 Play 正常继续。
+ */
+export async function handleSleepTimerExpired(): Promise<void> {
+  await usePlaybackSessionStore.getState().handleSleepTimerExpired();
+}
+
+/**
+ * M7-03 到期回调注册（AudioControllerHost 挂载时调用，卸载时传 null 解除）。
+ * Transport 到期（非 minutes 不触发）经此回调进入 Flow 编排，
+ * Transport 本身不 import Session（防循环依赖）。
+ */
+export function registerSleepTimerExpiryHandler(): void {
+  try {
+    usePlaybackStore.getState().registerSleepTimerExpiryHandler(() => {
+      void handleSleepTimerExpired();
+    });
+  } catch {
+    // 注册失败不阻断 Host 挂载（到期仅缺 Toast/checkpoint，audio 照停）。
+  }
 }
 
 /** Draft→Work 提升（§24，sessionId 不变，hash 不一致 reset 0）。 */

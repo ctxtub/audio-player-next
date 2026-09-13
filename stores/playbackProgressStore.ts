@@ -335,6 +335,8 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
     // 中文注释：恢复态预算补齐——DTO 数值优先（水合已写入 playbackStore），缺失时回落到用户配置播放时长
     // （与 startStoryPlayback 同源：playDuration 分钟→毫秒），避免 remainingMs=null 导致 start() 早返。
     // 仅补齐 null 项，不覆盖睡眠倒计时继承的已有数值；新故事/一次性回放路径不经过此处，语义不受影响。
+    // M7-03 legacy 兼容：本 legacy 面无 mode 概念，回落补齐即确立 minutes Timer
+    // （旧行为保持：playDuration>0 → 倒计时；新面 off/story_end 由 Session 面同步，不经过此处）。
     const playbackState = usePlaybackStore.getState();
     if (playbackState.remainingMs === null || playbackState.totalAllowedMs === null) {
       const playDurationMinutes = useConfigStore.getState().apiConfig.playDuration;
@@ -344,7 +346,11 @@ const playbackProgressStoreCreator: StateCreator<PlaybackProgressStore> = (set, 
         playDurationMinutes > 0
       ) {
         const fallbackBudgetMs = playDurationMinutes * 60000;
-        playbackState.ensureCountdownBudget(fallbackBudgetMs);
+        playbackState.setSleepTimerState(
+          'minutes',
+          playbackState.remainingMs ?? fallbackBudgetMs,
+          playbackState.totalAllowedMs ?? fallbackBudgetMs,
+        );
         const latest = get();
         if (latest.remainingAllowedMs === null || latest.totalAllowedMs === null) {
           set({

@@ -24,6 +24,8 @@ nodeRequire.cache[glassToastPath] = {
 } as unknown as NodeModule;
 
 type ServerConfig = {
+    defaultSleepTimerMinutes: number;
+    defaultSleepTimerEnabled: boolean;
     playDuration: number;
     voiceId: string;
     speed: number;
@@ -36,6 +38,8 @@ let saveBehavior: 'fail-then-success' | 'always-fail' | 'always-success' = 'fail
 let fetchDelays: number[] = [];
 let fetchValues: ServerConfig[] = [];
 const serverTruth: ServerConfig = {
+    defaultSleepTimerMinutes: 30,
+    defaultSleepTimerEnabled: true,
     playDuration: 30,
     voiceId: 'alloy',
     speed: 1.0,

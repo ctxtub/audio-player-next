@@ -36,7 +36,7 @@ async function runLoginNoLeakTests() {
         data: { username, password: hashed, nickname: 'LoginNoLeakUserA' },
     });
     await prisma.userConfig.create({
-        data: { userId: userA.id, playDurationMinutes: 60, themeMode: 'light' },
+        data: { userId: userA.id, defaultSleepTimerMinutes: 60, themeMode: 'light' },
     });
     await saveConversationForSubject({ type: 'user', id: userA.id }, [
         { messageId: 'ua_1', role: 'user', content: 'USER-A-OWN-CONTENT-独有' },
@@ -64,7 +64,7 @@ async function runLoginNoLeakTests() {
 
     // ---- 2. 活跃访客造数（与 A 完全不同的独有内容）----
     const guestId = `g_login_noleak_${tag}`;
-    await prisma.guestConfig.create({ data: { guestId, playDurationMinutes: 20 } });
+    await prisma.guestConfig.create({ data: { guestId, defaultSleepTimerMinutes: 20 } });
     await saveConversationForSubject({ type: 'guest', id: guestId }, [
         { messageId: 'gq_1', role: 'user', content: 'GUEST-DRAFT-访客草稿独有' },
     ]);

@@ -107,6 +107,14 @@ export const playbackAnchorStateSchema = z.enum(['ready', 'ended']);
 export type PlaybackAnchorState = z.infer<typeof playbackAnchorStateSchema>;
 
 /**
+ * M7-03 Sleep Timer 三态（spec §22）：off（不限制）| minutes（播放 N 分钟后暂停）|
+ * story_end（当前 Work 完播停止）。story_end 仅 Work（§22.1/§24）。
+ * （前置声明：AnchorDTO / begin / checkpoint / setSleepTimer 共用。）
+ */
+export const sleepTimerModeSchema = z.enum(['off', 'minutes', 'story_end']);
+export type SleepTimerMode = z.infer<typeof sleepTimerModeSchema>;
+
+/**
  * §13.2 PlaybackAnchorDTO（14 字段逐字对齐）。
  * 不包含：storyText / audioUrl / currentTime / isPlaying。
  */
@@ -132,6 +140,13 @@ export const playbackAnchorDTOSchema = z.object({
   remainingAllowedMs: z.number().int().min(0).nullable(),
   totalAllowedMs: z.number().int().min(0).nullable(),
 
+  /**
+   * M7-03 Sleep Timer 三态（spec §23 M5 Anchor 增补）。
+   * Legacy 行由 migration + getAnchor repair 按 remainingAllowedMs 回填
+   *（非 null→minutes，null→off，§23.1），新写入一律显式。
+   */
+  sleepTimerMode: sleepTimerModeSchema,
+
   updatedAt: z.string().min(1), // ISO 8601 字符串
 });
 
@@ -140,6 +155,8 @@ export type PlaybackAnchorDTO = z.infer<typeof playbackAnchorDTOSchema>;
 /** §13.3 Work 播放状态（由 Progress 推导，绝不另存 status 列；见 lib/playback/progress.ts）。 */
 export const workPlaybackStateSchema = z.enum(['not_started', 'in_progress', 'completed']);
 export type WorkPlaybackState = z.infer<typeof workPlaybackStateSchema>;
+
+/* ---------------- M7-03 playback.setSleepTimer（spec §24 / §24.1） ---------------- */
 
 /**
  * §13.3 WorkPlaybackProgressDTO（M3 只消费此 View DTO）。
@@ -184,6 +201,12 @@ export const beginPlaybackSessionInputSchema = z.object({
   remainingAllowedMs: z.number().int().min(0).nullable().optional(),
   totalAllowedMs: z.number().int().min(0).nullable().optional(),
 
+  /**
+   * M7-03 Sleep Timer 三态（spec §23；可选以兼容旧客户端 begin）。
+   * 缺省时 server 按 Legacy 规则派生（remaining!=null→minutes，否则 off，§23.1）。
+   */
+  sleepTimerMode: sleepTimerModeSchema.optional(),
+
   // 仅 Draft begin 携带；Work begin 不得信任客户端快照。
   draftSnapshot: z
     .object({
@@ -200,6 +223,8 @@ export type BeginPlaybackSessionInput = z.infer<typeof beginPlaybackSessionInput
 /**
  * §17 playback.saveCheckpoint 输入。
  * 不再由客户端发送 source / title：当前 Source 由 Anchor.sessionId 决定。
+ * M7-03：增补可选 sleepTimerMode（缺省保持 Anchor 现值，旧客户端不覆盖 Timer；
+ * 到期/切换/off 等 Timer 变更必须显式携带，否则会被 dedupe 语义吞掉）。
  */
 export const savePlaybackCheckpointInputSchema = z.object({
   sessionId: playbackSessionIdSchema,
@@ -215,6 +240,8 @@ export const savePlaybackCheckpointInputSchema = z.object({
 
   remainingAllowedMs: z.number().int().min(0).nullable().optional(),
   totalAllowedMs: z.number().int().min(0).nullable().optional(),
+
+  sleepTimerMode: sleepTimerModeSchema.optional(),
 });
 
 export type SavePlaybackCheckpointInput = z.infer<typeof savePlaybackCheckpointInputSchema>;
@@ -267,6 +294,50 @@ export const promoteDraftPlaybackToWorkInputSchema = z.object({
 });
 
 export type PromoteDraftPlaybackToWorkInput = z.infer<typeof promoteDraftPlaybackToWorkInputSchema>;
+
+/* ---------------- M7-03 playback.setSleepTimer（spec §24 / §24.1） ---------------- */
+
+/**
+ * setSleepTimer 输入（spec §24）：
+ * - off → remaining=null, total=null；
+ * - minutes → minutes 必填（10–120），remaining=total=minutes×60_000；
+ * - story_end → 仅 Work（Draft 由 server 拒绝），remaining=null, total=null。
+ * minutes 缺省/非法由 zod 拒绝（fail-closed，不落库）。
+ */
+export const setSleepTimerInputSchema = z
+  .object({
+    sessionId: playbackSessionIdSchema,
+    mode: sleepTimerModeSchema,
+    minutes: z.number().int().min(10).max(120).optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.mode === 'minutes' && val.minutes === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'SLEEP_TIMER_MINUTES_REQUIRED',
+        path: ['minutes'],
+      });
+    }
+  });
+
+export type SetSleepTimerInput = z.infer<typeof setSleepTimerInputSchema>;
+
+/**
+ * setSleepTimer 输出：stale 直接返回 accepted:false（绝不覆盖新 Session timer，
+ * §24.1 与 saveCheckpoint 同源）；同 Session 接受时回传最新 Anchor。
+ */
+export const setSleepTimerResultSchema = z.discriminatedUnion('accepted', [
+  z.object({
+    accepted: z.literal(true),
+    anchor: playbackAnchorDTOSchema,
+  }),
+  z.object({
+    accepted: z.literal(false),
+    reason: z.literal(STALE_SESSION),
+  }),
+]);
+
+export type SetSleepTimerResult = z.infer<typeof setSleepTimerResultSchema>;
 
 /** §22 playback.getWorkProgressBatch 输入（1..50）与输出（每个 workId 都有结果，无 row 即 not_started）。 */
 export const getWorkPlaybackProgressBatchInputSchema = z.object({

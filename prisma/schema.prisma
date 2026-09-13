@@ -102,8 +102,10 @@ model UserConfig {
   id                    Int      @id @default(autoincrement())
   userId                Int      @unique
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// 允许播放时长，单位：分钟，范围 10-120
-  playDurationMinutes   Int      @default(30)
+  /// M7-03 默认睡眠定时分钟数（逻辑 rename；物理列仍为 playDurationMinutes，不做 SQLite rebuild；范围 10-120）
+  defaultSleepTimerMinutes   Int      @default(30) @map("playDurationMinutes")
+  /// M7-03 默认睡眠定时开关（true=新 Session 默认 minutes 定时；false=新 Session 默认 off；默认 true 保持既有 30 分钟行为，§29.2）
+  defaultSleepTimerEnabled Boolean @default(true)
   /// TTS 音色 ID，空字符串表示使用系统默认
   voiceId               String   @default("")
   /// 播放速率，范围 0.25-4.0，默认 1.0
@@ -122,8 +124,10 @@ model GuestConfig {
   id                    Int      @id @default(autoincrement())
   /// 具名访客标识符（格式如 g_1234567890abcdef...）
   guestId               String   @unique
-  /// 允许播放时长，单位：分钟，范围 10-120
-  playDurationMinutes   Int      @default(30)
+  /// M7-03 默认睡眠定时分钟数（逻辑 rename；物理列仍为 playDurationMinutes；范围 10-120）
+  defaultSleepTimerMinutes   Int      @default(30) @map("playDurationMinutes")
+  /// M7-03 默认睡眠定时开关（默认 true 保持既有行为，§29.2）
+  defaultSleepTimerEnabled Boolean @default(true)
   /// TTS 音色 ID，空字符串表示使用系统默认
   voiceId               String   @default("")
   /// 播放速率，范围 0.25-4.0，默认 1.0
@@ -246,6 +250,9 @@ model UserPlaybackAnchor {
   /// 倒计时上下文：继承定时器剩余有效毫秒数
   remainingAllowedMs Int?
   totalAllowedMs     Int?
+  /// M7-03 Sleep Timer 三态：off|minutes|story_end（§22；story_end 仅 Work，§22.1）。
+  /// Legacy 行由 migration 按 remainingAllowedMs 回填（非 null→minutes，null→off，§23.1），不得只依赖列 default。
+  sleepTimerMode       String @default("minutes")
   /// Legacy compatibility; new domain logic不再读取（M5 起收敛为 continuationMode finite|extendable）
   isOneShot          Boolean @default(false)
 
@@ -283,6 +290,8 @@ model GuestPlaybackAnchor {
 
   remainingAllowedMs Int?
   totalAllowedMs     Int?
+  /// M7-03 Sleep Timer 三态：off|minutes|story_end（§22；Guest 与 User 对称）
+  sleepTimerMode       String @default("minutes")
   /// Legacy compatibility; new domain logic不再读取
   isOneShot          Boolean @default(false)
 

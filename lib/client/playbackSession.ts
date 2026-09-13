@@ -1,9 +1,10 @@
 /**
  * 播放会话客户端（M5-04 正式暴露层，spec §34）。
  *
- * 包装 7 个新 Session procedures：
+ * 包装 Session procedures：
  * getAnchor / beginSession / saveCheckpoint / completeSession /
- * clearAnchor / promoteDraftToWork / getWorkProgressBatch。
+ * clearAnchor / promoteDraftToWork / getWorkProgressBatch
+ * + M7-03 setSleepTimer。
  *
  * 旧 lib/client/playbackProgress.ts（getProgress / saveProgress /
  * clearProgress 包装）保留 adapter 一个迁移周期，不删除。
@@ -22,6 +23,8 @@ import type {
   PromoteDraftPlaybackToWorkInput,
   SavePlaybackCheckpointInput,
   SavePlaybackCheckpointResult,
+  SetSleepTimerInput,
+  SetSleepTimerResult,
 } from '@/lib/trpc/schemas/playback';
 
 /** §15 playback.getAnchor：读取当前主体唯一 Anchor（无则 null）。 */
@@ -41,6 +44,14 @@ export const savePlaybackCheckpoint = async (
   input: SavePlaybackCheckpointInput,
 ): Promise<SavePlaybackCheckpointResult> => {
   return trpc.playback.saveCheckpoint.mutate(input);
+};
+
+/**
+ * M7-03 playback.setSleepTimer：当前 Session Timer 设置（spec §24）。
+ * stale → {accepted:false, reason:'STALE_SESSION'}（绝不覆盖新 Session timer）。
+ */
+export const setSleepTimer = async (input: SetSleepTimerInput): Promise<SetSleepTimerResult> => {
+  return trpc.playback.setSleepTimer.mutate(input);
 };
 
 /** §19 playback.completeSession：完播收尾（保留 ended Anchor）。 */

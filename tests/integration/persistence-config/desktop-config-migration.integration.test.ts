@@ -21,11 +21,15 @@ async function runDesktopMigrationTests() {
     const dtoKeys = Object.keys(userConfigDtoSchema.shape).sort();
     assert.deepStrictEqual(
         dtoKeys,
-        ['desktopFloatingPlayerEnabled', 'playDuration', 'speed', 'themeMode', 'voiceId'],
-        'DTO 必须只暴露新字段（含其余四字段），不得含 legacy'
+        // M7-03：DTO 正式字段增补 defaultSleepTimerEnabled/defaultSleepTimerMinutes；
+        // playDuration 作为 compatibility alias 同值保留一个发布周期。
+        ['defaultSleepTimerEnabled', 'defaultSleepTimerMinutes', 'desktopFloatingPlayerEnabled', 'playDuration', 'speed', 'themeMode', 'voiceId'],
+        'DTO 必须只暴露新字段（含其余字段），不得含 legacy floatingPlayerEnabled'
     );
     assert.ok(!('floatingPlayerEnabled' in userConfigDtoSchema.shape), 'DTO shape 不得含 legacy 别名');
     const parsed = userConfigDtoSchema.parse({
+        defaultSleepTimerMinutes: 30,
+        defaultSleepTimerEnabled: true,
         playDuration: 30,
         voiceId: '',
         speed: 1.0,
@@ -82,7 +86,7 @@ async function runDesktopMigrationTests() {
     await prisma.guestConfig.create({
         data: {
             guestId: guestLegacyId,
-            playDurationMinutes: 30,
+            defaultSleepTimerMinutes: 30,
             voiceId: '',
             speed: 1.0,
             desktopFloatingPlayerEnabled: false,
@@ -175,7 +179,8 @@ async function runDesktopMigrationTests() {
     assert.ok(!('floatingPlayerEnabled' in mapped), 'DB 映射不得含旧逻辑字段');
     // toConfigDto 只读新逻辑行。
     const dto = toConfigDto({
-        playDurationMinutes: 30,
+        defaultSleepTimerMinutes: 30,
+        defaultSleepTimerEnabled: true,
         voiceId: '',
         speed: 1,
         desktopFloatingPlayerEnabled: false,

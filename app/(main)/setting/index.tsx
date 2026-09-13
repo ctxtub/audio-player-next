@@ -7,7 +7,7 @@ import { useTheme } from '@/components/ThemeProvider';
 import { useConfigStore } from '@/stores/configStore';
 import { useAuthStore } from '@/stores/authStore';
 import styles from './index.module.scss';
-import BasicConfigSection from './components/BasicConfigSection';
+import DefaultSleepTimerSection from './components/DefaultSleepTimerSection';
 import DesktopFloatingPlayerSection from './components/DesktopFloatingPlayerSection';
 import ThemeModeSection from './components/ThemeModeSection';
 import VoiceServiceSection from './components/VoiceServiceSection';
@@ -54,9 +54,46 @@ const ConfigPage: React.FC = () => {
   }, [apiConfig.voiceId, isConfigLoaded, voiceOptions]);
 
   /**
-   * 当前播放时长（分钟）。
+   * M7-03 默认睡眠定时分钟数（新语义字段；旧 playDuration 别名同值保留）。
    */
-  const playDuration = useMemo(() => apiConfig.playDuration, [apiConfig.playDuration]);
+  const defaultSleepTimerMinutes = useMemo(
+    () => apiConfig.defaultSleepTimerMinutes,
+    [apiConfig.defaultSleepTimerMinutes]
+  );
+
+  /**
+   * M7-03 默认睡眠定时开关。
+   */
+  const defaultSleepTimerEnabled = useMemo(
+    () => apiConfig.defaultSleepTimerEnabled,
+    [apiConfig.defaultSleepTimerEnabled]
+  );
+
+  const handleDefaultSleepTimerMinutesChange = useCallback(
+    (value: number) => {
+      if (!isConfigLoaded) {
+        return;
+      }
+      if (value === apiConfig.defaultSleepTimerMinutes) {
+        return;
+      }
+      updateConfig({ defaultSleepTimerMinutes: value });
+    },
+    [apiConfig.defaultSleepTimerMinutes, isConfigLoaded, updateConfig]
+  );
+
+  const handleDefaultSleepTimerEnabledChange = useCallback(
+    (value: boolean) => {
+      if (!isConfigLoaded) {
+        return;
+      }
+      if (value === apiConfig.defaultSleepTimerEnabled) {
+        return;
+      }
+      updateConfig({ defaultSleepTimerEnabled: value });
+    },
+    [apiConfig.defaultSleepTimerEnabled, isConfigLoaded, updateConfig]
+  );
 
   /**
    * 是否在宽屏启用悬浮迷你播放器（M6 语义；移动端始终 docked）。
@@ -64,19 +101,6 @@ const ConfigPage: React.FC = () => {
   const isDesktopFloatingPlayerEnabled = useMemo(
     () => apiConfig.desktopFloatingPlayerEnabled,
     [apiConfig.desktopFloatingPlayerEnabled]
-  );
-
-  const handlePlayDurationChange = useCallback(
-    (value: number) => {
-      if (!isConfigLoaded) {
-        return;
-      }
-      if (value === apiConfig.playDuration) {
-        return;
-      }
-      updateConfig({ playDuration: value });
-    },
-    [apiConfig.playDuration, isConfigLoaded, updateConfig]
   );
 
   const handleVoiceSelect = useCallback(
@@ -148,9 +172,11 @@ const ConfigPage: React.FC = () => {
       <div className={styles.configForm}>
         <UserSection />
         <ThemeModeSection value={themeMode} onChange={handleThemeModeChange} />
-        <BasicConfigSection
-          playDuration={playDuration}
-          onPlayDurationChange={handlePlayDurationChange}
+        <DefaultSleepTimerSection
+          enabled={defaultSleepTimerEnabled}
+          minutes={defaultSleepTimerMinutes}
+          onEnabledChange={handleDefaultSleepTimerEnabledChange}
+          onMinutesChange={handleDefaultSleepTimerMinutesChange}
         />
         <SpeedConfigSection
           speed={apiConfig.speed}

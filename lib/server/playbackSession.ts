@@ -62,6 +62,15 @@
  *
  * Router（lib/trpc/routers/playback.ts）只经由本 facade 对外提供
  * 7 个新 procedures，Subject 鉴权与 rate limit 仍由 router 层复用。
+ *
+ * M7-03 Sleep Timer 增补（spec §23–§30）：
+ * - Anchor 行增补 sleepTimerMode（off|minutes|story_end）；toAnchorDto 归一
+ *   remaining==0（到期不再以 0 持久化，§26）；getAnchor repair 同写 timer
+ *   一致性（§23.1，不只依赖列 default）；
+ * - beginSession 显式持久化 mode（缺省按 Legacy 派生；Draft story_end 拒绝）；
+ * - saveCheckpoint 可选携带 mode（缺省保持现值，旧包不覆盖 Timer）；
+ * - setSleepTimer 独立持久化 + Session Guard（§24/§24.1）；
+ * - completeSession Timer reset off（§27，Draft/Work 对称）。
  */
 
 import { prisma } from '@/lib/db';
@@ -73,6 +82,12 @@ import {
   createPlaybackSessionId,
   isValidPlaybackSessionId,
 } from '@/lib/playback/session';
+import {
+  isValidSleepTimerMode,
+  normalizeSleepTimerTriple,
+  resolveSetSleepTimerValues,
+  type SleepTimerMode,
+} from '@/lib/playback/sleepTimer';
 import {
   REPLAY_TEXT_PREFIX,
   equalPlaybackSource,
@@ -107,6 +122,8 @@ import type {
   PromoteDraftPlaybackToWorkInput,
   SavePlaybackCheckpointInput,
   SavePlaybackCheckpointResult,
+  SetSleepTimerInput,
+  SetSleepTimerResult,
 } from '@/lib/trpc/schemas/playback';
 
 /**
@@ -130,6 +147,8 @@ type AnchorRow = {
   speed: number;
   remainingAllowedMs: number | null;
   totalAllowedMs: number | null;
+  /** M7-03 Sleep Timer 三态（DB TEXT；非法值由 toAnchorDto fail-closed 收敛）。 */
+  sleepTimerMode: string;
   updatedAt: Date;
 };
 
@@ -178,6 +197,17 @@ const toAnchorDto = (row: AnchorRow): PlaybackAnchorDTO | null => {
   if (!Number.isInteger(row.totalParagraphs) || row.totalParagraphs < 1) return null;
   if (typeof row.voiceId !== 'string' || row.voiceId.length > 64) return null;
   if (typeof row.speed !== 'number' || !(row.speed >= 0.25 && row.speed <= 4.0)) return null;
+  // M7-03 三元组归一（§23.1/§26 全局不变式：预算只存在于 minutes）：
+  // remaining==0 → null；显式 off/story_end 优先于派生；DTO 永不出现 off+预算。
+  // getAnchor repair 负责把该归一把写回 DB。
+  const timerTriple = normalizeSleepTimerTriple(
+    row.sleepTimerMode,
+    row.remainingAllowedMs,
+    row.totalAllowedMs,
+  );
+  const normalizedRemaining = timerTriple.remainingMs;
+  const normalizedTotal = timerTriple.totalMs;
+  const sleepTimerMode: SleepTimerMode = timerTriple.mode;
   return {
     sessionId: row.sessionId,
     source,
@@ -190,9 +220,42 @@ const toAnchorDto = (row: AnchorRow): PlaybackAnchorDTO | null => {
     totalParagraphs: row.totalParagraphs,
     voiceId: row.voiceId,
     speed: row.speed,
-    remainingAllowedMs: row.remainingAllowedMs ?? null,
-    totalAllowedMs: row.totalAllowedMs ?? null,
+    remainingAllowedMs: normalizedRemaining,
+    totalAllowedMs: normalizedTotal,
+    sleepTimerMode,
     updatedAt: row.updatedAt.toISOString(),
+  };
+};
+
+/**
+ * M7-03 Anchor timer repair 判定（纯 helper，不触库；getAnchor repair 与测试共用）。
+ *
+ * 全局不变式（§23.1/§26）：预算只存在于 minutes。normalizeSleepTimerTriple
+ * 与行现状逐字段比对，任一不一致即返回待写回三元组。
+ *
+ * @returns null 表示无需 repair；否则返回待写回的 { sleepTimerMode, remainingAllowedMs, totalAllowedMs }。
+ */
+export const resolveAnchorSleepTimerRepair = (row: {
+  sleepTimerMode: unknown;
+  remainingAllowedMs: number | null | undefined;
+  totalAllowedMs: number | null | undefined;
+}): { sleepTimerMode: SleepTimerMode; remainingAllowedMs: number | null; totalAllowedMs: number | null } | null => {
+  const triple = normalizeSleepTimerTriple(
+    row.sleepTimerMode,
+    row.remainingAllowedMs,
+    row.totalAllowedMs,
+  );
+  const normalizedTotalInput = row.totalAllowedMs === 0 ? null : (row.totalAllowedMs ?? null);
+  const needsRepair =
+    !isValidSleepTimerMode(row.sleepTimerMode) ||
+    row.sleepTimerMode !== triple.mode ||
+    (row.remainingAllowedMs ?? null) !== triple.remainingMs ||
+    normalizedTotalInput !== triple.totalMs;
+  if (!needsRepair) return null;
+  return {
+    sleepTimerMode: triple.mode,
+    remainingAllowedMs: triple.remainingMs,
+    totalAllowedMs: triple.totalMs,
   };
 };
 
@@ -303,10 +366,13 @@ export const getPlaybackAnchorForSubject = async (
   // §33 repair：sessionId null/invalid UUID → 生成 UUID 写回。
   // 同时把 legacy chat/generation 收敛为 canonical draft/work 写回，
   // 非法 anchorState（非 ready|ended）收敛为 ready 写回；三者合并为一次 update。
+  // M7-03 增补 timer repair（§23.1）：sleepTimerMode 非法/与 remaining 不一致/
+  // remaining==0 过期残留时同一次 update 写回（不得只依赖 schema default）。
   const needsSessionRepair = !isValidPlaybackSessionId(row.sessionId);
   const needsKindRepair = row.sourceKind !== canonicalKind;
   const needsStateRepair = row.anchorState !== 'ready' && row.anchorState !== 'ended';
-  if (!needsSessionRepair && !needsKindRepair && !needsStateRepair) {
+  const timerRepair = resolveAnchorSleepTimerRepair(row);
+  if (!needsSessionRepair && !needsKindRepair && !needsStateRepair && !timerRepair) {
     return toAnchorDto(row);
   }
   const repairedSessionId = needsSessionRepair ? createPlaybackSessionId() : (row.sessionId as string);
@@ -322,6 +388,13 @@ export const getPlaybackAnchorForSubject = async (
               sessionId: repairedSessionId,
               sourceKind: canonicalKind,
               anchorState: repairedAnchorState,
+              ...(timerRepair
+                ? {
+                    sleepTimerMode: timerRepair.sleepTimerMode,
+                    remainingAllowedMs: timerRepair.remainingAllowedMs,
+                    totalAllowedMs: timerRepair.totalAllowedMs,
+                  }
+                : {}),
             },
           })
         : await prisma.guestPlaybackAnchor.update({
@@ -330,6 +403,13 @@ export const getPlaybackAnchorForSubject = async (
               sessionId: repairedSessionId,
               sourceKind: canonicalKind,
               anchorState: repairedAnchorState,
+              ...(timerRepair
+                ? {
+                    sleepTimerMode: timerRepair.sleepTimerMode,
+                    remainingAllowedMs: timerRepair.remainingAllowedMs,
+                    totalAllowedMs: timerRepair.totalAllowedMs,
+                  }
+                : {}),
             },
           });
     return toAnchorDto(updated);
@@ -379,8 +459,19 @@ export const beginPlaybackSessionForSubject = async (
       mode: input.mode,
     });
   }
-  const remainingAllowedMs = input.remainingAllowedMs ?? null;
-  const totalAllowedMs = input.totalAllowedMs ?? null;
+  const beginTimerInputRemaining = input.remainingAllowedMs ?? null;
+  const beginTimerInputTotal = input.totalAllowedMs ?? null;
+  // M7-03：新写入一律走三元组归一（全局不变式：预算只存在于 minutes）；
+  // 缺省 mode（旧客户端）按 Legacy 规则派生（remaining!=null→minutes，否则 off，
+  // §23.1），显式 off/story_end 优先于派生且预算清零，不得只依赖列 default。
+  const beginTimer = normalizeSleepTimerTriple(
+    input.sleepTimerMode,
+    beginTimerInputRemaining,
+    beginTimerInputTotal,
+  );
+  const remainingAllowedMs = beginTimer.remainingMs;
+  const totalAllowedMs = beginTimer.totalMs;
+  const sleepTimerMode: SleepTimerMode = beginTimer.mode;
 
   if (input.source.kind === 'work') {
     // draftSnapshot 只允许 Draft 使用（§16，Work 侧不信任客户端快照）。
@@ -503,6 +594,7 @@ export const beginPlaybackSessionForSubject = async (
       speed: input.speed,
       remainingAllowedMs,
       totalAllowedMs,
+      sleepTimerMode,
       isOneShot: true,
     };
     const saved =
@@ -529,6 +621,13 @@ export const beginPlaybackSessionForSubject = async (
 
   // —— Draft Begin（§16.4） ——
   const messageId = input.source.messageId;
+  // M7-03 §24：story_end 仅 Work；Draft begin 携带即 BAD_REQUEST（fail-closed）。
+  if (input.sleepTimerMode === 'story_end') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '[playback-session] story_end 仅 Work 可用（§22.1），Draft begin 拒绝',
+    });
+  }
   // server contract：拒绝 replay-text-* 等瞬态 ID 持久化（M5-01 门禁提升到 server）。
   if (!isValidDraftMessageId(messageId)) {
     throw new TRPCError({
@@ -574,6 +673,7 @@ export const beginPlaybackSessionForSubject = async (
     speed: input.speed,
     remainingAllowedMs,
     totalAllowedMs,
+    sleepTimerMode,
     isOneShot: true,
   };
   const saved =
@@ -621,6 +721,8 @@ export type CheckpointAnchorWriteData = {
   speed: number;
   remainingAllowedMs: number | null;
   totalAllowedMs: number | null;
+  /** M7-03 Sleep Timer 三态（checkpoint 显式携带 timer 变更；缺省保持现值）。 */
+  sleepTimerMode: SleepTimerMode;
 };
 
 /**
@@ -770,6 +872,7 @@ export const savePlaybackCheckpointForSubject = async (
     speed,
     remainingAllowedMs,
     totalAllowedMs,
+    sleepTimerMode: inputSleepTimerMode,
   } = input;
   // Fail-closed：input session 非法（router zod 已拦，直调 facade 仍守）→ STALE，不写。
   if (!isValidPlaybackSessionId(sessionId)) {
@@ -817,6 +920,18 @@ export const savePlaybackCheckpointForSubject = async (
     return { accepted: true, anchor: existingDto };
   }
 
+  // M7-03：显式携带则更新 Timer；缺省（旧客户端/旧包）保持 Anchor 现值，
+  // 绝不回退为列 default——旧 in-flight 包不得覆盖 setSleepTimer 新值。
+  // 写前走三元组归一：保持的 off/story_end 配输入预算亦清零（旧包预算不得复活已关 Timer）；
+  // minutes 缺正预算则安全降级 off（fail-closed 到安全态）。
+  const checkpointTimer = normalizeSleepTimerTriple(
+    inputSleepTimerMode ??
+      (isValidSleepTimerMode(currentRow.sleepTimerMode)
+        ? currentRow.sleepTimerMode
+        : undefined),
+    remainingAllowedMs ?? null,
+    totalAllowedMs ?? null,
+  );
   const anchorData: CheckpointAnchorWriteData = {
     contentHash,
     segmentationVersion,
@@ -824,8 +939,9 @@ export const savePlaybackCheckpointForSubject = async (
     nextParagraphIndex,
     totalParagraphs,
     speed,
-    remainingAllowedMs: remainingAllowedMs ?? null,
-    totalAllowedMs: totalAllowedMs ?? null,
+    remainingAllowedMs: checkpointTimer.remainingMs,
+    totalAllowedMs: checkpointTimer.totalMs,
+    sleepTimerMode: checkpointTimer.mode,
   };
 
   // —— Draft checkpoint：按 Anchor identity conditional 只更新 Anchor，不做 Work progress ——
@@ -966,6 +1082,90 @@ export const savePlaybackCheckpointForSubject = async (
 };
 
 /**
+ * M7-03 playback.setSleepTimer：当前 Session Timer 独立持久化（spec §24 / §24.1）。
+ *
+ * - off → remaining=null, total=null, mode=off；
+ * - minutes → minutes 必填（10–120 由 zod 门禁），remaining=total=minutes×60_000；
+ * - story_end → 仅 Work（Draft fail-closed BAD_REQUEST），remaining=null, total=null。
+ * - Session Guard（§24.1）：无 Anchor / anchor.sessionId !== input.sessionId /
+ *   input.sessionId 非法 / dangling source → {accepted:false, reason:'STALE_SESSION'}，
+ *   绝不覆盖新 Session timer（与 saveCheckpoint §17.1 同源）。
+ * - Timer API 独立持久化（conditional updateMany WHERE sessionId 原子写）：
+ *   不依赖 checkpoint dedupe 路径，杜绝「timer 变更被 dedupe 吞掉」同类问题。
+ * - User/Guest 对称。
+ */
+export const setSleepTimerForSubject = async (
+  subject: Subject,
+  input: SetSleepTimerInput,
+): Promise<SetSleepTimerResult> => {
+  const { sessionId, mode } = input;
+  if (!isValidPlaybackSessionId(sessionId)) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  const currentRow =
+    subject.type === 'user'
+      ? await prisma.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
+      : await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+  if (!currentRow) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  if (currentRow.sessionId !== sessionId) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  const source = tryParseLegacyPlaybackSource(currentRow.sourceKind, currentRow.sourceId);
+  if (!source) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  if (mode === 'story_end' && source.kind !== 'work') {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '[playback-session] story_end 仅 Work 可用（§22.1），Draft 拒绝',
+    });
+  }
+  const values = resolveSetSleepTimerValues(mode, input.minutes);
+  if (!values) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: '[playback-session] minutes 模式必须携带 10–120 有效 minutes',
+    });
+  }
+  const data = {
+    sleepTimerMode: values.mode,
+    remainingAllowedMs: values.remainingMs,
+    totalAllowedMs: values.totalMs,
+  };
+  const casRes =
+    subject.type === 'user'
+      ? await prisma.userPlaybackAnchor.updateMany({
+          where: { userId: subject.id, sessionId },
+          data,
+        })
+      : await prisma.guestPlaybackAnchor.updateMany({
+          where: { guestId: subject.id, sessionId },
+          data,
+        });
+  if (casRes.count === 0) {
+    // 并发切换（guard 后 write 前 Session 已变）：按当前 DB 值 fail-closed。
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  const fresh =
+    subject.type === 'user'
+      ? await prisma.userPlaybackAnchor.findUnique({ where: { userId: subject.id } })
+      : await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: subject.id } });
+  if (!fresh) {
+    return { accepted: false, reason: STALE_SESSION };
+  }
+  const dto = toAnchorDto(fresh);
+  if (!dto) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: '[playback-session] setSleepTimer 落库后映射失败',
+    });
+  }
+  return { accepted: true, anchor: dto };
+};
+
+/**
  * §19 playback.completeSession：完播收尾（保留 ended Anchor，M5-07 落地）。
  *
  * - 无 Anchor → null（不建不写）；dangling source 不可解析 → null（不给脏行续命）。
@@ -1016,11 +1216,22 @@ export const completePlaybackSessionForSubject = async (
       subject.type === 'user'
         ? await prisma.userPlaybackAnchor.updateMany({
             where: { userId: subject.id, sessionId },
-            data: { anchorState: 'ended' },
+            // M7-03 §27：完播 Timer reset off（remaining/total null；Draft 同理）。
+            data: {
+              anchorState: 'ended',
+              sleepTimerMode: 'off',
+              remainingAllowedMs: null,
+              totalAllowedMs: null,
+            },
           })
         : await prisma.guestPlaybackAnchor.updateMany({
             where: { guestId: subject.id, sessionId },
-            data: { anchorState: 'ended' },
+            data: {
+              anchorState: 'ended',
+              sleepTimerMode: 'off',
+              remainingAllowedMs: null,
+              totalAllowedMs: null,
+            },
           });
     if (casRes.count === 0) {
       throw new TRPCError({
@@ -1078,6 +1289,10 @@ export const completePlaybackSessionForSubject = async (
               nextParagraphIndex: workTotal,
               totalParagraphs: workTotal,
               anchorState: 'ended',
+              // M7-03 §27：完播 Timer reset off（无论此前 minutes/story_end/off）。
+              sleepTimerMode: 'off',
+              remainingAllowedMs: null,
+              totalAllowedMs: null,
             },
           })
         : await tx.guestPlaybackAnchor.updateMany({
@@ -1087,6 +1302,9 @@ export const completePlaybackSessionForSubject = async (
               nextParagraphIndex: workTotal,
               totalParagraphs: workTotal,
               anchorState: 'ended',
+              sleepTimerMode: 'off',
+              remainingAllowedMs: null,
+              totalAllowedMs: null,
             },
           });
     if (casRes.count === 0) {

@@ -36,6 +36,7 @@ import {
   completePlaybackSession,
   clearPlaybackAnchor,
   promoteDraftPlaybackToWork,
+  setSleepTimer as apiSetSleepTimer,
 } from '@/lib/client/playbackSession';
 import { get as getWorkDetail } from '@/lib/client/library';
 import {
@@ -55,6 +56,10 @@ import {
 } from '@/lib/playback/progress';
 import { createPlaybackSessionId } from '@/lib/playback/session';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
+import {
+  resolveDefaultSessionTimer,
+  type SleepTimerMode,
+} from '@/lib/playback/sleepTimer';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useConfigStore } from '@/stores/configStore';
@@ -94,6 +99,11 @@ interface PlaybackSessionState {
   speed: number;
   continuationMode: SessionContinuationMode;
   status: PlaybackSessionStatus;
+  /**
+   * M7-03 当前 Session Sleep Timer 三态（spec §22；Anchor.sleepTimerMode 的运行时镜像）。
+   * minutes 预算本体在 Transport（remainingMs/totalAllowedMs）；本字段决定 countdown 门与 UI 展示。
+   */
+  sleepTimerMode: SleepTimerMode;
   prefetchedAudioUrl: string | null;
   prefetchingIndex: number | null;
   lastSavedKey: string | null;
@@ -125,6 +135,11 @@ interface PlaybackSessionActions {
     continuationMode?: SessionContinuationMode;
     remainingAllowedMs?: number | null;
     totalAllowedMs?: number | null;
+    /**
+     * M7-03 当前 Session Timer 三态（缺省按 User Config 默认解析，§28；
+     * 显式传入时与 remaining/total 一致性由调用方保证）。
+     */
+    sleepTimerMode?: SleepTimerMode;
     initialNextIndex?: number;
   }) => void;
   resumeRehydratedPlayback: () => Promise<void>;
@@ -141,6 +156,21 @@ interface PlaybackSessionActions {
     speed?: number;
     draftSnapshot?: { title: string; contentHash: string; totalParagraphs: number; voiceId: string };
   }) => Promise<void>;
+  /**
+   * M7-03 当前 Session Sleep Timer 设置（spec §24，经 playback.setSleepTimer）。
+   * 只改当前 Session Timer，不自动改 Settings 默认（§31.1）。
+   * 成功后同步 Session.sleepTimerMode + Transport 三态/预算，并收敛 checkpoint；
+   * stale（Session 已切换）时返回 false，不覆盖新 Session timer（§24.1）。
+   */
+  setSleepTimer: (mode: SleepTimerMode, minutes?: number) => Promise<boolean>;
+  /**
+   * M7-03 Sleep Timer 到期承接（spec §26，由 Transport 到期回调经 flow 触发）。
+   * Transport 已 pause audio + 归一 off/null；此处置 Session paused + 持久化
+   * checkpoint（显式携带 off/null）+ Toast。之后 Play 正常继续。
+   */
+  handleSleepTimerExpired: () => Promise<void>;
+  /** 取消尚未发射的 debounce checkpoint（setSleepTimer 前调用，防旧预算覆盖新 Timer）。 */
+  cancelDeferredCheckpoint: () => void;
   saveCheckpointDebounced: (options?: { forceReset?: boolean }) => void;
   saveCheckpointImmediate: (options?: { forceReset?: boolean }) => Promise<void>;
   clearSession: () => Promise<void>;
@@ -190,6 +220,7 @@ const INITIAL_SESSION_STATE: PlaybackSessionState = {
   speed: 1.0,
   continuationMode: 'finite',
   status: 'idle',
+  sleepTimerMode: 'off',
   prefetchedAudioUrl: null,
   prefetchingIndex: null,
   lastSavedKey: null,
@@ -451,6 +482,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       speed: anchor.speed,
       continuationMode: rehydratedContinuationMode(),
       status: 'ready',
+      // M7-03：Anchor.sleepTimerMode 运行时镜像（off/minutes/story_end，§22/§23）。
+      sleepTimerMode: anchor.sleepTimerMode,
       lastSavedKey: `${anchor.sessionId}:${position.nextParagraphIndex}`,
     });
 
@@ -465,6 +498,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         title,
         remainingMs: anchor.remainingAllowedMs ?? null,
         totalAllowedMs: anchor.totalAllowedMs ?? null,
+        // M7-03：Transport 三态与预算同源同步（countdown 门，§25）。
+        sleepTimerMode: anchor.sleepTimerMode,
         isOneShot: true,
         currentParagraphIndex: position.nextParagraphIndex,
         totalParagraphs,
@@ -528,6 +563,39 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     abortPrefetch();
     clearDebounceTimer();
 
+    // M7-03 新 Session Timer（§28）：不继承旧 Session remaining；显式传入优先，
+    // 缺省按 User Config 默认解析（enabled→minutes，否则 off）。
+    // 兼容旧形态：仅传 remaining（无 mode）视为 minutes（Legacy 规则 §23.1）。
+    const explicitMode =
+      params.sleepTimerMode ??
+      (params.remainingAllowedMs != null ? ('minutes' as const) : undefined);
+    const sessionTimer =
+      explicitMode !== undefined
+        ? {
+            mode: explicitMode,
+            remainingMs: explicitMode === 'minutes' ? (params.remainingAllowedMs ?? null) : null,
+            totalMs: explicitMode === 'minutes' ? (params.totalAllowedMs ?? null) : null,
+          }
+        : resolveDefaultSessionTimer({
+            defaultEnabled: (() => {
+              try {
+                return useConfigStore.getState().apiConfig.defaultSleepTimerEnabled !== false;
+              } catch {
+                return true;
+              }
+            })(),
+            defaultMinutes: (() => {
+              try {
+                const cfg = useConfigStore.getState().apiConfig;
+                return cfg.defaultSleepTimerMinutes > 0
+                  ? cfg.defaultSleepTimerMinutes
+                  : cfg.playDuration;
+              } catch {
+                return 30;
+              }
+            })(),
+          });
+
     set({
       sessionId: params.sessionId ?? null,
       source: params.source.kind === 'draft'
@@ -545,9 +613,21 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       speed: params.speed ?? 1.0,
       continuationMode: params.continuationMode ?? 'finite',
       status: 'playing',
+      sleepTimerMode: sessionTimer.mode,
       prefetchedAudioUrl: null,
       prefetchingIndex: null,
     });
+
+    // M7-03：新会话 Transport Timer 同步（countdown 门与预算同源）。
+    try {
+      usePlaybackStore.getState().setSleepTimerState(
+        sessionTimer.mode,
+        sessionTimer.remainingMs,
+        sessionTimer.totalMs,
+      );
+    } catch {
+      // transport 同步失败不阻断本地激活。
+    }
 
     try {
       usePlaybackStore.getState().setParagraphInfo({
@@ -575,19 +655,29 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     if (!state.source || state.paragraphs.length === 0) return;
     await usePlaybackStore.getState().ensureUnlocked();
     const playbackState = usePlaybackStore.getState();
-    if (playbackState.remainingMs === null || playbackState.totalAllowedMs === null) {
-      const playDurationMinutes = useConfigStore.getState().apiConfig.playDuration;
+    // M7-03：回落预算只在 minutes 模式补齐（off/story_end 的 null 合法，不得复活 Timer；
+    // ensureCountdownBudget 内部亦有同门，此处只做新语义字段读取）。
+    if (
+      state.sleepTimerMode === 'minutes' &&
+      (playbackState.remainingMs === null || playbackState.totalAllowedMs === null)
+    ) {
+      const cfg = useConfigStore.getState().apiConfig;
+      const fallbackMinutes =
+        cfg.defaultSleepTimerMinutes > 0 ? cfg.defaultSleepTimerMinutes : cfg.playDuration;
       if (
-        typeof playDurationMinutes === 'number' &&
-        Number.isFinite(playDurationMinutes) &&
-        playDurationMinutes > 0
+        typeof fallbackMinutes === 'number' &&
+        Number.isFinite(fallbackMinutes) &&
+        fallbackMinutes > 0
       ) {
-        const fallbackBudgetMs = playDurationMinutes * 60000;
+        const fallbackBudgetMs = fallbackMinutes * 60000;
         playbackState.ensureCountdownBudget(fallbackBudgetMs);
       }
     }
-    const resumeBudgetMs = usePlaybackStore.getState().remainingMs;
-    if (resumeBudgetMs !== null && resumeBudgetMs <= 0) return;
+    // M7-03：耗尽早退只适用于 minutes 模式（off/story_end 到期归一 null 后正常继续，§26）。
+    if (state.sleepTimerMode === 'minutes') {
+      const resumeBudgetMs = usePlaybackStore.getState().remainingMs;
+      if (resumeBudgetMs !== null && resumeBudgetMs <= 0) return;
+    }
     await get().playParagraph(get().nextParagraphIndex, { explicit: true });
   },
 
@@ -599,7 +689,10 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       return;
     }
     const paragraphBudgetMs = usePlaybackStore.getState().remainingMs;
-    if (paragraphBudgetMs !== null && paragraphBudgetMs <= 0) return;
+    // M7-03：耗尽守卫只适用于 minutes 模式（off/story_end null 合法，§26）。
+    if (state.sleepTimerMode === 'minutes' && paragraphBudgetMs !== null && paragraphBudgetMs <= 0) {
+      return;
+    }
     if (
       !usePlaybackStore.getState().isPlaying &&
       usePlaybackStore.getState().currentAudioUrl !== null &&
@@ -668,7 +761,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     if (!usePlaybackStore.getState().isPlaying) return;
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     const remainingMs = usePlaybackStore.getState().remainingMs;
-    if (remainingMs !== null && remainingMs <= 0) return;
+    // M7-03：预取预算门只适用于 minutes 模式（off/story_end null 合法，§26）。
+    if (state.sleepTimerMode === 'minutes' && remainingMs !== null && remainingMs <= 0) return;
     if (state.prefetchingIndex === paragraphIndex) return;
 
     abortPrefetch();
@@ -717,6 +811,14 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       if (state.sessionId) await completePlaybackSession({ sessionId: state.sessionId });
     } catch (err) {
       console.warn('[playbackSessionStore] completeSession failed', err);
+    }
+    // M7-03 §27：Work 完播（任意 timer 模式）Timer reset off；再次播放使用新默认配置
+    //（server completeSession 已持久化 off/null；此处同步运行时镜像，不另发 checkpoint）。
+    set({ sleepTimerMode: 'off' });
+    try {
+      usePlaybackStore.getState().setSleepTimerState('off', null, null);
+    } catch {
+      // transport 同步失败不阻断完播返回。
     }
     return false;
   },
@@ -819,14 +921,99 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
   beginPlayback: async (params) => {
     const sessionId = createPlaybackSessionId();
     const speed = params.speed ?? get().speed ?? 1.0;
+    // M7-03 新 Session Timer（§28/§62）：不继承旧 Session remaining，一律按 User Config
+    // 默认重新计算（enabled→minutes，否则 off）；server 显式持久化 mode。
+    const defaultTimer = resolveDefaultSessionTimer({
+      defaultEnabled: (() => {
+        try {
+          return useConfigStore.getState().apiConfig.defaultSleepTimerEnabled !== false;
+        } catch {
+          return true;
+        }
+      })(),
+      defaultMinutes: (() => {
+        try {
+          const cfg = useConfigStore.getState().apiConfig;
+          return cfg.defaultSleepTimerMinutes > 0 ? cfg.defaultSleepTimerMinutes : cfg.playDuration;
+        } catch {
+          return 30;
+        }
+      })(),
+    });
     const anchor = await beginPlaybackSession({
       sessionId,
       source: params.source,
       mode: params.mode,
       speed,
+      remainingAllowedMs: defaultTimer.remainingMs,
+      totalAllowedMs: defaultTimer.totalMs,
+      sleepTimerMode: defaultTimer.mode,
       draftSnapshot: params.draftSnapshot,
     });
     await get().hydrateFromAnchor(anchor);
+  },
+
+  setSleepTimer: async (mode, minutes) => {
+    const state = get();
+    if (!state.sessionId || !state.source) return false;
+    // Draft story_end 本地先行门禁（server 亦拒绝；UI 侧不展示该选项，§22.1）。
+    if (mode === 'story_end' && state.source.kind !== 'work') return false;
+    if (mode === 'minutes' && !(typeof minutes === 'number' && Number.isInteger(minutes) && minutes >= 10 && minutes <= 120)) {
+      return false;
+    }
+    // M7-02 复审约束：先取消尚未发射的 debounce checkpoint，防旧预算覆盖新 Timer。
+    clearDebounceTimer();
+    const sessionId = state.sessionId;
+    let result: Awaited<ReturnType<typeof apiSetSleepTimer>>;
+    try {
+      result =
+        mode === 'minutes'
+          ? await apiSetSleepTimer({ sessionId, mode, minutes })
+          : await apiSetSleepTimer({ sessionId, mode });
+    } catch (err) {
+      console.warn('[playbackSessionStore] setSleepTimer failed', err);
+      return false;
+    }
+    if (!result.accepted) {
+      // STALE_SESSION：Session 已切换，不覆盖新 Session timer（§24.1）。
+      return false;
+    }
+    // §50 session guard：回包晚到时确认仍是同一 session，否则丢弃同步。
+    if (get().sessionId !== sessionId) return false;
+    const anchor = result.anchor;
+    set({ sleepTimerMode: anchor.sleepTimerMode });
+    try {
+      usePlaybackStore.getState().setSleepTimerState(
+        anchor.sleepTimerMode,
+        anchor.remainingAllowedMs ?? null,
+        anchor.totalAllowedMs ?? null,
+      );
+    } catch {
+      // transport 同步失败不掩盖 server 成功（下次 checkpoint 收敛）。
+    }
+    // Timer 独立持久化已完成；追加一次 checkpoint 收敛段落/speed 同一 Anchor
+    //（显式携带新 timer，dedupe key 覆盖 timer 语义，防吞变更）。
+    await get().saveCheckpointImmediate({ forceReset: false });
+    return true;
+  },
+
+  handleSleepTimerExpired: async () => {
+    const state = get();
+    if (!state.sessionId || !state.source) return;
+    // Transport 已 pause audio + 归一 off/null；Session 置 paused（保留会话，§26）。
+    abortPrefetch();
+    set({ status: 'paused', sleepTimerMode: 'off', prefetchedAudioUrl: null, prefetchingIndex: null });
+    // 持久化到期态（显式携带 off/null；forceReset 绕过 dedupe，确保真实落盘）。
+    await get().saveCheckpointImmediate({ forceReset: true });
+    try {
+      GlassToast.show({ icon: 'success', content: '睡眠定时已结束', duration: 3000 });
+    } catch {
+      // toast 失败不阻断到期收尾。
+    }
+  },
+
+  cancelDeferredCheckpoint: () => {
+    clearDebounceTimer();
   },
 
   saveCheckpointDebounced: (options) => {
@@ -840,11 +1027,14 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     clearDebounceTimer();
     const state = get();
     if (!state.sessionId || !state.source) return;
+    const playbackStore = usePlaybackStore.getState();
     // Blocking 2（M7-02 复审）：dedupe key 必须覆盖 speed——同 paragraph 内改倍速
     // 也必须真实落盘（否则 Session/Transport 已 1.5x 而 Anchor 仍旧值，刷新回退）。
-    const saveKey = `${state.sessionId}:${state.nextParagraphIndex}:${state.speed}:${options?.forceReset ? 'force' : 'normal'}`;
+    // M7-03（评审约束 8）：dedupe key 必须覆盖 timer 持久语义——mode/remaining/total
+    // 任一变化都必须真实落盘（否则「Timer change 被 dedupe」：Session/Transport 已 off
+    // 而 Anchor 仍 minutes，刷新复活旧 Timer）。
+    const saveKey = `${state.sessionId}:${state.nextParagraphIndex}:${state.speed}:${state.sleepTimerMode}:${playbackStore.remainingMs ?? 'null'}:${playbackStore.totalAllowedMs ?? 'null'}:${options?.forceReset ? 'force' : 'normal'}`;
     if (!options?.forceReset && state.lastSavedKey === saveKey) return;
-    const playbackStore = usePlaybackStore.getState();
     try {
       await savePlaybackCheckpoint({
         sessionId: state.sessionId,
@@ -856,6 +1046,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         speed: state.speed,
         remainingAllowedMs: playbackStore.remainingMs ?? undefined,
         totalAllowedMs: playbackStore.totalAllowedMs ?? undefined,
+        sleepTimerMode: state.sleepTimerMode,
       });
       // 仅当 session 未切换才写 lastSavedKey，避免旧会话覆盖新键。
       if (get().sessionId === state.sessionId) set({ lastSavedKey: saveKey });

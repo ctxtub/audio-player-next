@@ -35,6 +35,7 @@ import { NowPlayingHeader } from './NowPlayingHeader';
 import { ParagraphStatus } from './ParagraphStatus';
 import { PlaybackControls } from './PlaybackControls';
 import { PlaybackRateControl } from './PlaybackRateControl';
+import { SleepTimerControl } from './SleepTimerControl';
 import { PlaybackTimeline, EXPANDED_TIMELINE_KEYBOARD_STEP_SECONDS } from './PlaybackTimeline';
 import { useExpandedPlaybackControls } from './useExpandedPlaybackControls';
 import { useExpandedNowPlayingViewModel } from './useExpandedNowPlayingViewModel';
@@ -268,6 +269,14 @@ export const ExpandedNowPlaying: React.FC = () => {
                             <PlaybackRateControl
                                 currentRate={viewModel.playbackRate}
                                 onSelect={controls.setPlaybackRate}
+                                disabled={!viewModel.hasSession}
+                            />
+                            {/* M7-03 P3C Expanded 快捷 Timer（spec §31.1/§32：只改当前 Session，不改 Settings 默认）。 */}
+                            <SleepTimerControl
+                                mode={viewModel.sleepTimer.mode}
+                                remainingMs={viewModel.sleepTimer.remainingMs}
+                                isWork={viewModel.sleepTimer.isWork}
+                                onSelect={controls.setSleepTimer}
                                 disabled={!viewModel.hasSession}
                             />
                             {viewModel.isEnded ? (

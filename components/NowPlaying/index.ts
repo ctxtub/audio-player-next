@@ -41,6 +41,7 @@ export {
 export {
     deriveExpandedNowPlayingViewModel,
     deriveExpandedParagraph,
+    deriveExpandedSleepTimer,
     deriveExpandedTitle,
     deriveExpandedVoiceLabel,
     deriveExpandedTimeline,
@@ -51,6 +52,7 @@ export {
     useExpandedNowPlayingViewModel,
     type ExpandedNowPlayingViewModel,
     type ExpandedParagraphViewModel,
+    type ExpandedSleepTimerViewModel,
     type ExpandedTimelineViewModel,
     type ExpandedTransportViewModel,
 } from './useExpandedNowPlayingViewModel';
@@ -76,6 +78,13 @@ export {
     isSupportedPlaybackRate,
 } from './PlaybackRateControl';
 export { ParagraphStatus, formatParagraphStatus } from './ParagraphStatus';
+export {
+    SleepTimerControl,
+    deriveSleepTimerControlModel,
+    isValidCustomSleepTimerMinutes,
+    type SleepTimerControlProps,
+    type SleepTimerSelection,
+} from './SleepTimerControl';
 export {
     NOW_PLAYING_BREAKPOINT_PX,
     resolveNowPlayingLayoutMode,

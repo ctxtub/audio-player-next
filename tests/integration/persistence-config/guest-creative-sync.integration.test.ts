@@ -304,7 +304,7 @@ async function runGuestCreativeSyncTests() {
     await prisma.guestConfig.create({
         data: {
             guestId: guestExpired,
-            playDurationMinutes: 30,
+            defaultSleepTimerMinutes: 30,
             speed: 1.0,
             themeMode: 'system',
             updatedAt: thirtyOneDaysAgo,
@@ -345,7 +345,7 @@ async function runGuestCreativeSyncTests() {
     await prisma.guestConfig.create({
         data: {
             guestId: guestMigrate,
-            playDurationMinutes: 45,
+            defaultSleepTimerMinutes: 45,
             speed: 1.5,
             themeMode: 'dark',
             voiceId: 'onyx',
@@ -459,7 +459,7 @@ async function runGuestCreativeSyncTests() {
     });
     assert(newUser !== null, 'New user must exist');
     assert(newUser.config !== null, 'UserConfig must be migrated');
-    assert.strictEqual(newUser.config.playDurationMinutes, 45);
+    assert.strictEqual(newUser.config.defaultSleepTimerMinutes, 45);
     assert.strictEqual(newUser.config.speed, 1.5, 'speed must be migrated from guest');
     assert.strictEqual(newUser.config.themeMode, 'dark', 'themeMode must be migrated from guest');
     assert.strictEqual(newUser.config.voiceId, 'onyx', 'voiceId must be migrated from guest');

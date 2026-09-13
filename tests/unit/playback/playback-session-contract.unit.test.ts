@@ -70,6 +70,7 @@ const buildValidAnchor = () => ({
   speed: 1.0,
   remainingAllowedMs: null as number | null,
   totalAllowedMs: null as number | null,
+  sleepTimerMode: 'off' as const,
   updatedAt: '2026-09-13T00:00:00.000Z',
 });
 
@@ -107,7 +108,8 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   }
   console.log('PASS: source discriminatedUnion verified');
 
-  // —— §13.2 Anchor DTO：14 字段精确锁死 + 禁止字段 ——
+  // —— §13.2 Anchor DTO：15 字段精确锁死 + 禁止字段 ——
+  // M7-03：增补 sleepTimerMode（三态 SSOT 落库透出，spec §23）。
   console.log('--- anchor DTO (§13.2) ---');
   const anchorKeys = Object.keys(playbackAnchorDTOSchema.shape).sort();
   assert.deepStrictEqual(anchorKeys, [
@@ -117,6 +119,7 @@ async function runPlaybackSessionContractTests(): Promise<void> {
     'remainingAllowedMs',
     'segmentationVersion',
     'sessionId',
+    'sleepTimerMode',
     'source',
     'speed',
     'state',
@@ -294,9 +297,10 @@ async function runPlaybackSessionContractTests(): Promise<void> {
       speed: 1.0,
     }),
   );
-  // §17 input 严格 8 字段：sessionId/contentHash/segmentationVersion/
+  // §17 input 严格 9 字段：sessionId/contentHash/segmentationVersion/
   // lastCompletedParagraphIndex/nextParagraphIndex/totalParagraphs/speed/
-  // remainingAllowedMs/totalAllowedMs；不收 source/title，且无 forceReset 旁路。
+  // remainingAllowedMs/totalAllowedMs/sleepTimerMode（M7-03 增补 Timer 面）；
+  // 不收 source/title，且无 forceReset 旁路。
   assert.deepStrictEqual(Object.keys(savePlaybackCheckpointInputSchema.shape).sort(), [
     'contentHash',
     'lastCompletedParagraphIndex',
@@ -304,6 +308,7 @@ async function runPlaybackSessionContractTests(): Promise<void> {
     'remainingAllowedMs',
     'segmentationVersion',
     'sessionId',
+    'sleepTimerMode',
     'speed',
     'totalAllowedMs',
     'totalParagraphs',

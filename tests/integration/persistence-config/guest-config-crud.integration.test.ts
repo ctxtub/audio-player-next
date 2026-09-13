@@ -55,7 +55,9 @@ async function runGuestConfigTests() {
     const dbGuestRow = await prisma.guestConfig.findUnique({ where: { guestId: guestId1 } });
     assert(dbGuestRow !== null, 'GuestConfig DB row must exist');
     assert.strictEqual(dbGuestRow.guestId, guestId1);
-    assert.strictEqual(dbGuestRow.playDurationMinutes, 30);
+    assert.strictEqual(dbGuestRow.defaultSleepTimerMinutes, 30);
+    // M7-03 §29.2：新增 defaultSleepTimerEnabled 默认 true（行为保持 30 分钟默认）。
+    assert.strictEqual(dbGuestRow.defaultSleepTimerEnabled, true);
     assert.strictEqual(dbGuestRow.speed, 1.0);
     assert.strictEqual(dbGuestRow.themeMode, 'system');
 
@@ -105,7 +107,7 @@ async function runGuestConfigTests() {
     await prisma.guestConfig.create({
         data: {
             guestId: guestIdMigrate,
-            playDurationMinutes: 45,
+            defaultSleepTimerMinutes: 45,
             speed: 1.25,
             themeMode: 'dark',
             voiceId: 'shimmer',
@@ -150,7 +152,7 @@ async function runGuestConfigTests() {
     });
     assert(createdUser !== null, 'Created user must exist');
     assert(createdUser.config !== null, 'UserConfig must be created via register migration');
-    assert.strictEqual(createdUser.config.playDurationMinutes, 45, 'playDurationMinutes must be migrated from guest');
+    assert.strictEqual(createdUser.config.defaultSleepTimerMinutes, 45, 'defaultSleepTimerMinutes must be migrated from guest');
     assert.strictEqual(createdUser.config.speed, 1.25, 'speed must be migrated from guest');
     assert.strictEqual(createdUser.config.themeMode, 'dark', 'themeMode must be migrated from guest');
     assert.strictEqual(createdUser.config.voiceId, 'shimmer', 'voiceId must be migrated from guest');
@@ -161,7 +163,7 @@ async function runGuestConfigTests() {
         where: { guestId: guestIdMigrate },
     });
     assert(originalGuestConfig !== null, 'GuestConfig must remain untouched after registration');
-    assert.strictEqual(originalGuestConfig.playDurationMinutes, 45);
+    assert.strictEqual(originalGuestConfig.defaultSleepTimerMinutes, 45);
 
 
     // Rollback test: simulate failure during registration
@@ -169,7 +171,7 @@ async function runGuestConfigTests() {
     await prisma.guestConfig.create({
         data: {
             guestId: guestIdRollback,
-            playDurationMinutes: 90,
+            defaultSleepTimerMinutes: 90,
             speed: 2.0,
             themeMode: 'light',
         },
@@ -214,7 +216,7 @@ async function runGuestConfigTests() {
             where: { guestId: guestIdRollback },
         });
         assert(intactGuestConfig !== null, 'GuestConfig must remain untouched when registration rolls back');
-        assert.strictEqual(intactGuestConfig.playDurationMinutes, 90);
+        assert.strictEqual(intactGuestConfig.defaultSleepTimerMinutes, 90);
     } finally {
         (nextHeaders as { cookies: unknown }).cookies = origCookies;
     }
@@ -381,6 +383,8 @@ async function runGuestConfigTests() {
         mockStorage.setItem('config-store', JSON.stringify({ state: { themeMode: 'system' } }));
         useConfigStore.setState({
             apiConfig: {
+                defaultSleepTimerMinutes: 60,
+                defaultSleepTimerEnabled: true,
                 playDuration: 60,
                 voiceId: 'alloy',
                 speed: 1.5,

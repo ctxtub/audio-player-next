@@ -10,6 +10,7 @@ import GlassToast from '@/components/ui/GlassToast';
 import {
   handleEnded as handleSessionEnded,
   pausePlayback as pauseViaSessionFlow,
+  registerSleepTimerExpiryHandler,
   reportPlaybackPause,
   reportPlaybackStart,
   reportProgress,
@@ -235,6 +236,8 @@ const AudioControllerHost: React.FC = () => {
       setPlaybackRate: handleSetPlaybackRate,
     };
     registerAudioController(controller);
+    // M7-03：Transport 到期回调注册（pause audio 后经 Flow 做 checkpoint + Toast，§26）。
+    registerSleepTimerExpiryHandler();
     return () => {
       registerAudioController(null);
     };

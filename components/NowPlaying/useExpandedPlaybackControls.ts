@@ -19,6 +19,10 @@
  *   audioController / M8.ensureSegment；只委托 playbackSessionFlow）；
  * - P3B 再增加 seekStoryPosition(ms)（本轮不提供，避免 UI 层散落跨域操作）。
  *
+ * M7-03 P3C 增补（spec §24/§31.1 additive）：
+ * - setSleepTimer(mode, minutes?)：当前 Session Timer 设置（只改当前 Session，
+ *   不自动改 Settings 默认；stale/非法返回 false，由本 hook Toast 呈现）。
+ *
  * 错误面：play/restart 失败经 GlassToast 提示（与 Mini 同口径），seek/pause
  * 同步失败静默（transport 无控制器时 flow 侧 no-op）。
  */
@@ -32,7 +36,10 @@ import {
     seekCurrentSegment as flowSeekCurrentSegment,
     seekRelative as flowSeekRelative,
     setPlaybackRate as flowSetPlaybackRate,
+    setSleepTimer as flowSetSleepTimer,
 } from '@/app/services/playbackSessionFlow';
+import type { SleepTimerMode } from '@/lib/playback/sleepTimer';
+import type { SleepTimerSelection } from './SleepTimerControl';
 
 /** Expanded 播放控制门面（组件唯一依赖的播放写面）。 */
 export type ExpandedPlaybackControls = {
@@ -48,6 +55,11 @@ export type ExpandedPlaybackControls = {
     seekRelative: (deltaSeconds: number) => void;
     /** 当前 Session 倍速（七档；不写回 UserConfig，不触发新 TTS）。 */
     setPlaybackRate: (rate: number) => void;
+    /**
+     * M7-03 当前 Session Sleep Timer（spec §24/§31.1）。
+     * 只改当前 Session Timer，不自动改 Settings 默认。
+     */
+    setSleepTimer: (selection: SleepTimerSelection) => void;
 };
 
 export const useExpandedPlaybackControls = (): ExpandedPlaybackControls => {
@@ -97,7 +109,20 @@ export const useExpandedPlaybackControls = (): ExpandedPlaybackControls => {
         });
     }, []);
 
-    return { play, pause, restart, seekCurrentSegment, seekRelative, setPlaybackRate };
+    const setSleepTimer = useCallback((selection: SleepTimerSelection) => {
+        const mode: SleepTimerMode = selection.mode;
+        const minutes = selection.mode === 'minutes' ? selection.minutes : undefined;
+        flowSetSleepTimer(mode, minutes).then((ok) => {
+            if (!ok) {
+                GlassToast.show({ icon: 'fail', content: '睡眠定时设置失败，请重试', duration: 3000 });
+            }
+        }).catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : '睡眠定时设置失败，请重试';
+            GlassToast.show({ icon: 'fail', content: message, duration: 3000 });
+        });
+    }, []);
+
+    return { play, pause, restart, seekCurrentSegment, seekRelative, setPlaybackRate, setSleepTimer };
 };
 
 export default useExpandedPlaybackControls;

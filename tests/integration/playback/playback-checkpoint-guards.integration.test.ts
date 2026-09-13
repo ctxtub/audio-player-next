@@ -69,6 +69,9 @@ async function runPlaybackCheckpointGuardsTests(): Promise<void> {
     speed: 1.25,
     remainingAllowedMs: 1500000,
     totalAllowedMs: 1800000,
+    // M7-03 新客户端形态：携带预算的 checkpoint 必须显式携带 mode（§23/§24）；
+    // 缺省 mode + off 现值 → 预算清零（旧包不得复活已关 Timer）。
+    sleepTimerMode: 'minutes',
   });
   assert.strictEqual(saveA1.accepted, true);
   assert(saveA1.accepted === true);
@@ -277,6 +280,8 @@ async function runPlaybackCheckpointGuardsTests(): Promise<void> {
     speed: 1.5,
     remainingAllowedMs: 900000,
     totalAllowedMs: 1800000,
+    // M7-03 新客户端形态（同上）。
+    sleepTimerMode: 'minutes',
   });
   assert(sameNext.accepted === true);
   assert.strictEqual(sameNext.anchor.nextParagraphIndex, 2);
@@ -552,6 +557,7 @@ async function runPlaybackCheckpointGuardsTests(): Promise<void> {
       speed: 1.0,
       remainingAllowedMs: null,
       totalAllowedMs: null,
+      sleepTimerMode: 'off',
     },
   );
   assert.strictEqual(r1count, 0, 'stale conditional write must affect 0 rows');
@@ -644,6 +650,7 @@ async function runPlaybackCheckpointGuardsTests(): Promise<void> {
       speed: 1.0,
       remainingAllowedMs: null,
       totalAllowedMs: null,
+      sleepTimerMode: 'off',
     },
   );
   assert.strictEqual(r2count, 0, 'monotonic conditional write must affect 0 rows');

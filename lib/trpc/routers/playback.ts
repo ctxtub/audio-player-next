@@ -21,6 +21,7 @@ import {
   promoteDraftPlaybackToWorkInputSchema,
   savePlaybackCheckpointInputSchema,
   savePlaybackProgressInputSchema,
+  setSleepTimerInputSchema,
 } from '../schemas/playback';
 import {
   getPlaybackProgressForSubject,
@@ -35,6 +36,7 @@ import {
   getWorkPlaybackProgressBatchForSubject,
   promoteDraftPlaybackToWorkForSubject,
   savePlaybackCheckpointForSubject,
+  setSleepTimerForSubject,
 } from '@/lib/server/playbackSession';
 import { resolveSubject } from '@/lib/server/subject';
 import { enforceProcedureRateLimit } from '@/lib/server/rateLimit';
@@ -154,6 +156,22 @@ export const playbackRouter = router({
       });
       const subject = resolveSubject(ctx);
       return promoteDraftPlaybackToWorkForSubject(subject, input);
+    }),
+
+  /**
+   * M7-03 playback.setSleepTimer：当前 Session Timer 设置（spec §24 / §24.1）。
+   * stale（sessionId 不匹配当前 Anchor）→ {accepted:false, reason:'STALE_SESSION'}；
+   * Draft story_end → BAD_REQUEST。
+   */
+  setSleepTimer: guardedProcedure
+    .input(setSleepTimerInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit('playback:setSleepTimer', ctx, {
+        guestLimit: 60,
+        authedLimit: 120,
+      });
+      const subject = resolveSubject(ctx);
+      return setSleepTimerForSubject(subject, input);
     }),
 
   /**

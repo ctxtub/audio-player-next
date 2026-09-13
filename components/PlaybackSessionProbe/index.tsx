@@ -53,6 +53,9 @@ export default function PlaybackSessionProbe(): null {
               // M7-02 P3A browser 断言用（只读透传，不改变产品行为）：
               // Session.speed（当前 Session 级倍速）+ Transport.playbackRate。
               speed: session.speed,
+              // M7-03 P3C browser 断言用（只读透传，不改变产品行为）：
+              // Session.sleepTimerMode + Transport 三态/预算。
+              sleepTimerMode: session.sleepTimerMode,
               transport: {
                 isPlaying: transport.isPlaying,
                 hasAudioUrl: transport.currentAudioUrl !== null,
@@ -61,6 +64,9 @@ export default function PlaybackSessionProbe(): null {
                 duration: transport.duration,
                 hasController: transport.audioController !== null,
                 playbackRate: transport.playbackRate,
+                sleepTimerMode: transport.sleepTimerMode,
+                remainingMs: transport.remainingMs,
+                totalAllowedMs: transport.totalAllowedMs,
               },
               audioCount,
             };
@@ -88,6 +94,14 @@ export default function PlaybackSessionProbe(): null {
           },
           saveCheckpointNow: async (): Promise<Record<string, unknown>> => {
             await usePlaybackSessionStore.getState().saveCheckpointImmediate();
+            return snapshot();
+          },
+          // M7-03 P3C browser 入口（真实 flow.setSleepTimer；只改当前 Session Timer）。
+          setSleepTimer: async (
+            mode: 'off' | 'minutes' | 'story_end',
+            minutes?: number,
+          ): Promise<Record<string, unknown>> => {
+            await flow.setSleepTimer(mode, minutes);
             return snapshot();
           },
         };

@@ -1129,6 +1129,18 @@ cases:
     executable_ids: [exec-expanded-ui-state, exec-expanded-surface, exec-l3-expanded-now-playing-surface]
     fixtures: []
     owner: smoke-baseline
+  - case_id: expanded-playback-capabilities-p3a
+    display_name_zh: Expanded播放能力P3A
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: Expanded内本段时间轴seek与键盘钳制七档倍速段落徽标与从头播放且Mini同步
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [ui, playback, session, seek, speed, restart, aria]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/15-Expanded播放能力P3A.md
+    executable_ids: [exec-expanded-playback-capabilities, exec-expanded-playback-integration, exec-l3-expanded-playback-capabilities]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1488,6 +1500,18 @@ executables:
     display_name_zh: L3 Expanded全局浮层与响应式
     layer: L3
     path: ./tests/system/browser/scenarios/expanded-now-playing-surface.spec.ts
+  - executable_id: exec-expanded-playback-capabilities
+    display_name_zh: Expanded播放能力P3A控制语义与架构守卫
+    layer: L1
+    path: ./tests/unit/now-playing/expanded-playback-capabilities.unit.test.ts
+  - executable_id: exec-expanded-playback-integration
+    display_name_zh: Expanded播放能力P3A会话传输穿越
+    layer: L2
+    path: ./tests/integration/now-playing/expanded-playback-integration.integration.test.ts
+  - executable_id: exec-l3-expanded-playback-capabilities
+    display_name_zh: L3 Expanded播放能力P3A全链路
+    layer: L3
+    path: ./tests/system/browser/scenarios/expanded-playback-capabilities.spec.ts
   - executable_id: exec-l3-desktop-floating-mode
     display_name_zh: L3桌面悬浮拖拽吸附收官
     layer: L3

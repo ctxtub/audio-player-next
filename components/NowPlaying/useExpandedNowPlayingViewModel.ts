@@ -12,6 +12,11 @@
  * - timeline P3A segment 形态与 sleepTimer/rate/actions 留给 M7-B/C/D，
  *   本文件不引入第二套播放状态。
  *
+ * M7-02 P3A 增补（spec §14/§16/§17/§20/§39 additive，不破 M7-01 字段）：
+ * - timeline 恒 segment（当前 Segment，不伪装整篇，spec §17/§68）；
+ * - playbackRate = Session.speed（当前 Session 级，spec §20.1）；
+ * - primaryAction/canRestart/isPlaying（与 Mini 同映射，Mini/Expanded 同 Session 即时同步）。
+ *
  * 纯派生见 deriveExpandedNowPlayingViewModel（可独立测试）；
  * Hook 层只做 selector 派生，不 mutation Session/Transport/Config。
  */
@@ -22,6 +27,12 @@ import { usePlaybackStore } from '@/stores/playbackStore';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
 import type { VoiceOption } from '@/types/ttsGenerate';
 import { MINI_NOW_PLAYING_FALLBACK_TITLE } from './types';
+import { deriveExpandedPlaybackAction, type ExpandedPlaybackAction } from './PlaybackControls';
+import { EXPANDED_TIMELINE_MODE } from './PlaybackTimeline';
+
+export type { ExpandedPlaybackAction };
+export { deriveExpandedPlaybackAction };
+export { EXPANDED_TIMELINE_MODE };
 
 /** Expanded 段落定位（P3A：当前段为最重要的作品级定位，spec §39）。 */
 export type ExpandedParagraphViewModel = {
@@ -38,7 +49,7 @@ export type ExpandedTransportViewModel = {
     duration: number;
 };
 
-/** M7-01 Expanded ViewModel（Header/Surface 最小集）。 */
+/** M7-01 Expanded ViewModel（Header/Surface 最小集 + M7-02 P3A 增补）。 */
 export type ExpandedNowPlayingViewModel = {
     /** 是否存在可展示 session（source 非空且 status 非 idle）。 */
     hasSession: boolean;
@@ -56,6 +67,25 @@ export type ExpandedNowPlayingViewModel = {
     transport: ExpandedTransportViewModel;
     /** 是否为完成态（status == ended，spec §8 保留展示）。 */
     isEnded: boolean;
+    /** M7-02 P3A timeline（恒 segment，不伪装整篇）。 */
+    timeline: ExpandedTimelineViewModel;
+    /** M7-02 当前 Session 倍速（Session.speed，spec §20.1）。 */
+    playbackRate: number;
+    /** M7-02 主动作（与 Mini 同映射）。 */
+    primaryAction: ExpandedPlaybackAction;
+    /** M7-02 是否可从头播放（hasSession 即 true）。 */
+    canRestart: boolean;
+    /** M7-02 Transport 是否正在播放（Mini/Expanded 同源即时同步）。 */
+    isPlaying: boolean;
+};
+
+/** M7-02 P3A timeline ViewModel（恒 segment）。 */
+export type ExpandedTimelineViewModel = {
+    mode: typeof EXPANDED_TIMELINE_MODE;
+    /** 段内当前时间（秒，已消毒 >=0）。 */
+    currentTime: number;
+    /** 段内总时长（秒，0 表示未知/fail-safe）。 */
+    duration: number;
 };
 
 /** Session 快照输入（纯函数层，不依赖 store）。 */
@@ -66,6 +96,8 @@ export type ExpandedSessionSnapshot = {
     voiceId: string;
     nextParagraphIndex: number;
     totalParagraphs: number;
+    /** M7-02 当前 Session 倍速（缺省 1.0，保持 M7-01 调用兼容）。 */
+    speed?: number;
 };
 
 /** Transport 快照输入（纯函数层）。 */
@@ -73,6 +105,8 @@ export type ExpandedTransportSnapshot = {
     isPlaying: boolean;
     currentTime: number;
     duration: number;
+    /** M7-02 Transport.playbackRate（纯函数回退用，缺省 1.0，保持三参兼容）。 */
+    playbackRate?: number;
 };
 
 /** 空标题回退（与 Mini 同一 fallback，保证跨 surface 一致）。 */
@@ -126,6 +160,48 @@ export const deriveExpandedTitle = (title: string): string => {
 };
 
 /**
+ * M7-02 纯函数：P3A timeline 派生（恒 segment，消毒 currentTime/duration）。
+ * duration 非有限/<=0 → 0（fail-safe）；currentTime 钳制 [0, duration]。
+ */
+export const deriveExpandedTimeline = (
+    currentTime: number,
+    duration: number
+): ExpandedTimelineViewModel => {
+    const safeDuration =
+        typeof duration === 'number' && Number.isFinite(duration) && duration > 0 ? duration : 0;
+    const rawCurrent =
+        typeof currentTime === 'number' && Number.isFinite(currentTime) ? currentTime : 0;
+    return {
+        mode: EXPANDED_TIMELINE_MODE,
+        currentTime: Math.min(Math.max(rawCurrent, 0), safeDuration),
+        duration: safeDuration,
+    };
+};
+
+/**
+ * M7-02 纯函数：当前 Session 倍速派生（spec §20.1）。
+ * Session.speed 优先（0.25–4.0 有限值）；非法时回退 Transport.playbackRate；
+ * 再非法回退 1.0。不读 UserConfig（Expanded 仅当前 Session）。
+ */
+export const deriveExpandedPlaybackRate = (sessionSpeed: unknown, transportRate: unknown): number => {
+    if (typeof sessionSpeed === 'number' && Number.isFinite(sessionSpeed) && sessionSpeed >= 0.25 && sessionSpeed <= 4.0) {
+        return sessionSpeed;
+    }
+    if (typeof transportRate === 'number' && Number.isFinite(transportRate) && transportRate >= 0.25 && transportRate <= 4.0) {
+        return transportRate;
+    }
+    return 1.0;
+};
+
+/**
+ * M7-02 纯函数：是否可从头播放（有可展示 session 即 true，spec §38）。
+ */
+export const deriveExpandedCanRestart = (
+    source: PlaybackSourceRef | null,
+    status: PlaybackSessionStatus
+): boolean => source !== null && status !== 'idle';
+
+/**
  * 纯函数：ViewModel 总装（不复制 Store，只做展示派生）。
  */
 export const deriveExpandedNowPlayingViewModel = (
@@ -134,6 +210,11 @@ export const deriveExpandedNowPlayingViewModel = (
     voiceOptions: ReadonlyArray<Pick<VoiceOption, 'value' | 'label'>>
 ): ExpandedNowPlayingViewModel => {
     const hasSession = session.source !== null && session.status !== 'idle';
+    // Transport.playbackRate 需经调用方传入？纯函数层不读 store：此处以 session.speed 为主，
+    // transport 侧 rate 由 Hook 层透传（见下方 Hook 扩展，纯函数保持三参兼容）。
+    const transportRate =
+        (transport as unknown as { playbackRate?: unknown }).playbackRate ?? 1.0;
+    const playbackRate = deriveExpandedPlaybackRate(session.speed ?? 1.0, transportRate);
     return {
         hasSession,
         title: deriveExpandedTitle(session.title),
@@ -147,6 +228,11 @@ export const deriveExpandedNowPlayingViewModel = (
             duration: transport.duration,
         },
         isEnded: session.status === 'ended',
+        timeline: deriveExpandedTimeline(transport.currentTime, transport.duration),
+        playbackRate,
+        primaryAction: deriveExpandedPlaybackAction(session.status),
+        canRestart: deriveExpandedCanRestart(session.source, session.status),
+        isPlaying: transport.isPlaying,
     };
 };
 
@@ -161,14 +247,16 @@ export const useExpandedNowPlayingViewModel = (): ExpandedNowPlayingViewModel =>
     const voiceId = usePlaybackSessionStore((state) => state.voiceId);
     const nextParagraphIndex = usePlaybackSessionStore((state) => state.nextParagraphIndex);
     const totalParagraphs = usePlaybackSessionStore((state) => state.totalParagraphs);
+    const speed = usePlaybackSessionStore((state) => state.speed);
     const isPlaying = usePlaybackStore((state) => state.isPlaying);
     const currentTime = usePlaybackStore((state) => state.currentTime);
     const duration = usePlaybackStore((state) => state.duration);
+    const playbackRate = usePlaybackStore((state) => state.playbackRate);
     const voiceOptions = useConfigStore((state) => state.voiceOptions);
 
     return deriveExpandedNowPlayingViewModel(
-        { source, status, title, voiceId, nextParagraphIndex, totalParagraphs },
-        { isPlaying, currentTime, duration },
+        { source, status, title, voiceId, nextParagraphIndex, totalParagraphs, speed },
+        { isPlaying, currentTime, duration, playbackRate } as unknown as ExpandedTransportSnapshot,
         voiceOptions
     );
 };

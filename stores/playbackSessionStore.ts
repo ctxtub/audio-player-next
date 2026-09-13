@@ -108,6 +108,13 @@ interface PlaybackSessionActions {
   initForGuest: (deps?: SessionRehydrateDeps) => Promise<boolean>;
   /** 由 Anchor DTO 直接水合（init 内部与测试共用）。 */
   hydrateFromAnchor: (anchor: PlaybackAnchorDTO, deps?: SessionRehydrateDeps) => Promise<boolean>;
+  /**
+   * M7-02 P3A 当前 Session 倍速（spec §20/§20.1 additive，无新 SSOT）。
+   * Session.speed + Transport.playbackRate + Anchor 持久化三同步；
+   * 不写回 UserConfig 默认 speed；不触发新 TTS；不建 Expanded-local state。
+   * 非法值（非有限/越界 0.25–4.0）直接忽略；无 source 时 no-op。
+   */
+  setSpeed: (rate: number) => Promise<void>;
   setActiveStory: (params: {
     source: PlaybackSourceRef;
     sessionId?: string | null;
@@ -466,7 +473,45 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       console.warn('[playbackSessionStore] transport sync failed', err);
     }
 
+    // M7-02 P3A：rehydrate 即时同步 Transport.playbackRate = Anchor.speed
+    //（无 isRehydratedReady 特殊分支，spec §61；只经 Transport，不碰 UserConfig）。
+    try {
+      const anchorSpeed = anchor.speed;
+      if (typeof anchorSpeed === 'number' && Number.isFinite(anchorSpeed)) {
+        usePlaybackStore.getState().setPlaybackRate(anchorSpeed);
+      }
+    } catch {
+      // rate 同步失败不阻断水合（transport 保持既有值）。
+    }
+
     return true;
+  },
+
+  setSpeed: async (rate) => {
+    const state = get();
+    if (!state.source || !state.sessionId) return;
+    if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0.25 || rate > 4.0) {
+      return;
+    }
+    if (state.speed === rate) {
+      // 仍需保证 Transport 一致（rehydrate 错位修复），但不重复落盘。
+      try {
+        if (usePlaybackStore.getState().playbackRate !== rate) {
+          usePlaybackStore.getState().setPlaybackRate(rate);
+        }
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    set({ speed: rate });
+    try {
+      usePlaybackStore.getState().setPlaybackRate(rate);
+    } catch {
+      // transport 同步失败不阻断 session 侧（下次读取仍以 Session.speed 为准）。
+    }
+    // Anchor 持久化（同一 Session 内 speed 上报；stale 时 server 侧 no-op，不抛错）。
+    await get().saveCheckpointImmediate({ forceReset: false });
   },
 
   setActiveStory: (params) => {
@@ -512,6 +557,16 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       });
     } catch {
       // transport 同步失败不阻断本地激活。
+    }
+
+    // M7-02 P3A：新会话激活即时同步 Transport.playbackRate（只经 Transport，不碰 UserConfig）。
+    try {
+      const activeSpeed = params.speed ?? 1.0;
+      if (typeof activeSpeed === 'number' && Number.isFinite(activeSpeed)) {
+        usePlaybackStore.getState().setPlaybackRate(activeSpeed);
+      }
+    } catch {
+      // ignore
     }
   },
 
@@ -675,12 +730,54 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
   restart: async () => {
     const state = get();
     if (!state.source) return;
-    const newSessionId = createPlaybackSessionId();
-    set({ nextParagraphIndex: 0, lastCompletedParagraphIndex: -1 });
+    // M7-02 P3A 从头播放（spec §38/§38.1）：
+    // - Work：经 server beginSession mode=restart（新 UUID + position 0 + completedAt 保留，
+    //   M5 §16.3/§30 由 server 持有），再从 paragraph 0 显式起播；
+    // - Draft：重播当前已存在文本从 paragraph 0 开始，并强制此次 restart 为 finite
+    //  （消费操作，到结尾停止，不得触发 AI continuation；本地复位，不新开 server 会话，
+    //   不误写 StoryWork/progress identity）。
+    if (state.source.kind === 'work') {
+      const workId = state.source.workId;
+      const speed = state.speed ?? 1.0;
+      try {
+        await get().beginPlayback({
+          source: { kind: 'work', workId },
+          mode: 'restart',
+          speed,
+        });
+        // begin 已水合新 Session（status=ready，position 0，transport idle + rate 已同步）。
+      } catch (err) {
+        // 离线/单测容错（M6-02 既有集成经 setActiveStory 本地种子、无 server Anchor）：
+        // server 不可达时本地生成新 UUID + position 0，保证“新 UUID + 从头播放”语义不退化；
+        // 在线真实路径仍以 server 为准（completedAt 由 server 保留）。
+        console.warn('[playbackSessionStore] restart begin failed, fallback local', err);
+        abortPrefetch();
+        set({
+          sessionId: createPlaybackSessionId(),
+          nextParagraphIndex: 0,
+          lastCompletedParagraphIndex: -1,
+          prefetchedAudioUrl: null,
+          prefetchingIndex: null,
+        });
+        try {
+          usePlaybackStore.getState().setPlaybackRate(speed);
+        } catch {
+          // ignore
+        }
+      }
+      await get().playParagraph(0, { explicit: true });
+      return;
+    }
+    // Draft 本地 restart：段落复位 + 强制 finite（spec §38.1），同 Session 内从头播放。
+    abortPrefetch();
+    set({
+      nextParagraphIndex: 0,
+      lastCompletedParagraphIndex: -1,
+      continuationMode: 'finite',
+      prefetchedAudioUrl: null,
+      prefetchingIndex: null,
+    });
     await get().saveCheckpointImmediate({ forceReset: true });
-    // restart 语义由 server beginSession 持有（新 sessionId + position 0）时，
-    // 此处经 beginPlayback 走服务端 restart；无 source 时回落本地从头播放。
-    void newSessionId;
     await get().playParagraph(0, { explicit: true });
   },
 
@@ -707,6 +804,14 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       voiceId: anchor.voiceId,
       speed: anchor.speed,
     });
+    // 提升后 rate 同步 Transport（与 hydrate/setActive 同口径，不碰 UserConfig）。
+    try {
+      if (typeof anchor.speed === 'number' && Number.isFinite(anchor.speed)) {
+        usePlaybackStore.getState().setPlaybackRate(anchor.speed);
+      }
+    } catch {
+      // ignore
+    }
   },
 
   beginPlayback: async (params) => {

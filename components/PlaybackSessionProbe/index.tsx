@@ -50,6 +50,9 @@ export default function PlaybackSessionProbe(): null {
               nextParagraphIndex: session.nextParagraphIndex,
               totalParagraphs: session.totalParagraphs,
               lastCompletedParagraphIndex: session.lastCompletedParagraphIndex,
+              // M7-02 P3A browser 断言用（只读透传，不改变产品行为）：
+              // Session.speed（当前 Session 级倍速）+ Transport.playbackRate。
+              speed: session.speed,
               transport: {
                 isPlaying: transport.isPlaying,
                 hasAudioUrl: transport.currentAudioUrl !== null,
@@ -57,6 +60,7 @@ export default function PlaybackSessionProbe(): null {
                 currentTime: transport.currentTime,
                 duration: transport.duration,
                 hasController: transport.audioController !== null,
+                playbackRate: transport.playbackRate,
               },
               audioCount,
             };

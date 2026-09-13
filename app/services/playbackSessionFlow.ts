@@ -25,7 +25,7 @@
  * extendable 会话尾段是唯一允许回退 legacy AI 续写链的例外（§28）。
  */
 
-import { usePlaybackStore } from '@/stores/playbackStore';
+import { usePlaybackStore, clampSegmentSeekTarget } from '@/stores/playbackStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
 import type { SessionContinuationMode } from '@/stores/playbackSessionStore';
@@ -89,6 +89,48 @@ export async function restartPlayback(): Promise<void> {
   await usePlaybackSessionStore.getState().restart();
 }
 
+/**
+ * M7-02 P3A 当前 Segment seek（spec §17/§17.1/§17.3 additive，无新 SSOT）。
+ * 只动 Transport 段内 currentTime（经 AudioControllerHost 唯一 audio owner），
+ * 不改变 Session sessionId/source/paragraph identity，不落 checkpoint。
+ * 全 clamp + duration=0/unknown fail-safe（no-op 返回 false）。
+ * @param targetSeconds 目标秒数
+ * @returns 是否实际发起 seek
+ */
+export function seekCurrentSegment(targetSeconds: number): boolean {
+  const transport = usePlaybackStore.getState();
+  const clamped = clampSegmentSeekTarget(targetSeconds, transport.duration);
+  if (clamped === null) {
+    return false;
+  }
+  transport.seekAudio(clamped);
+  return true;
+}
+
+/**
+ * M7-02 P3A 相对 seek（keyboard ±5s，spec §17.2）。
+ * currentTime + delta 后走同一 clamp/fail-safe；不改变 Session identity。
+ * @param deltaSeconds 相对秒数（+5/-5）
+ * @returns 是否实际发起 seek
+ */
+export function seekRelative(deltaSeconds: number): boolean {
+  if (typeof deltaSeconds !== 'number' || !Number.isFinite(deltaSeconds)) {
+    return false;
+  }
+  const transport = usePlaybackStore.getState();
+  return seekCurrentSegment(transport.currentTime + deltaSeconds);
+}
+
+/**
+ * M7-02 P3A 当前 Session 倍速（spec §20/§20.1 additive，无新 SSOT）。
+ * Session.speed + Transport.playbackRate + Anchor 持久化三同步；
+ * 不写回 UserConfig 默认 speed；不触发新 TTS（只调 <audio>.playbackRate）。
+ * @param rate 目标倍速（旧七档之一；越界/非法直接 no-op）
+ */
+export async function setPlaybackRate(rate: number): Promise<void> {
+  await usePlaybackSessionStore.getState().setSpeed(rate);
+}
+
 /** Draft→Work 提升（§24，sessionId 不变，hash 不一致 reset 0）。 */
 export async function promoteDraftToWork(workId: number): Promise<void> {
   await usePlaybackSessionStore.getState().promoteDraftToWork(workId);
@@ -102,8 +144,11 @@ export function stopPlayback(): void {
 /**
  * §27 规范名别名（与 spec 动词一致；pausePlayback / restartPlayback /
  * stopPlayback 保留供 Host 等既有调用方，M9 再收敛命名）。
+ * M7-02 增补 restartCurrentSession（spec §47/M7 对 M5 additive contract 命名统一，
+ * 同一 restart 实现，不新增重复状态）。
  */
 export { pausePlayback as pause, restartPlayback as restart, stopPlayback as stop };
+export { restartPlayback as restartCurrentSession };
 
 /** 播放器开始播放时更新 transport 倒计时。 */
 export function reportPlaybackStart(): void {

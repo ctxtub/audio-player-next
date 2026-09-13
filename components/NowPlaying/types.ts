@@ -128,3 +128,25 @@ export type MiniNowPlayingViewModel = {
     /** 布局形态三态（M6-01 契约；config 只影响此字段，不影响 visible）。 */
     layoutMode: MiniNowPlayingLayoutMode;
 };
+
+/* ------------------------------------------------------------------ */
+/* M7-02 Expanded P3A Playback Capabilities（spec §16/§17/§20/§39）。   */
+/* 本节只加 P3A 类型契约，不改 M6/M7-01 既有类型；SSOT 仍在 M5。        */
+/* - Title/Voice/Play/Pause 一律走 M5 ownership（UI→flow→Session+Host）；*/
+/* - Timeline 恒 segment（当前 Segment，不伪装整篇）；                  */
+/* - 两种 position 严格区分：paragraph identity → Session，段内         */
+/*   currentTime/duration → Transport；                                 */
+/* - 明确无上一段/下一段（spec §40），无 story-level timeline（M8 P3B）。*/
+/* ------------------------------------------------------------------ */
+
+/** M7-02 P3A timeline 固定模式（M8 前恒 segment）。 */
+export type ExpandedTimelineMode = 'segment';
+
+/** M7-02 P3A 键盘步进（秒，spec §17.2 ±5s）。 */
+export const EXPANDED_SEEK_STEP_SECONDS = 5;
+
+/** M7-02 七档倍速值（spec §20，与旧 AudioPlayer 一致）。 */
+export const EXPANDED_SUPPORTED_PLAYBACK_RATES = [0.8, 0.9, 0.95, 1.0, 1.05, 1.1, 1.5] as const;
+
+/** M7-02 七档倍速值类型。 */
+export type ExpandedSupportedPlaybackRate = (typeof EXPANDED_SUPPORTED_PLAYBACK_RATES)[number];

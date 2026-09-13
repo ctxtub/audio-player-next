@@ -22,6 +22,35 @@ import type { AudioControllerHandle } from '@/types/audioPlayer';
 const MINUTE_IN_MS = 60000;
 
 /**
+ * M7-02 P3A seek clamp 纯函数（spec §17.3）。
+ * 所有 seek 必须 clamp(target, 0, duration)；duration=0/unknown fail-safe 返回 null（调用方 no-op）。
+ * @param target 目标秒数
+ * @param duration 当前段总时长（秒）
+ * @returns 钳制后秒数；不可 seek 时返回 null
+ */
+export const clampSegmentSeekTarget = (target: number, duration: number): number | null => {
+  if (!Number.isFinite(target) || !Number.isFinite(duration)) {
+    return null;
+  }
+  if (!(duration > 0)) {
+    return null;
+  }
+  if (target <= 0) {
+    return 0;
+  }
+  if (target >= duration) {
+    return duration;
+  }
+  return target;
+};
+
+/**
+ * M7-02 playbackRate 合法性（spec §20：保留七档语义，Transport 接受 0.25–4.0 有限值）。
+ */
+export const isValidTransportPlaybackRate = (rate: number): boolean =>
+  typeof rate === 'number' && Number.isFinite(rate) && rate >= 0.25 && rate <= 4.0;
+
+/**
  * 播放器状态数据结构：Transport 字段为 SSOT；以下 identity 字段已 deprecated。
  */
 type PlaybackStoreBaseState = {
@@ -293,10 +322,14 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     },
     /**
      * 调整播放速率，供播放器组件响应倍速切换。
+     * M7-02：非法值直接忽略（不写 Transport、不触 controller）；合法值同步 controller。
      * @param rate number 目标倍速值
      * @returns void
      */
     setPlaybackRate: (rate, options) => {
+      if (!isValidTransportPlaybackRate(rate)) {
+        return;
+      }
       set({
         playbackRate: rate,
       });
@@ -411,11 +444,19 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
     },
     /**
      * 跳转到指定播放时间点。
+     * M7-02 P3A（spec §17.3）：全 clamp + fail-safe。duration 未知/<=0 或 target 非法
+     * 时 no-op（不触 controller、不抛错）；合法时钳制到 [0, duration] 后 seek。
+     * 只动 Transport 段内 currentTime，不写 Session 段落 identity、不落 checkpoint。
      * @param time number 目标时间（秒）
      * @returns void
      */
     seekAudio: (time: number) => {
-      get().audioController?.seek(time);
+      const duration = get().duration;
+      const clamped = clampSegmentSeekTarget(time, duration);
+      if (clamped === null) {
+        return;
+      }
+      get().audioController?.seek(clamped);
     },
     /**
      * 直接设置当前的音频 URL，用于同步播放状态（例如自动切歌时）。

@@ -1,7 +1,9 @@
 'use client';
 
 /**
- * M7-01 NowPlayingHeader（spec §3/§10/§11 基础 presentation）。
+ * M7-01 NowPlayingHeader（spec §3/§10/§11 基础 presentation）
+ * + M7-02 Title/Voice 扩展（spec §14/§15：title ← Session.title，
+ *   voice ← Session.voiceId 经 voiceOptions lookup；Work 不再错读全局 Config voiceId）。
  *
  * 纯展示组件：只收 props，不读任何 store / Session / Transport。
  * - Drag Handle：移动端 Bottom Sheet 唯一拖拽发起点（spec §10.2），

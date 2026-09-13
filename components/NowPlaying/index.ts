@@ -43,11 +43,39 @@ export {
     deriveExpandedParagraph,
     deriveExpandedTitle,
     deriveExpandedVoiceLabel,
+    deriveExpandedTimeline,
+    deriveExpandedPlaybackRate,
+    deriveExpandedCanRestart,
     EXPANDED_NOW_PLAYING_FALLBACK_TITLE,
     EXPANDED_VOICE_FALLBACK_LABEL,
     useExpandedNowPlayingViewModel,
     type ExpandedNowPlayingViewModel,
+    type ExpandedParagraphViewModel,
+    type ExpandedTimelineViewModel,
+    type ExpandedTransportViewModel,
 } from './useExpandedNowPlayingViewModel';
+export { useExpandedPlaybackControls, type ExpandedPlaybackControls } from './useExpandedPlaybackControls';
+export {
+    PlaybackTimeline,
+    EXPANDED_TIMELINE_MODE,
+    EXPANDED_TIMELINE_ARIA_LABEL,
+    EXPANDED_TIMELINE_KEYBOARD_STEP_SECONDS,
+    formatSegmentTime,
+    resolveClickSeekTarget,
+    resolveKeyboardSeekTarget,
+} from './PlaybackTimeline';
+export {
+    PlaybackControls,
+    deriveExpandedPlaybackAction,
+    type ExpandedPlaybackAction,
+} from './PlaybackControls';
+export {
+    PlaybackRateControl,
+    EXPANDED_PLAYBACK_RATES,
+    formatPlaybackRateLabel,
+    isSupportedPlaybackRate,
+} from './PlaybackRateControl';
+export { ParagraphStatus, formatParagraphStatus } from './ParagraphStatus';
 export {
     NOW_PLAYING_BREAKPOINT_PX,
     resolveNowPlayingLayoutMode,

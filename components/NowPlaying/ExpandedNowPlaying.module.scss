@@ -255,6 +255,41 @@
   color: var(--text-tertiary);
 }
 
+/* M7-02 P3A 播放能力区（additive，不改 M7-01 Surface 布局/断点）。
+ * 新组件经 data-testid 兜底布局（触控热区 >=44px，与 Mini 同口径），
+ * 视觉延续 glass/typography，不引入大型唱片（spec §13）。 */
+.body [data-testid='expanded-timeline-track'] {
+  min-height: var(--size-touch-target);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.body [data-testid='expanded-timeline-fill'] {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--accent-primary);
+}
+
+.body [data-testid='expanded-playback-controls'] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.body [data-testid='expanded-playback-controls'] button {
+  min-width: var(--size-touch-target);
+  min-height: var(--size-touch-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.body [data-testid='expanded-rate-control'] button {
+  min-height: var(--size-touch-target);
+}
+
 /* Reduced Motion：关闭弹簧/位移动画，drag dismiss 立即收起（spec §10.3）。 */
 @media (prefers-reduced-motion: reduce) {
   .overlay,

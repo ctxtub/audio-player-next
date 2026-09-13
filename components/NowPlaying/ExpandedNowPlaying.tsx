@@ -1,20 +1,28 @@
 'use client';
 
 /**
- * M7-01 ExpandedNowPlaying（spec §10/§11 基础 Surface + §42 Focus + §9 关闭语义）。
+ * M7-01 ExpandedNowPlaying（spec §10/§11 基础 Surface + §42 Focus + §9 关闭语义）
+ * + M7-02 P3A Playback Capabilities（spec §16/§17/§20/§38/§39 additive）。
  *
- * 职责（M7-01 最小集）：
+ * 职责：
  * - Modal Bottom Sheet（<768）/ Modal Right Side Panel（>=768）单一语义，
  *   CSS 断点切换，JS 不重挂载（resize 时 isExpanded 不变，spec §76）；
  * - react-aria-components ModalOverlay/Modal/Dialog 提供 focus containment /
  *   Escape / overlay semantics（spec §10.1），不自研 focus trap；
  * - 打开不改变播放，关闭/Escape/backdrop/下滑一律不暂停（spec §9）；
  * - 移动 drag dismiss 只能由顶部 Handle 发起（spec §10.2），内容区滚动不触发；
- * - Header/Surface 最小 presentation：title / voice · 段落 / 完成态（P3A）；
- *   完整 Timeline/Controls/Rate/Sleep/Actions 留给 M7-B/C/D。
+ * - Header：title ← Session.title（空回退“正在播放”），voice ← Session.voiceId
+ *   经 voiceOptions lookup（找不到显示 voiceId，再回退 AI 语音，spec §15）；
+ * - P3A 播放能力（本轮新增，经 useExpandedPlaybackControls facade 消费 M5）：
+ *   当前 Segment timeline（本段，不伪装整篇）/ click+keyboard seek 全 clamp /
+ *   Play-Pause-从头播放 / 七档 Session 级倍速 / 段落 badge；明确无上一段/
+ *   下一段（spec §40），无 story-level timeline（M8 P3B）。
  *
- * 本文件只读 ViewModel + UI Store 关闭动作，不直调 playbackSessionFlow /
- * AudioControllerHost / playbackStore 写面（M5 ownership 边界）。
+ * M5 ownership 边界：
+ * - 本文件只读 ViewModel + UI Store 关闭动作 + facade 回调；
+ * - 不直调 playbackSessionFlow / AudioControllerHost / playbackStore 写面 /
+ *   <audio> / Session 字段（全部经 facade → flow → Session+Host）；
+ * - 不建 Expanded-local speed state；不写回 UserConfig；不触 StoryWork/progress identity。
  */
 
 import React, { useCallback, useRef, useState } from 'react';
@@ -24,6 +32,11 @@ import { useDrag } from '@use-gesture/react';
 import { useNowPlayingUiStore } from '@/stores/nowPlayingUiStore';
 
 import { NowPlayingHeader } from './NowPlayingHeader';
+import { ParagraphStatus } from './ParagraphStatus';
+import { PlaybackControls } from './PlaybackControls';
+import { PlaybackRateControl } from './PlaybackRateControl';
+import { PlaybackTimeline, EXPANDED_TIMELINE_KEYBOARD_STEP_SECONDS } from './PlaybackTimeline';
+import { useExpandedPlaybackControls } from './useExpandedPlaybackControls';
 import { useExpandedNowPlayingViewModel } from './useExpandedNowPlayingViewModel';
 import styles from './ExpandedNowPlaying.module.scss';
 
@@ -63,6 +76,8 @@ export const ExpandedNowPlaying: React.FC = () => {
     const isExpanded = useNowPlayingUiStore((state) => state.isExpanded);
     const closeExpanded = useNowPlayingUiStore((state) => state.closeExpanded);
     const viewModel = useExpandedNowPlayingViewModel();
+    // M7-02 P3A facade：唯一播放写面（UI→flow→Session+Host；本文件不直调 store/audio）。
+    const controls = useExpandedPlaybackControls();
 
     const [dragOffsetY, setDragOffsetY] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
@@ -182,6 +197,38 @@ export const ExpandedNowPlaying: React.FC = () => {
                             >
                                 {`第 ${viewModel.paragraph.current} / ${viewModel.paragraph.total} 段`}
                             </div>
+                            {/* M7-02 P3A 段落 badge（spec §39，与 Mini 同公式的结构化表达）。 */}
+                            <ParagraphStatus
+                                current={viewModel.paragraph.current}
+                                total={viewModel.paragraph.total}
+                            />
+                            {/* M7-02 P3A 当前 Segment timeline（本段，不伪装整篇，spec §17/§68）。 */}
+                            <PlaybackTimeline
+                                currentTime={viewModel.timeline.currentTime}
+                                duration={viewModel.timeline.duration}
+                                onSeek={controls.seekCurrentSegment}
+                                disabled={!viewModel.hasSession}
+                            />
+                            {/* M7-02 P3A 播放控制（Play/Pause/±5s/从头播放；无上一段/下一段，spec §40）。 */}
+                            <PlaybackControls
+                                primaryAction={viewModel.primaryAction}
+                                canRestart={viewModel.canRestart}
+                                onPlay={controls.play}
+                                onPause={controls.pause}
+                                onRestart={controls.restart}
+                                onSeekBackward={() =>
+                                    controls.seekRelative(-EXPANDED_TIMELINE_KEYBOARD_STEP_SECONDS)
+                                }
+                                onSeekForward={() =>
+                                    controls.seekRelative(EXPANDED_TIMELINE_KEYBOARD_STEP_SECONDS)
+                                }
+                            />
+                            {/* M7-02 P3A Session 级倍速（七档，不写回 UserConfig，不触发新 TTS）。 */}
+                            <PlaybackRateControl
+                                currentRate={viewModel.playbackRate}
+                                onSelect={controls.setPlaybackRate}
+                                disabled={!viewModel.hasSession}
+                            />
                             {viewModel.isEnded ? (
                                 <div
                                     className={styles.endedBadge}

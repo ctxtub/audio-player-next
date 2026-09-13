@@ -1,10 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import HistoryRecords from '@/app/(main)/player/components/HistoryRecords';
-import GenerationHistory from '@/app/(main)/player/components/GenerationHistory';
-import { useChatStore } from '@/stores/chatStore';
+import HistoryRecords from '@/app/(main)/chat/components/HistoryRecords';
+import GenerationHistory from '@/app/(main)/chat/components/GenerationHistory';
 import { usePromptHistoryStore, selectSortMode } from '@/stores/promptHistoryStore';
 import styles from './index.module.scss';
 
@@ -18,17 +16,27 @@ const TABS: ReadonlyArray<{ key: HistoryTab; label: string }> = [
 ];
 
 /**
- * 播放器页历史面板：在播放器下方平铺承载「提示词历史 / 生成历史」两个内联列表，
- * 用分段控件切换。头部右侧仅在提示词页展示排序切换；选择提示词跳创作页预填并自动发送。
+ * Chat 所有的 History Surface 受控展示组件的入参定义（M4-07）。
+ */
+export interface HistoryPanelProps {
+  /** 选择某条提示词「重新创作」时回调，由 ChatLayout 适配器消费（setPendingAutoSend + 关面板）。 */
+  onSelectPrompt: (prompt: string) => void;
+  /** 关闭 History Surface 回调，由 ChatLayout 持有纯 UI state。 */
+  onClose: () => void;
+}
+
+/**
+ * Chat-owned History Surface：承载「提示词历史 / 生成历史」两个内联列表，用分段控件切换。
+ * 纯 presentation ownership：只拥有 activeTab 与排序模式 UI；不拥有 router、跨页导航、
+ * pendingAutoSend 编排、generation 编排与 Chat reset（M4-07 relocation 非 migration）。
+ * 数据源保持不变：提示词经 HistoryRecords 读 promptHistoryStore，生成经 GenerationHistory 读 generationHistoryStore。
+ * @param props.onSelectPrompt 选择提示词回调（重新创作，同页消费）
+ * @param props.onClose 关闭入口回调
  * @returns 历史面板 JSX
  */
-const HistoryPanel: React.FC = () => {
-  /** 路由：选择提示词后跳转创作页。 */
-  const router = useRouter();
+const HistoryPanel: React.FC<HistoryPanelProps> = ({ onSelectPrompt, onClose }) => {
   /** 当前激活分段，默认提示词历史（访客与登录都有内容）。 */
   const [activeTab, setActiveTab] = useState<HistoryTab>('prompt');
-  /** 设置跨页待发提示词。 */
-  const setPendingAutoSend = useChatStore((state) => state.setPendingAutoSend);
   /** 提示词排序模式：频率 / 时间。 */
   const sortMode = usePromptHistoryStore(selectSortMode);
   /** 切换提示词排序模式。 */
@@ -39,14 +47,8 @@ const HistoryPanel: React.FC = () => {
     setSortMode(sortMode === 'frequency' ? 'recent' : 'frequency');
   };
 
-  /** 选择历史提示词：预填并跳转创作页自动发送（重新创作，非本页播放）。 */
-  const handleSelectPrompt = (prompt: string) => {
-    setPendingAutoSend(prompt);
-    router.push('/chat');
-  };
-
   return (
-    <section className={styles.panel}>
+    <section className={styles.panel} aria-label="历史">
       <div className={styles.header}>
         <div className={styles.segmented} role="tablist" aria-label="历史类型切换">
           {TABS.map((tab) => (
@@ -63,16 +65,21 @@ const HistoryPanel: React.FC = () => {
           ))}
         </div>
 
-        {activeTab === 'prompt' && (
-          <button type="button" className={styles.sortButton} onClick={toggleSortMode}>
-            {sortMode === 'frequency' ? '按频率排序' : '按时间排序'}
+        <div className={styles.headerActions}>
+          {activeTab === 'prompt' && (
+            <button type="button" className={styles.sortButton} onClick={toggleSortMode}>
+              {sortMode === 'frequency' ? '按频率排序' : '按时间排序'}
+            </button>
+          )}
+          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="关闭历史">
+            关闭
           </button>
-        )}
+        </div>
       </div>
 
       <div className={styles.body}>
         {activeTab === 'prompt' ? (
-          <HistoryRecords onSelectPrompt={handleSelectPrompt} />
+          <HistoryRecords onSelectPrompt={onSelectPrompt} />
         ) : (
           <GenerationHistory />
         )}

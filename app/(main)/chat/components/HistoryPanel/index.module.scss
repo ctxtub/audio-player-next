@@ -1,4 +1,4 @@
-/* 播放器页历史面板 — Liquid Glass，平铺承载提示词/生成历史并分段切换 */
+/* Chat-owned History Surface — Liquid Glass，承载提示词/生成历史并分段切换（M4-07 relocation） */
 .panel {
   flex: 1;
   min-height: 0;
@@ -57,6 +57,14 @@
       }
     }
 
+    /* 头部右侧动作区：排序切换 + 关闭入口 */
+    .headerActions {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      flex-shrink: 0;
+    }
+
     /* 排序切换：仅提示词页展示，沿用原弹窗头部样式 */
     .sortButton {
       flex-shrink: 0;
@@ -64,6 +72,20 @@
       color: var(--accent-primary);
       background: var(--accent-primary-subtle);
       border: none;
+      cursor: pointer;
+      padding: var(--space-1) var(--space-3);
+      border-radius: var(--radius-full);
+      white-space: nowrap;
+      transition: var(--transition-colors);
+    }
+
+    /* 关闭入口：History Surface 明确关闭按钮 */
+    .closeButton {
+      flex-shrink: 0;
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+      border: 0.5px solid var(--border-subtle);
       cursor: pointer;
       padding: var(--space-1) var(--space-3);
       border-radius: var(--radius-full);

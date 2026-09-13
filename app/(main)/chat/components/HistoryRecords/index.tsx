@@ -11,13 +11,13 @@ import {
   HistoryList,
   HistoryListItem,
   HistoryEmpty,
-} from '@/app/(main)/player/components/HistoryList';
+} from '@/app/(main)/chat/components/HistoryList';
 
 /**
  * 提示词历史列表组件的入参定义。
  */
 interface HistoryRecordsProps {
-  /** 选择某条提示词「重新创作」时回调，交由上层跳转创作页预填并自动发送。 */
+  /** 选择某条提示词「重新创作」时回调，交由 ChatLayout 同页消费（setPendingAutoSend + 关面板）。 */
   onSelectPrompt: (prompt: string) => void;
 }
 

@@ -10,7 +10,7 @@ import {
   HistoryList,
   HistoryListItem,
   HistoryEmpty,
-} from '@/app/(main)/player/components/HistoryList';
+} from '@/app/(main)/chat/components/HistoryList';
 
 /** 故事正文摘要的最大字符数。 */
 const EXCERPT_LIMIT = 60;

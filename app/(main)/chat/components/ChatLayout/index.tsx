@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import GlassToast from '@/components/ui/GlassToast';
 
 import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
@@ -13,6 +13,7 @@ import HeaderArea from './HeaderArea';
 import OnboardingModal from '../OnboardingModal';
 import InputArea from './InputArea';
 import MessageArea from './MessageArea';
+import HistoryPanel from '../HistoryPanel';
 import styles from './index.module.scss';
 import type { ChatLayoutProps } from './types';
 
@@ -41,7 +42,7 @@ const defaultSuggestions: HeaderSuggestion[] = [
 ];
 
 /**
- * 聊天页面布局组件，组织消息区与输入区。
+ * 聊天页面布局组件，组织消息区与输入区，并持有 Chat-owned History Surface 纯 UI 开关。
  * @param props.initialMessages 初始消息列表。
  * @returns 布局结构 JSX。
  */
@@ -51,6 +52,10 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
   const messages = useChatStore((state) => state.messages);
   const inputValue = useChatStore((state) => state.inputValue);
   const setInputValue = useChatStore((state) => state.setInputValue);
+  /** 同页 History 选择的唯一 pending 消费订阅（M4-07：显式订阅，当前已在 /chat，无需 router 再挂载）。 */
+  const pendingAutoSend = useChatStore((state) => state.pendingAutoSend);
+  /** History Surface 纯 UI 开关（M4-07）：不进 Zustand，不触数据。 */
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   /** 悬浮播放器控制。 */
   const { play: playAudio } = useFloatingPlayer();
@@ -107,24 +112,51 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     }
   }, []);
 
-  // 来自 /player 历史记录「选一条」的跨页自动发送：预填输入框并发送，仅消费一次。
+  // Chat-owned History 同页自动发送：History 选择只写 pendingAutoSend，本 effect 为唯一消费路径。
   // 02-02 UX：发送中到达的 pending 不丢（保留待发），生成结束（isSending 翻转）重触发消费补发。
   useEffect(() => {
-    const pending = useChatStore.getState().pendingAutoSend;
-    if (!pending) {
+    if (!pendingAutoSend) {
       return;
     }
-    // 中文注释：02-02 最小守卫——发送中时不旁路自动发送，且不消费 pending（保留待发）；正常路径行为不变。
-    const sending = useChatStore.getState().messages.some((message) => message.status === 'sending');
-    if (sending) {
+
+    if (isSending) {
       return;
     }
+
+    const prompt = pendingAutoSend;
+
     // 中文注释：H-21方案A——从提示词历史开始新创作为干净会话，发送前先重置故事链路（清空旧会话/播放/预载/生成态），再消费 pending 自动发送；此时 messages 已空，新请求不含旧上下文。发送中到达的 pending 仍由上文守卫保留待发，语义不变。
     resetStoryFlow();
     useChatStore.getState().setPendingAutoSend(null);
-    setInputValue(pending);
-    handleSubmit(pending);
-  }, [handleSubmit, setInputValue, isSending]);
+
+    setInputValue(prompt);
+    void handleSubmit(prompt);
+  }, [
+    pendingAutoSend,
+    isSending,
+    handleSubmit,
+    setInputValue,
+  ]);
+
+  /**
+   * History 提示词「重新创作」适配器（M4-07）：只写 pending + 关面板，不直接提交/重置/导航。
+   * 消费由上文唯一 pending consumer 承担 exactly-once；发送中选择沿单 slot 覆盖语义排队，不抢当前 attempt。
+   * @param prompt 选择的历史提示词。
+   */
+  const handleHistorySelectPrompt = useCallback((prompt: string) => {
+    useChatStore.getState().setPendingAutoSend(prompt);
+    setHistoryOpen(false);
+  }, []);
+
+  /** 打开 Chat-owned History Surface（纯 UI，不触数据）。 */
+  const handleOpenHistory = useCallback(() => {
+    setHistoryOpen(true);
+  }, []);
+
+  /** 关闭 Chat-owned History Surface（纯 UI，不触数据）。 */
+  const handleCloseHistory = useCallback(() => {
+    setHistoryOpen(false);
+  }, []);
 
   /**
    * 输入框内容变化时同步到 store，便于外部组件访问。 
@@ -210,7 +242,25 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         value={inputValue}
         onChange={handleInputChange}
         onClear={handleClear}
+        leftSlot={(
+          <button
+            type="button"
+            className={styles.historyTrigger}
+            onClick={handleOpenHistory}
+            aria-label="打开历史"
+            aria-expanded={historyOpen}
+          >
+            历史
+          </button>
+        )}
       />
+      {historyOpen ? (
+        <div className={styles.historyOverlay} role="dialog" aria-modal="false" aria-label="历史">
+          <div className={styles.historyDialog}>
+            <HistoryPanel onSelectPrompt={handleHistorySelectPrompt} onClose={handleCloseHistory} />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

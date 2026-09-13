@@ -7,11 +7,11 @@ import GenerationPreview from '@/app/(main)/player/components/GenerationPreview'
 import AudioPlayer from '@/app/(main)/player/components/AudioPlayer';
 
 import { useConfigStore } from '@/stores/configStore';
-import HistoryPanel from './components/HistoryPanel';
 import styles from './index.module.scss';
 
 /**
- * 播放器页：纯播放 + 历史视图。故事生成已统一收归创作（chat）页。
+ * 播放器页：纯 playback/compatibility surface。历史 Surface 已回迁 Chat（M4-07）。
+ * 本页仅保留播放主体（PlaybackStatusBoard / GenerationPreview / AudioPlayer），不再拥有 History UI。
  * @returns 播放器页 JSX 结构
  */
 const HomePage: React.FC = () => {
@@ -39,8 +39,6 @@ const HomePage: React.FC = () => {
         <GenerationPreview />
 
         <AudioPlayer />
-
-        <HistoryPanel />
       </div>
     </div>
   );

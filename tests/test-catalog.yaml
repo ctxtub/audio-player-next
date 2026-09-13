@@ -1009,6 +1009,18 @@ cases:
     executable_ids: [exec-artifact-history-rehydration]
     fixtures: []
     owner: creation-artifact
+  - case_id: history-ui-relocation
+    display_name_zh: History UI 回迁 Chat-owned Surface
+    legacy_aliases: [E2E-08-07]
+    journey_id: creation-artifact
+    user_goal: 提示词历史与生成历史从 Player 搬回 Chat 创作 surface，保留原 store 与操作语义，同页选择 exactly-once 新创作且 Player 不再拥有 History
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [chat, history, relocation, ownership, pending-consumer]
+    spec_path: docs/e2e/08-创作Artifact/07-HistoryUIRelocation.md
+    executable_ids: [exec-history-ui-relocation]
+    fixtures: []
+    owner: creation-artifact
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1256,6 +1268,10 @@ executables:
     display_name_zh: Artifact History 持久化与恢复
     layer: L1
     path: ./tests/unit/creation-chat/artifact-history-rehydration.unit.test.ts
+  - executable_id: exec-history-ui-relocation
+    display_name_zh: History UI 回迁 Chat-owned Surface
+    layer: L1
+    path: ./tests/unit/creation-chat/history-ui-relocation.unit.test.ts
   - executable_id: exec-l3-reject-second-submit-while-streaming
     display_name_zh: L3流式中再次提交互斥
     layer: L3

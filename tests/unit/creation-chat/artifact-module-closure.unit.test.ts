@@ -817,7 +817,7 @@ async function main(): Promise<void> {
       assert.ok(!content.includes('libraryClient'), `${rel} 不得直调 Library`);
       assert.ok(!content.includes('storyArtifactPromotion'), `${rel} 不得直引 promotion adapter`);
     }
-    // ⑥ Legacy 新构造点仅 decoder。
+    // ⑥ Legacy 新构造点仅 decoder（扫描整个 lib，含 lib/server；types/ 除外，见下）。
     const constructorRe = /type\s*:\s*['"]storyCard['"]/;
     const constructorViolations: string[] = [];
     const walkProd = (dir: string): void => {
@@ -835,10 +835,18 @@ async function main(): Promise<void> {
         }
       }
     };
-    for (const root of ['app', 'lib/client', 'stores', 'components']) {
+    for (const root of ['app', 'lib', 'stores', 'components']) {
       walkProd(path.resolve(process.cwd(), root));
     }
     assert.deepStrictEqual(constructorViolations, [], `新构造点仅允许 decoder，违规：${constructorViolations.join(', ')}`);
+    // 中文注释：M4-10 fixup——server provenance boundary 允许识别 Legacy，但绝不允许构造 Legacy。
+    // chatConversation.ts 在 final allowlist（识别 existing storyCard 做 provenance/sanitize），
+    // 故 allowlist 本身拦不住它新增构造点；此处显式断言堵住"新 Legacy 写入"通道。
+    // （注：types/ 不进 constructor scan——StoryCardPart 类型声明的 type: 'storyCard' 合法，非运行时构造。）
+    assert.ok(
+      !constructorRe.test(readSource('lib/server/chatConversation.ts')),
+      'server provenance boundary 允许识别 Legacy，但绝不允许构造 Legacy',
+    );
     // ⑦ final allowlist 外 Legacy 依赖 = 0。
     const WIRE_RE = /['"]storyCard['"]/;
     const TYPE_RE = /StoryCardPart/;

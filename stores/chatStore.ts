@@ -20,7 +20,17 @@ import {
 import {
   isDraftArtifact,
   isCompleteArtifact,
+  isPromotingArtifact,
+  isPromotionFailedArtifact,
 } from '@/types/chatArtifact';
+import type { CompleteChatArtifact, PromotionFailedChatArtifact } from '@/types/chatArtifact';
+import {
+  beginPromotion,
+  executePromotionCreate,
+  finishPromotionAsFailed,
+  finishPromotionAsReady,
+  type PromotionSourceArtifact,
+} from '@/lib/client/chatPromotionOrchestration';
 import type { AgentType } from '@/types/agent';
 import {
   createAssistantPlaceholder,
@@ -73,6 +83,11 @@ export type ChatStoreAction =
   | { type: 'stream.finish'; payload?: ChatStreamDoneEvent; messageId?: string } // 普通对话或流传输完成
   | { type: 'stream.fail'; error?: string; messageId?: string }            // 失败
   | { type: 'stream.abort'; messageId?: string; reason?: string }          // 中断
+  // M4-04 promotion 编排回写（仅 orchestration 内部派发；归属校验失败一律 no-op）
+  | { type: 'promotion.resolved'; messageId: string; promotionToken: number; promotionEpoch: number; storyWorkId: number } // promotion 成功回写 ready
+  | { type: 'promotion.rejected'; messageId: string; promotionToken: number; promotionEpoch: number; error?: string } // promotion 失败回写 promotion_failed
+  // M4-04 promotion 幂等重试（仅 promotion_failed 可重试；只重发入库写，不走 generation transport）
+  | { type: 'promotion.retry'; messageId: string }                         // 重试单条 Artifact 的 promotion
   | {
     type: 'summary.update';
     summaryText: string;
@@ -267,6 +282,142 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   let accountEpoch = 0;
   /** H-15 基线：上次读取/落盘成功的 messageId 序列（内存，不持久化）。 */
   let baselineMessageIds: string[] | undefined = undefined;
+  /**
+   * M4-04 promotion 编排瞬态守卫（客户端 async race guard，不进持久领域模型）：
+   * - promotionSeq：全局单调 promotionToken 计数器，每次 kick 自增；
+   * - promotionEpoch：resetChat/reset/resetActiveSession 自增，旧 promotion resolve/reject 凭此 no-op；
+   * - inflightPromotions：messageId → 在途 promotion 归属（同一 messageId 最多一个 in-flight create）；
+   * - pendingPromotionKicks：set() 内登记、dispatch 尾部统一 drain，避免 updater 内直接做异步副作用。
+   */
+  let promotionSeq = 0;
+  let promotionEpoch = 0;
+  const inflightPromotions = new Map<string, { token: number; epoch: number }>();
+  const pendingPromotionKicks: {
+    messageId: string;
+    token: number;
+    epoch: number;
+    source: PromotionSourceArtifact;
+  }[] = [];
+
+  /**
+   * M4-04：登记一次 promotion kick（调用方已把 Artifact 置为 promoting）。
+   * 同一 messageId 已有在途 promotion 时拒绝登记（调用方不得重复 kick）。
+   */
+  const enqueuePromotionKick = (
+    messageId: string,
+    source: PromotionSourceArtifact,
+  ): { token: number; epoch: number } | null => {
+    if (inflightPromotions.has(messageId)) {
+      return null;
+    }
+    promotionSeq += 1;
+    const kick = { token: promotionSeq, epoch: promotionEpoch, source };
+    inflightPromotions.set(messageId, { token: kick.token, epoch: kick.epoch });
+    pendingPromotionKicks.push({ messageId, ...kick });
+    return { token: kick.token, epoch: kick.epoch };
+  };
+
+  /**
+   * M4-04：drain 本次 dispatch 登记的 promotion kicks（dispatch 尾部调用，set() 之后）。
+   * 异步 create 结算后一律经 promotion.resolved/rejected 回写，由归属校验决定生效或 no-op。
+   */
+  const drainPromotionKicks = () => {
+    if (pendingPromotionKicks.length === 0) {
+      return;
+    }
+    const kicks = pendingPromotionKicks.splice(0, pendingPromotionKicks.length);
+    for (const kick of kicks) {
+      void executePromotionCreate(kick.source).then(
+        (dto) => {
+          get().dispatch({
+            type: 'promotion.resolved',
+            messageId: kick.messageId,
+            promotionToken: kick.token,
+            promotionEpoch: kick.epoch,
+            storyWorkId: dto.id,
+          });
+        },
+        (error) => {
+          get().dispatch({
+            type: 'promotion.rejected',
+            messageId: kick.messageId,
+            promotionToken: kick.token,
+            promotionEpoch: kick.epoch,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+      );
+    }
+  };
+
+  /**
+   * M4-04：promotion 结果归属校验（stale 防线核心）。
+   * 只有「epoch 未变 ＋ slot 仍属该 token ＋ 消息仍存在 ＋ 当前 Artifact 仍是该次
+   * promotion 对应的 promoting generation（status==='promoting' 且 sourceMessageId 一致）」
+   * 四项全过才允许写回；任一失败一律 no-op（拥有 slot 时顺手释放，避免泄漏）。
+   */
+  const claimPromotionSlot = (
+    messages: ChatMessage[],
+    messageId: string,
+    promotionToken: number,
+    epoch: number,
+  ): { msg: ChatMessage; index: number } | null => {
+    if (epoch !== promotionEpoch) {
+      return null;
+    }
+    const inflight = inflightPromotions.get(messageId);
+    if (!inflight || inflight.token !== promotionToken || inflight.epoch !== epoch) {
+      return null;
+    }
+    const index = messages.findIndex((m) => m.id === messageId && m.role === 'assistant');
+    if (index === -1) {
+      inflightPromotions.delete(messageId);
+      return null;
+    }
+    const msg = messages[index];
+    const existing = getStoryArtifactPart(msg);
+    if (
+      !existing ||
+      !isPromotingArtifact(existing.artifact) ||
+      existing.artifact.sourceMessageId !== messageId
+    ) {
+      inflightPromotions.delete(messageId);
+      return null;
+    }
+    inflightPromotions.delete(messageId);
+    return { msg, index };
+  };
+
+  /**
+   * M4-04：作废全部在途 promotion（resetChat/reset/resetActiveSession 调用）。
+   * 旧 resolve/reject 凭 epoch 失配 no-op；在途 slot 同步清空防泄漏。
+   */
+  const invalidateInflightPromotions = () => {
+    promotionEpoch += 1;
+    inflightPromotions.clear();
+  };
+
+  /**
+   * M4-04：将已完成的 Artifact 置为 promoting 并登记 async kick（story_complete 两分支共用）。
+   * beginPromotion 抛错时停留在 complete（不抛、不 kick）；kick 登记走在途去重，
+   * 重复登记直接忽略（Artifact 已是 promoting，后续 duplicate 事件同样忽略）。
+   */
+  const writePromotingAndKick = (
+    messages: ChatMessage[],
+    targetIndex: number,
+    completed: CompleteChatArtifact,
+    messageId: string,
+  ): void => {
+    let promoting;
+    try {
+      promoting = beginPromotion(completed);
+    } catch {
+      messages[targetIndex] = withArtifact(messages[targetIndex], completed);
+      return;
+    }
+    messages[targetIndex] = withArtifact(messages[targetIndex], promoting);
+    enqueuePromotionKick(messageId, completed);
+  };
 
   /**
    * 判断是否为基线冲突错误（服务端 CONFLICT 拒写）。
@@ -702,7 +853,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         }
         case 'stream.story_complete': {
           // M4-02 冻结语义：story_complete 仅表示故事正文 terminal（draft→complete）。
-          // ≠ StoryWork created ≠ audio ready ≠ promotion started；done ≠ implicit promotion。
+          // M4-04 编排：complete 随后同步进入 promoting 并 kick 唯一 async promotion
+          // （complete → startPromotion() → promoteStoryArtifact()）；done 不再隐式 promotion。
           // 严格按 messageId 身份定位；找不到（stale/已清空）直接忽略，绝不复活。
           const targetIndex = messages.findIndex(
             (m) => m.id === action.messageId && m.role === 'assistant',
@@ -716,8 +868,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
 
           const existing = getStoryArtifactPart(msg);
           if (existing) {
-            if (isCompleteArtifact(existing.artifact)) {
-              // duplicate story_complete：同一 attempt 只发生一次 draft→complete，重复到达幂等忽略。
+            if (isCompleteArtifact(existing.artifact) || isPromotingArtifact(existing.artifact)) {
+              // duplicate story_complete：同一 attempt 只发生一次 draft→complete→promoting，
+              // 重复到达幂等忽略（绝不产生第二次入库写）。
               return state;
             }
             if (!isDraftArtifact(existing.artifact)) {
@@ -730,13 +883,13 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
                 title: action.title,
               });
               // 终态仍保持发送中/已送达原样，不在此标记 delivered（delivery 归 stream.finish）。
-              messages[targetIndex] = withArtifact(msg, completed);
+              writePromotingAndKick(messages, targetIndex, completed, action.messageId);
             } catch {
               return state;
             }
             return { messages };
           }
-          // 无 Artifact 兜底：按同一 sourceMessageId 重建 draft→complete（仍不触达 promotion/audio）。
+          // 无 Artifact 兜底：按同一 sourceMessageId 重建 draft→complete→promoting（仍不触达 audio）。
           try {
             const draft = createDraftArtifact({
               sourceMessageId: msg.id,
@@ -746,10 +899,65 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
               finalStoryText: authoritativeText,
               title: action.title,
             });
-            messages[targetIndex] = withArtifact(msg, completed);
+            writePromotingAndKick(messages, targetIndex, completed, action.messageId);
           } catch {
             return state;
           }
+          return { messages };
+        }
+        case 'promotion.resolved': {
+          // M4-04：promotion 成功回写 ready（promoting → ready）。
+          // 归属校验失败（stale/epoch 失配/消息已清/Artifact 已非该次 promoting）一律 no-op。
+          const claimed = claimPromotionSlot(messages, action.messageId, action.promotionToken, action.promotionEpoch);
+          if (!claimed) return state;
+          const promoting = getStoryArtifactPart(claimed.msg)?.artifact;
+          if (!promoting || !isPromotingArtifact(promoting)) return state;
+          try {
+            const ready = finishPromotionAsReady(promoting, action.storyWorkId);
+            messages[claimed.index] = withArtifact(claimed.msg, ready);
+          } catch {
+            // 非法 storyWorkId 等：不写回（slot 已释放，不重试、不抛）。
+            return state;
+          }
+          return { messages };
+        }
+        case 'promotion.rejected': {
+          // M4-04：promotion 失败回写 promotion_failed（promoting → promotion_failed）。
+          // 完整 storyText / sourceMessageId / prompt / voice 快照全保留；delivery 不动；
+          // 不换 sourceMessageId、不重生成、不自动重试（重试只走 promotion.retry）。
+          const claimed = claimPromotionSlot(messages, action.messageId, action.promotionToken, action.promotionEpoch);
+          if (!claimed) return state;
+          const promoting = getStoryArtifactPart(claimed.msg)?.artifact;
+          if (!promoting || !isPromotingArtifact(promoting)) return state;
+          try {
+            const failed = finishPromotionAsFailed(promoting, action.error ?? 'promotion_failed');
+            messages[claimed.index] = withArtifact(claimed.msg, failed);
+          } catch {
+            return state;
+          }
+          return { messages };
+        }
+        case 'promotion.retry': {
+          // M4-04：promotion_failed 幂等重试（promotion_failed → promoting ＋ 只重发入库写）。
+          // 非 promotion_failed（promoting 在途/ready 终态/interrupted/draft/complete）一律忽略；
+          // 同一 messageId 在途去重（快速双击只发一次）；绝不触达 generation transport。
+          const targetIndex = messages.findIndex(
+            (m) => m.id === action.messageId && m.role === 'assistant',
+          );
+          if (targetIndex === -1) return state;
+          const msg = messages[targetIndex];
+          const existing = getStoryArtifactPart(msg);
+          if (!existing || !isPromotionFailedArtifact(existing.artifact)) return state;
+          if (inflightPromotions.has(action.messageId)) return state;
+          const source: PromotionFailedChatArtifact = existing.artifact;
+          let promoting;
+          try {
+            promoting = beginPromotion(source);
+          } catch {
+            return state;
+          }
+          messages[targetIndex] = withArtifact(msg, promoting);
+          enqueuePromotionKick(action.messageId, source);
           return { messages };
         }
         case 'stream.finish': {
@@ -883,6 +1091,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     });
     // 任一消息变更后调度防抖保存（内部按登录态/在途状态决定是否真正保存）
     scheduleSave();
+    // M4-04：drain 本次 dispatch 登记的 promotion kicks（set() 之后触发 async create）。
+    drainPromotionKicks();
   },
 
   checkAndSummarize: async () => {
@@ -949,12 +1159,16 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   resetActiveSession: () => {
     // 重置会话：移除所有处于 sending 状态的临时消息，
     // 通常在用户主动取消生成，或页面卸载时调用。
+    // M4-04：同步作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op）。
+    invalidateInflightPromotions();
     set((state) => ({
       messages: state.messages.filter(m => m.status !== 'sending'),
     }));
     scheduleSave();
   },
   resetChat: () => {
+    // M4-04：清空作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op，绝不复活）。
+    invalidateInflightPromotions();
     set({
       messages: [],
     });
@@ -1005,6 +1219,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   },
   reset: () => {
     accountEpoch++; // 作废在途 initForUser 的回写
+    // M4-04：登出同步作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op）。
+    invalidateInflightPromotions();
     userInitPromise = null; // 让重新登录能起新请求
     baselineMessageIds = undefined; // 中文注释：H-15 登出清基线，避免跨账号透传。
     if (saveTimer) {

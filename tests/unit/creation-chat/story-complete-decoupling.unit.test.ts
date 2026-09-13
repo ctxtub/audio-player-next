@@ -4,6 +4,9 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 
 // 中文注释：M4-02 解耦回归——stream complete 与 Artifact completion 解耦（draft→complete 仅由 story_complete 驱动）。
+// M4-04 更新：story_complete 随后同步进入 promoting 并 kick 唯一 async promotion，
+// complete 为瞬态（同步不再可观察）；本文件注入永不结算的 promotion 桩，锁定 draft→(complete)→promoting
+// 的同步编排语义与 done 正交性，ready/failed 终态由 E2E-08-04 覆盖。
 // 全程内存打桩，不建 socket、不绑端口，不碰 prisma/dev.db。
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
@@ -43,12 +46,25 @@ const { useChatStore } = nodeRequire('../../../stores/chatStore') as {
   useChatStore: typeof import('../../../stores/chatStore').useChatStore;
 };
 
+// 中文注释：M4-04 编排桩——永不结算，锁定同步编排语义（complete 瞬态→promoting），绝不触达真实网络。
+const { setPromotionCreateOverride } = nodeRequire(
+  '../../../lib/client/chatPromotionOrchestration',
+) as {
+  setPromotionCreateOverride: typeof import('../../../lib/client/chatPromotionOrchestration').setPromotionCreateOverride;
+};
+let promotionCreateCalls = 0;
+setPromotionCreateOverride(() => {
+  promotionCreateCalls += 1;
+  return new Promise<never>(() => {});
+});
+
 type DispatchArg = Parameters<ReturnType<typeof useChatStore.getState>['dispatch']>[0];
 type ChatMsg = ReturnType<typeof useChatStore.getState>['messages'][number];
 
 function resetBaseline(): void {
   useChatStore.getState().reset();
   useChatStore.setState({ syncEnabled: false });
+  promotionCreateCalls = 0;
 }
 
 function submitAndGetAssistantId(content = '讲个睡前故事'): string {
@@ -117,7 +133,7 @@ async function main(): Promise<void> {
     console.log('PASS: M4-02-01 source identity');
   }
 
-  console.log('=== M4-02-02: duplicate story_complete 同一 attempt 仅一次 draft→complete ===');
+  console.log('=== M4-02-02: duplicate story_complete 同一 attempt 仅一次 draft→complete→promoting ===');
   {
     resetBaseline();
     const assistantId = submitAndGetAssistantId();
@@ -125,13 +141,16 @@ async function main(): Promise<void> {
     delta(assistantId, '从前');
     storyComplete(assistantId, '从前有座山');
     const first = getArtifact(assistantId);
-    assert.strictEqual(first.part.artifact.status, 'complete');
+    // M4-04：complete 为瞬态，同步可观察到 promoting，且只 kick 一次 promotion。
+    assert.strictEqual(first.part.artifact.status, 'promoting');
     assert.strictEqual(first.part.artifact.storyText, '从前有座山');
-    // 重复到达：幂等忽略，不抛错、不新写、不改文本。
+    assert.strictEqual(promotionCreateCalls, 1, '首次 story_complete 必须恰好 kick 一次 promotion');
+    // 重复到达：幂等忽略，不抛错、不新写、不改文本、不产生第二次 promotion。
     storyComplete(assistantId, '从前有座山');
     const second = getArtifact(assistantId);
-    assert.strictEqual(second.part.artifact.status, 'complete');
+    assert.strictEqual(second.part.artifact.status, 'promoting');
     assert.strictEqual(second.part.artifact.storyText, '从前有座山');
+    assert.strictEqual(promotionCreateCalls, 1, 'duplicate story_complete 不得产生第二次 promotion');
     assert.strictEqual(
       (second.msg.parts ?? []).filter((p) => p.type === 'storyArtifact').length,
       1,
@@ -140,21 +159,22 @@ async function main(): Promise<void> {
     console.log('PASS: M4-02-02 duplicate idempotent');
   }
 
-  console.log('=== M4-02-03: story_complete → done 仍是同一个 complete ===');
+  console.log('=== M4-02-03: story_complete → done 仍是同一个 promoting（done 只标记送达） ===');
   {
     resetBaseline();
     const assistantId = submitAndGetAssistantId();
     intentStory(assistantId);
     storyComplete(assistantId, '完整故事正文-03');
     const before = getArtifact(assistantId);
+    assert.strictEqual(before.part.artifact.status, 'promoting');
     finish(assistantId);
     const after = getArtifact(assistantId);
-    assert.strictEqual(after.part.artifact.status, 'complete', 'done 不得改变 Artifact 状态');
+    assert.strictEqual(after.part.artifact.status, 'promoting', 'done 不得改变 Artifact 状态');
     assert.strictEqual(after.part.artifact.storyText, before.part.artifact.storyText, 'done 不得改写正文');
     assert.strictEqual(after.part.artifact.sourceMessageId, assistantId);
     assert.strictEqual(after.msg.status, 'delivered', 'done 标记 delivered');
     assert.strictEqual((after.part.artifact as { storyWorkId?: unknown }).storyWorkId, undefined);
-    console.log('PASS: M4-02-03 complete stable across done');
+    console.log('PASS: M4-02-03 promoting stable across done');
   }
 
   console.log('=== M4-02-04: done → story_complete 不因 done 提前制造 ready/StoryWork ===');
@@ -168,10 +188,10 @@ async function main(): Promise<void> {
     assert.strictEqual(mid.part.artifact.status, 'draft', 'done 不得隐式 complete');
     assert.strictEqual(mid.msg.status, 'delivered');
     assert.strictEqual((mid.part.artifact as { storyWorkId?: unknown }).storyWorkId, undefined);
-    // 随后 story_complete 仍可完成，但绝不直接 ready。
+    // 随后 story_complete 同步进入 promoting（M4-04 编排），但绝不直接 ready。
     storyComplete(assistantId, '草稿片段完整版');
     const after = getArtifact(assistantId);
-    assert.strictEqual(after.part.artifact.status, 'complete');
+    assert.strictEqual(after.part.artifact.status, 'promoting');
     assert.strictEqual((after.part.artifact as { storyWorkId?: unknown }).storyWorkId, undefined);
     assert.ok(!('storyWorkId' in after.part.artifact) || after.part.artifact.storyWorkId === undefined);
     console.log('PASS: M4-02-04 done-first no premature ready');
@@ -192,7 +212,8 @@ async function main(): Promise<void> {
     storyComplete(idA, 'A-完整正文-stale');
     const artifactA = getArtifact(idA);
     const artifactB = getArtifact(idB);
-    assert.strictEqual(artifactA.part.artifact.status, 'complete');
+    // M4-04：A 同步进入 promoting（promotion 在途），B 仍为 draft。
+    assert.strictEqual(artifactA.part.artifact.status, 'promoting');
     assert.strictEqual(artifactA.part.artifact.storyText, 'A-完整正文-stale');
     assert.strictEqual(artifactB.part.artifact.status, 'draft', 'stale A 不得推进 B');
     assert.strictEqual(artifactB.part.artifact.storyText, 'B-草稿');
@@ -400,7 +421,7 @@ async function main(): Promise<void> {
     })();
     assert.strictEqual(completeHandlerSlice.includes('audioUrl'), false, 'story_complete 处理器不得写入 audioUrl');
 
-    // 运行时：完整新链无 StoryCard、无 audioUrl、无 StoryWork。
+    // 运行时：完整新链无 StoryCard、无 audioUrl、无 StoryWork（M4-04：同步停在 promoting，在途未结算）。
     resetBaseline();
     const assistantId = submitAndGetAssistantId();
     intentStory(assistantId);
@@ -413,10 +434,11 @@ async function main(): Promise<void> {
     assert.ok(!flat.includes('"type":"storyCard"'), '运行时不得新写 StoryCardPart');
     assert.ok(!flat.includes('storyCard'), '运行时不得出现 storyCard 写入');
     assert.ok(!flat.includes('audioUrl'), '运行时不得写入 audioUrl（Modern Artifact 无该字段）');
-    assert.ok(!flat.includes('storyWorkId'), '运行时不得出现 StoryWork（complete ≠ ready，promotion 留后续）');
-    assert.ok(!flat.includes('library.create'), '运行时不得触发 library.create');
+    assert.ok(!flat.includes('storyWorkId'), '运行时不得出现 StoryWork（promoting 在途未结算，无 storyWorkId）');
+    assert.ok(!flat.includes('library.create'), '运行时不得直调 library.create（唯一通道走 adapter）');
+    assert.strictEqual(promotionCreateCalls, 1, '完整新链必须恰好 kick 一次 promotion');
     const { part } = getArtifact(assistantId);
-    assert.strictEqual(part.artifact.status, 'complete');
+    assert.strictEqual(part.artifact.status, 'promoting');
     assert.strictEqual('audioUrl' in (part.artifact as Record<string, unknown>), false);
     console.log('PASS: M4-02-08 static+runtime guards');
   }
@@ -433,6 +455,7 @@ const testPromise = main()
     process.exit(1);
   })
   .finally(() => {
+    setPromotionCreateOverride(undefined);
     useChatStore.getState().reset();
   });
 

@@ -1009,6 +1009,10 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   handleParagraphEnded: async (): Promise<boolean> => {
     const state = get();
+    // M8-04 FIXUP-4 fail-closed（Manifest unknown → 绝不以 Draft 切分冒充 Work Manifest SSOT）：
+    // status=error 时当前 Blob 可自然播完，到 ended 事件时停止：不推进 next、不 checkpoint、
+    // 不 fetchAudio、不 ensureSegment、不清 Session；等 hydrate/retry 恢复可信 Manifest SSOT。
+    if (state.status === 'error') return false;
     if (state.totalParagraphs <= 0 || state.paragraphs.length === 0) return false;
     const completed = state.nextParagraphIndex;
     const next = completed + 1;

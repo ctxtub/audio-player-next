@@ -119,6 +119,7 @@ const SID_I = '091ac10b-58cc-4372-a567-0e02b2c3d491';
 const SID_J = '0a1ac10b-58cc-4372-a567-0e02b2c3d4a1';
 const SID_K = '0b1ac10b-58cc-4372-a567-0e02b2c3d4b1';
 const SID_L = '0c1ac10b-58cc-4372-a567-0e02b2c3d4c1';
+const SID_M = '0d1ac10b-58cc-4372-a567-0e02b2c3d4d1';
 const P1 = `第一自然段：很久很久以前在宁静的大森林深处住着一只聪明活泼的小松鼠它有一条蓬松柔软的大尾巴每天清晨都在高高的树梢之间欢快地跳来跳去寻找新鲜的坚果与甘甜的露水日子过得无忧无虑。`;
 const P2 = `第二自然段：小松鼠每天迎着金色的朝阳出门收集松果仔细辨别每一颗果实是否饱满香甜然后整整齐齐存放在自己温暖干燥的树洞深处为即将到来的漫长寒冬储备充足的粮食心里充满了丰收的喜悦。`;
 const TWO = `${P1}\n${P2}`;
@@ -565,6 +566,143 @@ async function runTests() {
         assert.strictEqual(ensureCalls, 0, 'B11c prefetch boundary：3>=Manifest count 3 不预取');
         assert.strictEqual(fetchCalls, 0, 'B11c prefetch boundary：越界不走 fetch');
       }
+    }
+    console.log('=== B11d. Oracle FIXUP-4 Manifest unknown error 下 handleParagraphEnded fail-closed（runtime） ===');
+    {
+      // promotion server 成功但 client Manifest fetch 失败 → source=Work/status=error/paragraphs 留 Draft/Blob 不断；
+      // 此时 Blob ended 必须停止（不推进 next/不 checkpoint/不 fetch/不 ensure/不清 Session），等 hydrate retry 恢复 SSOT。
+      const FROZEN_D0 = `${P1}【冻D0】`;
+      const FROZEN_D1 = `${P2}【冻D1】`;
+      const FROZEN_D2 = `第三冻段D：刻意多一段以验证 error 恢复与 count 切换内容足够长用于后续播放与预取边界断言。`;
+      const FROZEN_D_ALL = [FROZEN_D0, FROZEN_D1, FROZEN_D2];
+      const draftMsgB11d = `oracleB11d-draft-${Date.now()}`;
+      await prisma.chatMessage.create({ data: { userId: user.id, position: 0, messageId: draftMsgB11d, role: 'assistant', content: 'draft', parts: null } });
+      const workB11d = await prisma.storyWork.create({ data: { userId: user.id, prompt: 'oracleB11d', storyText: TWO, voiceId: 'alloy', title: 'oracleB11d', excerpt: 'e', contentHash: '', sourceMessageId: draftMsgB11d } });
+      await prisma.storyWork.update({ where: { id: workB11d.id }, data: { contentHash: hashA } });
+      const rB11d = await ensureStoryAudioSegmentForSubject(subject, { workId: workB11d.id, segmentIndex: 0, sessionId: SID_J }, { synthesize: synth });
+      assert.strictEqual(rB11d.status, 'ready', 'B11d manifest 先建');
+      const manB11d = await prisma.storyAudioManifest.findUnique({ where: { storyWorkId_version: { storyWorkId: workB11d.id, version: 1 } } });
+      assert.ok(manB11d, 'B11d manifest 行存在');
+      await prisma.storyAudioManifest.update({ where: { id: manB11d!.id }, data: { segmentationVersion: 'legacy-v0' } });
+      await prisma.storyPlaybackProgress.upsert({
+        where: { storyWorkId: workB11d.id },
+        create: { storyWorkId: workB11d.id, contentHash: hashA, segmentationVersion: 'legacy-v0', lastCompletedParagraphIndex: 0, nextParagraphIndex: 1, totalParagraphs: 3, completedAt: null, lastPlayedAt: new Date() },
+        update: { contentHash: hashA, segmentationVersion: 'legacy-v0', lastCompletedParagraphIndex: 0, nextParagraphIndex: 1, totalParagraphs: 3 },
+      });
+      resetWorld(); fakeController(pc1);
+      getConfig().setState({ apiConfig: { ...getConfig().getState().apiConfig, voiceId: 'alloy', speed: 1 } });
+      process.env.CANONICAL_AUDIO_ENABLED = '1';
+      getSession().getState().setActiveStory({ source: { kind: 'draft', messageId: draftMsgB11d }, sessionId: SID_M, title: 'oracleB11d-draft', storyText: TWO, voiceId: 'alloy', speed: 1.0 });
+      assert.deepStrictEqual(getSession().getState().paragraphs, [P1, P2], 'B11d 前提：Draft paragraphs 为本地切分');
+      getTransport().setState({ isPlaying: true } as never);
+      await getSession().getState().playParagraph(0, { explicit: true });
+      const draftUrlB11d = getTransport().getState().currentAudioUrl;
+      assert.ok(typeof draftUrlB11d === 'string' && (draftUrlB11d as string).startsWith('blob:'), 'B11d 前提：Draft 首播 blob');
+      getSession().setState({ nextParagraphIndex: 1, lastCompletedParagraphIndex: 0 });
+      promoteHandler = async () => ({ title: 'oracleB11d', contentHash: hashA, segmentationVersion: 'legacy-v0', totalParagraphs: 3, voiceId: 'alloy', speed: 1.0 });
+      let promoteThrewB11d = false;
+      try {
+        await getSession().getState().promoteDraftToWork(workB11d.id, { getManifest: async () => { throw new Error('manifest-fetch-boom-B11d'); } });
+      } catch {
+        promoteThrewB11d = true;
+      } finally {
+        promoteHandler = null;
+      }
+      assert.strictEqual(promoteThrewB11d, true, 'B11d：Manifest throws 时 promote 必须 reject（fail-closed）');
+      assert.strictEqual(getSession().getState().source?.kind, 'work', 'B11d：error 时 source 已切 Work（与 server 对齐）');
+      assert.strictEqual(getSession().getState().status, 'error', 'B11d：error 时 status=error');
+      assert.deepStrictEqual(getSession().getState().paragraphs, [P1, P2], 'B11d：error 时 paragraphs 保留旧 Draft（不清空最后可信 snapshot）');
+      assert.strictEqual(getTransport().getState().currentAudioUrl, draftUrlB11d, 'B11d：error 时当前 Draft Blob 仍为原 URL（不 pause/不断流 §22.4）');
+      assert.strictEqual(getSession().getState().nextParagraphIndex, 1, 'B11d：error 时 hash 一致沿用 draft 断点 1');
+      const nextOnErrorB11d = getSession().getState().nextParagraphIndex;
+      const lastOnErrorB11d = getSession().getState().lastCompletedParagraphIndex;
+      const paragraphsOnErrorB11d = [...getSession().getState().paragraphs];
+      const lastSavedKeyOnErrorB11d = getSession().getState().lastSavedKey;
+      const sessionIdOnErrorB11d = getSession().getState().sessionId;
+      const progDbBeforeEndedB11d = await prisma.storyPlaybackProgress.findUnique({ where: { storyWorkId: workB11d.id } });
+      // 模拟当前 Blob 自然播完 → ended 事件（runtime 真路径，非静态源码扫描）。
+      const ppModB11d = nodeRequire(ppPath) as Record<string, unknown>;
+      const origSaveB11d = ppModB11d['savePlaybackCheckpoint'];
+      const origCompleteB11d = ppModB11d['completePlaybackSession'];
+      const origClearB11d = ppModB11d['clearPlaybackAnchor'];
+      let saveCallsB11d = 0;
+      let completeCallsB11d = 0;
+      let clearCallsB11d = 0;
+      ppModB11d['savePlaybackCheckpoint'] = async () => { saveCallsB11d += 1; return { accepted: true }; };
+      ppModB11d['completePlaybackSession'] = async () => { completeCallsB11d += 1; return null; };
+      ppModB11d['clearPlaybackAnchor'] = async () => { clearCallsB11d += 1; return { cleared: true }; };
+      try {
+        ensureCalls = 0; ensureLog = []; fetchCalls = 0; fetchTexts = [];
+        mockReadyMap.clear(); ensureQueue.length = 0;
+        getTransport().setState({ isPlaying: true } as never);
+        const endedRetB11d = await getSession().getState().handleParagraphEnded();
+        assert.strictEqual(endedRetB11d, false, 'B11d：error 下 ended 返回 false（停止，不推进）');
+        assert.strictEqual(getSession().getState().nextParagraphIndex, nextOnErrorB11d, 'B11d：error 下 next 不变化');
+        assert.strictEqual(getSession().getState().lastCompletedParagraphIndex, lastOnErrorB11d, 'B11d：error 下 lastCompleted 不变化');
+        assert.deepStrictEqual(getSession().getState().paragraphs, paragraphsOnErrorB11d, 'B11d：error 下 paragraphs 不变（不以 Draft 冒充 Work SSOT）');
+        assert.strictEqual(getSession().getState().lastSavedKey, lastSavedKeyOnErrorB11d, 'B11d：error 下 checkpoint 不推进（lastSavedKey 不变）');
+        assert.strictEqual(saveCallsB11d, 0, 'B11d：error 下 saveCheckpoint=0');
+        assert.strictEqual(completeCallsB11d, 0, 'B11d：error 下 complete=0');
+        assert.strictEqual(fetchCalls, 0, 'B11d：error 下 fetchAudio=0（flag-on 亦不取 Draft 文本）');
+        assert.strictEqual(ensureCalls, 0, 'B11d：error 下 ensureSegment=0（flag-on 亦不推进 checkpoint/资产）');
+        assert.strictEqual(clearCallsB11d, 0, 'B11d：error 下不清 Anchor');
+        assert.strictEqual(getSession().getState().sessionId, sessionIdOnErrorB11d, 'B11d：error 下 Session 不被 clear（sessionId 不变）');
+        assert.strictEqual(getSession().getState().source?.kind, 'work', 'B11d：error 下 source 仍 work（不清 Session）');
+        assert.strictEqual(getSession().getState().status, 'error', 'B11d：error 下 status 仍 error（不转 ended/ready）');
+        assert.strictEqual(getTransport().getState().currentAudioUrl, draftUrlB11d, 'B11d：error ended 后当前 Blob URL 不变（不清播放）');
+        const progDbAfterEndedB11d = await prisma.storyPlaybackProgress.findUnique({ where: { storyWorkId: workB11d.id } });
+        assert.deepStrictEqual(
+          { next: progDbAfterEndedB11d?.nextParagraphIndex, last: progDbAfterEndedB11d?.lastCompletedParagraphIndex, ver: progDbAfterEndedB11d?.segmentationVersion, total: progDbAfterEndedB11d?.totalParagraphs },
+          { next: progDbBeforeEndedB11d?.nextParagraphIndex, last: progDbBeforeEndedB11d?.lastCompletedParagraphIndex, ver: progDbBeforeEndedB11d?.segmentationVersion, total: progDbBeforeEndedB11d?.totalParagraphs },
+          'B11d：error 下 Progress 不推进/不重置',
+        );
+        // flag-off 同样停止（guard 与 flag 无关）：切换 flag 再模拟一次 ended，仍 false 且零副作用。
+        {
+          const savedCanonB11d = process.env.CANONICAL_AUDIO_ENABLED;
+          const savedPublicB11d = process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED;
+          process.env.CANONICAL_AUDIO_ENABLED = '0';
+          delete process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED;
+          try {
+            ensureCalls = 0; ensureLog = []; fetchCalls = 0; fetchTexts = [];
+            getTransport().setState({ isPlaying: true } as never);
+            const endedRetOffB11d = await getSession().getState().handleParagraphEnded();
+            assert.strictEqual(endedRetOffB11d, false, 'B11d flag-off：error 下 ended 仍 false');
+            assert.strictEqual(getSession().getState().nextParagraphIndex, nextOnErrorB11d, 'B11d flag-off：next 不变化');
+            assert.strictEqual(fetchCalls, 0, 'B11d flag-off：fetchAudio=0（不以旧 Draft 文本合成）');
+            assert.strictEqual(ensureCalls, 0, 'B11d flag-off：ensureSegment=0');
+            assert.strictEqual(saveCallsB11d, 0, 'B11d flag-off：saveCheckpoint 仍 0');
+          } finally {
+            if (savedCanonB11d === undefined) delete process.env.CANONICAL_AUDIO_ENABLED;
+            else process.env.CANONICAL_AUDIO_ENABLED = savedCanonB11d;
+            if (savedPublicB11d === undefined) delete process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED;
+            else process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED = savedPublicB11d;
+          }
+          process.env.CANONICAL_AUDIO_ENABLED = '1';
+        }
+      } finally {
+        ppModB11d['savePlaybackCheckpoint'] = origSaveB11d;
+        ppModB11d['completePlaybackSession'] = origCompleteB11d;
+        ppModB11d['clearPlaybackAnchor'] = origClearB11d;
+      }
+      // Manifest 恢复 → hydrate retry → frozen 恢复 → 可继续播放。
+      hooks.__resetPlaybackSessionTestHooks();
+      const anchorRetryB11d = { sessionId: SID_M, source: { kind: 'work' as const, workId: workB11d.id }, title: 'oracleB11d', contentHash: hashA, segmentationVersion: 'legacy-v0', nextParagraphIndex: 1, lastCompletedParagraphIndex: 0, totalParagraphs: 3, voiceId: 'alloy', speed: 1.0, sleepTimerMode: 'off' as const, remainingAllowedMs: null, totalAllowedMs: null };
+      const okRetryB11d = await getSession().getState().hydrateFromAnchor(anchorRetryB11d as never, {
+        getWork: async () => ({ title: 'oracleB11d', storyText: TWO, voiceId: 'alloy', contentHash: hashA }),
+        getManifest: async () => ({ segments: [{ index: 0, text: FROZEN_D0 }, { index: 1, text: FROZEN_D1 }, { index: 2, text: FROZEN_D2 }], segmentationVersion: 'legacy-v0', segmentCount: 3 }),
+      });
+      assert.strictEqual(okRetryB11d, true, 'B11d：Manifest 恢复后 hydrate retry 成功');
+      assert.strictEqual(getSession().getState().status, 'ready', 'B11d：retry 后 ready');
+      assert.deepStrictEqual(getSession().getState().paragraphs, FROZEN_D_ALL, 'B11d：retry 后 paragraphs 恢复 frozen');
+      assert.strictEqual(getSession().getState().segmentationVersion, 'legacy-v0', 'B11d：retry 后 version=Manifest');
+      assert.strictEqual(getSession().getState().totalParagraphs, 3, 'B11d：retry 后 total=Manifest segmentCount');
+      ensureCalls = 0; ensureLog = []; fetchCalls = 0; fetchTexts = [];
+      mockReadyMap.clear(); ensureQueue.length = 0;
+      getTransport().setState({ isPlaying: true } as never);
+      await getSession().getState().playParagraph(1, { explicit: true });
+      assert.ok(ensureCalls >= 1, 'B11d：retry 后可继续播放（flag-on 走 ensure）');
+      assert.ok(ensureLog.some((e) => e.workId === workB11d.id && e.segmentIndex === 1), 'B11d：retry 后 ensure 使用相同 index 1');
+      assert.ok(((getTransport().getState().currentAudioUrl ?? '') as string).startsWith('/api/audio/segments/'), 'B11d：retry 后 canonical URL');
     }
     console.log('\nALL WORK PLAYBACK REUSE INTEGRATION TESTS PASSED!');
   } finally {

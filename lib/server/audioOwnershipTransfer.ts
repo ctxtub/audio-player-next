@@ -26,6 +26,13 @@
  * - 禁止「User 已有 Manifest 就直接删 Guest」：User 已存在时必须先过
  *   isTransferEquivalent 等价门，冲突一律 fail-closed / CONFLICT，
  *   Guest/User audio rows 均不得被破坏，绝不删除任何 Object。
+ * - M8-05-03 FIXUP active-lease runtime gate（独立于等价门，isTransferEquivalent
+ *   的 canonical 定义不变、lease 仍属瞬态豁免）：destructive ownership cutover 前，
+ *   Guest Segment status=preparing AND leaseId!=null AND leaseExpiresAt>now 即视为
+ *   仍有 Guest worker ownership（该 worker 仍可能通过 M8-03 pre-put fencing 并写
+ *   object），禁止删除 Guest Audio rows，fail-closed / retryable CONFLICT，
+ *   整个 registration creative transaction rollback。过期 lease / 无 lease 的
+ *   preparing 仍允许迁移（已无合法活 worker），迁移后由 User ensure 正常 reclaim。
  *
  * 幂等 / 冲突语义（integration oracle 锁定）：
  * - Guest Manifest 不存在 → no-op（幂等）。
@@ -52,7 +59,7 @@
 import { TRPCError } from '@trpc/server';
 
 /**
- * 调用方 transaction 窄面（仅本 helper 需要的四个 delegate 操作）。
+ * 调用方 transaction 窄面（仅本 helper 需要的 delegate 操作；写面四类 + fencing 读面）。
  *
  * Loose any 入参是有意的：具体 Prisma delegate 泛型在 fake 下不可名，
  * 窄 fake 面与具体 delegate 在严格逆变下互不兼容；loose args 保持双向可赋值
@@ -68,6 +75,11 @@ export type AudioOwnershipTransferTx = {
     guestStoryAudioSegment: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         deleteMany(args: any): Promise<any>;
+        // M8-05-03 FIXUP fencing 重读面（事务内 active-lease gate 用；可选以兼容最小 fake）。
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        findFirst?(args: any): Promise<any>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        findMany?(args: any): Promise<any>;
     };
     storyAudioManifest: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -221,6 +233,95 @@ function throwConflict(guestWorkId: number, userWorkId: number, detail: string):
 }
 
 /**
+ * M8-05-03 FIXUP active-lease runtime gate（纯判定；独立于 isTransferEquivalent）。
+ *
+ * 只要某个 Guest worker 仍可能通过 M8-03 pre-put fencing 并写 object，
+ * 就不能完成 Guest→User ownership cutover：
+ *   status === 'preparing' AND leaseId != null/'' AND leaseExpiresAt > now
+ * 即视为仍有 Guest worker ownership。过期 lease / 无 lease 的 preparing
+ * 已无合法活 worker，允许迁移（迁移后由 User ensure 正常 reclaim）。
+ * isTransferEquivalent 的 canonical 定义不变（lease 仍属瞬态豁免）。
+ */
+export function isActiveGuestLeaseSegment(
+    seg: Record<string, unknown>,
+    nowMs: number
+): boolean {
+    if ((seg.status as string) !== 'preparing') return false;
+    const leaseId = seg.leaseId as string | null | undefined;
+    if (leaseId == null || leaseId === '') return false;
+    const exp = seg.leaseExpiresAt as Date | string | null | undefined;
+    if (exp == null) return false;
+    const expMs = exp instanceof Date ? exp.getTime() : Date.parse(String(exp));
+    if (Number.isNaN(expMs)) return false;
+    return expMs > nowMs;
+}
+
+function findActiveGuestLeaseInSnapshot(
+    segments: Array<Record<string, unknown>>,
+    nowMs: number
+): Record<string, unknown> | null {
+    for (const s of segments) {
+        if (isActiveGuestLeaseSegment(s, nowMs)) return s;
+    }
+    return null;
+}
+
+/**
+ * Fencing 重读：同一 tx 内、删除动作前再次确认该 Guest manifest 下已无
+ * preparing+有效 lease 行。必须与删除动作同事务；调用方不得做事务外的
+ * 普通早期 read 然后假定不会有人新 claim（防 TOCTOU）。
+ */
+async function assertNoActiveGuestLeaseFresh(
+    tx: AudioOwnershipTransferTx,
+    manifestId: unknown,
+    now: Date,
+    guestWorkId: number,
+    userWorkId: number,
+    guestVersion: number
+): Promise<void> {
+    const delegate = (tx as unknown as Record<string, unknown>)
+        .guestStoryAudioSegment as
+        | {
+              findMany?: (args: unknown) => Promise<unknown>;
+              findFirst?: (args: unknown) => Promise<unknown>;
+          }
+        | undefined;
+    const nowMs = now.getTime();
+    // 首选 findMany 全量候选后在内存按 lease 语义过滤（避开 leaseId '' 的 DB 语义坑）。
+    if (delegate && typeof delegate.findMany === 'function') {
+        const rows = (await delegate.findMany({
+            where: { manifestId, status: 'preparing', leaseExpiresAt: { gt: now } },
+            select: { segmentIndex: true, status: true, leaseId: true, leaseExpiresAt: true },
+        })) as Array<Record<string, unknown>>;
+        const list = Array.isArray(rows) ? rows : [];
+        for (const r of list) {
+            if (isActiveGuestLeaseSegment(r, nowMs)) {
+                throwConflict(
+                    guestWorkId,
+                    userWorkId,
+                    `guest manifest v${guestVersion} has active synthesis lease (segment ${(r.segmentIndex as number) ?? '?'}): Guest worker still owns it; retry after expiry`
+                );
+            }
+        }
+        return;
+    }
+    if (delegate && typeof delegate.findFirst === 'function') {
+        const row = (await delegate.findFirst({
+            where: { manifestId, status: 'preparing', leaseExpiresAt: { gt: now } },
+            select: { segmentIndex: true, status: true, leaseId: true, leaseExpiresAt: true },
+        })) as null | Record<string, unknown>;
+        if (row && isActiveGuestLeaseSegment(row, nowMs)) {
+            throwConflict(
+                guestWorkId,
+                userWorkId,
+                `guest manifest v${guestVersion} has active synthesis lease (segment ${(row.segmentIndex as number) ?? '?'}): Guest worker still owns it; retry after expiry`
+            );
+        }
+    }
+    // 无 fencing 读面时退回快照判定（快照预检已 fail-closed；真 Prisma tx 恒有读面）。
+}
+
+/**
  * Guest → User Canonical Audio ownership transfer（必须在调用方 DB transaction 内调用）。
  *
  * @param tx 调用方 transaction client（严禁传全局 prisma；本文件不 import lib/db，
@@ -251,12 +352,40 @@ export async function transferGuestAudioOwnershipTx(
     })) as Array<Record<string, unknown> & { segments: Array<Record<string, unknown>> }>;
     if (guestManifests.length === 0) return { status: 'noop', manifestCount: 0 };
 
+    // FIXUP 快照预检：任一 Guest manifest 含 preparing+有效 lease 即 fail-closed，
+    // 写前直接 CONFLICT（User rows 不创建；throw 由外层 $transaction 全回滚）。
+    {
+        const nowMs = Date.now();
+        for (const m of guestManifests) {
+            const segs = Array.isArray(m.segments) ? (m.segments as Array<Record<string, unknown>>) : [];
+            const hit = findActiveGuestLeaseInSnapshot(segs, nowMs);
+            if (hit) {
+                throwConflict(
+                    guestWorkId,
+                    userWorkId,
+                    `guest manifest v${m.version as number} has active synthesis lease (segment ${(hit.segmentIndex as number) ?? '?'}): Guest worker still owns it; retry after expiry`
+                );
+            }
+        }
+    }
+
     let transferred = 0;
     let idempotent = 0;
 
     for (const guestManifest of guestManifests) {
         const guestSegments = Array.isArray(guestManifest.segments) ? guestManifest.segments : [];
         const guestVersion = guestManifest.version as number;
+
+        // FIXUP fencing 重读（与删除同事务、防 TOCTOU）：该 manifest 在本迭代内
+        // 若有新 claim 的有效 lease，必须在任何写前 fail-closed。
+        await assertNoActiveGuestLeaseFresh(
+            tx,
+            guestManifest.id,
+            new Date(),
+            guestWorkId,
+            userWorkId,
+            guestVersion
+        );
 
         // 2) 查 User 同 version Manifest（含 segments，供等价门判定）。
         const userManifest = (await tx.storyAudioManifest.findUnique({
@@ -318,6 +447,16 @@ export async function transferGuestAudioOwnershipTx(
                 });
             }
 
+            // FIXUP fencing 复检（与删除同事务）：create 与 delete 之间若有新 claim，
+            // 必须 fail-closed 回滚本次 create，绝不产生 zombie User lease。
+            await assertNoActiveGuestLeaseFresh(
+                tx,
+                guestManifest.id,
+                new Date(),
+                guestWorkId,
+                userWorkId,
+                guestVersion
+            );
             // Guest rows 删除（ownership move 完成；object bytes 不动，tombstone 不记）。
             await tx.guestStoryAudioSegment.deleteMany({
                 where: { manifestId: guestManifest.id },
@@ -344,6 +483,16 @@ export async function transferGuestAudioOwnershipTx(
                 `user manifest v${guestVersion} exists with differing canonical identity/segments/storageKeys`
             );
         }
+        // FIXUP：即使等价门通过，active Guest lease 仍禁止删 Guest rows
+        //（否则老 worker 的 pre-put renew 后 put 会覆盖同 key object，造成 canonical corruption）。
+        await assertNoActiveGuestLeaseFresh(
+            tx,
+            guestManifest.id,
+            new Date(),
+            guestWorkId,
+            userWorkId,
+            guestVersion
+        );
         // 幂等完成：User rows 不动，只清 Guest rows。
         await tx.guestStoryAudioSegment.deleteMany({
             where: { manifestId: guestManifest.id },

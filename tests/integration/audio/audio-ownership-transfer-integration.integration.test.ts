@@ -26,11 +26,14 @@ import { buildFakeCanonicalMp3 } from '../../../tests/support/fixtures/fake-cano
  *    Guest Manifest=none、Guest Segments=none；
  * 2) 计数：storage copy=0、put=0、delete=0、TTS=0、tombstone=0；
  * 3) partial Manifest 3/8 → 原样 transfer（partial 状态与 ready metadata 不丢）；
- * 4) failed/preparing/missing segment metadata → 原样 transfer、不触发 synthesis；
+ * 4) FIXUP 拆分：4a active lease（preparing+未来 lease）→ CONFLICT 拒绝+过期后 retry 成功（Oracle A）；
+ *    4b 过期/无 lease preparing+failed/missing → 原样 transfer、不触发 synthesis；
  * 5) 重复 registration migration → 不重复 User Manifest/Segment（幂等）；
  * 6) 故意制造 User/Guest 冲突 → 整个 ownership transfer rollback、object untouched、两侧 rows 不破坏；
  * 7) 注册后 getPlaybackManifest(userWorkId) 直接见转移的 frozen segments；
  *    已有 ready segment 可立即读取、不重新生成。
+ * 8) Oracle B：User 已存在等价 + Guest active lease → 即使等价亦拒绝；释放后幂等成功；
+ * 9) suspended worker 原子 claim 后 migration 不得产生 zombie User lease（加分）。
  *
  * 不变量：全程 storage.put=0/delete=0（计数后端）、tombstone=0、TTS=0（migration 无合成路径；
  * oracle 7 以 counting synthesizer 证明 ready 快路径零合成）。
@@ -306,14 +309,14 @@ async function runAudioOwnershipTransferIntegrationTests() {
       console.log('PASS: 3) partial 通过');
     }
 
-    console.log('=== 4) failed/preparing/missing 原样 transfer、不触发 synthesis ===');
+    console.log('=== 4a) Oracle A fail-closed：User absent + Guest preparing active lease → CONFLICT 拒绝，retry 后成功 ===');
     {
-      const guestId = `g_${TAG}_mixed`;
+      const guestId = `g_${TAG}_activeA`;
       const created = await createGuestWorkWithManifest({
-        tag: 'mixed',
+        tag: 'activeA',
         guestId,
         manifestStatus: 'preparing',
-        contentHash: `hash_${TAG}_mixed`,
+        contentHash: `hash_${TAG}_activeA`,
         segs: [
           { status: 'failed', withObject: false },
           { status: 'preparing', withObject: false, lease: true },
@@ -322,11 +325,104 @@ async function runAudioOwnershipTransferIntegrationTests() {
         seedBase: 31,
       });
       const guestSegBefore = await prisma.guestStoryAudioSegment.findMany({ where: { manifestId: created.manifestId }, orderBy: { segmentIndex: 'asc' } });
+      const activeSegBefore = guestSegBefore.find((s) => s.status === 'preparing');
+      assert.ok(activeSegBefore?.leaseId, '前置 active lease 存在');
+      assert.ok(activeSegBefore?.leaseExpiresAt && activeSegBefore.leaseExpiresAt.getTime() > Date.now(), '前置 lease 未来有效');
+      const user = await prisma.user.create({
+        data: { username: `m8053_activeA_${Date.now()}_${Math.floor(Math.random() * 1e6)}`, password: 'TestPassword123!', nickname: 'M8053' },
+      });
+      const counting = createCountingBackend(realStorage);
+      setAudioAssetStorageForTests(counting);
+      const ttsBefore = ttsInvocations;
+      let threw: unknown = null;
+      try {
+        await migrateGuestCreativeRecordsToUser(guestId, user.id);
+      } catch (e) {
+        threw = e;
+      } finally {
+        setAudioAssetStorageForTests(realStorage);
+      }
+      assert.ok(threw, 'active lease 必须拒绝 transfer');
+      assert.strictEqual((threw as { code?: string }).code, 'CONFLICT', 'active 拒绝码必须 CONFLICT（fail-closed/retryable）');
+      assert.ok(String((threw as Error).message).includes('active synthesis lease'), '错误须指明 active lease 可重试');
+      // Guest 全保留
+      assert.strictEqual(await prisma.guestStoryAudioManifest.count({ where: { storyWorkId: created.workId } }), 1, 'Guest Manifest 全保留');
+      assert.strictEqual(await prisma.guestStoryAudioSegment.count({ where: { manifestId: created.manifestId } }), 3, 'Guest Segments 全保留');
+      // User Audio rows 不创建（整事务回滚；映射亦不落）
+      const mappedAfterFail = await prisma.storyWorkMigration.findMany({ where: { guestId, guestStoryWorkId: created.workId } });
+      assert.strictEqual(mappedAfterFail.length, 0, 'CONFLICT 整事务回滚：不落错误 map');
+      const userWorksAfterFail = await prisma.storyWork.findMany({ where: { userId: user.id } });
+      // creative migration 在 CONFLICT 前可能已建 User Work 行，但 audio rows 绝不创建；此处断言 audio 面零创建
+      for (const uw of userWorksAfterFail) {
+        assert.strictEqual(await prisma.storyAudioManifest.count({ where: { storyWorkId: uw.id } }), 0, 'User Audio rows 不创建（无 zombie lease）');
+      }
+      // object 不动 + 计数
+      for (const k of created.storageKeys) {
+        // failed/preparing/missing 本无 object；仅断言计数面无写
+        void k;
+      }
+      assert.deepStrictEqual(counting.puts, [], 'active 拒绝 put=0');
+      assert.deepStrictEqual(counting.deletes, [], 'active 拒绝 delete=0');
+      assert.strictEqual(ttsInvocations, ttsBefore, 'active 拒绝 TTS=0');
+      assert.strictEqual(await countTombstones(created.storageKeys), 0, 'active 拒绝 tombstone=0');
+      console.log('PASS: 4a) Oracle A fail-closed 通过');
+
+      // retry：lease 过期后同一 migration 成功（过期 lease 原样搬运，User ensure 可 reclaim）
+      const expiredAt = new Date(Date.now() - 60_000);
+      await prisma.guestStoryAudioSegment.updateMany({ where: { manifestId: created.manifestId, status: 'preparing' }, data: { leaseExpiresAt: expiredAt } });
+      const counting2 = createCountingBackend(realStorage);
+      setAudioAssetStorageForTests(counting2);
+      const ttsBefore2 = ttsInvocations;
+      let retryRes: Awaited<ReturnType<typeof migrateGuestCreativeRecordsToUser>> | null = null;
+      try {
+        retryRes = await migrateGuestCreativeRecordsToUser(guestId, user.id);
+      } finally {
+        setAudioAssetStorageForTests(realStorage);
+      }
+      assert.ok(retryRes, '过期后 retry 必须成功');
+      const userWorkId = retryRes.storyWorkIdMap.get(created.workId)!;
+      assert.ok(userWorkId !== undefined, 'retry 后建立映射');
+      const userManifest = await prisma.storyAudioManifest.findUnique({
+        where: { storyWorkId_version: { storyWorkId: userWorkId, version: 1 } },
+        include: { segments: { orderBy: { segmentIndex: 'asc' } } },
+      });
+      assert.ok(userManifest, 'retry 后 User Manifest 存在');
+      assert.deepStrictEqual(userManifest.segments.map((s) => s.status), ['failed', 'preparing', 'missing'], 'retry 后三态原样');
+      assert.deepStrictEqual(userManifest.segments.map((s) => s.storageKey), guestSegBefore.map((s) => s.storageKey), 'retry 后 storageKeys 不变');
+      assert.strictEqual(await prisma.guestStoryAudioManifest.count({ where: { storyWorkId: created.workId } }), 0, 'retry 后 Guest 清除');
+      assert.deepStrictEqual(counting2.puts, [], 'retry put=0');
+      assert.deepStrictEqual(counting2.deletes, [], 'retry delete=0');
+      assert.strictEqual(ttsInvocations, ttsBefore2, 'retry TTS=0');
+      assert.strictEqual(await countTombstones(created.storageKeys), 0, 'retry tombstone=0');
+      console.log('PASS: 4a) Oracle A retry（过期后成功）通过');
+    }
+
+    console.log('=== 4b) 过期 lease 原样 transfer、不触发 synthesis（FIXUP 拆分后半） ===');
+    {
+      const guestId = `g_${TAG}_expiredB`;
+      const created = await createGuestWorkWithManifest({
+        tag: 'expiredB',
+        guestId,
+        manifestStatus: 'preparing',
+        contentHash: `hash_${TAG}_expiredB`,
+        segs: [
+          { status: 'failed', withObject: false },
+          { status: 'preparing', withObject: false, lease: true },
+          { status: 'missing', withObject: false },
+        ],
+        seedBase: 33,
+      });
+      // 将未来 lease 置为过期（模拟 worker 已死、lease 自然过期；User ensure 可 reclaim）
+      const past = new Date(Date.now() - 60_000);
+      await prisma.guestStoryAudioSegment.updateMany({ where: { manifestId: created.manifestId, status: 'preparing' }, data: { leaseExpiresAt: past } });
+      const guestSegBefore = await prisma.guestStoryAudioSegment.findMany({ where: { manifestId: created.manifestId }, orderBy: { segmentIndex: 'asc' } });
+      assert.ok(guestSegBefore[1].leaseId, '过期 leaseId 仍保留（原样搬运）');
+      assert.ok(guestSegBefore[1].leaseExpiresAt!.getTime() <= Date.now(), '前置 lease 已过期');
       const counting = createCountingBackend(realStorage);
       setAudioAssetStorageForTests(counting);
       const ttsBefore = ttsInvocations;
       const user = await prisma.user.create({
-        data: { username: `m8053_mixed_${Date.now()}_${Math.floor(Math.random() * 1e6)}`, password: 'TestPassword123!', nickname: 'M8053' },
+        data: { username: `m8053_expiredB_${Date.now()}_${Math.floor(Math.random() * 1e6)}`, password: 'TestPassword123!', nickname: 'M8053' },
       });
       const res = await migrateGuestCreativeRecordsToUser(guestId, user.id);
       setAudioAssetStorageForTests(realStorage);
@@ -335,17 +431,19 @@ async function runAudioOwnershipTransferIntegrationTests() {
         where: { storyWorkId_version: { storyWorkId: userWorkId, version: 1 } },
         include: { segments: { orderBy: { segmentIndex: 'asc' } } },
       });
-      assert.ok(userManifest, 'mixed User Manifest 存在');
+      assert.ok(userManifest, 'expired User Manifest 存在');
       assert.deepStrictEqual(userManifest.segments.map((s) => s.status), ['failed', 'preparing', 'missing'], '三态原样');
       assert.strictEqual(userManifest.segments[0].lastErrorCode, guestSegBefore[0].lastErrorCode, 'failed error 原样');
-      assert.ok(userManifest.segments[1].leaseId, 'preparing lease 原样搬运（不触发 synthesis）');
+      assert.strictEqual(userManifest.segments[1].leaseId, guestSegBefore[1].leaseId, '过期 lease 原样搬运（不触发 synthesis，User ensure 可 reclaim）');
       assert.deepStrictEqual(userManifest.segments.map((s) => s.storageKey), guestSegBefore.map((s) => s.storageKey), 'storageKeys 不变');
-      assert.deepStrictEqual(counting.puts, [], 'mixed put=0（未合成即未写对象）');
-      assert.deepStrictEqual(counting.deletes, [], 'mixed delete=0');
-      assert.strictEqual(ttsInvocations, ttsBefore, 'mixed TTS=0');
-      assert.strictEqual(await countTombstones(created.storageKeys), 0, 'mixed tombstone=0');
-      console.log('PASS: 4) mixed 通过');
+      assert.strictEqual(await prisma.guestStoryAudioManifest.count({ where: { storyWorkId: created.workId } }), 0, 'Guest 清除');
+      assert.deepStrictEqual(counting.puts, [], 'expired put=0（未合成即未写对象）');
+      assert.deepStrictEqual(counting.deletes, [], 'expired delete=0');
+      assert.strictEqual(ttsInvocations, ttsBefore, 'expired TTS=0');
+      assert.strictEqual(await countTombstones(created.storageKeys), 0, 'expired tombstone=0');
+      console.log('PASS: 4b) expired 通过');
     }
+
 
     console.log('=== 5) 重复 registration migration → 不重复 User Manifest/Segment（幂等） ===');
     {
@@ -587,6 +685,163 @@ async function runAudioOwnershipTransferIntegrationTests() {
       }
       console.log('PASS: 7) 读路径通过');
     }
+
+    console.log('=== 8) Oracle B：User 已存在等价 + Guest active lease → 即使等价亦拒绝；释放后幂等成功 ===');
+    {
+      // Guest preparing + active lease；User 已有 canonical-equivalent Manifest（lease 豁免故等价）
+      const guestId = `g_${TAG}_oracleB`;
+      const created = await createGuestWorkWithManifest({
+        tag: 'oracleB',
+        guestId,
+        manifestStatus: 'preparing',
+        contentHash: `hash_${TAG}_oracleB`,
+        segs: [
+          { status: 'preparing', withObject: false, lease: true },
+          { status: 'missing', withObject: false },
+        ],
+        seedBase: 51,
+      });
+      const guestManifest = await prisma.guestStoryAudioManifest.findUnique({ where: { id: created.manifestId }, include: { segments: { orderBy: { segmentIndex: 'asc' } } } });
+      assert.ok(guestManifest, '前置 Guest Manifest 存在');
+      const userB = await prisma.user.create({
+        data: { username: `m8053_oracleB_${Date.now()}_${Math.floor(Math.random() * 1e6)}`, password: 'TestPassword123!', nickname: 'M8053' },
+      });
+      const guestWork = await prisma.guestStoryWork.findUnique({ where: { id: created.workId } });
+      assert.ok(guestWork, '前置 Guest Work 存在');
+      const userWorkB = await prisma.storyWork.create({
+        data: { userId: userB.id, prompt: guestWork.prompt, storyText: guestWork.storyText, title: 'oracleB', contentHash: guestWork.contentHash },
+      });
+      // 手工建等价 User Manifest（除 opaque id/lease 外与 Guest 一致；顺序打乱亦等价）
+      const userManifestB = await prisma.storyAudioManifest.create({
+        data: {
+          storyWorkId: userWorkB.id,
+          version: 1,
+          status: guestManifest.status,
+          contentHash: guestManifest.contentHash,
+          segmentationVersion: guestManifest.segmentationVersion,
+          voiceId: guestManifest.voiceId,
+          ttsBackendId: guestManifest.ttsBackendId,
+          ttsModel: guestManifest.ttsModel,
+          synthesisVersion: guestManifest.synthesisVersion,
+          synthesisSpeed: guestManifest.synthesisSpeed,
+          audioFormat: guestManifest.audioFormat,
+          segmentCount: guestManifest.segmentCount,
+          readySegmentCount: guestManifest.readySegmentCount,
+          totalDurationMs: guestManifest.totalDurationMs,
+          totalByteLength: guestManifest.totalByteLength,
+        },
+      });
+      for (const gs of [...guestManifest.segments].sort((a, b) => b.segmentIndex - a.segmentIndex)) {
+        await prisma.storyAudioSegment.create({
+          data: {
+            id: randomUUID(),
+            manifestId: userManifestB.id,
+            segmentIndex: gs.segmentIndex,
+            text: gs.text,
+            textHash: gs.textHash,
+            status: gs.status,
+            storageKey: gs.storageKey,
+            contentType: gs.contentType,
+            byteLength: gs.byteLength,
+            durationMs: gs.durationMs,
+            audioChecksum: gs.audioChecksum,
+            attemptCount: 0,
+          },
+        });
+      }
+      const userSegCountBefore = await prisma.storyAudioSegment.count({ where: { manifestId: userManifestB.id } });
+      // 等价+active 直调 helper 必须拒绝（fail-closed），Guest 不删、User 不动
+      const counting = createCountingBackend(realStorage);
+      setAudioAssetStorageForTests(counting);
+      let threw: unknown = null;
+      try {
+        await prisma.$transaction((tx) => transferGuestAudioOwnershipTx(tx, created.workId, userWorkB.id));
+      } catch (e) {
+        threw = e;
+      } finally {
+        setAudioAssetStorageForTests(realStorage);
+      }
+      assert.ok(threw, '等价+active 必须拒绝');
+      assert.strictEqual((threw as { code?: string }).code, 'CONFLICT', '等价+active 拒绝码必须 CONFLICT');
+      assert.ok(String((threw as Error).message).includes('active synthesis lease'), '错误须指明 active lease');
+      assert.ok(await prisma.guestStoryAudioManifest.findUnique({ where: { id: created.manifestId } }), 'Guest Manifest 不删');
+      assert.strictEqual(await prisma.guestStoryAudioSegment.count({ where: { manifestId: created.manifestId } }), 2, 'Guest Segments 不删');
+      assert.ok(await prisma.storyAudioManifest.findUnique({ where: { id: userManifestB.id } }), 'User Manifest 不动');
+      assert.strictEqual(await prisma.storyAudioSegment.count({ where: { manifestId: userManifestB.id } }), userSegCountBefore, 'User Segments 不动');
+      assert.deepStrictEqual(counting.puts, [], '等价+active put=0');
+      assert.deepStrictEqual(counting.deletes, [], '等价+active delete=0');
+      assert.strictEqual(await countTombstones(created.storageKeys), 0, '等价+active tombstone=0');
+      console.log('PASS: 8) Oracle B fail-closed 通过');
+
+      // 释放 lease（模拟 worker release/过期）后 retry → 幂等成功（只清 Guest，User 不动）
+      await prisma.guestStoryAudioSegment.updateMany({ where: { manifestId: created.manifestId }, data: { leaseId: null, leaseExpiresAt: null } });
+      const out = await prisma.$transaction((tx) => transferGuestAudioOwnershipTx(tx, created.workId, userWorkB.id));
+      assert.strictEqual(out.status, 'idempotent', '释放后 retry 应幂等成功');
+      assert.strictEqual(await prisma.guestStoryAudioManifest.count({ where: { storyWorkId: created.workId } }), 0, '幂等清 Guest Manifest');
+      assert.ok(await prisma.storyAudioManifest.findUnique({ where: { id: userManifestB.id } }), '幂等 User Manifest 不动');
+      assert.strictEqual(await prisma.storyAudioSegment.count({ where: { manifestId: userManifestB.id } }), userSegCountBefore, '幂等 User Segments 不动');
+      console.log('PASS: 8) Oracle B retry 幂等通过');
+    }
+
+    console.log('=== 9) suspended worker 原子 claim 后 migration 不得产生 zombie User lease（加分 oracle） ===');
+    {
+      // missing 段经与 ensure 相同的原子 claim 谓词转为 preparing+active（模拟 TTS 在途的 suspended worker）
+      const guestId = `g_${TAG}_suspended`;
+      const created = await createGuestWorkWithManifest({
+        tag: 'suspended',
+        guestId,
+        manifestStatus: 'preparing',
+        contentHash: `hash_${TAG}_suspended`,
+        segs: [{ status: 'missing', withObject: false }],
+        seedBase: 61,
+      });
+      const segBefore = await prisma.guestStoryAudioSegment.findFirst({ where: { manifestId: created.manifestId } });
+      assert.ok(segBefore, '前置 missing 段存在');
+      const claimLeaseId = randomUUID();
+      const claimExpires = new Date(Date.now() + 60_000);
+      const claimed = await prisma.guestStoryAudioSegment.updateMany({
+        where: {
+          id: segBefore.id,
+          OR: [{ status: 'missing' }, { status: 'failed' }, { status: 'preparing', OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lte: new Date() } }] }],
+        },
+        data: { status: 'preparing', leaseId: claimLeaseId, leaseExpiresAt: claimExpires, attemptCount: { increment: 1 } },
+      });
+      assert.strictEqual(claimed.count, 1, '原子 claim 成功（suspended worker 持有 lease）');
+      const user = await prisma.user.create({
+        data: { username: `m8053_susp_${Date.now()}_${Math.floor(Math.random() * 1e6)}`, password: 'TestPassword123!', nickname: 'M8053' },
+      });
+      const counting = createCountingBackend(realStorage);
+      setAudioAssetStorageForTests(counting);
+      let threw: unknown = null;
+      try {
+        await migrateGuestCreativeRecordsToUser(guestId, user.id);
+      } catch (e) {
+        threw = e;
+      } finally {
+        setAudioAssetStorageForTests(realStorage);
+      }
+      assert.ok(threw, 'suspended claim 后 migration 必须拒绝');
+      assert.strictEqual((threw as { code?: string }).code, 'CONFLICT', 'suspended 拒绝码必须 CONFLICT');
+      // 无 zombie User lease：User 侧无 audio rows（整事务回滚）
+      const userWorks = await prisma.storyWork.findMany({ where: { userId: user.id } });
+      for (const uw of userWorks) {
+        assert.strictEqual(await prisma.storyAudioManifest.count({ where: { storyWorkId: uw.id } }), 0, '不得产生 zombie User lease 行');
+      }
+      assert.ok(await prisma.guestStoryAudioManifest.findUnique({ where: { id: created.manifestId } }), 'Guest Manifest 保留（worker 可继续 put）');
+      assert.deepStrictEqual(counting.puts, [], 'suspended put=0');
+      assert.deepStrictEqual(counting.deletes, [], 'suspended delete=0');
+      // worker 释放后 retry 成功
+      await prisma.guestStoryAudioSegment.updateMany({ where: { manifestId: created.manifestId }, data: { leaseId: null, leaseExpiresAt: null, status: 'missing' } });
+      const retry = await migrateGuestCreativeRecordsToUser(guestId, user.id);
+      const userWorkId = retry.storyWorkIdMap.get(created.workId)!;
+      assert.ok(userWorkId !== undefined, '释放后 retry 建映射');
+      assert.ok(
+        await prisma.storyAudioManifest.findUnique({ where: { storyWorkId_version: { storyWorkId: userWorkId, version: 1 } } }),
+        '释放后 retry 建 User Manifest'
+      );
+      console.log('PASS: 9) suspended claim 无 zombie 通过');
+    }
+
   } finally {
     if (prevDriver === undefined) delete process.env.AUDIO_STORAGE_DRIVER;
     else process.env.AUDIO_STORAGE_DRIVER = prevDriver;

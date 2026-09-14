@@ -547,57 +547,50 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const normalized = normalizeStoryText(storyText);
     const currentHash = computeStoryContentHash(normalized);
     const localParagraphs = segmentStoryText(normalized);
-    // M8-04 Segmentation SSOT（spec §23）+ FIXUP Blocking 1/2：
+    // M8-04 Segmentation SSOT（spec §23）+ FIXUP/FIXUP-2 Blocking：
+    // Work hydrate 始终读取 Manifest identity（与 CANONICAL_AUDIO flag 无关）：
     // Manifest 已存在 → Work 播放段落文本 SSOT = Manifest.segments[].text，
     // effectiveSegmentationVersion = manifest.segmentationVersion，
     // effectiveTotalParagraphs = manifest.segmentCount（Manifest 权威）；
     // 无 Manifest（null/segments=[]）→ 回落本地切分，第一次真正请求时 ensure 侧 lazy 建；
-    // Manifest 读取 throws（unknown）→ canonical Work fail-closed：不进 ready，
-    // 不把 local 当 canonical SSOT，不改写 version，不推进/重置 Progress，可 retry，
-    // 不删 Session、不清 Anchor。Draft 恒本地切分（不受开关影响）。
+    // Manifest 读取 throws（unknown）→ Work fail-closed：不进 ready，
+    // 不把 local 当 SSOT，不改写 version，不推进/重置 Progress，可 retry，
+    // 不删 Session、不清 Anchor。flag 只控制音源 provider（play/prefetch：
+    // on→ensureSegment/canonical URL，off→fetchAudio/ephemeral），不控制 identity。
+    // Draft 恒本地切分（不受开关影响）。
     let paragraphs = localParagraphs;
     let effectiveSegmentationVersion = SEGMENTATION_VERSION;
     let effectiveTotalParagraphs = Math.max(1, localParagraphs.length);
     if (anchor.source.kind === 'work') {
-      let useCanonical = false;
+      let manifest: {
+        segments: Array<{ index: number; text: string }>;
+        segmentationVersion?: string;
+        segmentCount?: number;
+      } | null;
       try {
-        useCanonical = shouldUseCanonicalAudio({ kind: 'work', workId: anchor.source.workId });
-      } catch {
-        useCanonical = false;
-      }
-      if (useCanonical) {
-        let manifest: {
-          segments: Array<{ index: number; text: string }>;
-          segmentationVersion?: string;
-          segmentCount?: number;
-        } | null;
-        try {
-          manifest = await d.getManifest(anchor.source.workId);
-        } catch (err) {
-          // Blocking 2 fail-closed：unknown ≠ missing，不得回落本地。
-          console.warn('[playbackSessionStore] canonical manifest read failed, fail-closed', err);
-          if (get().hydrationEpoch !== epochAtStart) return false;
-          set({ status: 'error' });
-          return false;
-        }
+        manifest = await d.getManifest(anchor.source.workId);
+      } catch (err) {
+        // FIXUP Blocking 2 / FIXUP-2：unknown ≠ missing，不得回落本地（flag 无关）。
+        console.warn('[playbackSessionStore] manifest read failed, fail-closed', err);
         if (get().hydrationEpoch !== epochAtStart) return false;
-        if (manifest && Array.isArray(manifest.segments) && manifest.segments.length > 0) {
-          paragraphs = selectWorkParagraphs(localParagraphs, manifest);
-          if (
-            typeof manifest.segmentationVersion === 'string' &&
-            manifest.segmentationVersion.length > 0
-          ) {
-            effectiveSegmentationVersion = manifest.segmentationVersion;
-          }
-          if (
-            typeof manifest.segmentCount === 'number' &&
-            Number.isFinite(manifest.segmentCount) &&
-            Math.floor(manifest.segmentCount) >= 1
-          ) {
-            effectiveTotalParagraphs = Math.floor(manifest.segmentCount);
-          } else {
-            effectiveTotalParagraphs = Math.max(1, paragraphs.length);
-          }
+        set({ status: 'error' });
+        return false;
+      }
+      if (get().hydrationEpoch !== epochAtStart) return false;
+      if (manifest && Array.isArray(manifest.segments) && manifest.segments.length > 0) {
+        paragraphs = selectWorkParagraphs(localParagraphs, manifest);
+        if (
+          typeof manifest.segmentationVersion === 'string' &&
+          manifest.segmentationVersion.length > 0
+        ) {
+          effectiveSegmentationVersion = manifest.segmentationVersion;
+        }
+        if (
+          typeof manifest.segmentCount === 'number' &&
+          Number.isFinite(manifest.segmentCount) &&
+          Math.floor(manifest.segmentCount) >= 1
+        ) {
+          effectiveTotalParagraphs = Math.floor(manifest.segmentCount);
         } else {
           effectiveTotalParagraphs = Math.max(1, paragraphs.length);
         }

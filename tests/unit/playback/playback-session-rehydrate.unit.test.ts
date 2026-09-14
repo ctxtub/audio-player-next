@@ -240,6 +240,8 @@ async function runPlaybackSessionRehydrateTests(): Promise<void> {
       assert.strictEqual(workId, 300, '必须按 workId 精确 resolve（§25.1），不得用 history find 猜');
       return { title: '小松鼠的故事', storyText: STORY_4P, voiceId: 'alloy', contentHash: h1 };
     },
+    // M8-04 FIXUP-2：hydrate 始终读 Manifest；无 Manifest 显式 null→本地回落。
+    getManifest: async () => null,
     clearAnchor: async (sid: string) => {
       cleared.push(sid);
     },
@@ -277,6 +279,8 @@ async function runPlaybackSessionRehydrateTests(): Promise<void> {
   driftNotified = 0;
   const okDrift = await useSession.getState().hydrateFromAnchor(anchorWork as never, {
     getWork: async () => ({ title: '小松鼠的故事', storyText: `${STORY_4P}\n全新尾声段落`, voiceId: 'alloy', contentHash: h1 }),
+    // M8-04 FIXUP-2：无 Manifest 显式 null（hash 漂移与 Manifest 无关，仍 reset 0）。
+    getManifest: async () => null,
     clearAnchor: async (sid: string) => {
       cleared.push(sid);
     },
@@ -297,6 +301,8 @@ async function runPlaybackSessionRehydrateTests(): Promise<void> {
   useTransport.getState().reset();
   const okRename = await useSession.getState().hydrateFromAnchor(anchorWork as never, {
     getWork: async () => ({ title: '重命名后的标题', storyText: STORY_4P, voiceId: 'alloy', contentHash: h1 }),
+    // M8-04 FIXUP-2：无 Manifest 显式 null（title 变化不重置与 Manifest 无关）。
+    getManifest: async () => null,
     clearAnchor: async () => {},
     notifyDrift: () => {
       assert.fail('title 变化不得触发漂移 toast');

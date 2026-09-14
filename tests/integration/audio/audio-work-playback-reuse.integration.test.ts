@@ -8,7 +8,7 @@ import { setupIsolatedDb } from '../../support/db/isolated-db.helper';
 import { buildFakeCanonicalMp3 } from '../../support/fixtures/fake-canonical-mp3';
 import { ensureStoryAudioSegmentForSubject } from '../../../lib/server/storyAudio';
 import { getAudioProjectionsForSubject, listStoryWorksForSubject, getStoryWorkForSubject } from '../../../lib/server/storyWork';
-import { beginPlaybackSessionForSubject } from '../../../lib/server/playbackSession';
+import { beginPlaybackSessionForSubject, completePlaybackSessionForSubject, promoteDraftPlaybackToWorkForSubject, savePlaybackCheckpointForSubject } from '../../../lib/server/playbackSession';
 import { SEGMENTATION_VERSION } from '../../../utils/segmentation';
 import { resetAudioAssetStorageForTests } from '../../../lib/audio/storage/index';
 import { resetCache } from '../../../lib/server/openai';
@@ -110,6 +110,13 @@ const SID_A = 'a47ac10b-58cc-4372-a567-0e02b2c3d47a';
 const SID_B = 'b47ac10b-58cc-4372-a567-0e02b2c3d47b';
 const SID_C = 'c47ac10b-58cc-4372-a567-0e02b2c3d47c';
 const SID_D = 'd47ac10b-58cc-4372-a567-0e02b2c3d47d';
+const SID_E = 'e47ac10b-58cc-4372-a567-0e02b2c3d47e';
+const SID_F = 'f47ac10b-58cc-4372-a567-0e02b2c3d47f';
+const SID_G = '071ac10b-58cc-4372-a567-0e02b2c3d471';
+const SID_H = '081ac10b-58cc-4372-a567-0e02b2c3d481';
+const SID_I = '091ac10b-58cc-4372-a567-0e02b2c3d491';
+const SID_J = '0a1ac10b-58cc-4372-a567-0e02b2c3d4a1';
+const SID_K = '0b1ac10b-58cc-4372-a567-0e02b2c3d4b1';
 const P1 = `第一自然段：很久很久以前在宁静的大森林深处住着一只聪明活泼的小松鼠它有一条蓬松柔软的大尾巴每天清晨都在高高的树梢之间欢快地跳来跳去寻找新鲜的坚果与甘甜的露水日子过得无忧无虑。`;
 const P2 = `第二自然段：小松鼠每天迎着金色的朝阳出门收集松果仔细辨别每一颗果实是否饱满香甜然后整整齐齐存放在自己温暖干燥的树洞深处为即将到来的漫长寒冬储备充足的粮食心里充满了丰收的喜悦。`;
 const TWO = `${P1}\n${P2}`;
@@ -350,6 +357,119 @@ async function runTests() {
     assert.strictEqual(okRetry, true, 'Oracle B：retry 后可恢复');
     assert.strictEqual(getSession().getState().status, 'ready', 'Oracle B：retry 后 ready');
     assert.deepStrictEqual(getSession().getState().paragraphs, [FROZEN_A, FROZEN_B], 'Oracle B：retry 后 frozen');
+    console.log('=== B9. Oracle FIXUP-2 Blocking1 flag-off 仍 Manifest 权威（legacy-v0 + CANONICAL_AUDIO_ENABLED=0） ===');
+    {
+      const savedCanonB9 = process.env.CANONICAL_AUDIO_ENABLED;
+      const savedPublicB9 = process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED;
+      process.env.CANONICAL_AUDIO_ENABLED = '0';
+      delete process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED;
+      try {
+        const workB9 = await prisma.storyWork.create({ data: { userId: user.id, prompt: 'oracleB9', storyText: TWO, voiceId: 'alloy', title: 'oracleB9', excerpt: 'e', contentHash: '', sourceMessageId: 'oracleB9-m1' } });
+        await prisma.storyWork.update({ where: { id: workB9.id }, data: { contentHash: hashA } });
+        const rB9 = await ensureStoryAudioSegmentForSubject(subject, { workId: workB9.id, segmentIndex: 0, sessionId: SID_E }, { synthesize: synth });
+        assert.strictEqual(rB9.status, 'ready', 'B9 manifest 先建');
+        const manB9 = await prisma.storyAudioManifest.findUnique({ where: { storyWorkId_version: { storyWorkId: workB9.id, version: 1 } } });
+        assert.ok(manB9, 'B9 manifest 行存在');
+        assert.strictEqual(manB9!.segmentCount, 2, 'B9 manifest segmentCount=2');
+        await prisma.storyAudioManifest.update({ where: { id: manB9!.id }, data: { segmentationVersion: 'legacy-v0' } });
+        await prisma.storyPlaybackProgress.upsert({
+          where: { storyWorkId: workB9.id },
+          create: { storyWorkId: workB9.id, contentHash: hashA, segmentationVersion: 'legacy-v0', lastCompletedParagraphIndex: 0, nextParagraphIndex: 1, totalParagraphs: 2, completedAt: null, lastPlayedAt: new Date() },
+          update: { contentHash: hashA, segmentationVersion: 'legacy-v0', lastCompletedParagraphIndex: 0, nextParagraphIndex: 1, totalParagraphs: 2 },
+        });
+        const anchorB9 = await beginPlaybackSessionForSubject(subject, { sessionId: SID_F, source: { kind: 'work', workId: workB9.id }, mode: 'resume', speed: 1.0 });
+        assert.strictEqual(anchorB9.segmentationVersion, 'legacy-v0', 'B9：Anchor version=legacy-v0（flag-off 仍 Manifest 权威）');
+        assert.strictEqual(anchorB9.totalParagraphs, 2, 'B9：Anchor total=Manifest.segmentCount');
+        assert.strictEqual(anchorB9.nextParagraphIndex, 1, 'B9：begin next 保留 1（不 reset）');
+        resetWorld(); fakeController(pc1);
+        process.env.CANONICAL_AUDIO_ENABLED = '0';
+        delete process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED;
+        const okB9 = await getSession().getState().hydrateFromAnchor(anchorB9 as never, {
+          getWork: async () => ({ title: 'oracleB9', storyText: TWO, voiceId: 'alloy', contentHash: hashA }),
+          getManifest: async () => ({ segments: [{ index: 0, text: FROZEN_A }, { index: 1, text: FROZEN_B }], segmentationVersion: 'legacy-v0', segmentCount: 2 }),
+        });
+        assert.strictEqual(okB9, true, 'B9：hydrate 成功');
+        assert.strictEqual(getSession().getState().status, 'ready', 'B9：hydrate 进入 ready');
+        assert.deepStrictEqual(getSession().getState().paragraphs, [FROZEN_A, FROZEN_B], 'B9：client paragraphs=frozen Manifest text（flag-off 不消失）');
+        assert.strictEqual(getSession().getState().segmentationVersion, 'legacy-v0', 'B9：hydrate version 仍 legacy');
+        assert.strictEqual(getSession().getState().nextParagraphIndex, 1, 'B9：hydrate next 保留 1');
+        getTransport().setState({ isPlaying: true } as never);
+        const ensureBeforeB9 = ensureCalls;
+        const fetchBeforeB9 = fetchCalls;
+        await getSession().getState().playParagraph(1, { explicit: true });
+        assert.strictEqual(ensureCalls, ensureBeforeB9, 'B9：playParagraph 不调用 ensureSegment（flag-off 走 fetchAudio）');
+        assert.ok(fetchCalls > fetchBeforeB9, 'B9：playParagraph 走 fetchAudio（ephemeral）');
+        assert.ok((getTransport().getState().currentAudioUrl ?? '').startsWith('blob:'), 'B9：ephemeral blob URL');
+      } finally {
+        if (savedCanonB9 === undefined) delete process.env.CANONICAL_AUDIO_ENABLED;
+        else process.env.CANONICAL_AUDIO_ENABLED = savedCanonB9;
+        if (savedPublicB9 === undefined) delete process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED;
+        else process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED = savedPublicB9;
+      }
+      process.env.CANONICAL_AUDIO_ENABLED = '1';
+    }
+    console.log('=== B10. Oracle FIXUP-2 Blocking2(a) legacy 完播 Progress 仍 Manifest pair，下次 resume 不 reset ===');
+    {
+      const workB10 = await prisma.storyWork.create({ data: { userId: user.id, prompt: 'oracleB10', storyText: TWO, voiceId: 'alloy', title: 'oracleB10', excerpt: 'e', contentHash: '', sourceMessageId: 'oracleB10-m1' } });
+      await prisma.storyWork.update({ where: { id: workB10.id }, data: { contentHash: hashA } });
+      const rB10 = await ensureStoryAudioSegmentForSubject(subject, { workId: workB10.id, segmentIndex: 0, sessionId: SID_G }, { synthesize: synth });
+      assert.strictEqual(rB10.status, 'ready', 'B10 manifest 先建');
+      const manB10 = await prisma.storyAudioManifest.findUnique({ where: { storyWorkId_version: { storyWorkId: workB10.id, version: 1 } } });
+      assert.ok(manB10, 'B10 manifest 行存在');
+      await prisma.storyAudioManifest.update({ where: { id: manB10!.id }, data: { segmentationVersion: 'legacy-v0' } });
+      await prisma.storyPlaybackProgress.upsert({
+        where: { storyWorkId: workB10.id },
+        create: { storyWorkId: workB10.id, contentHash: hashA, segmentationVersion: 'legacy-v0', lastCompletedParagraphIndex: 0, nextParagraphIndex: 1, totalParagraphs: 2, completedAt: null, lastPlayedAt: new Date() },
+        update: { contentHash: hashA, segmentationVersion: 'legacy-v0', lastCompletedParagraphIndex: 0, nextParagraphIndex: 1, totalParagraphs: 2 },
+      });
+      const anchorB10 = await beginPlaybackSessionForSubject(subject, { sessionId: SID_H, source: { kind: 'work', workId: workB10.id }, mode: 'resume', speed: 1.0 });
+      assert.strictEqual(anchorB10.nextParagraphIndex, 1, 'B10 前提：begin 不 reset');
+      const completedB10 = await completePlaybackSessionForSubject(subject, { sessionId: SID_H });
+      assert.ok(completedB10, 'B10：complete 返回 Anchor');
+      assert.strictEqual(completedB10!.segmentationVersion, 'legacy-v0', 'B10：完播 Anchor version 仍 legacy（不用当前重算）');
+      assert.strictEqual(completedB10!.totalParagraphs, 2, 'B10：完播 Anchor total=Manifest.segmentCount');
+      assert.strictEqual(completedB10!.nextParagraphIndex, 2, 'B10：完播 Anchor next=total');
+      const progB10 = await prisma.storyPlaybackProgress.findUnique({ where: { storyWorkId: workB10.id } });
+      assert.strictEqual(progB10?.segmentationVersion, 'legacy-v0', 'B10：Progress version 与 Manifest 相同（完播不写回当前版本）');
+      assert.strictEqual(progB10?.totalParagraphs, 2, 'B10：Progress total 与 Manifest 相同');
+      assert.strictEqual(progB10?.nextParagraphIndex, 2, 'B10：Progress next=total');
+      assert.strictEqual(progB10?.lastCompletedParagraphIndex, 1, 'B10：Progress last=total-1');
+      // §4 session ownership：同 source resume 须保持同一 session（换 UUID 即 BAD_REQUEST），
+      // 故下一次 resume 沿用同一 SID_H（完播不制造 drift：hash/version 一致→保留 next=total）。
+      const anchorB10Resume = await beginPlaybackSessionForSubject(subject, { sessionId: SID_H, source: { kind: 'work', workId: workB10.id }, mode: 'resume', speed: 1.0 });
+      assert.strictEqual(anchorB10Resume.nextParagraphIndex, 2, 'B10：下一次 resume 不 reset（正常完播不制造 drift）');
+      assert.strictEqual(anchorB10Resume.segmentationVersion, 'legacy-v0', 'B10：resume version 仍 legacy');
+    }
+    console.log('=== B11. Oracle FIXUP-2 Blocking2(b) promotion 目标已有 legacy Manifest → Anchor/Progress 用 Manifest pair ===');
+    {
+      const draftMsgB11 = `oracleB11-draft-${Date.now()}`;
+      await prisma.chatMessage.create({ data: { userId: user.id, position: 0, messageId: draftMsgB11, role: 'assistant', content: 'draft', parts: null } });
+      const workB11 = await prisma.storyWork.create({ data: { userId: user.id, prompt: 'oracleB11', storyText: TWO, voiceId: 'alloy', title: 'oracleB11', excerpt: 'e', contentHash: '', sourceMessageId: draftMsgB11 } });
+      await prisma.storyWork.update({ where: { id: workB11.id }, data: { contentHash: hashA } });
+      const rB11 = await ensureStoryAudioSegmentForSubject(subject, { workId: workB11.id, segmentIndex: 0, sessionId: SID_J }, { synthesize: synth });
+      assert.strictEqual(rB11.status, 'ready', 'B11 manifest 先建');
+      const manB11 = await prisma.storyAudioManifest.findUnique({ where: { storyWorkId_version: { storyWorkId: workB11.id, version: 1 } } });
+      assert.ok(manB11, 'B11 manifest 行存在');
+      await prisma.storyAudioManifest.update({ where: { id: manB11!.id }, data: { segmentationVersion: 'legacy-v0' } });
+      const draftAnchorB11 = await beginPlaybackSessionForSubject(subject, { sessionId: SID_K, source: { kind: 'draft', messageId: draftMsgB11 }, mode: 'resume', speed: 1.0, draftSnapshot: { title: 'oracleB11-draft', contentHash: hashA, totalParagraphs: 2, voiceId: 'alloy' } });
+      assert.strictEqual(draftAnchorB11.nextParagraphIndex, 0, 'B11 前提：draft begin position 0');
+      const saveB11 = await savePlaybackCheckpointForSubject(subject, { sessionId: SID_K, contentHash: hashA, segmentationVersion: SEGMENTATION_VERSION, lastCompletedParagraphIndex: 0, nextParagraphIndex: 1, totalParagraphs: 2, speed: 1.0 });
+      assert.strictEqual(saveB11.accepted, true, 'B11 前提：draft checkpoint 推进到 1');
+      const promotedB11 = await promoteDraftPlaybackToWorkForSubject(subject, { sessionId: SID_K, workId: workB11.id });
+      assert.strictEqual(promotedB11.sessionId, SID_K, 'B11：promotion 不变 sessionId');
+      assert.deepStrictEqual(promotedB11.source, { kind: 'work', workId: workB11.id }, 'B11：source 切 work');
+      assert.strictEqual(promotedB11.segmentationVersion, 'legacy-v0', 'B11：promoted Anchor 使用 Manifest version（非当前重算）');
+      assert.strictEqual(promotedB11.totalParagraphs, 2, 'B11：promoted Anchor total=Manifest.segmentCount');
+      assert.strictEqual(promotedB11.nextParagraphIndex, 1, 'B11：hash 一致沿用 draft 断点 1');
+      const progB11 = await prisma.storyPlaybackProgress.findUnique({ where: { storyWorkId: workB11.id } });
+      assert.ok(progB11, 'B11：promotion 建 Progress');
+      assert.strictEqual(progB11!.segmentationVersion, 'legacy-v0', 'B11：promoted Progress 使用 Manifest version');
+      assert.strictEqual(progB11!.totalParagraphs, 2, 'B11：promoted Progress total=Manifest.segmentCount');
+      assert.strictEqual(progB11!.nextParagraphIndex, 1, 'B11：Progress next 与 Anchor 一致（Audio index == Progress index）');
+      assert.strictEqual(progB11!.nextParagraphIndex, promotedB11.nextParagraphIndex, 'B11：Anchor/Progress index 一致');
+      const segB11 = await ensureStoryAudioSegmentForSubject(subject, { workId: workB11.id, segmentIndex: progB11!.nextParagraphIndex, sessionId: SID_K }, { synthesize: synth });
+      assert.strictEqual(segB11.status, 'ready', 'B11：后续 canonical segment index 与 Progress index 一致（可就绪）');
+    }
     console.log('\nALL WORK PLAYBACK REUSE INTEGRATION TESTS PASSED!');
   } finally {
     if (savedFlag === undefined) delete process.env.CANONICAL_AUDIO_ENABLED;

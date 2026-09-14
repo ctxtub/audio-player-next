@@ -133,6 +133,8 @@ async function runPlaybackSessionRehydrateIntegrationTests(): Promise<void> {
             const detail = await getStoryWorkForSubject(guestWork, workId);
             return { title: detail.title, storyText: detail.storyText, voiceId: detail.voiceId, contentHash: detail.contentHash };
         },
+        // M8-04 FIXUP-2：hydrate 始终读 Manifest；本 work 无 Manifest→显式 null 本地回落。
+        getManifest: async () => null,
         clearAnchor: async () => {
             assert.fail('成功水合不得清 Anchor');
         },
@@ -171,6 +173,8 @@ async function runPlaybackSessionRehydrateIntegrationTests(): Promise<void> {
             const detail = await getStoryWorkForSubject(guestWork, workId);
             return { title: detail.title, storyText: detail.storyText, voiceId: detail.voiceId, contentHash: detail.contentHash };
         },
+        // M8-04 FIXUP-2：无 Manifest 显式 null（hash 漂移仍 reset 0）。
+        getManifest: async () => null,
         clearAnchor: async () => {
             assert.fail('漂移仍应成功水合（reset 0），不得清 Anchor');
         },
@@ -222,6 +226,8 @@ async function runPlaybackSessionRehydrateIntegrationTests(): Promise<void> {
             const detail = await getStoryWorkForSubject(guestRename, workId);
             return { title: detail.title, storyText: detail.storyText, voiceId: detail.voiceId, contentHash: detail.contentHash };
         },
+        // M8-04 FIXUP-2：无 Manifest 显式 null（title 变化不重置）。
+        getManifest: async () => null,
         clearAnchor: async () => {
             assert.fail('title 变化不得清 Anchor');
         },

@@ -430,18 +430,23 @@ const computeWorkTotalParagraphs = (storyText: string): number => {
 };
 
 /**
- * M8-04 FIXUP（Blocking 1/2）：Work 有效切分身份（Manifest 权威，spec §23）。
+ * M8-04 FIXUP（Blocking 1/2）/ FIXUP-2（Blocking 2）：Work 有效切分身份
+ * 只读 helper（Manifest 权威，spec §23；beginSession / completeSession /
+ * promoteDraftToWork 三个身份写路径统一消费）。
  *
  * - 已有 Manifest（canonical manifest 行存在）→
  *   effectiveSegmentationVersion = manifest.segmentationVersion，
  *   effectiveTotalParagraphs = manifest.segmentCount；
  * - 无 Manifest（null）→ SEGMENTATION_VERSION / 当前 segmentStoryText().length；
  * - Manifest 读取失败（throws）→ 直接抛（fail-closed，不得回落本地切分，
- *   不得写 Progress/Anchor，调用方按失败处理，可 retry）。
+ *   不得写 Progress/Anchor，调用方按失败处理，可 retry；调用方须在写身份前
+ *   调用，抛错即不写）。
  *
- * PlaybackSourceRef / sessionId / Anchor schema / Progress schema / CAS 规则全部不变。
+ * 只读：除 Manifest 行 select 外不触写；PlaybackSourceRef / sessionId /
+ * Anchor schema / Progress schema / CAS 规则全部不变。
+ * MANIFEST_VERSION=1 硬编码保留（本轮非阻塞，未提前做 active-manifest SSOT）。
  */
-const resolveWorkEffectiveSegmentation = async (
+export const resolveWorkEffectiveSegmentation = async (
   subject: Subject,
   workId: number,
   storyText: string,
@@ -1230,7 +1235,9 @@ export const setSleepTimerForSubject = async (
  *   重复 complete 幂等（已 ended 仍返回同一 ended Anchor，不破坏位置）。
  * - Work：先经 M2 getStoryWorkForSubject（subject, workId）鉴权
  *   （missing/foreign/trash 统一 NOT_FOUND，原样透出，无 partial 写）；
- *   total 经 computeWorkTotalParagraphs（work.storyText）权威计算；
+ *   total/version 经 resolveWorkEffectiveSegmentation Manifest 权威
+ *   （M8-04 FIXUP-2 Blocking 2：有 Manifest→manifest pair，无→当前切分，
+ *   读失败 fail-closed 写前抛，不写库；trash 自有仍取 Anchor frozen）；
  *   同一事务内 CAS Anchor（WHERE sessionId + sourceId，position→total、
  *   state→ended）+ UPSERT Progress（next=total/last=total-1、
  *   completedAt=首完保留、lastPlayedAt=now）；CAS 失败（并发切换）→
@@ -1305,16 +1312,18 @@ export const completePlaybackSessionForSubject = async (
   // —— Work complete（§19 / §30 / §41 + M5-08 §29.1）：ended + Progress next=total + completedAt ——
   const workId = source.workId;
   // M5-08 trash 边界：在播 Session 的 Work 被 moveToTrash 后，completion 仍允许；
-  // trash 自有时 total/content 取 Anchor 已存值（frozen，不重算、不取 trash 行元数据），
+  // trash 自有时 total/content 取 Anchor 已存值（frozen，不重算、不取 trash 行元数据，
+  // Anchor frozen 与 Manifest 权威一致，因 begin 已用 effective pair 落库），
   // 同一 CAS 面落库；非 trash 的 missing/foreign/已物理删除仍 NOT_FOUND 原样透出。
-  let workTotal: number;
-  let workHashForProgress: string;
-  let workVersionForProgress: string;
+  // M8-04 FIXUP-2 Blocking 2：非 trash 时 total/version 经
+  // resolveWorkEffectiveSegmentation Manifest 权威（写身份前只读，读失败直接抛 fail-closed）。
+  let workTotal!: number;
+  let workHashForProgress!: string;
+  let workVersionForProgress!: string;
+  let loadedWork: { id: number; storyText: string; contentHash: string } | null = null;
   try {
     const work = await getStoryWorkForSubject(subject, workId);
-    workTotal = computeWorkTotalParagraphs(work.storyText);
-    workHashForProgress = typeof work.contentHash === 'string' ? work.contentHash : '';
-    workVersionForProgress = SEGMENTATION_VERSION;
+    loadedWork = work;
   } catch (err) {
     let trashed = false;
     try {
@@ -1329,6 +1338,13 @@ export const completePlaybackSessionForSubject = async (
       typeof currentRow.segmentationVersion === 'string' && currentRow.segmentationVersion.length > 0
         ? currentRow.segmentationVersion
         : SEGMENTATION_VERSION;
+  }
+  if (loadedWork) {
+    // 写身份前只读解析：Manifest 存在→manifest pair；无→当前切分；读失败抛（不写库）。
+    const eff = await resolveWorkEffectiveSegmentation(subject, loadedWork.id, loadedWork.storyText);
+    workTotal = eff.effectiveTotalParagraphs;
+    workHashForProgress = typeof loadedWork.contentHash === 'string' ? loadedWork.contentHash : '';
+    workVersionForProgress = eff.effectiveSegmentationVersion;
   }
   const completedLast = workTotal - 1;
   const now = new Date();
@@ -1505,12 +1521,15 @@ export const invalidatePlaybackReferencesForWork = async (
  *
  * 成功（同一事务内 CAS Anchor + UPSERT Progress）：
  * - Anchor：source→work(workId)/title→work.title/contentHash→work.contentHash/
- *   voiceId→work.voiceId/segmentationVersion→current/total→work 重算；
+ *   voiceId→work.voiceId/segmentationVersion→effective/total→effective
+ *   （M8-04 FIXUP-2 Blocking 2：目标 Work 已有 Manifest 时用 manifest pair，
+ *   守「Audio segment index == Playback progress index」长期 invariant；
+ *   无 Manifest→当前切分；Manifest 读失败则事务前直接抛 fail-closed，不写库）；
  *   **sessionId 不变**（§45 audio 不重启的 server 侧保证；client 维持播放）；
  *   position：hash 一致沿用 draft 段落（钳制到 [0,total]/[-1,total-1]），
  *   不一致（§24.1，含任一空 hash）→ reset 0（last=-1/next=0，不许旧段落套新正文）；
  *   speed/timers/state 原样保留。
- * - Progress：UPSERT work 进度（hash/version/total 取 Work 当前值，
+ * - Progress：UPSERT work 进度（hash 取 Work 当前值，version/total 取 effective，
  *   completedAt 保留既有、lastPlayedAt=now）。
  * - CAS：updateMany WHERE sessionId + sourceId(draftMessageId)，count===0 →
  *   BAD_REQUEST（并发切换穿透防护）；User/Guest 对称。
@@ -1562,7 +1581,11 @@ export const promoteDraftPlaybackToWorkForSubject = async (
       message: '[playback-session] StoryWork.sourceMessageId 与 Draft.messageId 不一致，拒绝 promotion',
     });
   }
-  const workTotal = computeWorkTotalParagraphs(work.storyText);
+  // M8-04 FIXUP-2 Blocking 2：目标 Work 有效身份 Manifest 权威（写身份前只读，
+  // 读失败直接抛 fail-closed，不进事务不写库）。
+  const workEffective = await resolveWorkEffectiveSegmentation(subject, work.id, work.storyText);
+  const workTotal = workEffective.effectiveTotalParagraphs;
+  const workVersion = workEffective.effectiveSegmentationVersion;
   const workHash = typeof work.contentHash === 'string' ? work.contentHash : '';
   const preserve = shouldPreserveDraftBreakpointOnPromote(draftHash, workHash);
   const promotedNext = resolvePromotedNextParagraphIndex(draftNext, draftHash, workHash, workTotal);
@@ -1575,7 +1598,7 @@ export const promoteDraftPlaybackToWorkForSubject = async (
       sourceId: String(work.id),
       title: work.title,
       contentHash: workHash,
-      segmentationVersion: SEGMENTATION_VERSION,
+      segmentationVersion: workVersion,
       lastCompletedParagraphIndex: promotedLast,
       nextParagraphIndex: promotedNext,
       totalParagraphs: workTotal,
@@ -1608,7 +1631,7 @@ export const promoteDraftPlaybackToWorkForSubject = async (
         create: {
           storyWorkId: work.id,
           contentHash: workHash,
-          segmentationVersion: SEGMENTATION_VERSION,
+          segmentationVersion: workVersion,
           lastCompletedParagraphIndex: promotedLast,
           nextParagraphIndex: promotedNext,
           totalParagraphs: workTotal,
@@ -1617,7 +1640,7 @@ export const promoteDraftPlaybackToWorkForSubject = async (
         },
         update: {
           contentHash: workHash,
-          segmentationVersion: SEGMENTATION_VERSION,
+          segmentationVersion: workVersion,
           lastCompletedParagraphIndex: promotedLast,
           nextParagraphIndex: promotedNext,
           totalParagraphs: workTotal,
@@ -1631,7 +1654,7 @@ export const promoteDraftPlaybackToWorkForSubject = async (
       create: {
         storyWorkId: work.id,
         contentHash: workHash,
-        segmentationVersion: SEGMENTATION_VERSION,
+        segmentationVersion: workVersion,
         lastCompletedParagraphIndex: promotedLast,
         nextParagraphIndex: promotedNext,
         totalParagraphs: workTotal,
@@ -1640,7 +1663,7 @@ export const promoteDraftPlaybackToWorkForSubject = async (
       },
       update: {
         contentHash: workHash,
-        segmentationVersion: SEGMENTATION_VERSION,
+        segmentationVersion: workVersion,
         lastCompletedParagraphIndex: promotedLast,
         nextParagraphIndex: promotedNext,
         totalParagraphs: workTotal,

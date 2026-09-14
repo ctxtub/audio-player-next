@@ -326,6 +326,75 @@ async function runWorkPlaybackReadUnitTests() {
     console.log('PASS: 8. FIXUP Blocking1/2 通过');
   }
 
+  console.log('=== 9. M8-04 FIXUP-2 相邻写路径收口（hydrate 无条件 + 三路径统一 helper） ===');
+  {
+    const storeSrc9 = stripComments(
+      fs.readFileSync(path.resolve(process.cwd(), 'stores/playbackSessionStore.ts'), 'utf8'),
+    );
+    // Blocking 1：Work hydrate 身份不得被 flag 条件化（flag 只控音源 provider）。
+    const hydrateStart = storeSrc9.indexOf('hydrateFromAnchor: async');
+    assert.ok(hydrateStart >= 0, 'hydrateFromAnchor 实现存在');
+    const hydrateSeg = storeSrc9.slice(hydrateStart, hydrateStart + 8000);
+    assert.ok(
+      hydrateSeg.includes('d.getManifest') || hydrateSeg.includes('getManifest'),
+      'hydrate Work 必须始终读取 Manifest identity（与 flag 无关）',
+    );
+    assert.ok(
+      !hydrateSeg.includes('shouldUseCanonicalAudio'),
+      'hydrate 身份不得经 shouldUseCanonicalAudio 条件化（flag 只控音源，不控 identity）',
+    );
+    assert.ok(
+      hydrateSeg.includes('selectWorkParagraphs'),
+      'hydrate 仍经 Manifest precedence 取 frozen 文本',
+    );
+    // flag 仍控制音源：全局保留 provider 分支（play/prefetch），Draft 旧路径不变。
+    assert.ok(
+      storeSrc9.includes('shouldUseCanonicalAudio'),
+      'flag 仍须控制音源 provider（play/prefetch on→ensure/off→fetchAudio）',
+    );
+    assert.ok(storeSrc9.includes('fetchAudio'), 'flag-off 仍保留 ephemeral fetchAudio');
+    assert.ok(
+      storeSrc9.includes('ensureCanonicalSegment') || storeSrc9.includes('ensureSegment'),
+      'flag-on 仍保留 ensureSegment/canonical URL',
+    );
+    // Blocking 2：server 三身份写路径统一消费正式只读 helper。
+    const serverSrc9 = stripComments(
+      fs.readFileSync(path.resolve(process.cwd(), 'lib/server/playbackSession.ts'), 'utf8'),
+    );
+    assert.ok(
+      serverSrc9.includes('export const resolveWorkEffectiveSegmentation'),
+      'effective resolution 须为正式导出只读 helper（三路径统一消费）',
+    );
+    const completeStart = serverSrc9.indexOf('completePlaybackSessionForSubject');
+    assert.ok(completeStart >= 0, 'complete 路径存在');
+    const completeSeg = serverSrc9.slice(completeStart, completeStart + 8000);
+    assert.ok(
+      completeSeg.includes('resolveWorkEffectiveSegmentation'),
+      'completeSession 须消费 effective helper（不用当前重算回写）',
+    );
+    assert.ok(
+      completeSeg.includes('effectiveTotalParagraphs') &&
+        completeSeg.includes('effectiveSegmentationVersion'),
+      'complete 须用 effective pair 写 Anchor/Progress',
+    );
+    const promoteStart = serverSrc9.indexOf('promoteDraftPlaybackToWorkForSubject');
+    assert.ok(promoteStart >= 0, 'promote 路径存在');
+    const promoteSeg = serverSrc9.slice(promoteStart, promoteStart + 12000);
+    assert.ok(
+      promoteSeg.includes('resolveWorkEffectiveSegmentation'),
+      'promoteDraftToWork 须消费 effective helper（目标已有 Manifest 时守 invariant）',
+    );
+    assert.ok(
+      !promoteSeg.includes('SEGMENTATION_VERSION'),
+      'promote Work 写身份不得硬编码当前版本（须用 Manifest pair）',
+    );
+    assert.ok(
+      !/workVersionForProgress\s*=\s*SEGMENTATION_VERSION/.test(serverSrc9),
+      'complete 不得把 Work version 回写为当前版本（Manifest 权威）',
+    );
+    console.log('PASS: 9. FIXUP-2 收口通过');
+  }
+
   console.log('\nALL AUDIO WORK PLAYBACK READ UNIT TESTS PASSED!');
 }
 

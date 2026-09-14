@@ -56,15 +56,10 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
   /** History Surface 纯 UI 开关（M4-07）：不进 Zustand，不触数据。 */
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  /** 故事卡直接音频播放（M9-03：经 Transport 显式点播）。 */
-  const playAudio = usePlaybackStore((state) => state.playAudio);
-  const handlePlayStory = useCallback(
-    (url: string, id: string) => {
-      void playAudio(url, id, { explicit: true });
-    },
-    [playAudio],
-  );
-
+  /** M9-F01：StoryCard 播放 ownership 已收口至 PlaybackSessionFlow.playStoryCard；
+   * ChatLayout 不再持有任何 Transport 播放决策（此前 handlePlayStory 经
+   * usePlaybackStore.playAudio(url, id) 的用户播放 ownership 已删除）。
+   * 这里仅保留发送前的音频解锁（ensureUnlocked，非故事播放入口，不选音源）。 */
   /** 是否存在发送中的消息，用于控制输入区禁用状态 */
   const isSending = useMemo(
     () => messages.some((m) => m.status === 'sending'),
@@ -238,7 +233,6 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         messages={messages}
         isLoading={false}
         onRetry={handleRetry}
-        onPlayStory={(url, id) => handlePlayStory(url, id)}
       />
       <InputArea
         onSubmit={handleSubmit}

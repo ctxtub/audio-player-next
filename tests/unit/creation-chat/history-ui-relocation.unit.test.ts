@@ -792,7 +792,14 @@ async function runHistoryUiRelocationTests(): Promise<void> {
         resetBaseline();
         seedGenerationFixtures();
         const generationSource = readSource('app/(main)/chat/components/GenerationHistory/index.tsx');
-        assert.ok(generationSource.includes('replayGeneration(record)'), '回放必须仍只调用现有 replayGeneration(record)');
+        assert.ok(
+            generationSource.includes('playWorkFromHistory(record.id)'),
+            'M9-F01：回放必须经 Flow.playWorkFromHistory(record.id)（正式 Work Session）',
+        );
+        assert.ok(
+            !generationSource.includes('replayGeneration('),
+            'M9-F01：不得再走 Transport-only replayGeneration',
+        );
         assert.ok(generationSource.includes('useGenerationHistoryStore'), '数据源必须仍为 useGenerationHistoryStore');
         const renderResult = rtl.render(ReactMod.createElement(ChatLayout, {}));
         await rtl.act(async () => {

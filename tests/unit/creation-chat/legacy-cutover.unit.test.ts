@@ -414,16 +414,17 @@ async function main(): Promise<void> {
     setupJsdom();
     installAssetStubs();
     const repoRoot: string = process.cwd();
-    // 中文注释：audioUrl 为空的兼容重合成路径走 storyFlow.playStoryText，必须先占桩（不触真实 TTS）。
-    const resynthCalls: Array<{ storyText: string; messageId?: string }> = [];
-    const storyFlowPath = path.resolve(repoRoot, 'app/services/storyFlow.ts');
-    (nodeRequire as unknown as { cache: Record<string, NodeModule> }).cache[storyFlowPath] = {
-      id: storyFlowPath,
-      filename: storyFlowPath,
+    // 中文注释：M9-F01——Legacy StoryCard 的播放动作统一交 Flow.playStoryCard
+    // （有/无 persisted audioUrl 都不得再直达 Transport）。必须先占桩（不触真实 server/TTS）。
+    const flowCalls: Array<{ messageId: string; storyText?: string }> = [];
+    const flowPath = path.resolve(repoRoot, 'app/services/playbackSessionFlow.ts');
+    (nodeRequire as unknown as { cache: Record<string, NodeModule> }).cache[flowPath] = {
+      id: flowPath,
+      filename: flowPath,
       loaded: true,
       exports: {
-        playStoryText: async (storyText: string, messageId?: string) => {
-          resynthCalls.push({ storyText, messageId });
+        playStoryCard: async (input: { messageId: string; storyText?: string }) => {
+          flowCalls.push(input);
         },
       },
     } as unknown as NodeModule;
@@ -435,21 +436,17 @@ async function main(): Promise<void> {
     const storyCardMod = innerJiti(
       './app/(main)/chat/components/MessageParts/StoryCardPart.tsx',
     ) as unknown as {
-      default: React.ComponentType<{ part: unknown; messageId?: string; onPlayStory?: (u: string) => void }>;
+      default: React.ComponentType<{ part: unknown; messageId?: string }>;
     };
     const StoryCardPartRenderer = storyCardMod.default;
     const ReactMod = nodeRequire('react') as typeof React;
     const rtl = nodeRequire('@testing-library/react') as typeof import('@testing-library/react');
 
-    // 有 persisted audioUrl：沿旧 callback 播放。
-    const legacyCalls: string[] = [];
+    // 有 persisted audioUrl：仍经 Flow（audioUrl 不得直达 Transport，也不得出现在 Flow 入参）。
     const r1 = rtl.render(
       ReactMod.createElement(StoryCardPartRenderer, {
         part: { type: 'storyCard', storyText: 'legacy历史正文', audioUrl: 'https://example.com/a.mp3' },
         messageId: 'msg-legacy-1',
-        onPlayStory: (u: string) => {
-          legacyCalls.push(u);
-        },
       }),
     );
     try {
@@ -459,20 +456,21 @@ async function main(): Promise<void> {
       await rtl.act(async () => {
         rtl.fireEvent.click(playBtn);
       });
-      assert.deepStrictEqual(legacyCalls, ['https://example.com/a.mp3'], '有 persisted audioUrl 时沿旧 callback');
+      assert.deepStrictEqual(
+        flowCalls,
+        [{ messageId: 'msg-legacy-1', storyText: 'legacy历史正文' }],
+        '有 persisted audioUrl 时也必须经 Flow.playStoryCard（不带 audioUrl）',
+      );
     } finally {
       r1.unmount();
     }
 
-    // audioUrl 为空（M4-06 sanitize 后形态）：仍走既有 compatibility playback 路径（按正文重合成）。
+    // audioUrl 为空（M4-06 sanitize 后形态）：同一 Flow 入口（按正文重合成，不读旧 audioUrl）。
     const LONG_LEGACY = `兼容重合成长正文段落：${'星夜下的鲸鱼驮着微光前行，穿越银河般的海。'.repeat(8)}`;
     const r2 = rtl.render(
       ReactMod.createElement(StoryCardPartRenderer, {
         part: { type: 'storyCard', storyText: LONG_LEGACY, audioUrl: '' },
         messageId: 'msg-legacy-2',
-        onPlayStory: (u: string) => {
-          legacyCalls.push(u);
-        },
       }),
     );
     try {
@@ -482,7 +480,7 @@ async function main(): Promise<void> {
         rtl.fireEvent.click(expandBtn);
       });
       assert.ok(await rtl.screen.findByText(LONG_LEGACY), '展开全文必须展示完整正文');
-      // 关闭弹窗后点播放，走重合成路径。
+      // 关闭弹窗后点播放，走同一 Flow 重合成路径。
       const closeBtn = rtl.screen.queryByLabelText('关闭');
       if (closeBtn) {
         await rtl.act(async () => {
@@ -493,10 +491,9 @@ async function main(): Promise<void> {
       await rtl.act(async () => {
         rtl.fireEvent.click(playBtn2);
       });
-      assert.strictEqual(legacyCalls.length, 1, 'audioUrl 为空时不得走旧 audioUrl callback');
-      assert.strictEqual(resynthCalls.length, 1, 'audioUrl 为空时必须走按正文重合成路径');
-      assert.strictEqual(resynthCalls[0].storyText, LONG_LEGACY, '重合成必须携带完整正文');
-      assert.strictEqual(resynthCalls[0].messageId, 'msg-legacy-2', '重合成必须传递真实 messageId（断点定位）');
+      assert.strictEqual(flowCalls.length, 2, '两次点击都必须经 Flow.playStoryCard');
+      assert.strictEqual(flowCalls[1].messageId, 'msg-legacy-2', '必须传递真实 messageId（identity/断点定位）');
+      assert.strictEqual(flowCalls[1].storyText, LONG_LEGACY, '必须携带完整正文供 Flow 切分/合成');
     } finally {
       r2.unmount();
     }

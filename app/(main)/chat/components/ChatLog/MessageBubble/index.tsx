@@ -28,8 +28,6 @@ type MessageBubbleProps = {
   message: ChatMessage | ChatPendingMessage;
   /** 失败时的重试回调。 */
   onRetry?: (messageId?: string) => void;
-  /** 播放故事的回调，由 StoryCardPart 触发。 */
-  onPlayStory?: (audioUrl: string, messageId: string) => void;
 };
 
 /**
@@ -90,10 +88,9 @@ const agentPersonaMap: Record<string, { name: string; avatar: StaticImageData }>
  * 单条聊天消息的气泡组件，负责处理角色样式与发送状态提示。
  * @param props.message 聊天消息实体
  * @param props.onRetry 失败重试回调
- * @param props.onPlayStory 播放故事回调
  * @returns JSX.Element 消息气泡
  */
-const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }) => {
+const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry }) => {
   const status = (message.status ?? 'delivered') as ChatMessageDeliveryStatus;
   const isSending = status === 'sending';
   const isFailed = status === 'failed';
@@ -216,8 +213,6 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
                 key={index}
                 part={part}
                 messageId={message.id}
-                // 确保将当前消息 ID 传递出去，用于播放时的 ID 追踪
-                onPlayStory={(url) => onPlayStory?.(url, message.id || '')}
               />
             ))
           )}

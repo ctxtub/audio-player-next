@@ -89,7 +89,8 @@ const getStoryFlow = () =>
  * §26 Host 零故事依赖且保留 transport ownership；
  * §27 flow 九动词齐备且全部委托 Session SSOT；
  * §28 continuation 唯一门 continuationMode==='extendable'（flow 侧零旧 guard 读取）；
- * §50 client stale async TTS 丢弃（含 legacy 合成路径）；
+ * §50 client stale async TTS 丢弃（守卫唯一 home = Session store；legacy
+ * storyFlow 合成入口已随 M9-F01 删除）；
  * §52 三权分立（Session SSOT / Transport / Per-Work durable）。
  * §53 Probe 收敛 E2E-only default-off（M5-10 fixup-2 architecture regression：
  * normal runtime 开关缺席→关闭、无 window global、无 DOM 锚点、layout 不挂载；
@@ -99,8 +100,6 @@ const getStoryFlow = () =>
 
 const SID_A = 'a47ac10b-58cc-4372-a567-0e02b2c3d47a';
 const SID_B = 'b47ac10b-58cc-4372-a567-0e02b2c3d47b';
-const SID_C = 'c47ac10b-58cc-4372-a567-0e02b2c3d47c';
-const SID_D = 'd47ac10b-58cc-4372-a567-0e02b2c3d47d';
 
 // 两段 120 字级中文段落（首段 ≥80 字不触发前向合并，单段 ≤350 字不触发二次拆分，恒为 2 段）。
 const PARA_1 = `第一自然段：很久很久以前在宁静的大森林深处住着一只聪明活泼的小松鼠它有一条蓬松柔软的大尾巴每天清晨都在高高的树梢之间欢快地跳来跳去寻找新鲜的坚果与甘甜的露水日子过得无忧无虑。`;
@@ -329,7 +328,10 @@ async function runPlaybackRuntimeOrchestrationTests(): Promise<void> {
     storyCode.includes("continuationMode !== 'extendable'"),
     'storyFlow 早退须以 continuationMode 为准（§28）',
   );
-  assert.ok(storyCode.includes('originatingSessionId'), 'storyFlow 须有 §50 synth 守卫');
+  assert.ok(
+    !storyCode.includes('fetchAudio(') && !storyCode.includes('originatingSessionId'),
+    '§50 stale TTS 守卫不得回塞 storyFlow（唯一 home = Session store）',
+  );
   console.log('PASS: continuation mapping verified');
 
   // —— §28 运行时：finite 会话下 legacy near-end/ended 直接让路 ——
@@ -406,41 +408,31 @@ async function runPlaybackRuntimeOrchestrationTests(): Promise<void> {
   assert.strictEqual(useTransport.getState().currentAudioUrl, playCalls[0]);
   console.log('PASS: stale synth discard verified');
 
-  // —— §50 运行时：legacy 合成路径同门（session 切换 → discard；无切换 → 照播） ——
-  console.log('--- §50 runtime: legacy synth path guarded ---');
-  resetPlaybackWorld();
-  const legacyCalls: string[] = [];
-  installFakeController(legacyCalls);
-  useSession.getState().setActiveStory({
-    source: { kind: 'work', workId: 9 },
-    sessionId: SID_C,
-    title: '会话C',
-    storyText: TWO_PARAGRAPHS,
-    voiceId: 'alloy',
-    speed: 1,
-  });
-  const lateLegacy = deferBlob();
-  fetchQueue.push(() => lateLegacy.promise);
-  const pendingLegacy = getStoryFlow().playStoryText('瞬态合成正文：无稳定标识的降级播放路径。');
-  useSession.getState().setActiveStory({
-    source: { kind: 'work', workId: 10 },
-    sessionId: SID_D,
-    title: '会话D',
-    storyText: TWO_PARAGRAPHS,
-    voiceId: 'alloy',
-    speed: 1,
-  });
-  lateLegacy.resolve('blob:stale-legacy');
-  await pendingLegacy;
-  assert.ok(
-    !legacyCalls.includes('blob:stale-legacy'),
-    'legacy 晚到合成不得覆盖新会话（§50）',
+  // —— §50 单一 home：legacy 合成路径已退役，stale TTS 守卫只属 Session store ——
+  console.log('--- §50 single home: legacy synth path retired, guard lives in session store ---');
+  const storyFlowSource = stripComments(
+    fs.readFileSync(path.resolve(process.cwd(), 'app/services/storyFlow.ts'), 'utf8'),
   );
-  assert.deepStrictEqual(useSession.getState().source, { kind: 'work', workId: 10 });
-  // 无切换对照：legacy 照常播（守卫不误伤）。
-  await getStoryFlow().playStoryText('对照合成正文：同一会话内发起并返回。');
-  assert.strictEqual(legacyCalls.length, 1, '无切换时 legacy 合成应照播');
-  console.log('PASS: legacy synth guard verified');
+  assert.ok(
+    !storyFlowSource.includes('fetchAudio('),
+    'storyFlow 不得再自行合成 TTS（M9-F01：入口统一 Flow，§50 守卫不得有第二 home）',
+  );
+  assert.ok(
+    !storyFlowSource.includes('playStoryText') && !storyFlowSource.includes('synthesizeAndPlayOnce'),
+    'storyFlow legacy 合成入口（playStoryText/synthesizeAndPlayOnce）必须删除',
+  );
+  const sessionStoreSource = stripComments(
+    fs.readFileSync(path.resolve(process.cwd(), 'stores/playbackSessionStore.ts'), 'utf8'),
+  );
+  assert.ok(
+    sessionStoreSource.includes('originatingSessionId'),
+    '§50 stale TTS 守卫唯一 home = Session store（originatingSessionId）',
+  );
+  assert.ok(
+    sessionStoreSource.includes('get().sessionId !== originatingSessionId'),
+    '§50 失配必须丢弃，绝不覆盖新会话',
+  );
+  console.log('PASS: stale synth single-home verified');
 
   // —— §50 纯判定：stale checkpoint 拒绝（server 门的 client 侧对称） ——
   console.log('--- §50 decision: stale session rejected ---');

@@ -7,7 +7,7 @@ import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
 import type { ChatConversationMessage } from '@/types/chat';
 import type { AgentMessage } from '@/types/agent';
 import { interactWithAgent } from './agentFlow';
-import { startStoryPlayback } from './storyFlow';
+import { autoplayDraftStory } from './playbackSessionFlow';
 
 /**
  * 自动续写指令文案：预加载下一段故事时作为用户消息提交。
@@ -144,7 +144,28 @@ const executeChatStream = async (
                 .getState()
                 .selectors.hasStoryMessages(assistantMessageId);
               if (!existingStories) {
-                startStoryPlayback(assistantMessageId, pendingAudioBlob).catch(console.error);
+                // M9-F01：autoplay 经正式 Draft Session（先落盘保证 ChatMessage 行存在，
+                // 再 begin+provider 起播；旧整篇 blob 无 segment identity 不得当 paragraph
+                // 播放，一律吊销丢弃）。失败则 fail-closed 静默（聊天持久化本身亦已失败）。
+                // onComplete 是同步回调，落盘/起播链经 async IIFE 串行，不阻塞流收尾。
+                void (async () => {
+                  try {
+                    await useChatStore.getState().flushPendingSave().catch(() => false);
+                  } catch {
+                    // 落盘失败不阻断 begin 尝试（行可能已存在）；begin 侧自行 fail-closed。
+                  }
+                  autoplayDraftStory({
+                    messageId: assistantMessageId,
+                    storyText: generatedContent,
+                  }).catch(console.error);
+                  try {
+                    if (typeof pendingAudioBlob === 'string' && pendingAudioBlob.startsWith('blob:')) {
+                      URL.revokeObjectURL(pendingAudioBlob);
+                    }
+                  } catch {
+                    // 吊销失败不影响播放链。
+                  }
+                })();
               }
               // 记录到生成历史 + 提示词历史（仅用户主动发起、真正生成了故事时记；预加载续写不记录）
               if (recordHistory) {

@@ -393,7 +393,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [history, replay]
     spec_path: docs/e2e/03-播放状态与内核一致性/10-历史恢复卡回放重合成.md
-    executable_ids: [exec-paragraph-segmentation, exec-playback-identity-domain, exec-playback-session-contract, exec-playback-anchor-begin-session, exec-playback-checkpoint-guards, exec-playback-session-lifecycle-promotion, exec-playback-checkpoint-content-identity, exec-playback-session-rehydrate, exec-playback-session-rehydrate-server, exec-playback-runtime-orchestration, exec-storycard-session-resume, exec-l3-playback-pause-refresh-resume]
+    executable_ids: [exec-paragraph-segmentation, exec-playback-identity-domain, exec-playback-session-contract, exec-playback-anchor-begin-session, exec-playback-checkpoint-guards, exec-playback-session-lifecycle-promotion, exec-playback-checkpoint-content-identity, exec-playback-session-rehydrate, exec-playback-session-rehydrate-server, exec-playback-runtime-orchestration, exec-storycard-session-resume, exec-storycard-session-flow, exec-l3-playback-pause-refresh-resume]
     fixtures: []
     owner: playback-kernel
   - case_id: old-card-replay-no-consume-preload
@@ -406,6 +406,18 @@ cases:
     risk_tags: [history, preload]
     spec_path: docs/e2e/03-播放状态与内核一致性/11-旧卡回放不消费新预载.md
     executable_ids: [exec-preload-isolation]
+    fixtures: []
+    owner: playback-kernel
+  - case_id: story-playback-global-controls-reachable
+    display_name_zh: 故事播放全局控制同帧可达
+    legacy_aliases: [E2E-03-13, M9-F01]
+    journey_id: playback-kernel
+    user_goal: 故事卡与历史回放起播即存在正式 Session 且全局 Mini 同帧可达
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [playback, session, mini, history]
+    spec_path: docs/e2e/03-播放状态与内核一致性/13-故事播放全局控制可达.md
+    executable_ids: [exec-storycard-session-resume, exec-storycard-session-flow, exec-l3-story-playback-global-controls]
     fixtures: []
     owner: playback-kernel
   - case_id: setting-preview-dual-audio-source
@@ -1447,6 +1459,14 @@ executables:
     display_name_zh: 故事卡会话续播
     layer: L1
     path: ./tests/unit/playback/storycard-session-resume.unit.test.ts
+  - executable_id: exec-storycard-session-flow
+    display_name_zh: 故事卡与历史回放正式会话流转
+    layer: L2
+    path: ./tests/integration/playback/storycard-session-flow.integration.test.ts
+  - executable_id: exec-l3-story-playback-global-controls
+    display_name_zh: 故事播放全局控制同帧可达
+    layer: L3
+    path: ./tests/system/browser/scenarios/story-playback-global-controls-reachable.spec.ts
   - executable_id: exec-playback-lifecycle-trash
     display_name_zh: 播放Trash生命周期与永久删除边界
     layer: L2

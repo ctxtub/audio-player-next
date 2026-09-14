@@ -1,10 +1,16 @@
 /**
  * M9-03：本文件为故事生成流程兼容层；播放 session / preload / ended
  * 编排已迁出至 app/services/playbackSessionFlow.ts + stores/playbackSessionStore.ts。
- * 旧 playbackProgressStore 第二 SSOT 已删除：下列 startStoryPlayback /
- * replayGeneration / playStoryText 仅做无会话旧音频传输（transport 直接播放，
- * 不注册断点、不做段落持久化；历史 local 进度自然失效，不恢复为 SSOT）；
- * handleNearEnd / handleSegmentEnded 仅为无 session legacy 音频的传输锁保留，
+ * 旧 playbackProgressStore 第二 SSOT 已删除。
+ *
+ * M9-F01（Active Playback Session Visibility Closure）：全部用户故事播放入口
+ * （StoryCard / Generation History / 生成完成后 autoplay）已迁移至
+ * PlaybackSessionFlow（playStoryCard / playWorkFromHistory / autoplayDraftStory）；
+ * 下列 dead 故事入口已删除：startStoryPlayback / synthesizeAndPlayOnce /
+ * replayGeneration / playStoryText（删除后无产品调用方；TTS 合成只经 Session
+ * playParagraph 发起，§50 stale 守卫由 Session/Flow 持有）。
+ * handleNearEnd / handleSegmentEnded 仅为无 session legacy 音频的传输锁保留
+ * （无 UI 可达：产品代码 playAudio 调用点 ⊆ PlaybackSessionStore，见 L1 锁定），
  * 首部 session ownership 早退保证 finite 会话永不进入旧判定。
  * 新播放代码禁止新增调用，一律走 PlaybackSessionFlow。
  *
@@ -13,18 +19,13 @@
  *   本文件首部的 session ownership 早退保证：只要 Session SSOT 持有 source 且
  *   finite，会话外的任何直接调用也不得触发 AI 续写；
  * - 旧 isOneShot / sourceId / currentMessageId guard 组合已退役为 legacy
- *   无 session 角落的传输锁（@deprecated），不再是续写决策依据；
- * - synthesizeAndPlayOnce 带 §50 stale TTS session 守卫：fetchAudio 晚到且
- *   session 已切换 → revoke blob / discard，绝不覆盖新会话播放。
+ *   无 session 角落的传输锁（@deprecated），不再是续写决策依据。
  */
-import { useConfigStore } from '@/stores/configStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
-import type { GenerationRecord } from '@/stores/generationHistoryStore';
-import { fetchAudio } from '@/lib/client/ttsGenerate';
 
 /**
  * 可播放段落对象，包含音频地址与文本内容，并标注来源（首段/预加载/即时生成）。
@@ -83,40 +84,6 @@ const schedulePreloadRetry = () => {
 };
 
 /**
- * 启动故事播放会话：停止当前播放、重置状态并开始播放指定的故事音频。
- * @param messageId 故事对应的消息 ID
- * @param audioUrl 音频地址
- * @param options.oneShot 一次性播放（历史回放）：播完即止，不触发预加载续写
- */
-export const startStoryPlayback = async (
-  messageId: string,
-  audioUrl: string,
-  options?: { oneShot?: boolean },
-): Promise<void> => {
-  const playbackStore = usePlaybackStore.getState();
-  const preloadStore = usePreloadStore.getState();
-  const apiConfig = useConfigStore.getState().apiConfig;
-
-  // 停止当前正在播放的音频（如有）
-  playbackStore.pauseAudioPlayback();
-
-  // 重置状态
-  preloadStore.reset();
-  clearPreloadRetryTimer();
-  playbackStore.reset();
-
-  // 启动播放器会话
-  playbackStore.markSessionStart(messageId, apiConfig.playDuration, options);
-
-  // M9-03：不注册旧断点活跃故事（第二 SSOT 已删）；仅 transport 直接播放，
-  // 不做段落持久化，历史进度自然失效。
-
-  // 3. 自动开始播放生成的音频
-  // 中文注释：H-07 自动链——此处经 reset() 已清空在播轨道（currentAudioUrl=null），窗口守卫天然放行，无需 explicit。
-  await playbackStore.playAudio(audioUrl, messageId);
-};
-
-/**
  * Session ownership 早退（M5-10 §27/§28）：
  * Session SSOT 持有 source 且 finite 时，播放编排归 PlaybackSessionFlow 独占，
  * legacy 续写链不得以任何理由触发 AI continuation（也不得 reset 会话 transport）。
@@ -133,82 +100,6 @@ const shouldYieldToPlaybackSession = (): boolean => {
     // session store 不可用时保持 legacy 行为（fail-open 仅限无 SSOT 角落）。
   }
   return false;
-};
-
-/**
- * 合成给定正文并一次性播放：播完即止（oneShot 防续写），不清空聊天会话。
- * 由于音频为临时 blob URL 无法持久化，历史/恢复回放均依赖正文重新走 TTS 合成。
- * @param storyText 故事正文。
- * @param voiceId 音色。
- * @param messageId 播放会话标识。
- */
-const synthesizeAndPlayOnce = async (
-  storyText: string,
-  voiceId: string,
-  messageId: string,
-): Promise<void> => {
-  // 清理可能残留的生成阶段，避免恢复态故事卡片误显示生成动效
-  useGenerationStore.getState().reset();
-  const { speed } = useConfigStore.getState().apiConfig;
-  // §50 stale async TTS 守卫：记录合成发起时的 session，晚到先验 sessionId。
-  const originatingSessionId = (() => {
-    try {
-      return usePlaybackSessionStore.getState().sessionId;
-    } catch {
-      return null;
-    }
-  })();
-  const audioUrl = await fetchAudio(storyText, voiceId, speed);
-  // session 已切换（NULL→有值/有值→他值/有值→清空，任何变化）→ 直接 revoke/discard，
-  // 绝不 startStoryPlayback 覆盖新会话播放（与 session store playParagraph 同门）。
-  try {
-    if (usePlaybackSessionStore.getState().sessionId !== originatingSessionId) {
-      try {
-        if (audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl);
-      } catch {
-        // 忽略回收失败。
-      }
-      return;
-    }
-  } catch {
-    // session store 不可用时保持 legacy 行为。
-  }
-  await startStoryPlayback(messageId, audioUrl, { oneShot: true });
-};
-
-/**
- * 回放一条历史生成（生成历史弹窗）。
- * M9-03：transport 直接合成播放（一次性，不注册断点、不持久化）。
- * @param record 生成历史记录。
- */
-export const replayGeneration = async (record: GenerationRecord): Promise<void> => {
-  const { voiceId, speed } = useConfigStore.getState().apiConfig;
-  const chosenVoice = record.voiceId || voiceId;
-  const audioUrl = await fetchAudio(record.storyText, chosenVoice, speed);
-  // 中文注释：H-07 自动链——经 reset() 已清空在播轨道（currentAudioUrl=null），窗口守卫天然放行，无需 explicit。
-  // M9-03：旧段落机已删，此处仅 transport 一次性播放，不触发预载续写。
-  await usePlaybackStore.getState().playAudio(audioUrl, undefined, { explicit: true });
-};
-
-/**
- * 回放给定故事正文（恢复态故事卡片的"播放故事"）。
- * M9-03：transport 直接合成播放（一次性，不读旧断点、不持久化悬挂断点）。
- * @param storyText 故事正文。
- * @param messageId 可选：真实卡片 messageId（仅作 transport 会话标识，不持久化）
- */
-export const playStoryText = async (storyText: string, messageId?: string): Promise<void> => {
-  const { voiceId, speed } = useConfigStore.getState().apiConfig;
-  const validId = messageId && !messageId.startsWith('replay-text-') ? messageId : '';
-
-  if (validId) {
-    // M9-03：旧断点续播已随第二 SSOT 删除；此处直接合成并经 transport 播放，
-    // 不做指纹比对/断点恢复，历史 local 进度自然失效。
-    const audioUrl = await fetchAudio(storyText, voiceId, speed);
-    await usePlaybackStore.getState().playAudio(audioUrl, validId, { explicit: true });
-  } else {
-    // 降级：未传稳定标识时一次性合成播放，不持久化悬挂断点
-    await synthesizeAndPlayOnce(storyText, voiceId, `chat-${Date.now()}`);
-  }
 };
 
 /**

@@ -32,6 +32,14 @@
 
 import { usePlaybackStore, clampSegmentSeekTarget } from '@/stores/playbackStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
+import { useConfigStore } from '@/stores/configStore';
+import { resolvePlaybackDraftSnapshot } from '@/lib/client/playbackDraftSnapshot';
+import {
+  computeStoryContentHash,
+  normalizeStoryText,
+  segmentStoryText,
+} from '@/utils/segmentation';
+import { isValidDraftMessageId, isValidWorkId } from '@/lib/playback/source';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
 import type { SessionContinuationMode } from '@/stores/playbackSessionStore';
 import type { SleepTimerMode } from '@/lib/playback/sleepTimer';
@@ -109,6 +117,323 @@ export function pausePlayback(): void {
 /** 从头重播（§30 restart 语义由 server + store 持有）。 */
 export async function restartPlayback(): Promise<void> {
   await usePlaybackSessionStore.getState().restart();
+}
+
+/**
+ * M9-F01 StoryCard / History 用户播放入口（Active Playback Session Visibility Closure）。
+ *
+ * 全局 invariant：任何用户可感知的故事播放开始时，都必须已经存在正式
+ * Playback Session（`Transport.play()` 被调用时 `source !== null &&
+ * status !== 'idle'` 恒成立）。业务 UI（StoryCard / GenerationHistory /
+ * autoplay）一律经本节入口，不得再直接调用 `playbackStore.playAudio()` 做
+ * 播放决策（Transport 仍是正式底层 API，仅由 Session/Flow 调用）。
+ *
+ * Legacy `part.audioUrl` 在此面被有意忽略：它没有 segment identity
+ * （segmentIndex / textHash / segmentationVersion），无法证明代表整篇还是某
+ * 正式 paragraph；若当 paragraph 0 播放，整篇播完后 Session 会继续推进
+ * paragraph 1 造成重复播放。正确优先级：Session identity / segmentation
+ * 正确 > 复用旧音频缓存（未来复用需另立 audio→segment identity 契约）。
+ */
+
+/** StoryCard 播放上下文：组件只交稳定 identity + 卡片上下文，不做播放决策。 */
+export type StoryCardPlayInput = {
+  /** 卡片所属 assistant 消息 id（Draft identity 唯一来源）。 */
+  messageId: string;
+  /** 卡片自带正文（仅当 canonical resolver 取不到快照时 fallback）。 */
+  storyText?: string;
+  /** 卡片/Artifact 自带标题（可选；缺省按 §M9-F01 首行规则派生）。 */
+  title?: string;
+  /** 卡片自带 voice（可选；缺省用当前配置）。 */
+  voiceId?: string;
+};
+
+/** Draft begin 所需集中式 metadata（§M9-F01：Flow/domain helper 唯一构造点）。 */
+export type StoryCardDraftMetadata = {
+  source: Extract<PlaybackSourceRef, { kind: 'draft' }>;
+  /** 规范化后正文（hash/切分严格基于此串）。 */
+  storyText: string;
+  paragraphs: string[];
+  contentHash: string;
+  totalParagraphs: number;
+  title: string;
+  voiceId: string;
+  speed: number;
+  /** server draft begin 快照（与本地 paragraphs 同源）。 */
+  draftSnapshot: { title: string; contentHash: string; totalParagraphs: number; voiceId: string };
+};
+
+/** Draft 标题派生（纯函数）：首个非空行，去空白折叠后至多 60 字。 */
+export function deriveDraftTitle(normalizedText: string): string {
+  const firstLine = String(normalizedText ?? '')
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .find((line) => line.length > 0) ?? '';
+  const sliced = firstLine.slice(0, 60);
+  return sliced.length > 0 ? sliced : '未命名故事';
+}
+
+function pickNonEmptyString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? value : null;
+}
+
+/**
+ * 集中构造 Draft begin metadata（M9-F01 唯一构造点；StoryCard/ChatLayout 不得各自定义）。
+ * @returns 合法 metadata；任何非法输入（坏 messageId / 无可用正文 / 空切分）一律 null（fail-closed）。
+ */
+export function buildStoryCardDraftMetadata(input: StoryCardPlayInput): StoryCardDraftMetadata | null {
+  const messageId = typeof input.messageId === 'string' ? input.messageId : '';
+  if (!isValidDraftMessageId(messageId)) return null;
+  let snapshotTitle: string | null = null;
+  let snapshotVoice: string | null = null;
+  let snapshotText: string | null = null;
+  try {
+    const snapshot = resolvePlaybackDraftSnapshot(messageId);
+    snapshotText = snapshot && pickNonEmptyString(snapshot.storyText);
+    snapshotTitle = snapshot ? pickNonEmptyString(snapshot.title) : null;
+    snapshotVoice = snapshot ? pickNonEmptyString(snapshot.voiceId) : null;
+  } catch {
+    snapshotText = null;
+  }
+  const rawText = snapshotText ?? pickNonEmptyString(input.storyText);
+  if (rawText === null) return null;
+  const storyText = normalizeStoryText(rawText);
+  if (storyText.length === 0) return null;
+  const paragraphs = segmentStoryText(storyText);
+  if (paragraphs.length === 0) return null;
+  const contentHash = computeStoryContentHash(storyText);
+  if (contentHash.length === 0) return null;
+  const totalParagraphs = Math.max(1, paragraphs.length);
+  let configVoice = '';
+  let configSpeed = 1.0;
+  try {
+    const apiConfig = useConfigStore.getState().apiConfig;
+    configVoice = typeof apiConfig.voiceId === 'string' ? apiConfig.voiceId : '';
+    configSpeed = typeof apiConfig.speed === 'number' && Number.isFinite(apiConfig.speed) ? apiConfig.speed : 1.0;
+  } catch {
+    // 配置不可用时用安全缺省（playParagraph 侧仍有 voice 回退）。
+  }
+  const title = (pickNonEmptyString(input.title) ?? snapshotTitle ?? deriveDraftTitle(storyText)).slice(0, 100);
+  const voiceId = (pickNonEmptyString(input.voiceId) ?? snapshotVoice ?? configVoice ?? '').slice(0, 64);
+  return {
+    source: { kind: 'draft', messageId },
+    storyText,
+    paragraphs,
+    contentHash,
+    totalParagraphs,
+    title: title.length > 0 ? title : '未命名故事',
+    voiceId,
+    speed: configSpeed,
+    draftSnapshot: {
+      title: (title.length > 0 ? title : '未命名故事'),
+      contentHash,
+      totalParagraphs,
+      voiceId,
+    },
+  };
+}
+
+/**
+ * post-begin source-match 守卫（§50 切卡竞态）：
+ * begin 返回后若当前 Session 已不是本次请求的 source（更新的切换已落地），
+ * 调用方必须 abort，不得再 playParagraph（否则旧会话抢回 Transport）。
+ */
+function isCurrentSource(source: PlaybackSourceRef): boolean {
+  const current = usePlaybackSessionStore.getState().source;
+  if (!current || current.kind !== source.kind) return false;
+  return source.kind === 'draft'
+    ? (current as { messageId?: string }).messageId === source.messageId
+    : (current as { workId?: number }).workId === source.workId;
+}
+
+/** 当前 Session 是否就是给定 source（同卡/同 Work）。 */
+function isSameSource(
+  session: { source: PlaybackSourceRef | null },
+  source: PlaybackSourceRef,
+): boolean {
+  if (!session.source || session.source.kind !== source.kind) return false;
+  return source.kind === 'draft'
+    ? (session.source as { messageId: string }).messageId === source.messageId
+    : (session.source as { workId: number }).workId === source.workId;
+}
+
+/**
+ * 用户播放入口串行临界区 + 请求代（M9-F01 §50 竞态收口）。
+ *
+ * 为什么需要：`beginPlayback` 内部会 `hydrateFromAnchor` 并直接 `set(source)`，
+ * 而 store 的水合是「最后写入者胜出」。若两次 begin 并发，旧请求的晚到 hydrate
+ * 可能覆盖新请求的 source（用户点了 A 再点 B，结果 A 出声）。因此所有
+ * 「决策 + begin」经同一串行链执行，并以单调递增的请求代判定最新意图：
+ * 只有最新代可以 begin；begin 之后若代已过期，旧请求立即 abort（不 play）。
+ * 这样最终 source/播放属于最后一次用户操作，且不会出现双路 begin 抢写。
+ *
+ * 起播（playParagraph）在临界区之外执行：切卡时新卡不必等待旧卡在途的 TTS
+ * 合成；旧卡合成晚到由 store 的 originatingSessionId 守卫丢弃（§50）。
+ */
+let playRequestSeq = 0;
+let playCriticalSection: Promise<unknown> = Promise.resolve();
+
+/** 临界区计划：null = 已处理完（pause/resume/restart/被新请求取代），无需再起播。 */
+type PlannedPlay =
+  | { source: PlaybackSourceRef; sessionId: string | null; nextIndex: number | null }
+  | null;
+
+function runSerialized<T>(fn: () => Promise<T>): Promise<T> {
+  const run = playCriticalSection.then(fn, fn);
+  playCriticalSection = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+/** 同 source 的按钮意图（与旧 StoryCard 展示语义 1:1，只看 Transport 出声态）。 */
+function planSameSourceIntent(
+  session: { status: string; nextParagraphIndex: number; totalParagraphs: number },
+  transport: { isPlaying: boolean },
+): 'pause' | 'restart' | 'resume' {
+  if (transport.isPlaying) return 'pause';
+  if (session.status === 'ended' || session.nextParagraphIndex >= session.totalParagraphs) {
+    return 'restart';
+  }
+  return 'resume';
+}
+
+/**
+ * 临界区外的起播（二次校验）：
+ * 期间若有更新请求接管 Session（sessionId/source 已变），本计划作废，不得起播。
+ */
+async function playPlanned(planned: PlannedPlay): Promise<void> {
+  if (!planned || planned.nextIndex === null) return;
+  if (
+    planned.sessionId !== null &&
+    usePlaybackSessionStore.getState().sessionId !== planned.sessionId
+  ) {
+    return;
+  }
+  if (!isCurrentSource(planned.source)) return;
+  await playParagraph(planned.nextIndex, { explicit: true });
+}
+
+/**
+ * StoryCard 正式播放入口（M9-F01 唯一 StoryCard 播放决策面）。
+ *
+ * - 当前 Session 就是该 Draft 且 Transport 正在出声 → 正式 pause；
+ * - 就是该 Draft 且 `ended`（或 next 越界） → 正式 restart（新 sessionId）；
+ * - 就是该 Draft（ready/paused，含合法未完成断点 `0<next<total`）→ `resumePlayback()`，
+ *   保持 sessionId 与 canonical next（TTS 只合成 `paragraphs[next]`）；
+ * - 无 Session 或另一张卡 → 新建 Draft Session（restart+新 UUID）再从正式起点起播。
+ * 并发/连击时只有最后一次用户操作落地（见上方请求代说明）。
+ * 不在 StoryCard/ChatLayout/storyFlow 复制第二套 Session/断点状态机。
+ */
+export async function playStoryCard(input: StoryCardPlayInput): Promise<void> {
+  const messageId = typeof input.messageId === 'string' ? input.messageId : '';
+  if (!isValidDraftMessageId(messageId)) return;
+  const meta = buildStoryCardDraftMetadata(input);
+  if (!meta) return;
+  const token = ++playRequestSeq;
+  const planned = await runSerialized(async (): Promise<PlannedPlay> => {
+    if (token !== playRequestSeq) return null;
+    const session = usePlaybackSessionStore.getState();
+    const transport = usePlaybackStore.getState();
+    if (isSameSource(session, meta.source)) {
+      const intent = planSameSourceIntent(session, transport);
+      if (intent === 'pause') {
+        pausePlayback();
+        return null;
+      }
+      if (intent === 'restart') {
+        await restartPlayback();
+        return null;
+      }
+      await resumePlayback();
+      return null;
+    }
+    await beginPlayback({
+      source: meta.source,
+      mode: 'restart',
+      speed: meta.speed,
+      draftSnapshot: meta.draftSnapshot,
+    });
+    if (token !== playRequestSeq) return null;
+    if (!isCurrentSource(meta.source)) return null;
+    const live = usePlaybackSessionStore.getState();
+    return { source: meta.source, sessionId: live.sessionId, nextIndex: live.nextParagraphIndex };
+  });
+  await playPlanned(planned);
+}
+
+/**
+ * Generation History 正式回放入口（M9-F01）。
+ *
+ * History 底层即 StoryWork（DTO `record.id` = Work identity），回放走正式
+ * Work Session：`source = {kind:'work', workId: record.id}`，经 Work
+ * begin/restart/play 路径 + M5/M8 正式 provider，finite（不触发 AI continuation）。
+ * 不得伪造 transient Draft，不得修改 M5 source union。
+ */
+export async function playWorkFromHistory(workId: number): Promise<void> {
+  if (!isValidWorkId(workId)) return;
+  const source: PlaybackSourceRef = { kind: 'work', workId };
+  const token = ++playRequestSeq;
+  const planned = await runSerialized(async (): Promise<PlannedPlay> => {
+    if (token !== playRequestSeq) return null;
+    const session = usePlaybackSessionStore.getState();
+    const transport = usePlaybackStore.getState();
+    if (isSameSource(session, source)) {
+      const intent = planSameSourceIntent(session, transport);
+      if (intent === 'pause') {
+        pausePlayback();
+        return null;
+      }
+      if (intent === 'restart') {
+        await restartPlayback();
+        return null;
+      }
+      await resumePlayback();
+      return null;
+    }
+    let speed = 1.0;
+    try {
+      const configSpeed = useConfigStore.getState().apiConfig.speed;
+      if (typeof configSpeed === 'number' && Number.isFinite(configSpeed)) speed = configSpeed;
+    } catch {
+      // 缺省 1.0。
+    }
+    await beginPlayback({ source, mode: 'restart', speed });
+    if (token !== playRequestSeq) return null;
+    if (!isCurrentSource(source)) return null;
+    const live = usePlaybackSessionStore.getState();
+    return { source, sessionId: live.sessionId, nextIndex: live.nextParagraphIndex };
+  });
+  await playPlanned(planned);
+}
+
+/**
+ * 生成完成后 autoplay 正式入口（M9-F01）。
+ * 恒 fresh-restart 建 Draft Session 再从 `paragraphs[0]` 起播（旧整篇 blob 不得
+ * 当 paragraph 播放，由调用方吊销）。transport 可能残留旧轨道，故恒 explicit。
+ */
+export async function autoplayDraftStory(input: StoryCardPlayInput): Promise<void> {
+  const messageId = typeof input.messageId === 'string' ? input.messageId : '';
+  if (!isValidDraftMessageId(messageId)) return;
+  const meta = buildStoryCardDraftMetadata(input);
+  if (!meta) return;
+  const token = ++playRequestSeq;
+  const planned = await runSerialized(async (): Promise<PlannedPlay> => {
+    if (token !== playRequestSeq) return null;
+    await beginPlayback({
+      source: meta.source,
+      mode: 'restart',
+      speed: meta.speed,
+      draftSnapshot: meta.draftSnapshot,
+    });
+    if (token !== playRequestSeq) return null;
+    if (!isCurrentSource(meta.source)) return null;
+    const live = usePlaybackSessionStore.getState();
+    return { source: meta.source, sessionId: live.sessionId, nextIndex: 0 };
+  });
+  await playPlanned(planned);
 }
 
 /**

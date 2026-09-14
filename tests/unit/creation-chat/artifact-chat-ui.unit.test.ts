@@ -209,6 +209,27 @@ function stubNetworkBoundary(): void {
       saveMyConversation: async () => ({ ok: true }),
     },
   } as unknown as NodeModule;
+  // 中文注释：M9-F01——故事播放入口经 PlaybackSessionFlow→Session store→client。
+  // 本套件无 server，client begin 必须 fail-closed（legacy audioUrl 不得再直达 Transport）。
+  const playbackSessionPath = path.resolve(repoRoot, 'lib/client/playbackSession.ts');
+  cache[playbackSessionPath] = {
+    id: playbackSessionPath,
+    filename: playbackSessionPath,
+    loaded: true,
+    exports: {
+      getPlaybackAnchor: async () => null,
+      beginPlaybackSession: async () => {
+        throw new Error('M405_NO_SERVER');
+      },
+      savePlaybackCheckpoint: async () => ({ accepted: false }),
+      completePlaybackSession: async () => null,
+      clearPlaybackAnchor: async () => ({ cleared: false }),
+      promoteDraftPlaybackToWork: async () => {
+        throw new Error('M405_NO_SERVER');
+      },
+      setSleepTimer: async () => ({ accepted: false }),
+    },
+  } as unknown as NodeModule;
 }
 
 // 中文注释：六态合法 Artifact fixture 工厂（id/sourceMessageId 对齐同一 assistant message）。
@@ -260,7 +281,7 @@ async function runArtifactChatUiTests(): Promise<void> {
   const storyCardMod = innerJiti(
     './app/(main)/chat/components/MessageParts/StoryCardPart.tsx',
   ) as unknown as {
-    default: React.ComponentType<{ part: unknown; messageId?: string; onPlayStory?: (u: string) => void }>;
+    default: React.ComponentType<{ part: unknown; messageId?: string }>;
   };
   const generationMod = innerJiti('./stores/generationStore.ts') as unknown as {
     useGenerationStore: { setState: (p: Record<string, unknown>) => void };
@@ -364,22 +385,25 @@ async function runArtifactChatUiTests(): Promise<void> {
     for (const token of forbiddenRetry) {
       assert.ok(!source.includes(token), `UI 不得私设 promotion 语义：${token}`);
     }
-    // 分发器清理：storyArtifact 分支不得再透传 onPlayStory（Legacy 分支保留契约）。
+    // 分发器完全收口：M9-F01 后 onPlayStory 契约整体删除（播放归 PlaybackSessionFlow）。
     const indexSource = readFileSync(
       path.join(repoRoot, 'app/(main)/chat/components/MessageParts/index.tsx'),
       'utf8',
     );
+    const indexCode = indexSource
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|\s)\/\/.*$/gm, '$1');
+    assert.ok(
+      !indexCode.includes('onPlayStory'),
+      '分发器必须整体移除 onPlayStory 契约（M9-F01）',
+    );
+    assert.ok(
+      indexSource.includes('StoryCardPartRenderer part={part} messageId={messageId}'),
+      'Legacy storyCard 分支只传 part + messageId（播放决策在 Flow）',
+    );
     assert.ok(
       !indexSource.includes('StoryArtifactPartRenderer part={part} messageId={messageId} onPlayStory'),
-      'storyArtifact 分支必须切断 onPlayStory 透传',
-    );
-    assert.ok(
-      indexSource.includes('onPlayStory?: (audioUrl: string) => void'),
-      '通用 onPlayStory 契约必须保留（Legacy storyCard 仍用）',
-    );
-    assert.ok(
-      indexSource.includes('StoryCardPartRenderer part={part} messageId={messageId} onPlayStory={onPlayStory}'),
-      'Legacy storyCard 分支必须继续透传 onPlayStory',
+      'storyArtifact 分支不得透传 onPlayStory',
     );
     // 共享 playback CSS 不得被误删（Legacy 仍用）。
     const scss = readFileSync(
@@ -694,19 +718,31 @@ async function runArtifactChatUiTests(): Promise<void> {
   console.log('PASS: M4-05-09 interrupted 分离');
 
   // ==========================================================================
-  // M4-05-11：Legacy storyCard 只读兼容（renderer 可加载、行为未动、CSS 未被误删）
+  // M4-05-11：Legacy storyCard 只读兼容（renderer 可加载；播放已收口 Flow，不再直达 Transport）
   // ==========================================================================
-  console.log('=== M4-05-11: Legacy 只读兼容 ===');
+  console.log('=== M4-05-11: Legacy 只读兼容（播放收口 Flow） ===');
   {
     resetBaseline();
-    const onPlayCalls: string[] = [];
+    const playbackStoreMod = innerJiti('./stores/playbackStore.ts') as unknown as {
+      usePlaybackStore: {
+        getState: () => { registerAudioController: (controller: unknown) => void };
+      };
+    };
+    const transportPlayCalls: string[] = [];
+    playbackStoreMod.usePlaybackStore.getState().registerAudioController({
+      unlock: async () => {},
+      play: async (audioUrl: string) => {
+        transportPlayCalls.push(audioUrl);
+      },
+      resume: async () => {},
+      pause: () => {},
+      seek: () => {},
+      setPlaybackRate: () => {},
+    });
     const r = rtl.render(
       ReactMod.createElement(StoryCardPartRenderer, {
         part: { type: 'storyCard', storyText: 'legacy历史正文', audioUrl: 'https://example.com/a.mp3' },
         messageId: 'msg-legacy-1',
-        onPlayStory: (u: string) => {
-          onPlayCalls.push(u);
-        },
       }),
     );
     try {
@@ -716,7 +752,26 @@ async function runArtifactChatUiTests(): Promise<void> {
       await rtl.act(async () => {
         rtl.fireEvent.click(playBtn);
       });
-      assert.deepStrictEqual(onPlayCalls, ['https://example.com/a.mp3'], 'Legacy onPlayStory 接线不变');
+      // 等一拍：Flow 的 client begin 在本套件桩中 fail-closed，绝不落到 Transport。
+      await rtl.act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      });
+      assert.deepStrictEqual(
+        transportPlayCalls,
+        [],
+        'Legacy 旧 audioUrl 不得再直达 Transport（M9-F01：必须存在正式 Session）',
+      );
+      // 静态锁：StoryCard 的播放决策只经 Flow，无 legacy callback / storyFlow 合成。
+      const cardSource = readFileSync(
+        path.join(repoRoot, 'app/(main)/chat/components/MessageParts/StoryCardPart.tsx'),
+        'utf8',
+      );
+      const cardCode = cardSource
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|\s)\/\/.*$/gm, '$1');
+      assert.ok(!cardCode.includes('onPlayStory'), 'StoryCard 不得再消费 onPlayStory');
+      assert.ok(!cardCode.includes('playStoryText'), 'StoryCard 不得再走 storyFlow 合成');
+      assert.ok(cardCode.includes('playStoryCard'), 'StoryCard 必须经 Flow.playStoryCard');
     } finally {
       r.unmount();
     }

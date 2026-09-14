@@ -10,14 +10,14 @@ import SummaryPartRenderer from './SummaryPart';
 
 /**
  * 片段渲染器的通用 Props 定义。
+ * M9-F01：onPlayStory Transport 回调已删除——StoryCard 播放 ownership 收口至
+ * PlaybackSessionFlow.playStoryCard，组件只收 messageId。
  */
 export type PartRendererProps<T extends MessagePart = MessagePart> = {
     /** 待渲染的消息片段。 */
     part: T;
     /** 关联的真实消息 ID。 */
     messageId?: string;
-    /** 可选的播放故事回调，由 StoryCardPart 使用。 */
-    onPlayStory?: (audioUrl: string) => void;
 };
 
 /**
@@ -25,17 +25,15 @@ export type PartRendererProps<T extends MessagePart = MessagePart> = {
  * 用 switch 让每个分支自动收窄 part 的具体子类型，无需注册表的 any 断言。
  * @param props.part 待渲染的消息片段
  * @param props.messageId 关联消息 ID
- * @param props.onPlayStory 故事播放回调
  */
-const MessagePartRenderer: FC<PartRendererProps> = ({ part, messageId, onPlayStory }) => {
+const MessagePartRenderer: FC<PartRendererProps> = ({ part, messageId }) => {
     switch (part.type) {
         case 'text':
-            return <TextPartRenderer part={part} onPlayStory={onPlayStory} />;
+            return <TextPartRenderer part={part} />;
         case 'storyCard':
-            return <StoryCardPartRenderer part={part} messageId={messageId} onPlayStory={onPlayStory} />;
+            return <StoryCardPartRenderer part={part} messageId={messageId} />;
         case 'storyArtifact':
             // M4-05：Modern StoryArtifact 为纯 lifecycle UI，不再接收 playback 回调；
-            // Legacy storyCard 分支保持 onPlayStory 契约不变。
             return <StoryArtifactPartRenderer part={part} messageId={messageId} />;
         case 'guidance':
             return <GuidancePartComponent part={part} />;

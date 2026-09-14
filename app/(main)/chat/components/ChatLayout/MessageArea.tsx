@@ -8,7 +8,7 @@ import type { ChatLogProps } from '../ChatLog/types';
  */
 type MessageAreaProps = Pick<
   ChatLogProps,
-  'messages' | 'isLoading' | 'emptyHint' | 'loadingHint' | 'onRetry' | 'onPlayStory'
+  'messages' | 'isLoading' | 'emptyHint' | 'loadingHint' | 'onRetry'
 >;
 
 /**
@@ -21,7 +21,6 @@ const MessageArea: React.FC<MessageAreaProps> = ({
   emptyHint,
   loadingHint,
   onRetry,
-  onPlayStory,
 }) => {
   return (
     <div className={styles.messageArea}>
@@ -32,7 +31,6 @@ const MessageArea: React.FC<MessageAreaProps> = ({
         emptyHint={emptyHint}
         loadingHint={loadingHint}
         onRetry={onRetry}
-        onPlayStory={onPlayStory}
       />
     </div>
   );

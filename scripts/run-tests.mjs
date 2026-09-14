@@ -29,7 +29,7 @@ const ALLOWED_GROUPS = ['unit', 'integration', 'tooling'];
 // 中文注释：unit 禁止导入 lib/db 的静态扫描正则。
 const LIB_DB_IMPORT_RE = /from\s+['"].*lib\/db['"]|require\(['"].*lib\/db['"]\)/;
 
-// 中文注释：套件注册表（50 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit 与无库 tooling 元测试为 false）。
+// 中文注释：套件注册表（51 项，id 由 path 推导剥后缀，group 按迁移表归类，needs_db 仅 unit 与无库 tooling 元测试为 false）。
 // 中文注释：meta-suite 策略——runner 自身测试（runner/catalog/ci 三个 tooling 元测试）以 needs_db=false 的叶子套件登记进 tooling 组，
 // 它们只做 --list 只读查询 / 沙箱 catalog 校验 / 文件结构断言，从不触发套件执行与建库，故无自指递归（由 runner-group-split 用例⑧测试证明）；
 // 禁止用 checker 硬编码目录排除来掩盖测试。
@@ -83,6 +83,7 @@ const SUITES = [
     { id: 'playback-session-rehydrate', path: './tests/unit/playback/playback-session-rehydrate.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'playback-runtime-orchestration', path: './tests/unit/playback/playback-runtime-orchestration.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'storycard-session-resume', path: './tests/unit/playback/storycard-session-resume.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'storycard-session-flow', path: './tests/integration/playback/storycard-session-flow.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'playback-session-rehydrate-server', path: './tests/integration/playback/playback-session-rehydrate-server.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'main-navigation', path: './tests/unit/navigation/main-navigation.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'story-work-domain', path: './tests/unit/persistence-config/story-work-domain.unit.test.ts', group: 'unit', needs_db: false },

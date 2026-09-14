@@ -5,7 +5,7 @@ import { Play } from 'lucide-react';
 
 import GlassToast from '@/components/ui/GlassToast';
 import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
-import { replayGeneration } from '@/app/services/storyFlow';
+import { playWorkFromHistory } from '@/app/services/playbackSessionFlow';
 import {
   HistoryList,
   HistoryListItem,
@@ -52,11 +52,13 @@ const GenerationHistory: React.FC = () => {
   };
 
   /**
-   * 回放某条历史：重新合成并播放，失败 Toast 提示。
+   * 回放某条历史：经正式 Work Session 有限重播（M9-F01：source={kind:'work',
+   * workId: record.id}，M5/M8 正式 provider，Mini 可见/Expanded 可达；
+   * 不再走 Transport-only replay，不伪造 transient Draft）。
    * @param record 目标历史记录
    */
   const handleReplay = (record: (typeof records)[number]) => {
-    replayGeneration(record).catch(() => {
+    playWorkFromHistory(record.id).catch(() => {
       GlassToast.show({ icon: 'fail', content: '回放失败，请稍后重试' });
     });
   };

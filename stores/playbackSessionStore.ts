@@ -156,7 +156,7 @@ interface PlaybackSessionActions {
   handleExplicitPause: () => void;
   /** §30 restart：新 sessionId + position 0（保留 completedAt 由 server 侧持有）。 */
   restart: () => Promise<void>;
-  promoteDraftToWork: (workId: number) => Promise<void>;
+  promoteDraftToWork: (workId: number, deps?: SessionRehydrateDeps) => Promise<void>;
   beginPlayback: (params: {
     source: PlaybackSourceRef;
     mode: 'resume' | 'restart';
@@ -1097,26 +1097,124 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     await get().playParagraph(0, { explicit: true });
   },
 
-  promoteDraftToWork: async (workId) => {
+  promoteDraftToWork: async (workId, deps) => {
     const state = get();
     if (!state.sessionId || !state.source || state.source.kind !== 'draft') return;
     const sessionId = state.sessionId;
     const draftHash = state.contentHash;
     const draftNext = state.nextParagraphIndex;
+    const draftParagraphs = state.paragraphs;
     const anchor = await promoteDraftPlaybackToWork({ sessionId, workId });
-    // server 已切换 source/title/hash/voiceId（sessionId 不变）；本地按 hash 取舍断点。
+    // M8-04 FIXUP-3 Blocking（spec §23 Session.paragraphs[index]==Manifest.segments[index].text）：
+    // server promotion 已返回 Manifest 权威 Anchor（version=Manifest version、total=Manifest segmentCount）；
+    // client 必须同步把 Session 后续 segment provider 切到目标 Work Manifest frozen segments：
+    // Manifest exists → paragraphs=Manifest.segments[].text，version/count 取 Manifest 权威 pair
+    //（与 server Anchor version/count 一致性校验，不一致记 warn 仍以 Manifest 为准）；
+    // Manifest missing（null/segments=[]）→ 保留既有 M5 promotion 行为（paragraphs 沿用 Draft）；
+    // Manifest read throws（unknown）→ fail-closed：不得偷偷把 Draft paragraphs 当 Work Manifest SSOT，
+    // 须显式置 status error 并向上抛错（server Anchor 已切 Work，本地 source 亦切 Work 保持一致，
+    // 但 paragraphs 不可信，须经 hydrate retry 恢复；当前 Blob 不打断）。
+    // 复用 getPlaybackManifest + selectWorkParagraphs，不造新状态；当前 Blob 不 pause/stop/换 URL（§22.4）。
+    // §50 session guard：manifest 晚到时确认仍是同一 session，否则丢弃覆盖。
+    const d = resolveDeps(deps);
+    let manifest: {
+      segments: Array<{ index: number; text: string }>;
+      segmentationVersion?: string;
+      segmentCount?: number;
+    } | null = null;
+    let manifestUnknown = false;
+    try {
+      manifest = await d.getManifest(workId);
+    } catch (err) {
+      manifestUnknown = true;
+      console.warn('[playbackSessionStore] promote manifest read failed, fail-closed', err);
+    }
+    if (get().sessionId !== sessionId) return;
+    if (manifestUnknown) {
+      // fail-closed：source 切 Work 与 server 对齐，但 paragraphs 不可信 → 置 error 并抛错，
+      // 绝不以 Draft 切分冒充 Work Manifest SSOT；当前 Blob 不打断，仅清未播预取。
+      const preservedOnError = shouldPreserveDraftBreakpointOnPromote(draftHash, anchor.contentHash);
+      const nextOnError = preservedOnError
+        ? resolvePromotedNextParagraphIndex(draftNext, draftHash, anchor.contentHash, anchor.totalParagraphs)
+        : 0;
+      set({
+        source: { kind: 'work', workId },
+        title: anchor.title,
+        contentHash: anchor.contentHash,
+        segmentationVersion: anchor.segmentationVersion,
+        lastCompletedParagraphIndex: nextOnError > 0 ? nextOnError - 1 : -1,
+        nextParagraphIndex: nextOnError,
+        totalParagraphs: anchor.totalParagraphs,
+        voiceId: anchor.voiceId,
+        speed: anchor.speed,
+        status: 'error',
+      });
+      try {
+        const stalePrefetch = get().prefetchedAudioUrl;
+        abortPrefetch();
+        revokeAudioUrlIfBlob(stalePrefetch);
+      } catch {
+        // ignore
+      }
+      set({ prefetchedAudioUrl: null, prefetchingIndex: null });
+      try {
+        if (typeof anchor.speed === 'number' && Number.isFinite(anchor.speed)) {
+          usePlaybackStore.getState().setPlaybackRate(anchor.speed);
+        }
+      } catch {
+        // ignore
+      }
+      throw new Error('[playbackSessionStore] promote manifest unknown, fail-closed');
+    }
+    let paragraphs = draftParagraphs;
+    let effectiveSegmentationVersion = anchor.segmentationVersion;
+    let effectiveTotalParagraphs = anchor.totalParagraphs;
+    if (manifest && Array.isArray(manifest.segments) && manifest.segments.length > 0) {
+      paragraphs = selectWorkParagraphs(draftParagraphs, manifest);
+      if (
+        typeof manifest.segmentationVersion === 'string' &&
+        manifest.segmentationVersion.length > 0
+      ) {
+        if (manifest.segmentationVersion !== anchor.segmentationVersion) {
+          console.warn('[playbackSessionStore] promote manifest version mismatch anchor, use manifest', {
+            manifest: manifest.segmentationVersion,
+            anchor: anchor.segmentationVersion,
+          });
+        }
+        effectiveSegmentationVersion = manifest.segmentationVersion;
+      }
+      if (
+        typeof manifest.segmentCount === 'number' &&
+        Number.isFinite(manifest.segmentCount) &&
+        Math.floor(manifest.segmentCount) >= 1
+      ) {
+        if (Math.floor(manifest.segmentCount) !== anchor.totalParagraphs) {
+          console.warn('[playbackSessionStore] promote manifest count mismatch anchor, use manifest', {
+            manifest: manifest.segmentCount,
+            anchor: anchor.totalParagraphs,
+          });
+        }
+        effectiveTotalParagraphs = Math.floor(manifest.segmentCount);
+      } else {
+        effectiveTotalParagraphs = Math.max(1, paragraphs.length);
+      }
+    } else {
+      // Manifest missing → M5 行为：paragraphs 沿用 Draft，version/count 沿用 Anchor（无 Manifest 时 Anchor 即当前切分）。
+    }
+    // server 已切换 source/title/hash/voiceId（sessionId 不变）；本地按 hash 取舍断点（基于 Manifest 权威 total 钳制）。
     const preserved = shouldPreserveDraftBreakpointOnPromote(draftHash, anchor.contentHash);
     const next = preserved
-      ? resolvePromotedNextParagraphIndex(draftNext, draftHash, anchor.contentHash, anchor.totalParagraphs)
+      ? resolvePromotedNextParagraphIndex(draftNext, draftHash, anchor.contentHash, effectiveTotalParagraphs)
       : 0;
     set({
       source: { kind: 'work', workId },
       title: anchor.title,
       contentHash: anchor.contentHash,
-      segmentationVersion: anchor.segmentationVersion,
+      segmentationVersion: effectiveSegmentationVersion,
       lastCompletedParagraphIndex: next > 0 ? next - 1 : -1,
       nextParagraphIndex: next,
-      totalParagraphs: anchor.totalParagraphs,
+      totalParagraphs: effectiveTotalParagraphs,
+      paragraphs,
       voiceId: anchor.voiceId,
       speed: anchor.speed,
     });

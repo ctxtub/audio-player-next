@@ -395,6 +395,47 @@ async function runWorkPlaybackReadUnitTests() {
     console.log('PASS: 9. FIXUP-2 收口通过');
   }
 
+  console.log('=== 10. M8-04 FIXUP-3 promotion 后 client Session 切 Manifest frozen（§23） ===');
+  {
+    const storeSrc10 = stripComments(
+      fs.readFileSync(path.resolve(process.cwd(), 'stores/playbackSessionStore.ts'), 'utf8'),
+    );
+    const promoteStart = storeSrc10.indexOf('promoteDraftToWork: async');
+    assert.ok(promoteStart >= 0, 'client promoteDraftToWork 实现存在');
+    const promoteSeg = storeSrc10.slice(promoteStart, promoteStart + 9000);
+    assert.ok(
+      promoteSeg.includes('d.getManifest') || promoteSeg.includes('getManifest'),
+      'promotion 后必须同步读目标 Work Manifest（复用 getPlaybackManifest，不造新状态）',
+    );
+    assert.ok(
+      promoteSeg.includes('selectWorkParagraphs'),
+      'promotion 后 paragraphs 必须经 selectWorkParagraphs 取 frozen texts',
+    );
+    assert.ok(
+      promoteSeg.includes('paragraphs'),
+      'promotion 必须写回 Session.paragraphs（不得停留 Draft 切分）',
+    );
+    assert.ok(
+      promoteSeg.includes('effectiveSegmentationVersion') &&
+        promoteSeg.includes('effectiveTotalParagraphs'),
+      'promotion version/count 须取 Manifest 权威 pair（Anchor 一致性校验）',
+    );
+    assert.ok(
+      promoteSeg.includes('fail-closed'),
+      'promotion Manifest read throws 须 fail-closed（不得偷偷把 Draft 当 Work SSOT）',
+    );
+    assert.ok(
+      promoteSeg.includes("set({ status: 'error' })") || promoteSeg.includes('status'),
+      'promotion unknown 须显式 error（可 retry，不静默成功）',
+    );
+    assert.ok(!promoteSeg.includes('playAudio'), 'promotion 不得触发换音源播放（当前 Blob 不打断 §22.4）');
+    assert.ok(
+      !promoteSeg.includes('pauseAudioPlayback') && !promoteSeg.includes('.stop('),
+      'promotion 不得物理停止当前 Draft Blob',
+    );
+    console.log('PASS: 10. FIXUP-3 promotion 切 Manifest 通过');
+  }
+
   console.log('\nALL AUDIO WORK PLAYBACK READ UNIT TESTS PASSED!');
 }
 

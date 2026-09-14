@@ -37,6 +37,7 @@ try {
 let ensureCalls = 0;
 let ensureLog: Array<{ workId: number; segmentIndex: number; sessionId: string }> = [];
 let fetchCalls = 0;
+let fetchTexts: string[] = [];
 let mockTtsCount = 0;
 const mockReadyMap = new Map<string, string>();
 const ensureQueue: Array<() => Promise<never>> = [];
@@ -65,7 +66,7 @@ let promoteHandler: ((input: { sessionId: string; workId: number }) => Promise<{
 function installStubs() {
   nodeRequire.cache[ttsPath] = {
     id: ttsPath, filename: ttsPath, loaded: true,
-    exports: { fetchAudio: async (): Promise<string> => { fetchCalls += 1; return `blob:mock-${fetchCalls}`; } },
+    exports: { fetchAudio: async (text: string): Promise<string> => { fetchCalls += 1; fetchTexts.push(text); return `blob:mock-${fetchCalls}`; } },
   } as unknown as NodeModule;
   nodeRequire.cache[storyAudioPath] = {
     id: storyAudioPath, filename: storyAudioPath, loaded: true,
@@ -117,6 +118,7 @@ const SID_H = '081ac10b-58cc-4372-a567-0e02b2c3d481';
 const SID_I = '091ac10b-58cc-4372-a567-0e02b2c3d491';
 const SID_J = '0a1ac10b-58cc-4372-a567-0e02b2c3d4a1';
 const SID_K = '0b1ac10b-58cc-4372-a567-0e02b2c3d4b1';
+const SID_L = '0c1ac10b-58cc-4372-a567-0e02b2c3d4c1';
 const P1 = `第一自然段：很久很久以前在宁静的大森林深处住着一只聪明活泼的小松鼠它有一条蓬松柔软的大尾巴每天清晨都在高高的树梢之间欢快地跳来跳去寻找新鲜的坚果与甘甜的露水日子过得无忧无虑。`;
 const P2 = `第二自然段：小松鼠每天迎着金色的朝阳出门收集松果仔细辨别每一颗果实是否饱满香甜然后整整齐齐存放在自己温暖干燥的树洞深处为即将到来的漫长寒冬储备充足的粮食心里充满了丰收的喜悦。`;
 const TWO = `${P1}\n${P2}`;
@@ -127,7 +129,7 @@ function resetWorld() {
   getSession().getState().reset();
   getTransport().getState().reset();
   getTransport().setState({ _tickIntervalId: null, _lastTickAt: null, isPlaying: false } as never);
-  ensureCalls = 0; ensureLog = []; fetchCalls = 0; mockTtsCount = 0;
+  ensureCalls = 0; ensureLog = []; fetchCalls = 0; fetchTexts = []; mockTtsCount = 0;
   mockReadyMap.clear(); ensureQueue.length = 0;
 }
 function fakeController(calls: string[]) {
@@ -469,6 +471,100 @@ async function runTests() {
       assert.strictEqual(progB11!.nextParagraphIndex, promotedB11.nextParagraphIndex, 'B11：Anchor/Progress index 一致');
       const segB11 = await ensureStoryAudioSegmentForSubject(subject, { workId: workB11.id, segmentIndex: progB11!.nextParagraphIndex, sessionId: SID_K }, { synthesize: synth });
       assert.strictEqual(segB11.status, 'ready', 'B11：后续 canonical segment index 与 Progress index 一致（可就绪）');
+    }
+    console.log('=== B11c. Oracle FIXUP-3 promotion 后 client Session 切到 Manifest frozen segments（经 promoteDraftToWork） ===');
+    {
+      // Frozen 刻意与 Draft/current 切分不同文本 + 不同 count（2→3），命中 §23 invariant 断点：
+      // bug 版 Session paragraphs 仍 Draft（len 2）而 version/count 已 Manifest（3），index 2 会 <total 但 >=paragraphs.length → clearSession/错文本。
+      const FROZEN_C0 = `${P1}【冻C0】`;
+      const FROZEN_C1 = `${P2}【冻C1】`;
+      const FROZEN_C2 = `第三冻段：刻意多一段以验证 count 切换与边界文本与 Draft 完全不同内容足够长用于预取边界断言。`;
+      const FROZEN_ALL = [FROZEN_C0, FROZEN_C1, FROZEN_C2];
+      const draftMsgB11c = `oracleB11c-draft-${Date.now()}`;
+      await prisma.chatMessage.create({ data: { userId: user.id, position: 0, messageId: draftMsgB11c, role: 'assistant', content: 'draft', parts: null } });
+      const workB11c = await prisma.storyWork.create({ data: { userId: user.id, prompt: 'oracleB11c', storyText: TWO, voiceId: 'alloy', title: 'oracleB11c', excerpt: 'e', contentHash: '', sourceMessageId: draftMsgB11c } });
+      await prisma.storyWork.update({ where: { id: workB11c.id }, data: { contentHash: hashA } });
+      const rB11c = await ensureStoryAudioSegmentForSubject(subject, { workId: workB11c.id, segmentIndex: 0, sessionId: SID_J }, { synthesize: synth });
+      assert.strictEqual(rB11c.status, 'ready', 'B11c manifest 先建');
+      const manB11c = await prisma.storyAudioManifest.findUnique({ where: { storyWorkId_version: { storyWorkId: workB11c.id, version: 1 } } });
+      assert.ok(manB11c, 'B11c manifest 行存在');
+      await prisma.storyAudioManifest.update({ where: { id: manB11c!.id }, data: { segmentationVersion: 'legacy-v0' } });
+      resetWorld(); fakeController(pc1);
+      getConfig().setState({ apiConfig: { ...getConfig().getState().apiConfig, voiceId: 'alloy', speed: 1 } });
+      process.env.CANONICAL_AUDIO_ENABLED = '1';
+      getSession().getState().setActiveStory({ source: { kind: 'draft', messageId: draftMsgB11c }, sessionId: SID_L, title: 'oracleB11c-draft', storyText: TWO, voiceId: 'alloy', speed: 1.0 });
+      assert.deepStrictEqual(getSession().getState().paragraphs, [P1, P2], 'B11c 前提：Draft paragraphs 为本地切分');
+      getTransport().setState({ isPlaying: true } as never);
+      await getSession().getState().playParagraph(0, { explicit: true });
+      const draftUrlB11c = getTransport().getState().currentAudioUrl;
+      assert.ok(typeof draftUrlB11c === 'string' && (draftUrlB11c as string).startsWith('blob:'), 'B11c 前提：Draft 首播 blob');
+      getSession().setState({ nextParagraphIndex: 1, lastCompletedParagraphIndex: 0 });
+      assert.strictEqual(getSession().getState().nextParagraphIndex, 1, 'B11c 前提：draft next=1');
+      promoteHandler = async () => ({ title: 'oracleB11c', contentHash: hashA, segmentationVersion: 'legacy-v0', totalParagraphs: 3, voiceId: 'alloy', speed: 1.0 });
+      const manifestB11c = { segments: [{ index: 0, text: FROZEN_C0 }, { index: 1, text: FROZEN_C1 }, { index: 2, text: FROZEN_C2 }], segmentationVersion: 'legacy-v0', segmentCount: 3 };
+      await getSession().getState().promoteDraftToWork(workB11c.id, { getManifest: async () => manifestB11c });
+      promoteHandler = null;
+      assert.strictEqual(getTransport().getState().currentAudioUrl, draftUrlB11c, 'B11c：promotion 后当前 Draft Blob 完全相同（不打断）');
+      assert.deepStrictEqual(getSession().getState().paragraphs, FROZEN_ALL, 'B11c：Session.paragraphs→Manifest frozen texts');
+      assert.strictEqual(getSession().getState().segmentationVersion, 'legacy-v0', 'B11c：Session.version→Manifest version');
+      assert.strictEqual(getSession().getState().totalParagraphs, 3, 'B11c：Session.total→Manifest segmentCount');
+      assert.strictEqual(getSession().getState().nextParagraphIndex, 1, 'B11c：hash 一致沿用 draft 断点 1');
+      assert.strictEqual(getSession().getState().source?.kind, 'work', 'B11c：source 切 work');
+      // flag off 后播放下一段 → fetchAudio 收到 Manifest frozen text；ensure=0
+      {
+        const savedCanon = process.env.CANONICAL_AUDIO_ENABLED;
+        const savedPublic = process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED;
+        process.env.CANONICAL_AUDIO_ENABLED = '0';
+        delete process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED;
+        try {
+          ensureCalls = 0; ensureLog = []; fetchCalls = 0; fetchTexts = []; mockTtsCount = 0;
+          mockReadyMap.clear(); ensureQueue.length = 0;
+          getTransport().setState({ isPlaying: true } as never);
+          const ensureBefore = ensureCalls;
+          const fetchBefore = fetchCalls;
+          await getSession().getState().playParagraph(1, { explicit: true });
+          assert.strictEqual(ensureCalls, ensureBefore, 'B11c flag-off：ensureSegment 调用数=0');
+          assert.ok(fetchCalls > fetchBefore, 'B11c flag-off：走 fetchAudio');
+          assert.ok(fetchTexts.includes(FROZEN_C1), 'B11c flag-off：fetchAudio 收到 Manifest frozen text (index 1)');
+          assert.ok(!fetchTexts.includes(P2), 'B11c flag-off：不得合成 Draft 文本');
+          assert.ok(((getTransport().getState().currentAudioUrl ?? '') as string).startsWith('blob:'), 'B11c flag-off：ephemeral blob');
+        } finally {
+          if (savedCanon === undefined) delete process.env.CANONICAL_AUDIO_ENABLED;
+          else process.env.CANONICAL_AUDIO_ENABLED = savedCanon;
+          if (savedPublic === undefined) delete process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED;
+          else process.env.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED = savedPublic;
+        }
+        process.env.CANONICAL_AUDIO_ENABLED = '1';
+      }
+      // flag on 后播放下一段 → ensureSegment 使用相同 index；index 2 可播而非 clearSession
+      {
+        ensureCalls = 0; ensureLog = []; fetchCalls = 0; fetchTexts = [];
+        mockReadyMap.clear(); ensureQueue.length = 0;
+        getTransport().setState({ isPlaying: true } as never);
+        const fetchBeforeOn = fetchCalls;
+        await getSession().getState().playParagraph(1, { explicit: true });
+        assert.ok(ensureCalls >= 1, 'B11c flag-on：走 ensureSegment');
+        assert.strictEqual(fetchCalls, fetchBeforeOn, 'B11c flag-on：不走 fetchAudio');
+        assert.ok(ensureLog.some((e) => e.workId === workB11c.id && e.segmentIndex === 1), 'B11c flag-on：ensureSegment 使用相同 index 1');
+        assert.ok(((getTransport().getState().currentAudioUrl ?? '') as string).startsWith('/api/audio/segments/'), 'B11c flag-on：canonical URL');
+        const sidBefore = getSession().getState().sessionId;
+        await getSession().getState().playParagraph(2, { explicit: true });
+        assert.strictEqual(getSession().getState().sessionId, sidBefore, 'B11c：index 2 < total 且 < paragraphs.length，不 clearSession');
+        assert.ok(ensureLog.some((e) => e.segmentIndex === 2), 'B11c：index 2 ensure 可就绪');
+      }
+      // prefetch boundary → 基于 Manifest paragraph count（2<3 允许，3>=3 阻断）
+      {
+        getSession().setState({ nextParagraphIndex: 1, lastCompletedParagraphIndex: 0 });
+        ensureCalls = 0; ensureLog = []; fetchCalls = 0; fetchTexts = [];
+        getTransport().setState({ isPlaying: true } as never);
+        await getSession().getState().prefetchNextParagraph(2);
+        assert.ok(ensureCalls >= 1 && ensureLog.some((e) => e.segmentIndex === 2), 'B11c prefetch：基于 Manifest count，2<3 允许预取');
+        getSession().setState({ nextParagraphIndex: 2, lastCompletedParagraphIndex: 1 });
+        ensureCalls = 0; ensureLog = []; fetchCalls = 0; fetchTexts = [];
+        await getSession().getState().prefetchNextParagraph(3);
+        assert.strictEqual(ensureCalls, 0, 'B11c prefetch boundary：3>=Manifest count 3 不预取');
+        assert.strictEqual(fetchCalls, 0, 'B11c prefetch boundary：越界不走 fetch');
+      }
     }
     console.log('\nALL WORK PLAYBACK REUSE INTEGRATION TESTS PASSED!');
   } finally {

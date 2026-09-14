@@ -155,6 +155,7 @@ const SUITES = [
     { id: 'creation-actions-view', path: './tests/integration/now-playing/creation-actions-view.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'production-cutover', path: './tests/unit/now-playing/production-cutover.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'player-compat-redirect', path: './tests/unit/navigation/player-compat-redirect.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'legacy-player-surface-retirement', path: './tests/unit/navigation/legacy-player-surface-retirement.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'sleep-timer-semantics', path: './tests/unit/now-playing/sleep-timer-semantics.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'sleep-timer-control', path: './tests/unit/now-playing/sleep-timer-control.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'sleep-timer-countdown', path: './tests/unit/playback/sleep-timer-countdown.unit.test.ts', group: 'unit', needs_db: false },

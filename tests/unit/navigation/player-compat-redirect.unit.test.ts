@@ -14,7 +14,7 @@ const stripComments = (src: string): string =>
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|\s)\/\/.*$/gm, '$1');
 
-// allowlist：M9-01 兼容收口前保留（M9-02 才物理删除/清理）。
+// allowlist：M9-01 兼容收口形态；M9-02 起旧 Player 已物理删除，player 目录仅剩 page.tsx（见 M9-02 oracle）。
 const ALLOWLIST_DIR_PREFIX = 'app/(main)/player/';
 const ALLOWLIST_FILES = new Set<string>(['components/NowPlaying/useNowPlayingEntry.ts']);
 
@@ -92,27 +92,25 @@ async function runPlayerCompatRedirectUnit(): Promise<void> {
     console.log('PASS: M9-01-P1 server-redirect-form');
   }
 
-  console.log('=== M9-01-P2: 旧组件物理保留但不可达（M9-02 前不删） ===');
+  console.log('=== M9-01-P2: 旧组件物理退役且不可达（M9-02 已删除，本块锁删除态） ===');
   {
-    assert.ok(fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.tsx')), 'index.tsx 必须保留');
-    assert.ok(fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.module.scss')), 'index.module.scss 必须保留');
+    assert.ok(!fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.tsx')), 'index.tsx 必须已删除（M9-02）');
+    assert.ok(!fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.module.scss')), 'index.module.scss 必须已删除（M9-02）');
     assert.ok(fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/page.tsx')), 'page.tsx 必须保留（已转 redirect）');
     for (const comp of [
       'app/(main)/player/components/PlaybackStatusBoard/index.tsx',
       'app/(main)/player/components/GenerationPreview/index.tsx',
       'app/(main)/player/components/AudioPlayer/index.tsx',
     ]) {
-      assert.ok(fs.existsSync(path.resolve(process.cwd(), comp)), `${comp} 必须保留`);
+      assert.ok(!fs.existsSync(path.resolve(process.cwd(), comp)), `${comp} 必须已删除（M9-02）`);
     }
     // 不可达：page.tsx 不引用 index/components。
     const pageCode = stripComments(readRepoText('app/(main)/player/page.tsx'));
     assert.ok(!pageCode.includes('app/(main)/player'), 'compat route 不得再引用旧 player 路径');
-    // 旧 index 仍挂载三件套（证明未被掏空，删除归 M9-02）。
-    const indexSrc = readRepoText('app/(main)/player/index.tsx');
-    assert.ok(indexSrc.includes('PlaybackStatusBoard'), '旧 index 仍含 PlaybackStatusBoard（M9-02 前保留）');
-    assert.ok(indexSrc.includes('GenerationPreview'), '旧 index 仍含 GenerationPreview（M9-02 前保留）');
-    assert.ok(indexSrc.includes('AudioPlayer'), '旧 index 仍含 AudioPlayer（M9-02 前保留）');
-    console.log('PASS: M9-01-P2 legacy-kept-unreachable');
+    // 删除态：player 目录仅剩 page.tsx（旧 index 三件套挂载已随文件消失，详细锁见 M9-02 P1/P2）。
+    const playerEntries = fs.readdirSync(path.resolve(process.cwd(), 'app/(main)/player')).filter((n) => !n.startsWith('.'));
+    assert.deepStrictEqual(playerEntries.sort(), ['page.tsx'], `player 目录必须只含 page.tsx，实际=${playerEntries.join(',')}`);
+    console.log('PASS: M9-01-P2 legacy-retired-unreachable');
   }
 
   console.log('=== M9-01-P3: query/hash ≠ identity（不翻译旧 query 为 M5 Session） ===');
@@ -163,10 +161,10 @@ async function runPlayerCompatRedirectUnit(): Promise<void> {
       }
     }
     assert.deepStrictEqual(violations, [], `产品路径不得新增 /player 导航：${violations.join('；')}`);
-    // allowlist 自身存在性（防 guard 空转）。
+    // allowlist 自身存在性（防 guard 空转；M9-02 起 player 目录仅剩 page.tsx）。
     assert.ok(
-      fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.tsx')),
-      'allowlist 目录必须存在（M9-02 前不删除）',
+      fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/page.tsx')),
+      'allowlist 目录必须存在（M9-02 起仅剩 page.tsx）',
     );
     assert.ok(
       fs.existsSync(path.resolve(process.cwd(), 'components/NowPlaying/useNowPlayingEntry.ts')),

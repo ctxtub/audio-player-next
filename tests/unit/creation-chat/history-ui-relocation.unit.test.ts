@@ -466,17 +466,9 @@ async function runHistoryUiRelocationTests(): Promise<void> {
     console.log('=== M4-07-01: Player no longer owns History ===');
     {
         resetBaseline();
-        const playerSource = readSource('app/(main)/player/index.tsx');
-        assert.ok(!playerSource.includes('HistoryPanel'), 'player 不得再渲染 HistoryPanel');
-        assert.ok(!playerSource.includes('提示词历史'), 'player 不得再含提示词历史');
-        assert.ok(!playerSource.includes('生成历史'), 'player 不得再含生成历史 panel');
-        assert.ok(playerSource.includes('PlaybackStatusBoard'), 'Player 主体 PlaybackStatusBoard 仍存在');
-        assert.ok(playerSource.includes('GenerationPreview'), 'Player 主体 GenerationPreview 仍存在');
-        assert.ok(playerSource.includes('AudioPlayer'), 'Player 主体 AudioPlayer 仍存在');
-        assert.ok(
-            playerSource.includes('纯 playback') || playerSource.includes('compatibility'),
-            'Player 注释必须同步为纯 playback/compatibility surface',
-        );
+        // M9-02：旧 Player surface 已物理退役（index.tsx 含旧三件套一并删除），此处锁删除态：
+        // 不存在即不渲染/不拥有，无需再读源码断言。
+        assert.ok(!fs.existsSync(path.join(repoRoot, 'app/(main)/player/index.tsx')), '旧 player index 必须已删除（M9-02）');
         assert.ok(fs.existsSync(path.join(repoRoot, 'app/(main)/player/page.tsx')), '不得删除 /player route');
         assert.ok(
             !fs.existsSync(path.join(repoRoot, 'app/(main)/player/components/HistoryPanel')),
@@ -987,10 +979,8 @@ async function runHistoryUiRelocationTests(): Promise<void> {
     console.log('=== M4-07-12: Architecture + ownership guards ===');
     {
         resetBaseline();
-        const playerSource = readSource('app/(main)/player/index.tsx');
-        for (const owned of ['HistoryPanel', 'HistoryRecords', 'GenerationHistory', 'HistoryList']) {
-            assert.ok(!playerSource.includes(owned), `Player 不得拥有 ${owned} implementation`);
-        }
+        // M9-02：旧 player index 已删除，不存在即不拥有（目录级断言见 M4-07-01；详细锁见 M9-02 P5）。
+        assert.ok(!fs.existsSync(path.join(repoRoot, 'app/(main)/player/index.tsx')), '旧 player index 必须已删除（M9-02）');
         for (const rel of [
             'app/(main)/chat/components/HistoryPanel/index.tsx',
             'app/(main)/chat/components/HistoryRecords/index.tsx',

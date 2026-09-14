@@ -545,8 +545,13 @@ async function runExpandedSurfaceIntegration(): Promise<void> {
         const fsMod = nodeRequire('node:fs') as typeof import('node:fs');
         assert.strictEqual(
             fsMod.existsSync(path.join(repoRoot, 'app', '(main)', 'player', 'index.tsx')),
+            false,
+            '旧 /player index 必须已删除（M9-02，仅剩 redirect page）'
+        );
+        assert.strictEqual(
+            fsMod.existsSync(path.join(repoRoot, 'app', '(main)', 'player', 'page.tsx')),
             true,
-            '/player 文件仍存在（M9 前不删除）'
+            'player redirect page 必须保留'
         );
         rendered.unmount();
         console.log('PASS: M7-01-I7 focus return + compat file');

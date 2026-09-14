@@ -141,16 +141,20 @@ async function runExpandedUiStateTests(): Promise<void> {
         assert.ok(!code.includes('router.push'), 'M7 entry 不得再 router.push');
         assert.ok(!code.includes("push('/player')"), 'M7 产品路径不得 push /player');
         assert.ok(!code.includes('push(NOW_PLAYING_COMPAT_ROUTE) && false'), 'sanity');
-        // /player 常量保留为 deprecated 兼容（M9 前物理保留，验收 10）。
-        assert.ok(code.includes("'/player'"), 'compat 常量仍保留 /player（M9 前）');
+        // /player 常量保留为 deprecated 兼容（M9-02 物理删除后常量仍保留，见禁止项；验收 10）。
+        assert.ok(code.includes("'/player'"), 'compat 常量仍保留 /player（deprecated 兼容）');
         assert.ok(
             src.includes('@deprecated') || src.includes('deprecated'),
             '遗留路由工厂应标记 deprecated'
         );
-        // /player 物理文件仍存在。
+        // M9-02：旧 Player surface 已物理退役（仅剩 redirect page.tsx）。
         assert.ok(
-            fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.tsx')),
-            '/player 文件仍存在（M9 前不删除）'
+            !fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.tsx')),
+            '旧 player index 必须已删除（M9-02）'
+        );
+        assert.ok(
+            fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/page.tsx')),
+            'player redirect page 必须保留'
         );
         console.log('PASS: M7-01-03 entry cutover');
     }

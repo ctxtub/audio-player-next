@@ -1237,6 +1237,18 @@ cases:
     executable_ids: [exec-player-compat-redirect, exec-l3-player-compat-redirect]
     fixtures: []
     owner: smoke-baseline
+  - case_id: legacy-player-surface-retirement
+    display_name_zh: 旧播放器物理退役与音频归属
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: 旧PlayerUI物理消失只剩redirect且音频唯一归属Host不回归
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [router, compatibility, playback, session, cleanup]
+    spec_path: docs/e2e/09-旧播放器退役与兼容收口/02-旧播放器物理退役与音频归属.md
+    executable_ids: [exec-legacy-player-surface-retirement]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1800,3 +1812,7 @@ executables:
     display_name_zh: L3/player兼容重定向四例全链路
     layer: L3
     path: ./tests/system/browser/scenarios/player-compat-redirect.spec.ts
+  - executable_id: exec-legacy-player-surface-retirement
+    display_name_zh: 旧播放器物理退役静态守卫
+    layer: L1
+    path: ./tests/unit/navigation/legacy-player-surface-retirement.unit.test.ts

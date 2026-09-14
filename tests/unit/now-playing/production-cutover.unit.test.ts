@@ -58,7 +58,7 @@ const stripComments = (src: string): string =>
         .replace(/(^|\s)\/\/.*$/gm, '$1');
 
 // allowlist（允许保留，守卫里写死，spec §50/M9）：
-// 1. app/(main)/player/** —— 物理保留至 M9（不删除/不 redirect）；
+// 1. app/(main)/player/** —— M9-02 起仅剩 redirect page.tsx（旧 surface 已物理删除）；
 // 2. components/NowPlaying/useNowPlayingEntry.ts —— @deprecated
 //    NOW_PLAYING_COMPAT_ROUTE / shouldSuppressNowPlayingEntry /
 //    createNowPlayingEntryController（M9 删除 /player 时一并移除；M7 产品路径不用它们）；
@@ -157,10 +157,10 @@ async function runProductionCutoverUnit(): Promise<void> {
             }
         }
         assert.deepStrictEqual(violations, [], `正常产品流不得 navigate/push/link 到 /player（allowlist 外零容忍）：${violations.join('；')}`);
-        // allowlist 自身存在性（防误删/防 guard 空转）：
+        // allowlist 自身存在性（防误删/防 guard 空转；M9-02 起 player 目录仅剩 redirect page）：
         assert.ok(
-            fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.tsx')),
-            'allowlist 目录 app/(main)/player/** 必须存在（M9 前不删除）'
+            fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/page.tsx')),
+            'allowlist 目录 app/(main)/player/** 必须存在（M9-02 起仅剩 page.tsx）'
         );
         assert.ok(
             fs.existsSync(path.resolve(process.cwd(), 'components/NowPlaying/useNowPlayingEntry.ts')),
@@ -169,19 +169,19 @@ async function runProductionCutoverUnit(): Promise<void> {
         console.log(`PASS: M7-04-04-P1 zero-player-navigation files=${files.length}`);
     }
 
-    console.log('=== M7-04-04-P2: app/(main)/player/** 物理保留（M9 前不删除/不 redirect） ===');
+    console.log('=== M7-04-04-P2: app/(main)/player/** 物理退役（M9-02 仅剩 redirect） ===');
     {
         assert.ok(
-            fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.tsx')),
-            '/player index 必须仍存在'
+            !fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.tsx')),
+            '旧 /player index 必须已删除（M9-02）'
         );
         assert.ok(
             fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/page.tsx')),
-            '/player page 必须仍存在'
+            '/player page 必须仍存在（redirect）'
         );
-        const indexSrc = readRepoText('app/(main)/player/index.tsx');
-        assert.ok(indexSrc.includes('AudioPlayer'), '/player 页仍挂载旧 AudioPlayer（M9 前保留）');
-        console.log('PASS: M7-04-04-P2 player-physically-kept');
+        const pageSrc = readRepoText('app/(main)/player/page.tsx');
+        assert.ok(pageSrc.includes("redirect('/library')") || pageSrc.includes('redirect("/library")'), '/player 页必须为 redirect（M9-01 冻结）');
+        console.log('PASS: M7-04-04-P2 player-physically-retired');
     }
 
     console.log('=== M7-04-04-P3: deprecated 兼容符号仍存在（M9 前不删除） ===');

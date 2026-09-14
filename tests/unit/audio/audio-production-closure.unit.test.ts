@@ -14,7 +14,7 @@ import { CANONICAL_SYNTHESIS_SPEED } from '../../../lib/audio/profile';
  * 5. S3 SDK 仅出现在 adapter（lib/audio/storage/s3.ts）；
  * 6. M5 PlaybackSourceRef / sessionId / Progress / Anchor schema 未改；
  * 7. M7 P3A 无 story-level timeline ownership 新增；
- * 8. /player 未删（物理保留）；
+ * 8. /player 旧 surface 已删（M9-02 物理退役，仅剩 redirect page）；
  * 9. P3B story-level seek 明确排除（deferred consumer：文档显式排除 + 代码零实现 +
  *    P3B 字样仅出现在排除性注释）。
  */
@@ -196,17 +196,17 @@ async function runAudioProductionClosureUnitTests() {
     console.log('PASS: 7. P3A 边界通过');
   }
 
-  console.log('=== 8. /player 未删 ===');
+  console.log('=== 8. /player 旧 surface 已删（M9-02） ===');
   {
     assert.ok(
       fs.existsSync(path.join(process.cwd(), 'app/(main)/player/page.tsx')),
-      '/player page 必须物理保留',
+      '/player redirect page 必须保留',
     );
     assert.ok(
-      fs.existsSync(path.join(process.cwd(), 'app/(main)/player/index.tsx')),
-      '/player index 必须物理保留',
+      !fs.existsSync(path.join(process.cwd(), 'app/(main)/player/index.tsx')),
+      '旧 /player index 必须已删除（M9-02）',
     );
-    console.log('PASS: 8. /player 保留通过');
+    console.log('PASS: 8. /player 退役通过');
   }
 
   console.log('=== 9. P3B story-level seek 明确排除 ===');

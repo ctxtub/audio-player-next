@@ -2,7 +2,11 @@
 // journey: smoke-baseline
 // M9-01 /player Redirect & Compatibility Contract（targeted browser compat spec，4 条）。
 // 1. navigate /player（含 query/hash）→ pathname=/library 且旧 Player UI 不出现；
-// 2. active Work session 命中 /player → sessionId/source/next 不变 + Mini 可见 + Expanded 可 open；
+// 2. active Work session 经真实 App Router client transition 命中 /player（harness 侧
+//    直调 window.next.router.push，与产品 TabBar 同 reducer 路径，走 RSC + server
+//    redirect 跟随，非 page.goto/裸锚点整页 navigation；产品零新增 /player 入口，P4
+//    守卫锁定）→ sessionId/source/next 不变 + status 仍 paused + audioUrl 不变 +
+//    source/next 不变 + status 仍 paused + audioUrl 不变 + Mini 可见 + Expanded 可 open；
 // 3. cold restored Anchor 直开 /player → redirect + /library hydrate 后对齐（ready + transport 空闲）；
 // 4. 无 playback state → 空态不伪造 Session。
 // 全程确定性轮询（expect.poll），无长 sleep（否定性短窗除外），retries=0，双 project 串行。
@@ -11,6 +15,7 @@ import type { Page } from "@playwright/test";
 import { ensureGuestByApi, ensureRegisteredByApi } from "./helpers/auth";
 import { dismissOnboarding } from "./helpers/guest";
 import { createStoryWorkByPage } from "./helpers/library";
+import { transitionToPlayerCompatViaClientRouter } from "../harness/player-compat-transition";
 
 /** 探针快照（与 PlaybackSessionProbe 对齐子集）。 */
 type ProbeSnapshot = {
@@ -143,31 +148,88 @@ test("M9-01/2 活跃会话命中兼容入口会话连续可展开", async ({ pag
         return w["__M5PlaybackProbe"].pause();
     });
     await expect.poll(async () => (await readProbe(page)).status, { timeout: 30000 }).toBe("paused");
+    // transition 前记录：sessionId / source / next / status / audioUrl / currentTime。
     const beforeCompat = await readProbe(page);
     expect(beforeCompat.sessionId).toBe(sessionId);
+    expect(beforeCompat.source?.kind).toBe("work");
+    expect((beforeCompat.source as { workId?: number })?.workId).toBe(work.id);
+    expect(beforeCompat.status).toBe("paused");
+    expect(beforeCompat.transport?.hasAudioUrl).toBe(true);
+    const beforeAudioUrl = beforeCompat.transport?.audioUrl as string;
+    expect(typeof beforeAudioUrl === "string" && beforeAudioUrl.length > 0).toBe(true);
+    const beforeCurrentTime = beforeCompat.transport?.currentTime as number;
     const canonicalNext = beforeCompat.nextParagraphIndex as number;
     await expect.poll(async () => page.getByTestId("mini-now-playing").count(), { timeout: 15000 }).toBe(1);
-    recorder.step("活跃会话建立", { sessionId, canonicalNext });
+    // client-transition 同 document 证明：window token + audio 元素 marker（document
+    // navigation 会清堆并重建 audio，本标记仅 client transition 存活）。
+    const docToken = (await page.evaluate(() => {
+        const w = window as unknown as Record<string, unknown>;
+        const token = `m9-doc-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+        w["__m9CompatDocToken"] = token;
+        const audio = document.querySelector("audio");
+        if (audio) {
+            (audio as unknown as Record<string, unknown>)["__m9CompatMarker"] = "m9-compat-owner-v1";
+            audio.dataset.compatSurrogate = "active";
+        }
+        return token;
+    })) as string;
+    recorder.step("活跃会话建立", {
+        sessionId,
+        canonicalNext,
+        status: beforeCompat.status,
+        audioUrl: beforeAudioUrl,
+        currentTime: beforeCurrentTime,
+    });
 
-    // 应用内命中兼容入口（含旧 query/hash，契约要求直接丢弃、不翻译成 Session）。
+    // 应用内命中兼容入口：真实 App Router client transition 到 /player?from=active#keep
+    // （harness 侧直调 window.next.router.push，与产品 TabBar 同 reducer 路径；含旧 query/hash，
+    // 契约要求直接丢弃、不翻译成 Session；产品零新增 /player 入口）。严禁用 page.goto() 与
+    // 裸 <a> 点击冒充（App Router 下裸锚点一律整页 MPA 导航）。
     beginSessionCount = 0;
     ttsSynthCount = 0;
-    await page.goto(`${harnessEnv.appUrl}/player?from=active#keep`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await transitionToPlayerCompatViaClientRouter(page, "/player?from=active#keep");
     await page.waitForURL("**/library", { timeout: 15000 });
     expect(new URL(page.url()).pathname).toBe("/library");
     expect(page.url()).not.toContain("/player");
     await expect(page.getByTestId("library-page")).toBeVisible({ timeout: 15000 });
     await expectNoLegacyPlayerUI(page);
 
-    // 会话连续：sessionId/source/next 不变（hydrate 后 status 收敛为 ready/paused 均可，progress 以 next 为准）。
+    // 会话连续：sessionId/source/next 不变 + status 仍 paused + audioUrl 与 transition 前
+    // 相同（冻结契约：应用内 redirect 不清 transport；hydrate 后 ready/paused 均可的弱口径
+    // 在此不适用，本用例锁定 paused）。单 owner + controller 存活 + 无新增合成/会话。
     await expect.poll(async () => (await readProbe(page)).sessionId, { timeout: 60000 }).toBe(sessionId);
+    // 同 document 证明：client transition 未发生整页 reload（page.goto 则此处失败）。
+    await expect
+        .poll(
+            async () =>
+                await page.evaluate(
+                    () => (window as unknown as Record<string, unknown>)["__m9CompatDocToken"],
+                ),
+            { timeout: 15000 },
+        )
+        .toBe(docToken);
     const afterCompat = await readProbe(page);
     expect(afterCompat.source?.kind).toBe("work");
     expect((afterCompat.source as { workId?: number })?.workId).toBe(work.id);
     expect(afterCompat.nextParagraphIndex).toBe(canonicalNext);
+    expect(afterCompat.status).toBe("paused");
+    expect(afterCompat.transport?.hasAudioUrl).toBe(true);
+    expect(afterCompat.transport?.audioUrl).toBe(beforeAudioUrl);
     // transport 不因 redirect 主动 clear：单 owner + controller 存活 + 无新增合成/会话。
     expect(afterCompat.audioCount).toBe(1);
     expect(afterCompat.transport?.hasController).toBe(true);
+    const compatMarker = await page.evaluate(() => {
+        const audio = document.querySelector("audio");
+        if (!audio) return { alive: false, count: document.querySelectorAll("audio").length };
+        return {
+            alive:
+                (audio as unknown as Record<string, unknown>)["__m9CompatMarker"] === "m9-compat-owner-v1" &&
+                audio.dataset.compatSurrogate === "active",
+            count: document.querySelectorAll("audio").length,
+        };
+    });
+    expect(compatMarker.count).toBe(1);
+    expect(compatMarker.alive).toBe(true);
     expect(beginSessionCount).toBe(0);
     expect(ttsSynthCount).toBe(0);
 
@@ -182,7 +244,14 @@ test("M9-01/2 活跃会话命中兼容入口会话连续可展开", async ({ pag
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("expanded-now-playing")).toHaveCount(0, { timeout: 15000 });
     await expect.poll(async () => page.getByTestId("mini-now-playing").count(), { timeout: 15000 }).toBe(1);
-    recorder.step("活跃会话兼容连续可展开", { sessionId, canonicalNext });
+    recorder.step("活跃会话兼容连续可展开", {
+        sessionId,
+        canonicalNext,
+        status: afterCompat.status,
+        audioUrl: afterCompat.transport?.audioUrl,
+        clientTransition: "app-router-router-push",
+        docToken,
+    });
 });
 
 test("M9-01/3 cold 经兼容入口从冻结 Anchor 水合对齐", async ({ page, harnessEnv, evidence }) => {

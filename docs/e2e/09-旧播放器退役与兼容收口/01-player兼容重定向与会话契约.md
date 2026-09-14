@@ -16,7 +16,7 @@
 ## 操作步骤
 
 1. 直接导航 `/player`（可带任意 query/hash，如 `/player?legacy=1#frag`）：断言 pathname=`/library`，`library-page` 可见，旧 Player 地标（`播放进度` slider / `播放速度` / `从头重播`）计数为 0，全程 URL 不含 `/player`。
-2. 活跃 Work 会话下命中兼容入口：注册用户建两段 Work，经探针 `beginWork(resume)` + 首段合成 + pause 驻留，记录 `sessionId/source/nextParagraphIndex/audioUrl/status`；随后 `goto /player?from=active#keep`：断言 redirect 至 `/library` 后 `sessionId`/`source`/`next` 不变、`status` 仍 paused、`audioUrl` 不变、Mini（`mini-now-playing`）可见；点 Mini 元数据可开 Expanded（`expanded-now-playing` 可见，URL 仍为 `/library`），关闭后 Mini 恢复；全程无新增 `beginSession`/`tts.synthesize`，audio 单 owner。
+2. 活跃 Work 会话下命中兼容入口：注册用户建两段 Work，经探针 `beginWork(resume)` + 首段合成 + pause 驻留，记录 `sessionId/source/nextParagraphIndex/status/audioUrl/currentTime`；随后经 harness 侧真实 App Router client transition 到 `/player?from=active#keep`（`tests/system/browser/harness/player-compat-transition.ts` 直调 `window.next.router.push()`，与产品 TabBar `useRouter().push()` 同 reducer 路径，走 RSC + server `redirect('/library')` 跟随，非 `page.goto()`/裸 `<a>` 整页 navigation——App Router 下裸锚点一律 MPA；M7 已切断产品 `/player` client 入口，P4 守卫锁定产品零新增入口，本钩子挂 harness 侧）：断言 redirect 至 `/library` 后 `sessionId`/`source`/`next` 不变、`status` 仍 paused、`audioUrl` 与 transition 前相同（冻结契约：应用内 redirect 不清 transport，以 window docToken + audio 元素 marker 同存活证明同 document）、Mini（`mini-now-playing`）可见；点 Mini 元数据可开 Expanded（`expanded-now-playing` 可见，URL 仍为 `/library`），关闭后 Mini 恢复；全程无新增 `beginSession`/`tts.synthesize`，audio 单 owner（同元素存活）。
 3. Cold bookmark/refresh：同 2 建会话并 `saveCheckpointNow` 落 Anchor，记录 `sessionId/canonicalNext`；`goto /player` → `/library` 后执行 `reload`：断言 hydrate 后 `sessionId` 对齐、`source` 对齐、`nextParagraphIndex` 为 canonical、`status=ready`、transport 空闲（`hasAudioUrl=false`/`audioUrl=null`/`currentTime=0`/`isPlaying=false`），`library-page` 可见且旧 UI 不出现。
 4. 无播放态空态：全新访客（无 Session）直访 `/player`：断言落到 `/library`，探针 `sessionId=null`、`source=null`，Mini（`mini-now-playing`）计数 0，Expanded 计数 0，transport 空闲，不新建 Session。
 
@@ -24,7 +24,7 @@
 
 - 旧 bookmark / 直接地址栏 / refresh / restored `/player` → 全部 `/library`，无旧 Player UI 闪现。
 - `/player` 的 query/hash 不改变 identity 与 progress；不得把旧 query 翻译成 M5 Session；恢复只走 Anchor + PlaybackSessionStore。
-- 应用内活跃会话命中兼容入口：`sessionId` 不变、`source` 不变、progress（`nextParagraphIndex`）不变、audio transport 不因 redirect 主动 clear；Mini 可见且 Expanded 可 open。
+- 应用内活跃会话命中兼容入口：`sessionId` 不变、`source` 不变、progress（`nextParagraphIndex`）不变、`status` 仍 paused、`audioUrl` 与 transition 前相同，audio transport 不因 redirect 主动 clear（同 document + 同 audio 元素存活证明；spec 与本文断言一致，以做实 oracle 为准，不做“只保 identity”弱化）；Mini 可见且 Expanded 可 open。
 - Cold 路径：`/player` → `/library` → AccountSync/M5 hydrate → 从冻结 Anchor 恢复 Session（不复活旧 Player 页面）。
 - 空态：无 playback state 时不伪造 Session（`sessionId=null`，Mini 不渲染）。
 - 产品路径静态守卫：`components/**` + `app/(main)/**` + `lib/client/**` + `stores/**` 除 compat route/tests 外不得新增 `router.push/href/navigation('/player')`。
@@ -46,3 +46,5 @@
 - `stores/playbackSessionStore.ts` + `app/services/playbackSessionFlow.ts`（冻结恢复链）
 - `components/AccountSyncProvider/index.tsx`（hydrate 编排）
 - `tests/test-catalog.yaml`（`player-compat-redirect`）
+- `tests/system/browser/harness/player-compat-transition.ts`（M9-01 fixup harness 侧 client-transition 钩子，测试专用，产品零改动）
+- `tests/system/browser/scenarios/player-compat-redirect.spec.ts`（case 2 真实 App Router client transition oracle）

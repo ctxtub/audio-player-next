@@ -8,14 +8,12 @@ import {
   getWorkPlaybackProgressBatchInputSchema,
   playbackAnchorDTOSchema,
   playbackCanonicalSourceTypeSchema,
-  playbackProgressDTOSchema,
   playbackSessionIdSchema,
   playbackSourceSchema,
   playbackSourceTypeSchema,
   promoteDraftPlaybackToWorkInputSchema,
   savePlaybackCheckpointInputSchema,
   savePlaybackCheckpointResultSchema,
-  savePlaybackProgressInputSchema,
   workPlaybackProgressDTOSchema,
 } from '../../../lib/trpc/schemas/playback';
 import { isValidPlaybackSessionId } from '../../../lib/playback/session';
@@ -43,7 +41,7 @@ import {
  * 锁定 spec §13 / §14 / §17 / §18 / §19 / §21 / §22 / §24 / §34 surface：
  * Source discriminatedUnion（§13.1）+ Anchor DTO 14 字段（§13.2，
  * 绝不含 storyText/audioUrl/currentTime/isPlaying）+ WorkProgress DTO（§13.3）
- * + 7 新 procedures 输入输出 + 旧 API 保留 + 双层外观 7 方法 +
+ * + 7 新 procedures 输入输出 + M9-03 旧 CRUD procedure/DTO/Input 已删 + 双层外观 7 方法 +
  * facade 分态：getAnchor / beginSession 真逻辑（M5-05，经 prisma + M2 边界），
  * saveCheckpoint 真逻辑（M5-06：Stale/Monotonic/Work 事务；M5-07 FIXUP：CAS 再绑
  * content identity，防 promotion 竞态复活 §24.1），
@@ -196,45 +194,43 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   assert.throws(() => workPlaybackProgressDTOSchema.parse({ ...validProgress, state: 'playing' }));
   console.log('PASS: work progress DTO verified');
 
-  // —— legacy 四值 parser 保留（M5-03 兼容不破坏） ——
-  console.log('--- legacy compatibility ---');
+  // —— legacy 四值 parser 保留（M5-03 reader 兼容不破坏；M9-03 仅删旧 CRUD DTO/Input） ——
+  console.log('--- legacy compatibility (M9-03 retired CRUD DTO/Input) ---');
   for (const kind of ['chat', 'generation', 'draft', 'work']) {
     assert.strictEqual(playbackSourceTypeSchema.parse(kind), kind);
   }
   assert.strictEqual(playbackCanonicalSourceTypeSchema.parse('draft'), 'draft');
   assert.strictEqual(playbackCanonicalSourceTypeSchema.parse('work'), 'work');
   assert.throws(() => playbackCanonicalSourceTypeSchema.parse('chat'));
-  // 旧 saveProgress 输入仍接受 chat|generation（兼容旧客户端）。
+  // M9-03：旧 saveProgress Input / 旧 Progress DTO 已删除（无合法 consumer）。
+  // 经 schema 源码文本断言（不 import 已删导出），防止为"清干净"误删 M5 正式契约。
+  const schemaText = readRepoText('lib/trpc/schemas/playback.ts');
   assert.strictEqual(
-    savePlaybackProgressInputSchema.parse({
-      sourceType: 'chat',
-      sourceId: 'msg-old',
-      title: '旧标题',
-      contentHash: 'abc123',
-      lastCompletedParagraphIndex: -1,
-      nextParagraphIndex: 0,
-      totalParagraphs: 2,
-    }).sourceType,
-    'chat',
+    /export const savePlaybackProgressInputSchema/.test(schemaText),
+    false,
+    'M9-03 must remove savePlaybackProgressInputSchema',
   );
   assert.strictEqual(
-    savePlaybackProgressInputSchema.parse({
-      sourceType: 'generation',
-      sourceId: '123',
-      title: '旧标题',
-      contentHash: 'abc123',
-      lastCompletedParagraphIndex: -1,
-      nextParagraphIndex: 0,
-      totalParagraphs: 2,
-    }).sourceType,
-    'generation',
+    /export const playbackProgressDTOSchema/.test(schemaText),
+    false,
+    'M9-03 must remove playbackProgressDTOSchema',
   );
-  // 旧 DTO 形态保留（含 sourceType/sourceId/isOneShot）。
   assert.strictEqual(
-    Object.prototype.hasOwnProperty.call(playbackProgressDTOSchema.shape, 'isOneShot'),
-    true,
+    /export type (SavePlaybackProgressInput|PlaybackProgressDTO)\b/.test(schemaText),
+    false,
+    'M9-03 must remove legacy DTO/Input type exports',
   );
-  console.log('PASS: legacy parser retained');
+  // M5 正式契约必须保留：Anchor / Source / WorkProgress / SessionId / checkpoint。
+  for (const token of [
+    'playbackAnchorDTOSchema',
+    'playbackSourceSchema',
+    'workPlaybackProgressDTOSchema',
+    'playbackSessionIdSchema',
+    'savePlaybackCheckpointInputSchema',
+  ]) {
+    assert.match(schemaText, new RegExp(`export const ${token}`), `M5 contract must retain ${token}`);
+  }
+  console.log('PASS: legacy CRUD DTO/Input removed, M5 contract retained');
 
   // —— §14 inputs：7 procedures 输入边界 ——
   console.log('--- procedure inputs (§15–§24) ---');
@@ -452,8 +448,8 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   assert.throws(() => savePlaybackCheckpointResultSchema.parse({ accepted: false, reason: 'UNKNOWN' }));
   console.log('PASS: checkpoint result verified');
 
-  // —— router surface：7 新 + 3 旧（源码文本断言，unit 不直连持久化层） ——
-  console.log('--- router surface (§14) ---');
+  // —— router surface：7 新（M9-03 旧 3 已删；源码文本断言，unit 不直连持久化层） ——
+  console.log('--- router surface (§14, M9-03 retired legacy) ---');
   const routerText = readRepoText('lib/trpc/routers/playback.ts');
   for (const name of [
     'getAnchor',
@@ -467,8 +463,18 @@ async function runPlaybackSessionContractTests(): Promise<void> {
     assert.match(routerText, new RegExp(`\\b${name}\\s*:`), `router must expose playback.${name}`);
   }
   for (const legacy of ['getProgress', 'saveProgress', 'clearProgress']) {
-    assert.match(routerText, new RegExp(`\\b${legacy}\\s*:`), `router must retain legacy ${legacy}`);
+    assert.strictEqual(
+      new RegExp(`\\b${legacy}\\s*:`).test(routerText),
+      false,
+      `M9-03 must remove legacy router.${legacy}`,
+    );
   }
+  // 旧 server helper 文件已删除（仅服务 legacy procedures），M5 facade 独立。
+  assert.strictEqual(
+    fs.existsSync(path.resolve(process.cwd(), 'lib/server/playbackProgress.ts')),
+    false,
+    'M9-03 must delete lib/server/playbackProgress.ts',
+  );
   assert.match(routerText, /lib\/server\/playbackSession/, 'router must route new API via server facade');
   assert.match(routerText, /enforceProcedureRateLimit\('playback:beginSession'/, 'beginSession must reuse rate limit');
   assert.match(routerText, /enforceProcedureRateLimit\('playback:saveCheckpoint'/, 'saveCheckpoint must reuse rate limit');
@@ -488,11 +494,13 @@ async function runPlaybackSessionContractTests(): Promise<void> {
   ]) {
     assert.strictEqual(typeof fn, 'function');
   }
-  const legacyClientText = readRepoText('lib/client/playbackProgress.ts');
-  assert.match(legacyClientText, /getProgress/, 'legacy client adapter must be retained');
-  assert.match(legacyClientText, /saveProgress/, 'legacy client adapter must be retained');
-  assert.match(legacyClientText, /clearProgress/, 'legacy client adapter must be retained');
-  console.log('PASS: client facade verified');
+  const legacyClientPath = path.resolve(process.cwd(), 'lib/client/playbackProgress.ts');
+  assert.strictEqual(
+    fs.existsSync(legacyClientPath),
+    false,
+    'M9-03 must delete legacy lib/client/playbackProgress.ts',
+  );
+  console.log('PASS: client facade verified (legacy adapter removed)');
 
   // —— server facade：7 函数 + 分态（M5-07：7 procedures 全部真逻辑） ——
   console.log('--- server facade (M5-07 split) ---');

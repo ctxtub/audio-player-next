@@ -211,13 +211,12 @@ async function runDesktopMigrationTests() {
     assert.ok(mapHits.length >= 2, `User/Guest 必须各一处 @map("floatingPlayerEnabled")（得 ${mapHits.length}）`);
     console.log('PASS: M6-01-F schema guard');
 
-    console.log('=== M6-01-G: FloatingPlayer deprecated 兼容 shim（M6-04-FIXUP）===');
-    // FIXUP（评审 Blocking 2）：正式命名收官后 shim 短期兼容期保留（M9 删除），
-    // 仅薄 re-export；配置仍读新字段（经 Mini）。
+    console.log('=== M9-03: FloatingPlayer 兼容 shim 已删除（M6-04-FIXUP 到期）===');
+    // M9-03：兼容期结束，shim 物理删除；配置仍读新字段（经 Mini）。
     assert.strictEqual(
         fs.existsSync(path.join(process.cwd(), 'components', 'FloatingPlayer', 'index.tsx')),
-        true,
-        'components/FloatingPlayer/index.tsx 兼容 shim 必须存在（M9 前保留）'
+        false,
+        'M9-03 必须删除 components/FloatingPlayer/index.tsx 兼容 shim'
     );
     // 新字段改由 Mini 正式实现消费（只决定 layoutMode，不决定存在性）。
     const miniSrc = fs.readFileSync(
@@ -228,22 +227,18 @@ async function runDesktopMigrationTests() {
         miniSrc.includes('state.apiConfig.desktopFloatingPlayerEnabled'),
         'Mini 必须读新字段（仅供 layoutMode）'
     );
-    // shim 薄契约：re-export 正式 Mini + store 别名，不得重建旧 CSS/旧实现。
-    const shimSrc = fs.readFileSync(
-        path.join(process.cwd(), 'components', 'FloatingPlayer', 'index.tsx'),
-        'utf8'
-    );
-    assert.ok(
-        shimSrc.includes('MiniNowPlaying as FloatingPlayer'),
-        'shim 必须 re-export MiniNowPlaying as FloatingPlayer'
-    );
-    assert.ok(!shimSrc.includes('isFloatingVisible'), 'shim 不得重建旧显隐 state');
+    // M9-03：shim 已删，不再读取其内容；旧 CSS 不得重建。
     assert.strictEqual(
         fs.existsSync(path.join(process.cwd(), 'components', 'FloatingPlayer', 'index.module.scss')),
         false,
         '不得重建旧 CSS'
     );
-    console.log('PASS: M6-01-G FloatingPlayer compat regression');
+    assert.strictEqual(
+        fs.existsSync(path.join(process.cwd(), 'components', 'FloatingPlayer')),
+        false,
+        'M9-03 必须删除 FloatingPlayer 兼容目录'
+    );
+    console.log('PASS: M9-03 FloatingPlayer retirement');
 
     console.log('\nALL DESKTOP CONFIG MIGRATION INTEGRATION TESTS PASSED SUCCESSFULLY!');
 }

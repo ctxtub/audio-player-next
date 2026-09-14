@@ -6,8 +6,8 @@
  * clearAnchor / promoteDraftToWork / getWorkProgressBatch
  * + M7-03 setSleepTimer。
  *
- * 旧 lib/client/playbackProgress.ts（getProgress / saveProgress /
- * clearProgress 包装）保留 adapter 一个迁移周期，不删除。
+ * M9-03：旧 lib/client/playbackProgress.ts（getProgress / saveProgress /
+ * clearProgress 包装）已删除；新客户端一律使用本正式暴露层。
  */
 
 import { trpc } from '@/lib/trpc/client';

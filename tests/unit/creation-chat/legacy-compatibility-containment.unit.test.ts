@@ -478,14 +478,12 @@ async function main(): Promise<void> {
       'lib/server/chatConversation.ts',
       'app/(main)/chat/components/MessageParts/index.tsx',
       'app/(main)/chat/components/MessageParts/StoryCardPart.tsx',
-      // 旧 playback compatibility 纯 reader（M4-09 审计逐个批准）：
-      // storyFlow：startStoryPlayback 读历史卡 storyText 注册断点活跃故事；
-      // playbackProgressStore：resume 读历史卡 storyText；
+      // M9-03：旧 playback compatibility 纯 reader 已退役——
+      // storyFlow 不再读历史卡（transport 直接播放，不注册断点）；
+      // playbackProgressStore 已删除；
       // M5-09 fixup：playbackSessionStore 不再直读 wire（经 canonical resolver 间接消费），
       // Draft 快照唯一入口收敛在 playbackDraftSnapshot（Modern first → Legacy fallback）；
       // MessageBubble：卡片视图/实质内容判定需识别历史卡形态，无构造无转换。
-      'app/services/storyFlow.ts',
-      'stores/playbackProgressStore.ts',
       'lib/client/playbackDraftSnapshot.ts',
       'app/(main)/chat/components/ChatLog/MessageBubble/index.tsx',
     ]);

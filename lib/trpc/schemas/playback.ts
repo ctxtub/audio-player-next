@@ -13,8 +13,8 @@ export type PlaybackSourceType = z.infer<typeof playbackSourceTypeSchema>;
 
 /**
  * M5-03 new writer canonical 锁定点（文档锚）：server 落库只写 draft|work。
- * 本 schema 仅作类型标注与未来收紧入口；当前 input 仍接受四值以兼容旧客户端，
- * canonical 收敛统一在 lib/server/playbackProgress.ts + unifiedMigration.ts
+ * 本 schema 仅作类型标注与未来收紧入口；M9-03 起旧 CRUD 已删，
+ * canonical 收敛统一在 lib/server/playbackSession.ts + unifiedMigration.ts
  * 经 canonicalizeSourceKind 落库前完成（旧值透传兼容，新值原样，绝不存 chat|generation）。
  */
 export const playbackCanonicalSourceTypeSchema = z.enum(['draft', 'work']);
@@ -31,46 +31,11 @@ export type PlaybackCanonicalSourceType = z.infer<typeof playbackCanonicalSource
 export const playbackSessionIdSchema = z.uuidv4();
 export type PlaybackSessionId = z.infer<typeof playbackSessionIdSchema>;
 
-export const playbackProgressDTOSchema = z.object({
-  sourceType: playbackSourceTypeSchema,
-  sourceId: z.string().min(1).max(128),
-  sessionId: z.string().max(128).nullable().optional(),
-  title: z.string().min(1).max(100),
-  contentHash: z.string().default(''),
-  segmentationVersion: z.string().default('v1'),
-  lastCompletedParagraphIndex: z.number().int().min(-1),
-  nextParagraphIndex: z.number().int().min(0),
-  totalParagraphs: z.number().int().min(1),
-  voiceId: z.string().max(64).default(''),
-  speed: z.number().min(0.25).max(4.0).default(1.0),
-  remainingAllowedMs: z.number().int().min(0).nullable().optional(),
-  totalAllowedMs: z.number().int().min(0).nullable().optional(),
-  isOneShot: z.boolean().default(false),
-  updatedAt: z.string(), // ISO 8601 字符串
-});
-
-export type PlaybackProgressDTO = z.infer<typeof playbackProgressDTOSchema>;
-
-export const savePlaybackProgressInputSchema = z.object({
-  sourceType: playbackSourceTypeSchema,
-  sourceId: z.string().min(1).max(128),
-  sessionId: z.string().max(128).nullable().optional(),
-  title: z.string().min(1).max(100),
-  contentHash: z.string().min(1).max(64),
-  segmentationVersion: z.string().max(16).default('v1'),
-  lastCompletedParagraphIndex: z.number().int().min(-1),
-  nextParagraphIndex: z.number().int().min(0),
-  totalParagraphs: z.number().int().min(1),
-  voiceId: z.string().max(64).optional(),
-  speed: z.number().min(0.25).max(4.0).optional(),
-  remainingAllowedMs: z.number().int().min(0).nullable().optional(),
-  totalAllowedMs: z.number().int().min(0).nullable().optional(),
-  isOneShot: z.boolean().optional(),
-  /// 显式强制重置意图（用户主动点击“从头重播”时置为 true，绕过服务端单调递增检查）
-  forceReset: z.boolean().optional(),
-});
-
-export type SavePlaybackProgressInput = z.infer<typeof savePlaybackProgressInputSchema>;
+/* M9-03：旧 getProgress/saveProgress/clearProgress 专用 DTO/Input 已删除
+ *（PlaybackProgressDTO / SavePlaybackProgressInput，无合法 consumer）。
+ * DB canonical reader 兼容（chat|generation → draft|work）仍由
+ * playbackSourceTypeSchema + lib/playback/legacy.ts 承载，不在此动。
+ */
 
 /* ------------------------------------------------------------------ */
 /* M5-04 Playback Session API 契约冻结（spec §13 / §14）。               */
@@ -80,8 +45,9 @@ export type SavePlaybackProgressInput = z.infer<typeof savePlaybackProgressInput
 /*   currentTime / isPlaying，也不含旧 CRUD 形态的 sourceType /          */
 /*   sourceId / isOneShot）。                                           */
 /* - WorkProgress DTO 严格按 §13.3（M3 只消费此 View DTO）。             */
-/* - 上方 legacy 四值 parser（chat|generation|draft|work）原样保留，     */
-/*   旧 getProgress/saveProgress/clearProgress 契约不动（M9 才删除）。   */
+/* - 上方 legacy 四值 parser（chat|generation|draft|work）原样保留作      */
+/*   DB canonical reader 兼容；旧 getProgress/saveProgress/clearProgress */
+/*   专用 DTO/Input 已在 M9-03 删除（无合法 consumer）。                 */
 /* - 本项只冻结 surface；完整业务实现按 M5-05+ 推进。                    */
 /* ------------------------------------------------------------------ */
 

@@ -53,8 +53,7 @@ function clampNext(next: unknown, total: number): number {
   if (typeof next !== 'number' || !Number.isFinite(next)) return 0;
   const floored = Math.floor(next);
   if (floored < 0) return 0;
-  // 与旧 playbackProgressStore.hydrateFromDTO 一致：越界钳制到最后一合法段，
-  // 避免 next >= total 的脏读直接越界（§25.3 保留行为）。
+  // M9-03：越界钳制到最后一合法段，避免 next >= total 的脏读直接越界（§25.3 保留行为）。
   if (floored >= total) return Math.max(0, total - 1);
   return floored;
 }

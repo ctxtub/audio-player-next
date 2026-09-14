@@ -447,7 +447,7 @@ async function runMiniSessionIntegration(): Promise<void> {
         console.log('PASS: M6-02-I4 ended/error');
     }
 
-    console.log('=== M6-02-I5: 配置独立 + deprecated 兼容 shim（M6-04-FIXUP）===');
+    console.log('=== M9-03: 配置独立 + 兼容 shim 已删除 ===');
     {
         resetAll();
         seedWorkSession('月球上的小狐狸', 'paused');
@@ -456,27 +456,19 @@ async function runMiniSessionIntegration(): Promise<void> {
         assert.strictEqual(visDocked.visible, true);
         assert.strictEqual(visFloating.visible, true, '偏好只换形态，不换存在性');
         const fsMod = nodeRequire('node:fs') as typeof import('node:fs');
-        // FIXUP：shim 短期兼容期保留（M9 删除），仅薄 re-export，不得重建旧实现。
+        // M9-03：兼容期结束，shim 物理删除；正式命名唯一。
         assert.strictEqual(
             fsMod.existsSync(path.join(repoRoot, 'components', 'FloatingPlayer', 'index.tsx')),
-            true,
-            'FloatingPlayer deprecated 兼容 shim 必须存在（M9 前保留）'
+            false,
+            'M9-03 必须删除 FloatingPlayer deprecated 兼容 shim'
         );
-        const shimSrc = fsMod.readFileSync(
-            path.join(repoRoot, 'components', 'FloatingPlayer', 'index.tsx'),
-            'utf8'
-        ) as string;
-        assert.ok(
-            shimSrc.includes('MiniNowPlaying as FloatingPlayer'),
-            'shim 必须 re-export MiniNowPlaying as FloatingPlayer'
+        assert.strictEqual(
+            fsMod.existsSync(path.join(repoRoot, 'components', 'FloatingPlayer')),
+            false,
+            'M9-03 必须删除 FloatingPlayer 兼容目录'
         );
-        assert.ok(
-            shimSrc.includes("from '@/components/NowPlaying/MiniNowPlaying'"),
-            'shim identity 必须指向正式 MiniNowPlaying'
-        );
-        assert.ok(!shimSrc.includes('isFloatingVisible'), 'shim 不得重建旧显隐 state');
         assert.strictEqual(miniMod.MiniNowPlaying, miniMod.default, '正式命名默认/具名一致');
-        console.log('PASS: M6-02-I5 config + compat-shim');
+        console.log('PASS: M9-03 config + shim-removed');
     }
 
     resetAll();

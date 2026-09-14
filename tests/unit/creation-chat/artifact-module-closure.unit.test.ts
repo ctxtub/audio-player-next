@@ -858,8 +858,7 @@ async function main(): Promise<void> {
       'lib/server/chatConversation.ts',
       'app/(main)/chat/components/MessageParts/index.tsx',
       'app/(main)/chat/components/MessageParts/StoryCardPart.tsx',
-      'app/services/storyFlow.ts',
-      'stores/playbackProgressStore.ts',
+      // M9-03：storyFlow 不再读 wire（transport 直接播放）；playbackProgressStore 已删除。
       // M5-09 fixup：PlaybackSessionStore 不再直读 wire（经 canonical resolver 间接消费）；
       // Draft 快照唯一入口收敛在 playbackDraftSnapshot（Modern first → Legacy fallback）。
       'lib/client/playbackDraftSnapshot.ts',

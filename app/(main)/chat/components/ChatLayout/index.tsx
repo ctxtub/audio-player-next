@@ -7,7 +7,6 @@ import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
 import { resetStoryFlow } from '@/app/services/storyFlow';
 import { useChatStore } from '@/stores/chatStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
-import { useFloatingPlayer } from '@/stores/playbackStore';
 
 import HeaderArea from './HeaderArea';
 import OnboardingModal from '../OnboardingModal';
@@ -57,8 +56,14 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
   /** History Surface 纯 UI 开关（M4-07）：不进 Zustand，不触数据。 */
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  /** 悬浮播放器控制。 */
-  const { play: playAudio } = useFloatingPlayer();
+  /** 故事卡直接音频播放（M9-03：经 Transport 显式点播）。 */
+  const playAudio = usePlaybackStore((state) => state.playAudio);
+  const handlePlayStory = useCallback(
+    (url: string, id: string) => {
+      void playAudio(url, id, { explicit: true });
+    },
+    [playAudio],
+  );
 
   /** 是否存在发送中的消息，用于控制输入区禁用状态 */
   const isSending = useMemo(
@@ -233,7 +238,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         messages={messages}
         isLoading={false}
         onRetry={handleRetry}
-        onPlayStory={(url, id) => playAudio(url, id)}
+        onPlayStory={(url, id) => handlePlayStory(url, id)}
       />
       <InputArea
         onSubmit={handleSubmit}

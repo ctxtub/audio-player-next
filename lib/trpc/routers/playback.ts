@@ -1,15 +1,12 @@
 /**
  * 断点续播 Router
  *
- * 管理用户和具名访客的段落播放进度读取、保存与清除。
- *
  * M5-04：Playback router 从 CRUD Progress 升级成 Session API（spec §13/§14）。
- * 新增 7 个正式 procedures（getAnchor / beginSession / saveCheckpoint /
+ * 7 个正式 procedures（getAnchor / beginSession / saveCheckpoint /
  * completeSession / clearAnchor / promoteDraftToWork / getWorkProgressBatch），
- * 经 lib/server/playbackSession.ts facade 对外提供（完整业务实现按 M5-05+ 推进，
- * 本项 facade 为 fail-closed 占位，不写坏数据）。
- * 旧 getProgress / saveProgress / clearProgress 作为 compatibility procedures
- * 暂时保留（M9 删除），行为不动。
+ * 经 lib/server/playbackSession.ts facade 对外提供。
+ * M9-03：旧 getProgress / saveProgress / clearProgress compatibility procedures
+ * 已删除（无合法 consumer，经全仓 audit 确认），行为由 Session API 承载。
  */
 
 import { router, guardedProcedure } from '../init';
@@ -20,14 +17,8 @@ import {
   getWorkPlaybackProgressBatchInputSchema,
   promoteDraftPlaybackToWorkInputSchema,
   savePlaybackCheckpointInputSchema,
-  savePlaybackProgressInputSchema,
   setSleepTimerInputSchema,
 } from '../schemas/playback';
-import {
-  getPlaybackProgressForSubject,
-  savePlaybackProgressForSubject,
-  clearPlaybackProgressForSubject,
-} from '@/lib/server/playbackProgress';
 import {
   beginPlaybackSessionForSubject,
   clearPlaybackAnchorForSubject,
@@ -42,43 +33,6 @@ import { resolveSubject } from '@/lib/server/subject';
 import { enforceProcedureRateLimit } from '@/lib/server/rateLimit';
 
 export const playbackRouter = router({
-  /**
-   * 读取当前主体（登录用户或具名访客）的段落播放进度。
-   *
-   * @deprecated compatibility procedure（M9 删除）；新客户端请用 playback.getAnchor。
-   */
-  getProgress: guardedProcedure.query(async ({ ctx }) => {
-    const subject = resolveSubject(ctx);
-    return getPlaybackProgressForSubject(subject);
-  }),
-
-  /**
-   * 保存当前主体（登录用户或具名访客）的段落播放进度。
-   *
-   * @deprecated compatibility procedure（M9 删除）；新客户端请用 playback.saveCheckpoint。
-   */
-  saveProgress: guardedProcedure
-    .input(savePlaybackProgressInputSchema)
-    .mutation(async ({ ctx, input }) => {
-      enforceProcedureRateLimit('playback:saveProgress', ctx, {
-        guestLimit: 60,
-        authedLimit: 120,
-      });
-      const subject = resolveSubject(ctx);
-      return savePlaybackProgressForSubject(subject, input);
-    }),
-
-  /**
-   * 清除当前主体（登录用户或具名访客）的段落播放进度。
-   *
-   * @deprecated compatibility procedure（M9 删除）；新客户端请用 playback.clearAnchor。
-   */
-  clearProgress: guardedProcedure.mutation(async ({ ctx }) => {
-    const subject = resolveSubject(ctx);
-    await clearPlaybackProgressForSubject(subject);
-    return { success: true as const };
-  }),
-
   /**
    * §15 playback.getAnchor：读取当前 Subject 唯一 Anchor（无则 null）。
    */

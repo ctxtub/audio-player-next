@@ -12,7 +12,6 @@ import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
 import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
 import { useChatStore } from '@/stores/chatStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
-import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 
 /**
@@ -58,17 +57,8 @@ const participants: AccountSyncParticipant[] = [
     reset: () => useChatStore.getState().reset(),
   },
   {
-    // M5-09 cutover 过渡：新 SSOT PlaybackSessionStore 为主，旧 playbackProgressStore
-    // 保留 compatibility 双水合/双清（M9 删除旧项）。probe 名保持 playbackProgress
-    // 以兼容 H-06 参与序列断言；新增 playbackSession 参与项承载新链。
-    name: 'playbackProgress',
-    initForUser: () => usePlaybackProgressStore.getState().initForUser(),
-    initForGuest: () => usePlaybackProgressStore.getState().initForGuest(),
-    reset: () => {
-      usePlaybackProgressStore.getState().reset();
-    },
-  },
-  {
+    // M9-03：只 init PlaybackSessionStore（新 SSOT）；旧 playbackProgressStore 已删除，
+    // 历史 local 进度自然失效，不重新成为 SSOT，不增 fallback。
     name: 'playbackSession',
     initForUser: () => usePlaybackSessionStore.getState().initForUser().then(() => {}),
     initForGuest: () => usePlaybackSessionStore.getState().initForGuest().then(() => {}),

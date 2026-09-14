@@ -11,7 +11,6 @@
  * playbackRate/remainingMs/totalAllowedMs）保持不变，仍为全局 <audio> 唯一 ownership。
  * 旧字段仅作兼容镜像由 PlaybackSessionStore 同步写入，新代码禁止直接写入它们。
  */
-import { useCallback } from 'react';
 import { create, type StateCreator } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import type { AudioControllerHandle } from '@/types/audioPlayer';
@@ -674,39 +673,3 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
  * 播放器 store Hook，提供播放状态与操作。
  */
 export const usePlaybackStore = create<PlaybackStore>()(devtools(playbackStoreCreator));
-
-/**
- * 播放控制 Hook（M6-04 收官：已删除 spec §2.2 显隐命令；
- * Mini 显隐只由 PlaybackSession 派生，本 hook 仅保留 Transport 播放面
- * play/resume/pause，供 ChatLayout/AudioPlayer 显式点播入口使用）。
- * @returns 播放控制方法集合
- */
-export const useFloatingPlayer = () => {
-  const ensureUnlocked = usePlaybackStore((state) => state.ensureUnlocked);
-  const playAudio = usePlaybackStore((state) => state.playAudio);
-  const resumeAudio = usePlaybackStore((state) => state.resumeAudio);
-  const pauseAudioPlayback = usePlaybackStore((state) => state.pauseAudioPlayback);
-
-  const play = useCallback(
-    async (audioUrl: string, messageId?: string, options?: { explicit?: boolean }) => {
-      // 中文注释：play 即用户显式点播入口，缺省按显式放行（auto 须显式传 { explicit: false }）。
-      await playAudio(audioUrl, messageId, { explicit: options?.explicit ?? true });
-    },
-    [playAudio]
-  );
-
-  const resume = useCallback(async () => {
-    await resumeAudio();
-  }, [resumeAudio]);
-
-  const pause = useCallback(() => {
-    pauseAudioPlayback();
-  }, [pauseAudioPlayback]);
-
-  return {
-    ensureUnlocked,
-    play,
-    resume,
-    pause,
-  };
-};

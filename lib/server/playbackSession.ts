@@ -2,8 +2,8 @@
  * M5-07 Playback Session 服务端 Facade（spec §14 / §15 / §16 / §17 / §18 / §19 /
  * §21 / §22 / §24 / §30 / §33 / §36）。
  *
- * 本文件是 Session API 在 server 侧的正式暴露层，逐步替代
- * lib/server/playbackProgress.ts（旧 CRUD Progress 实现保留兼容，不删除）。
+ * 本文件是 Session API 在 server 侧的正式暴露层，已替代
+ * lib/server/playbackProgress.ts（旧 CRUD Progress 实现，M9-03 已删除）。
  *
  * M5-07 定调：getAnchor / beginSession（M5-05）与 saveCheckpoint（M5-06）语义冻结
  * 不动；completeSession / clearAnchor / promoteDraftToWork / getWorkProgressBatch

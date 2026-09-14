@@ -1,8 +1,11 @@
 /**
- * M5-10 过渡态：本文件回到故事生成流程兼容层；播放 session / preload / ended
+ * M9-03：本文件为故事生成流程兼容层；播放 session / preload / ended
  * 编排已迁出至 app/services/playbackSessionFlow.ts + stores/playbackSessionStore.ts。
- * 下列 handleNearEnd / handleSegmentEnded / startStoryPlayback / replayGeneration /
- * playStoryText 保留为 legacy fallback（无 session 的旧音频链，M9 删除），
+ * 旧 playbackProgressStore 第二 SSOT 已删除：下列 startStoryPlayback /
+ * replayGeneration / playStoryText 仅做无会话旧音频传输（transport 直接播放，
+ * 不注册断点、不做段落持久化；历史 local 进度自然失效，不恢复为 SSOT）；
+ * handleNearEnd / handleSegmentEnded 仅为无 session legacy 音频的传输锁保留，
+ * 首部 session ownership 早退保证 finite 会话永不进入旧判定。
  * 新播放代码禁止新增调用，一律走 PlaybackSessionFlow。
  *
  * M5-10 收敛（§27/§28/§50）：
@@ -19,12 +22,9 @@ import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePreloadStore } from '@/stores/preloadStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
-import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import type { GenerationRecord } from '@/stores/generationHistoryStore';
-import type { StoryCardPart } from '@/types/chat';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
-import { computeStoryContentHash, normalizeStoryText } from '@/utils/segmentation';
 
 /**
  * 可播放段落对象，包含音频地址与文本内容，并标注来源（首段/预加载/即时生成）。
@@ -108,25 +108,8 @@ export const startStoryPlayback = async (
   // 启动播放器会话
   playbackStore.markSessionStart(messageId, apiConfig.playDuration, options);
 
-  // 若存在真实消息且处于 delivered 态，注册断点活跃故事
-  if (!messageId.startsWith('replay-text-')) {
-    const msg = useChatStore.getState().messages.find((m) => m.id === messageId);
-    const storyCard = msg?.parts?.find((p): p is StoryCardPart => p.type === 'storyCard');
-    if (msg && msg.status === 'delivered' && storyCard && storyCard.storyText) {
-      usePlaybackProgressStore.getState().setActiveStory({
-        sourceType: 'chat',
-        sourceId: messageId,
-        sessionId: messageId,
-        title: '音频故事',
-        storyText: storyCard.storyText,
-        voiceId: apiConfig.voiceId,
-        speed: apiConfig.speed,
-        isOneShot: options?.oneShot ?? false,
-        remainingAllowedMs: apiConfig.playDuration * 60000,
-        totalAllowedMs: apiConfig.playDuration * 60000,
-      });
-    }
-  }
+  // M9-03：不注册旧断点活跃故事（第二 SSOT 已删）；仅 transport 直接播放，
+  // 不做段落持久化，历史进度自然失效。
 
   // 3. 自动开始播放生成的音频
   // 中文注释：H-07 自动链——此处经 reset() 已清空在播轨道（currentAudioUrl=null），窗口守卫天然放行，无需 explicit。
@@ -195,61 +178,33 @@ const synthesizeAndPlayOnce = async (
 
 /**
  * 回放一条历史生成（生成历史弹窗）。
+ * M9-03：transport 直接合成播放（一次性，不注册断点、不持久化）。
  * @param record 生成历史记录。
  */
 export const replayGeneration = async (record: GenerationRecord): Promise<void> => {
   const { voiceId, speed } = useConfigStore.getState().apiConfig;
   const chosenVoice = record.voiceId || voiceId;
-  const sourceId = String(record.id);
-
-  usePlaybackProgressStore.getState().setActiveStory({
-    sourceType: 'generation',
-    sourceId,
-    title: record.prompt ? record.prompt.slice(0, 20) : '作品回放',
-    storyText: record.storyText,
-    voiceId: chosenVoice,
-    speed,
-    isOneShot: true,
-  });
-
-  await usePlaybackProgressStore.getState().playParagraph(0, { explicit: true });
+  const audioUrl = await fetchAudio(record.storyText, chosenVoice, speed);
+  // 中文注释：H-07 自动链——经 reset() 已清空在播轨道（currentAudioUrl=null），窗口守卫天然放行，无需 explicit。
+  // M9-03：旧段落机已删，此处仅 transport 一次性播放，不触发预载续写。
+  await usePlaybackStore.getState().playAudio(audioUrl, undefined, { explicit: true });
 };
 
 /**
  * 回放给定故事正文（恢复态故事卡片的"播放故事"）。
+ * M9-03：transport 直接合成播放（一次性，不读旧断点、不持久化悬挂断点）。
  * @param storyText 故事正文。
- * @param messageId 可选：真实卡片 messageId
+ * @param messageId 可选：真实卡片 messageId（仅作 transport 会话标识，不持久化）
  */
 export const playStoryText = async (storyText: string, messageId?: string): Promise<void> => {
   const { voiceId, speed } = useConfigStore.getState().apiConfig;
   const validId = messageId && !messageId.startsWith('replay-text-') ? messageId : '';
 
   if (validId) {
-    // 断点恢复：若端侧已持有同一故事的真实断点（与按钮文案同源的 nextParagraphIndex），
-    // 则直接从该断点续播；否则回落为从头播放。指纹比对可防止正文漂移时误用旧断点。
-    const progressState = usePlaybackProgressStore.getState();
-    const incomingHash = computeStoryContentHash(normalizeStoryText(storyText));
-    const canResumeFromBreakpoint =
-      progressState.sourceId === validId &&
-      progressState.nextParagraphIndex > 0 &&
-      progressState.paragraphs.length > 0 &&
-      progressState.contentHash === incomingHash &&
-      progressState.nextParagraphIndex < progressState.totalParagraphs;
-    if (canResumeFromBreakpoint) {
-      await progressState.resumeRehydratedPlayback();
-      return;
-    }
-    usePlaybackProgressStore.getState().setActiveStory({
-      sourceType: 'chat',
-      sourceId: validId,
-      sessionId: validId,
-      title: '音频故事',
-      storyText,
-      voiceId,
-      speed,
-      isOneShot: true,
-    });
-    await usePlaybackProgressStore.getState().playParagraph(0, { explicit: true });
+    // M9-03：旧断点续播已随第二 SSOT 删除；此处直接合成并经 transport 播放，
+    // 不做指纹比对/断点恢复，历史 local 进度自然失效。
+    const audioUrl = await fetchAudio(storyText, voiceId, speed);
+    await usePlaybackStore.getState().playAudio(audioUrl, validId, { explicit: true });
   } else {
     // 降级：未传稳定标识时一次性合成播放，不持久化悬挂断点
     await synthesizeAndPlayOnce(storyText, voiceId, `chat-${Date.now()}`);
@@ -275,21 +230,13 @@ export const handleNearEnd = async (): Promise<void> => {
 
   // 一次性播放（历史回放）不预加载续写
   // @deprecated M5-10：legacy 无 session 角落的传输锁；续写决策以 flow 的
-  // continuationMode 唯一门为准，此处仅防无 session 旧音频误触续写。
+  // continuationMode 唯一门为准。
   if (playbackState.isOneShot) {
     return;
   }
 
-  // 中文注释：段落级故事（含恢复态/一次性回放）由段落预载推进，严禁走聊天续写分支。
-  // 进度侧一次性标记与播放侧可能不同步，此处同时检查两者，避免最终段前误触“请继续故事”。
-  // @deprecated M5-10：同上，legacy 角落传输锁（M9 随旧 store 删除）。
-  const progressStateForNearEnd = usePlaybackProgressStore.getState();
-  if (progressStateForNearEnd.isOneShot) {
-    return;
-  }
-  if (progressStateForNearEnd.sourceId && progressStateForNearEnd.totalParagraphs > 0) {
-    return;
-  }
+  // M9-03：旧段落机（progressState sourceId/isOneShot）已删；段落级故事由
+  // PlaybackSessionFlow 会话段落机推进，此处 legacy 音频无段落上下文，直接走传输锁判定。
 
   if (playbackState.remainingMs !== null && playbackState.remainingMs <= 0) {
     return;
@@ -329,11 +276,10 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
   const remainingMs = playbackStore.remainingMs ?? 0;
 
   // 一次性播放（历史回放）：播完即止，不续写下一段
-  // 中文注释：段落路径（恢复卡/重合成）仅在进度侧持有一次性标记，播放侧可能未同步，故同时检查两者。
+  // 中文注释：M9-03 旧进度侧一次性标记已删；仅以播放侧传输锁判定。
   // @deprecated M5-10：legacy 无 session 角落的传输锁；续写决策以 flow 的
-  // continuationMode 唯一门为准（M9 随旧 store 删除）。
-  const progressStateForOneShot = usePlaybackProgressStore.getState();
-  if (playbackStore.isOneShot || progressStateForOneShot.isOneShot) {
+  // continuationMode 唯一门为准。
+  if (playbackStore.isOneShot) {
     playbackStore.reset();
     usePreloadStore.getState().reset();
     clearPreloadRetryTimer();
@@ -372,14 +318,9 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
 
   // ChatStore 中无后续段落，尝试从预加载 Store 获取。
   // 场景：当前播放的是最后一段，或者预加载的内容尚未同步到 ChatStore。
-  // 中文注释：段落级故事播毕不得自动生成新聊天段，仅允许消费已存在的下一段；
-  // 此处直接返回，避免 requestPreload 触发“请继续故事”并增殖卡片。
-
+  // 中文注释：段落级故事由 PlaybackSessionFlow 会话段落机推进；
+  // 此处 legacy 音频无段落上下文，直接走预载传输锁，不再经旧段落机 early-return。
   let result: { segment: string; audioUrl: string; messageId?: string } | null = null;
-  const progressStateForPreload = usePlaybackProgressStore.getState();
-  if (progressStateForPreload.sourceId && progressStateForPreload.totalParagraphs > 0) {
-    return null;
-  }
   const preloadState = usePreloadStore.getState();
 
   try {
@@ -438,9 +379,15 @@ export const updatePlaybackProgress = (payload: { currentTime: number; duration:
 
 /**
  * 完整重置故事播放链路，清空播放、预加载与故事状态并取消定时器。
+ * M9-03：旧断点 reset 已删；会话侧本地停驻（stop，不清 server Anchor，
+ * 与旧语义对齐：仅清本地运行时），transport/preload/generation/chat 照旧。
  */
 export const resetStoryFlow = () => {
-  usePlaybackProgressStore.getState().reset();
+  try {
+    usePlaybackSessionStore.getState().stop();
+  } catch {
+    // session 不可用时仅清传输，不阻断重置链。
+  }
   usePlaybackStore.getState().reset();
   usePreloadStore.getState().reset();
   useGenerationStore.getState().reset();

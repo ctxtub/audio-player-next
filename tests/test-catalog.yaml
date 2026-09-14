@@ -285,7 +285,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [playback, budget]
     spec_path: docs/e2e/03-播放状态与内核一致性/01-倒计时耗尽UI与音频一致性.md
-    executable_ids: [exec-resume-countdown]
+    executable_ids: [exec-sleep-timer-countdown, exec-sleep-timer-session]
     fixtures: []
     owner: playback-kernel
   - case_id: budget-exhausted-tap-play-audio-state
@@ -321,7 +321,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [playback, race]
     spec_path: docs/e2e/03-播放状态与内核一致性/04-段落切换窗口内暂停不续播.md
-    executable_ids: [exec-paragraph-transition-guard]
+    executable_ids: [exec-playback-runtime-orchestration]
     fixtures: []
     owner: playback-kernel
   - case_id: breakpoint-resume-null-budget-state
@@ -333,7 +333,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [playback, resume]
     spec_path: docs/e2e/03-播放状态与内核一致性/05-断点恢复null预算播放状态.md
-    executable_ids: [exec-explicit-play-budget]
+    executable_ids: [exec-budget-exhaustion]
     fixtures: []
     owner: playback-kernel
   - case_id: segment-end-double-jump-guard
@@ -369,7 +369,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [playback, complete]
     spec_path: docs/e2e/03-播放状态与内核一致性/08-故事播完clearProgress收尾.md
-    executable_ids: [exec-final-segment-stop]
+    executable_ids: [exec-playback-session-lifecycle-promotion]
     fixtures: []
     owner: playback-kernel
   - case_id: client-route-nav-play-continuity
@@ -393,7 +393,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [history, replay]
     spec_path: docs/e2e/03-播放状态与内核一致性/10-历史恢复卡回放重合成.md
-    executable_ids: [exec-storycard-resume, exec-paragraph-segmentation, exec-playback-identity-domain, exec-playback-session-contract, exec-playback-anchor-begin-session, exec-playback-checkpoint-guards, exec-playback-session-lifecycle-promotion, exec-playback-checkpoint-content-identity, exec-playback-session-rehydrate, exec-playback-session-rehydrate-server, exec-playback-runtime-orchestration, exec-l3-playback-pause-refresh-resume]
+    executable_ids: [exec-paragraph-segmentation, exec-playback-identity-domain, exec-playback-session-contract, exec-playback-anchor-begin-session, exec-playback-checkpoint-guards, exec-playback-session-lifecycle-promotion, exec-playback-checkpoint-content-identity, exec-playback-session-rehydrate, exec-playback-session-rehydrate-server, exec-playback-runtime-orchestration, exec-l3-playback-pause-refresh-resume]
     fixtures: []
     owner: playback-kernel
   - case_id: old-card-replay-no-consume-preload
@@ -465,7 +465,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [persistence, monotonic]
     spec_path: docs/e2e/04-云端存储与多端数据调和/04-进度单调递增守卫与forceReset.md
-    executable_ids: [exec-save-sequence, exec-paragraph-resume-mixed-legacy]
+    executable_ids: [exec-save-sequence, exec-playback-checkpoint-guards]
     fixtures: []
     owner: persistence-recovery
   - case_id: guest-user-table-isolation-zero-leak
@@ -1249,6 +1249,18 @@ cases:
     executable_ids: [exec-legacy-player-surface-retirement]
     fixtures: []
     owner: smoke-baseline
+  - case_id: legacy-playback-compatibility-retirement
+    display_name_zh: 旧播放兼容适配器退役与收口
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: 兼容三件套物理删除且M5会话契约不回归
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [compatibility, playback, session, cleanup]
+    spec_path: docs/e2e/09-旧播放器退役与兼容收口/03-兼容适配器退役与会话收口.md
+    executable_ids: [exec-legacy-playback-compatibility-retirement]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1322,22 +1334,9 @@ executables:
     display_name_zh: 访客多主体生命周期
     layer: L2
     path: ./tests/integration/persistence-config/guest-multisubject-lifecycle.integration.test.ts
-  - executable_id: exec-storycard-resume
-    display_name_zh: 故事卡恢复
-    layer: L2
-    path: ./tests/integration/playback/storycard-resume.integration.test.ts
-  - executable_id: exec-resume-countdown
-    display_name_zh: 倒计时恢复
-    layer: L2
-    path: ./tests/integration/playback/resume-countdown.integration.test.ts
-  - executable_id: exec-final-segment-stop
-    display_name_zh: 末段停止
-    layer: L2
-    path: ./tests/integration/playback/final-segment-stop.integration.test.ts
-  - executable_id: exec-paragraph-transition-guard
-    display_name_zh: 段落切换守卫
-    layer: L2
-    path: ./tests/integration/playback/paragraph-transition-guard.integration.test.ts
+  # M9-03：旧 playbackProgressStore 第二 SSOT 删除，下列 6 个 legacy L2 已删（dead tests）。
+  # 其用户目标由 M5 Session 链承载：countdown→sleep-timer/budget，切换窗口→runtime-orchestration，
+  # null预算→budget-exhaustion，播完收尾→session-lifecycle，单调→checkpoint-guards，历史恢复卡→既有 Session 组合。
   - executable_id: exec-preload-isolation
     display_name_zh: 预载隔离
     layer: L2
@@ -1354,15 +1353,7 @@ executables:
     display_name_zh: 登出播放重置
     layer: L2
     path: ./tests/integration/identity-session/logout-playback-reset.integration.test.ts
-  - executable_id: exec-explicit-play-budget
-    display_name_zh: 显式播放预算
-    layer: L2
-    path: ./tests/integration/playback/explicit-play-budget.integration.test.ts
-  # P2-02 复核：保留。涵盖具名访客断点恢复、跨设备同步、GC、漂移检测与单调推进等完整 L2 行为断言。
-  - executable_id: exec-paragraph-resume-mixed-legacy
-    display_name_zh: 段落恢复混合遗留
-    layer: L2
-    path: ./tests/integration/playback/paragraph-resume-mixed.integration.test.ts
+  # M9-03：exec-explicit-play-budget / exec-paragraph-resume-mixed-legacy 已删（见上）。
   # P2-02 复核：保留。涵盖真实 GlassToast 组件单例渲染、终态替换过程态及 DOM 可见性 L1 行为断言。
   - executable_id: exec-toast-terminal-priority-legacy
     display_name_zh: 提示终态优先级遗留
@@ -1816,3 +1807,7 @@ executables:
     display_name_zh: 旧播放器物理退役静态守卫
     layer: L1
     path: ./tests/unit/navigation/legacy-player-surface-retirement.unit.test.ts
+  - executable_id: exec-legacy-playback-compatibility-retirement
+    display_name_zh: 旧播放兼容适配器退役静态守卫
+    layer: L1
+    path: ./tests/unit/navigation/legacy-playback-compatibility-retirement.unit.test.ts

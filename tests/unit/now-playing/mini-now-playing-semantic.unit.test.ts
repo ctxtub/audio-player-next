@@ -451,69 +451,29 @@ async function runMiniSemanticTests(): Promise<void> {
     }
     console.log('PASS: M6-02-09 legacy import guard');
 
-    console.log('=== M6-02-10: FloatingPlayer deprecated 兼容 shim 契约（M6-04-FIXUP）===');
+    console.log('=== M9-03: FloatingPlayer 兼容 shim 已删除（M6-04-FIXUP 到期）===');
     {
-        // M6-04-FIXUP（评审 Blocking 2）：MiniNowPlaying 正式命名完成，但 legacy import
-        // 仍处于短期兼容期（M9 删除）。shim 必须存在且为极薄 re-export，绝不能重建
-        // FloatingPlayer 专属 state/旧 CSS/drag/isFloatingVisible。
+        // M9-03：兼容期结束，shim 目录物理删除；正式命名唯一（MiniNowPlaying）。
         assert.strictEqual(
             fs.existsSync(path.resolve(process.cwd(), 'components/FloatingPlayer')),
-            true,
-            'components/FloatingPlayer 兼容 shim 目录必须存在（M9 前保留）'
+            false,
+            'M9-03 必须删除 components/FloatingPlayer 兼容 shim 目录'
         );
-        const shimPath = path.resolve(process.cwd(), 'components/FloatingPlayer/index.tsx');
         assert.strictEqual(
-            fs.existsSync(shimPath),
-            true,
-            'FloatingPlayer/index.tsx 兼容 shim 必须存在'
+            fs.existsSync(path.resolve(process.cwd(), 'components/FloatingPlayer/index.tsx')),
+            false,
+            'M9-03 必须删除 FloatingPlayer/index.tsx 兼容 shim'
         );
-        const shimSrc = readRepoText('components/FloatingPlayer/index.tsx');
-        // 必须 re-export MiniNowPlaying as FloatingPlayer（identity 指向正式实现，import 可编译由 tsc 门覆盖）。
+        // store 兼容别名 useFloatingPlayer 一并删除（ChatLayout 已迁至 Transport 直调）。
+        const playbackStoreSrc = readRepoText('stores/playbackStore.ts');
         assert.ok(
-            shimSrc.includes('MiniNowPlaying as FloatingPlayer'),
-            'shim 必须 re-export MiniNowPlaying as FloatingPlayer'
+            !playbackStoreSrc.includes('export const useFloatingPlayer'),
+            'M9-03 必须删除 useFloatingPlayer deprecated 别名导出',
         );
+        const chatSrc = readRepoText('app/(main)/chat/components/ChatLayout/index.tsx');
         assert.ok(
-            shimSrc.includes('MiniNowPlaying') && shimSrc.includes("from '@/components/NowPlaying/MiniNowPlaying'"),
-            'shim identity 必须指向正式 MiniNowPlaying surface'
-        );
-        assert.ok(
-            shimSrc.includes('useFloatingPlayer') && shimSrc.includes("from '@/stores/playbackStore'"),
-            'shim 必须 re-export useFloatingPlayer（store 兼容别名）'
-        );
-        // 文件头 @deprecated：Use MiniNowPlaying from components/NowPlaying. Remove in M9.
-        assert.ok(shimSrc.includes('@deprecated'), 'shim 文件头必须含 @deprecated');
-        assert.ok(
-            shimSrc.includes('Use MiniNowPlaying') && shimSrc.includes('Remove in M9'),
-            'shim 必须注明 Use MiniNowPlaying from components/NowPlaying. Remove in M9'
-        );
-        // 极薄：不得重新引入专属 state/旧 CSS/drag/isFloatingVisible/show-hide。
-        for (const token of [
-            'isFloatingVisible',
-            'isMiniVisible',
-            'showFloatingPlayer',
-            'hideFloatingPlayer',
-            'showPlayer',
-            'showMiniPlayer',
-            'useDrag',
-            'useState',
-            'create(',
-            '.module.scss',
-            'index.module',
-            'localStorage',
-        ]) {
-            assert.ok(!shimSrc.includes(token), `shim 不得重新引入 ${token}`);
-        }
-        assert.ok(
-            shimSrc.split('\n').length <= 30,
-            `shim 必须极薄（<=30 行，实际 ${shimSrc.split('\n').length}）`
-        );
-        // 旧 CSS/旧实现不得重建（目录下仅允许 index.tsx 单文件）。
-        const shimDirFiles = fs.readdirSync(path.resolve(process.cwd(), 'components/FloatingPlayer'));
-        assert.deepStrictEqual(
-            shimDirFiles.sort(),
-            ['index.tsx'],
-            `FloatingPlayer 目录仅允许 index.tsx shim（实际 ${shimDirFiles.join(',')}）`
+            !chatSrc.includes('useFloatingPlayer'),
+            'ChatLayout 不得再消费 useFloatingPlayer 别名',
         );
         const layoutSrc = readRepoText('app/(main)/layout.tsx');
         // M6-03 演进：Mini 已收进 MainChrome/BottomChrome slot（spec §16/§34），
@@ -535,13 +495,12 @@ async function runMiniSemanticTests(): Promise<void> {
         );
         assert.ok(!layoutSrc.includes("from '@/components/FloatingPlayer'"), 'layout 不得再走兼容路径');
         assert.ok(!bottomChromeSrc.includes("from '@/components/FloatingPlayer'"), 'BottomChrome 不得走兼容路径');
-        const chatSrc = readRepoText('app/(main)/chat/components/ChatLayout/index.tsx');
         assert.ok(
             !chatSrc.includes("from '@/components/FloatingPlayer'"),
             'chat 不得经 UI 兼容文件取 hook'
         );
     }
-    console.log('PASS: M6-02-10 naming cutover');
+    console.log('PASS: M9-03 naming retirement');
 
     console.log('=== M6-02-G1: MiniNowPlaying 源码架构守卫 ===');
     {

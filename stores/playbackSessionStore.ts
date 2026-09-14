@@ -17,8 +17,8 @@
  * 不写回状态（防切源/TTS 晚到覆盖，见 spec §50 session guard）。
  *
  * M5-09 cutover：stores/accountSync 已切换到本 store；旧
- * stores/playbackProgressStore 保留 @deprecated adapter（M9 删除），
- * 本文件绝不 import generationHistoryStore / playbackProgressStore /
+ * stores/playbackProgressStore 已在 M9-03 删除，
+ * 本文件绝不 import generationHistoryStore /
  * storyFlow / preloadStore（旧路径残留不得破坏新流程）。
  */
 

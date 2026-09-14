@@ -1323,6 +1323,55 @@ export type PhysicalDeleteStoryWorkOptions =
     };
 
 /**
+ * M8-05-02 FIXUP：survivor stale-tombstone 收敛窄 helper（fail-closed）。
+ *
+ * 背景（Blocker 反例链）：事务内 restore 竞态可致 Work B 存活；若 B.storageKey 的
+ * tombstone prune 失败被吞（旧 best-effort catch），事务照常 commit → tombstone
+ * 持久化残留 → 下一次 bounded cleanup（M8-05-01 冻结引擎不检查 key 是否被 live
+ * Segment 引用，直接 storage.delete(key)）会删除存活 Work 的 canonical object →
+ * Canonical corruption（DB Segment=ready / Object=gone）。
+ *
+ * 因此 survivor 收敛必须 fail-closed：prune 失败即 throw → 整个事务 rollback
+ *（Work delete rollback / tombstone upsert rollback / Manifest·Segment 保持 /
+ * Object 不动）。COMMIT 后 directed cleanup（cleanupAudioStorageKeys）的
+ * best-effort 吞错不受影响——那是已提交后的对象清理，与本事务内收敛正交。
+ *
+ * 三处分支（User trash / Guest manual / Guest retention）必须一致调用本 helper，
+ * 杜绝第二套收敛逻辑。
+ */
+export function computeCommittedAudioKeys(allKeys: string[], survivorKeys: string[]): string[] {
+  if (survivorKeys.length === 0) return [...allKeys];
+  const survivorSet = new Set(survivorKeys);
+  return allKeys.filter((k) => !survivorSet.has(k));
+}
+
+/**
+ * 事务内删除存活行误记 tombstone（fail-closed：故意无 try/catch）。
+ *
+ * 成功时存活 key 的 tombstone 在事务内被删（与外层事务同原子）；失败时 throw
+ * 由 Prisma $transaction 回滚整个事务，调用方不得吞错。
+ *
+ * 注：入参仅需 deleteMany 窄面（不复用 M8-05-01 冻结的 AudioDeletionTx，
+ * 后者无 deleteMany；冻结文件不动，此处本地声明以保持单向依赖）。
+ */
+export type SurvivorPruneTx = {
+  audioStorageDeletion: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    deleteMany(args: any): Promise<any>;
+  };
+};
+
+export async function pruneSurvivorAudioTombstones(
+  tx: SurvivorPruneTx,
+  survivorKeys: string[],
+): Promise<void> {
+  if (survivorKeys.length === 0) return;
+  await tx.audioStorageDeletion.deleteMany({
+    where: { storageKey: { in: survivorKeys } },
+  });
+}
+
+/**
  * StoryWork 物理删除唯一合法底层执行点（Server-Internal Primitive / M8 Audio Seam 唯一挂载点）
  *
  * 架构说明与安全约束：
@@ -1331,10 +1380,14 @@ export type PhysicalDeleteStoryWorkOptions =
  *    严禁在其他模块直接裸调 prisma.storyWork.delete/deleteMany 或 prisma.guestStoryWork.delete/deleteMany。
  * 2. M8-05-02 Audio-aware Physical Delete（spec §28.4/§29/§30）：
  *    同一 DB transaction 内完成「收集 Segment storageKey → UPSERT AudioStorageDeletion
- *    （同 key 幂等）→ DELETE StoryWork/GuestStoryWork（Manifest/Segment 靠 FK cascade）」；
+ *    （同 key 幂等）→ DELETE StoryWork/GuestStoryWork（Manifest/Segment 靠 FK cascade）
+ *    → survivor 收敛（pruneSurvivorAudioTombstones，fail-closed）」；
  *    COMMIT 后 best-effort 调用 05-01 冻结引擎 cleanupAudioStorageKeys 本批 tombstones。
  *    Storage cleanup 失败不得 rollback 已完成的永久删除；失败由 tombstone retry 接管。
  *    禁止先 delete Work → commit → 再查 storageKey（届时 key 已随 cascade 消失）。
+ *    Survivor 收敛失败必须 throw → 全事务 rollback（M8-05-02 FIXUP）：
+ *    M8-05-01 冻结引擎不检查 key 是否被 live Segment 引用，stale-tombstone 残留
+ *    会致 bounded cleanup 误删存活 Work 的 canonical object，故事务内 prune 不得 best-effort。
  * 3. 安全规则与显式 Discriminated Contract：
  *    - User 物理删除只能来自 Trash（deletedAt IS NOT NULL）；
  *    - Guest manual delete 只能来自 Trash（deletedAt IS NOT NULL）；
@@ -1404,8 +1457,11 @@ export async function executeStoryWorkPhysicalDelete(
         committedKeys = allKeys;
         return;
       }
-      // 竞态收敛：若事务内 find 与 delete 之间出现 restore 导致部分行未删，
-      // 存活行的音频不得清理——删掉其误记 tombstone，本批仅保留真正删除行的 keys。
+      // 竞态收敛（M8-05-02 FIXUP fail-closed）：若事务内 find 与 delete 之间出现
+      // restore 导致部分行未删，存活行的音频不得清理——删掉其误记 tombstone，
+      // 本批仅保留真正删除行的 keys。M8-05-01 冻结引擎不检查 live Segment 引用，
+      // stale-tombstone 残留会被 bounded cleanup 误删存活 object，故 prune 失败
+      // 必须 throw → 全事务 rollback（Work/Manifest/Segment 保持、Object 不动）。
       const survivors = await tx.storyWork.findMany({
         where: { id: { in: matchedIds } },
         select: { id: true },
@@ -1429,16 +1485,11 @@ export async function executeStoryWorkPhysicalDelete(
         survivorKeys = survivorSegments.map((s: { storageKey: string }) => s.storageKey);
       }
       if (survivorKeys.length > 0) {
-        const survivorKeySet = new Set(survivorKeys);
-        try {
-          await tx.audioStorageDeletion.deleteMany({
-            where: { storageKey: { in: survivorKeys } },
-          });
-        } catch {
-          // 误记清理 best-effort；失败则由后继 bounded 消费按 missing 语义收敛，
-          // 但存活行 object 仍在，cleanup 不会误删（delete 幂等 + tombstone 仅清行）。
-        }
-        committedKeys = allKeys.filter((k) => !survivorKeySet.has(k));
+        await pruneSurvivorAudioTombstones(
+          tx as unknown as SurvivorPruneTx,
+          survivorKeys,
+        );
+        committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
       } else {
         committedKeys = allKeys;
       }
@@ -1525,15 +1576,12 @@ export async function executeStoryWorkPhysicalDelete(
           survivorKeys = survivorSegments.map((s: { storageKey: string }) => s.storageKey);
         }
         if (survivorKeys.length > 0) {
-          const survivorKeySet = new Set(survivorKeys);
-          try {
-            await tx.audioStorageDeletion.deleteMany({
-              where: { storageKey: { in: survivorKeys } },
-            });
-          } catch {
-            // best-effort（见 User 分支注释）。
-          }
-          committedKeys = allKeys.filter((k) => !survivorKeySet.has(k));
+          // M8-05-02 FIXUP fail-closed（见 User 分支）：prune 失败即 throw → 全事务 rollback。
+          await pruneSurvivorAudioTombstones(
+            tx as unknown as SurvivorPruneTx,
+            survivorKeys,
+          );
+          committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
         } else {
           committedKeys = allKeys;
         }
@@ -1618,15 +1666,12 @@ export async function executeStoryWorkPhysicalDelete(
           survivorKeys = survivorSegments.map((s: { storageKey: string }) => s.storageKey);
         }
         if (survivorKeys.length > 0) {
-          const survivorKeySet = new Set(survivorKeys);
-          try {
-            await tx.audioStorageDeletion.deleteMany({
-              where: { storageKey: { in: survivorKeys } },
-            });
-          } catch {
-            // best-effort（见 User 分支注释）。
-          }
-          committedKeys = allKeys.filter((k) => !survivorKeySet.has(k));
+          // M8-05-02 FIXUP fail-closed（见 User 分支）：prune 失败即 throw → 全事务 rollback。
+          await pruneSurvivorAudioTombstones(
+            tx as unknown as SurvivorPruneTx,
+            survivorKeys,
+          );
+          committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
         } else {
           committedKeys = allKeys;
         }

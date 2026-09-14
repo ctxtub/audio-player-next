@@ -1,6 +1,10 @@
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  computeCommittedAudioKeys,
+  pruneSurvivorAudioTombstones,
+} from '../../../lib/server/storyWork';
 
 /**
  * M8-05-02 Audio-aware Physical Delete / Trash / Restore / Guest GC 单元测试（无真库）。
@@ -234,6 +238,126 @@ async function runAudioLifecycleDeleteUnitTests() {
     assert.ok(/cleanupAudioStorageKeys/.test(seam), 'seam 消费 directed cleanup');
     assert.strictEqual(/cleanupAudioStorageDeletions\s*\(/.test(seam), false, 'seam 不得直调 bounded 消费（留给 retry）');
     console.log('PASS: 6. 冻结契约通过');
+  }
+
+  console.log('=== 7. M8-05-02 FIXUP survivor stale-tombstone fail-closed（fake tx deterministic） ===');
+  {
+    // 窄 helper 经 fake transaction 做 deterministic oracle（不引入真实并发脆弱用例）。
+    // 锁定两条语义：(a) 存活 Work 的 storageKey 绝不留下已提交 tombstone；
+    // (b) prune 环节失败 → 全事务 rollback（Work/Manifest/Segment 保留、tombstone 未提交、Object 不动）。
+    type FakeTx = {
+      audioStorageDeletion: {
+        deleteMany(args: { where: { storageKey: { in: string[] } } }): Promise<{ count: number }>;
+      };
+    };
+    function createFakeTombstoneTx(initialKeys: string[], failPrune?: Error): {
+      tx: FakeTx;
+      rows: Set<string>;
+      pruneCalls: string[][];
+    } {
+      const rows = new Set(initialKeys);
+      const pruneCalls: string[][] = [];
+      const tx: FakeTx = {
+        audioStorageDeletion: {
+          async deleteMany(args) {
+            const keys = [...args.where.storageKey.in];
+            pruneCalls.push(keys);
+            if (failPrune) throw failPrune;
+            let count = 0;
+            for (const k of keys) {
+              if (rows.delete(k)) count += 1;
+            }
+            return { count };
+          },
+        },
+      };
+      return { tx, rows, pruneCalls };
+    }
+
+    // (a) 存活 key 的 tombstone 在事务内被删 → 已提交态无残留；committedKeys 仅含真正删除行
+    {
+      const allKeys = ['k-live-A', 'k-gone-1', 'k-live-B', 'k-gone-2'];
+      const survivorKeys = ['k-live-A', 'k-live-B'];
+      const fake = createFakeTombstoneTx(allKeys);
+      await pruneSurvivorAudioTombstones(fake.tx as never, survivorKeys);
+      assert.deepStrictEqual(fake.pruneCalls, [survivorKeys], 'prune 恰调一次且参数为 survivorKeys');
+      assert.deepStrictEqual([...fake.rows].sort(), ['k-gone-1', 'k-gone-2'], '存活 tombstone 已删、删除行 tombstone 保留');
+      assert.deepStrictEqual(
+        computeCommittedAudioKeys(allKeys, survivorKeys),
+        ['k-gone-1', 'k-gone-2'],
+        'committedKeys 排除存活 key（保序）',
+      );
+      // 空 survivor：零调用、原样返回（拷贝语义）
+      const fakeEmpty = createFakeTombstoneTx(['k-1']);
+      await pruneSurvivorAudioTombstones(fakeEmpty.tx as never, []);
+      assert.deepStrictEqual(fakeEmpty.pruneCalls, [], '空 survivor 不调 deleteMany');
+      assert.deepStrictEqual(fakeEmpty.rows.has('k-1'), true, '空 survivor 不动 tombstone');
+      const emptyInput = ['k-1', 'k-2'];
+      const copied = computeCommittedAudioKeys(emptyInput, []);
+      assert.deepStrictEqual(copied, ['k-1', 'k-2'], '空 survivor 全量提交');
+      assert.notStrictEqual(copied, emptyInput, '返回拷贝而非输入引用');
+      // 重复 key 收敛：allKeys 含重复存活 key 应全部过滤
+      assert.deepStrictEqual(
+        computeCommittedAudioKeys(['k-live', 'k-live', 'k-gone'], ['k-live']),
+        ['k-gone'],
+        '重复存活 key 全过滤',
+      );
+    }
+
+    // (b) prune 失败即 throw（fail-closed）→ 外层 $transaction 回滚：tombstone 未提交、Work/Segment 保留、Object 不动
+    {
+      const boom = new Error('injected prune boom');
+      const fake = createFakeTombstoneTx(['k-live', 'k-gone'], boom);
+      await assert.rejects(pruneSurvivorAudioTombstones(fake.tx as never, ['k-live']), /injected prune boom/, 'prune 失败必须 throw（不得吞错）');
+      // fake 在 throw 前未突变（helper 无 catch、无部分提交）
+      assert.deepStrictEqual([...fake.rows].sort(), ['k-gone', 'k-live'], 'prune throw 后 tombstone 原子未动（供外层 rollback）');
+
+      // 模拟整事务 rollback：快照 + throw → 恢复快照（对应 Prisma $transaction 丢弃本事务全部写）
+      const txRows = new Set<string>();
+      const txObjects = new Set(['k-live', 'k-gone']);
+      const workAliveBefore = true;
+      const snapshot = new Set(txRows);
+      let committed = true;
+      let thrown: unknown = null;
+      const boomTx = createFakeTombstoneTx([], new Error('injected prune boom'));
+      try {
+        // 事务内：enqueue allKeys → prune survivor（throw）
+        for (const k of ['k-live', 'k-gone']) txRows.add(k);
+        await pruneSurvivorAudioTombstones(boomTx.tx as never, ['k-live']);
+        committed = true;
+      } catch (e) {
+        thrown = e;
+        committed = false;
+        txRows.clear();
+        for (const k of snapshot) txRows.add(k);
+      }
+      assert.ok(thrown, '事务内 prune 失败必须向外抛');
+      assert.match(String((thrown as Error)?.message ?? thrown), /injected prune boom/);
+      assert.strictEqual(committed, false, 'prune 失败事务不得提交');
+      assert.deepStrictEqual([...txRows], [], 'tombstone 未提交（rollback 后空）');
+      assert.strictEqual(workAliveBefore, true, 'Work/Manifest/Segment 保留（rollback 语义占位）');
+      assert.deepStrictEqual([...txObjects].sort(), ['k-gone', 'k-live'], 'Object 不动（事务内未调 storage.delete）');
+    }
+
+    // (c) 三分支一致 + 旧 best-effort 已根除（静态）
+    {
+      const src = readRepoFile('lib/server/storyWork.ts');
+      const code = stripComments(src);
+      assert.strictEqual(/cleanup 不会误删/.test(code), false, '错误注释「存活行 object 仍在，cleanup 不会误删」必须删除');
+      assert.strictEqual(/误记清理 best-effort/.test(code), false, '旧 best-effort 吞错注释必须删除');
+      const pruneCallSites = (code.match(/await pruneSurvivorAudioTombstones\(/g) ?? []).length;
+      assert.strictEqual(pruneCallSites, 3, `三分支必须一致调用 helper（实际 ${pruneCallSites}）`);
+      const committedCallSites = (code.match(/committedKeys\s*=\s*computeCommittedAudioKeys\(/g) ?? []).length;
+      assert.strictEqual(committedCallSites, 3, `三分支 committedKeys 收敛必须一致（实际 ${committedCallSites}）`);
+      // helper 本体 fail-closed：无 try/catch
+      const helperStart = code.indexOf('export async function pruneSurvivorAudioTombstones');
+      assert.ok(helperStart >= 0, 'helper 可定位');
+      const helperBlock = code.slice(helperStart, helperStart + 800);
+      assert.strictEqual(/try\s*\{/.test(helperBlock), false, 'helper 内不得 try（fail-closed）');
+      assert.strictEqual(/catch/.test(helperBlock), false, 'helper 内不得 catch（fail-closed）');
+      assert.ok(/deleteMany/.test(helperBlock), 'helper 内必须 deleteMany');
+    }
+    console.log('PASS: 7. survivor fail-closed 通过');
   }
 
   console.log('ALL AUDIO LIFECYCLE DELETE UNIT TESTS PASSED SUCCESSFULLY');

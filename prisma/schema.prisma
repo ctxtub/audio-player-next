@@ -74,6 +74,8 @@ model StoryWork {
   updatedAt       DateTime  @default(now()) @updatedAt
   /// 每作品长期播放进度（per-Work 0/1；ownership 经本表 → User，不重复存 userId）
   progress        StoryPlaybackProgress?
+  /// M8 Canonical Audio Manifests（按 version 共存；旧 Work 无 Manifest = audio.status missing，不回填）
+  audioManifests  StoryAudioManifest[]
 
   @@unique([userId, sourceMessageId])
   @@index([userId, createdAt, id])
@@ -188,6 +190,8 @@ model GuestStoryWork {
   updatedAt       DateTime  @updatedAt
   /// 每作品长期播放进度（per-Work 0/1；ownership 经本表 → guest，不重复存 guestId）
   progress        GuestStoryPlaybackProgress?
+  /// M8 Canonical Audio Manifests（Guest 侧，与 User 对称；旧 Work 无 Manifest = audio.status missing，不回填）
+  audioManifests  GuestStoryAudioManifest[]
 
   @@unique([guestId, sourceMessageId])
   @@index([guestId, createdAt, id])
@@ -369,4 +373,204 @@ model StoryWorkMigration {
   @@index([guestStoryWorkId])
   @@index([userStoryWorkId])
   @@map("StoryWorkMigration")
+}
+
+/// M8 Canonical Audio Manifest（User 侧，spec §5.1/§5.2；M8-01 expand-only：只建表，零历史回填）。
+/// identity = contentHash + segmentationVersion + voiceId + ttsBackendId + ttsModel
+///   + synthesisVersion + audioFormat + synthesisSpeed(=1.0 冻结)；用户 playbackRate/title/favorite 不进入。
+/// 旧 StoryWork 无 Manifest 行，M2 投影一律 audio.status=missing（spec §37）。
+model StoryAudioManifest {
+  id Int @id @default(autoincrement())
+
+  storyWorkId Int
+  storyWork   StoryWork @relation(fields: [storyWorkId], references: [id], onDelete: Cascade)
+
+  /// Manifest 世代（正常恒为 1；为未来 Revoice/TTS 迁移/重生成预留，旧版以 supersededAt 标记）
+  version Int @default(1)
+
+  /// Manifest 级四态：missing | preparing | ready | failed（spec §12.2）
+  status String @default("missing")
+
+  /// 冻结的正文身份（创建时自 StoryWork 快照，之后不再跟随正文/切段算法变化）
+  contentHash         String
+  segmentationVersion String
+
+  /// 冻结的声音身份（Work.voiceId 优先；legacy 空串则 resolve 默认 voice 后冻结，spec §8）
+  voiceId String
+
+  /// 冻结的 TTS 身份（backend 显式 identity，非 secret；model 为 Manifest authoritative pin，spec §5.3/§9）
+  ttsBackendId String
+  ttsModel     String
+
+  /// 合成管线版本（应用自定 canonical-mp3-v1，语义变化时 bump，spec §5.4）
+  synthesisVersion String
+  /// Canonical 合成速度恒为 1.0（用户倍速由播放器 playbackRate 实现，spec §7）
+  synthesisSpeed   Float  @default(1.0)
+  audioFormat      String @default("mp3")
+
+  segmentCount      Int
+  readySegmentCount Int @default(0)
+
+  /// 仅全部 Segment ready 后写入 sum(segment.durationMs)（spec §17.1）
+  totalDurationMs Int?
+  totalByteLength Int?
+
+  lastErrorCode String?
+
+  readyAt      DateTime?
+  supersededAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  segments StoryAudioSegment[]
+
+  @@unique([storyWorkId, version])
+  @@index([storyWorkId, status])
+  @@index([status, updatedAt])
+}
+
+/// M8 Canonical Audio Segment（User 侧，spec §6；text 为 frozen input，Manifest 创建时持久化）。
+/// id 由 service 经 crypto.randomUUID() 显式生成（server-generated UUID，spec §6.1），不编码任何业务身份；
+/// storageKey 为 opaque asset key（story-audio/<uuid>.mp3），不编码 User/Guest/Work/title（spec §6.2/§6.3）。
+model StoryAudioSegment {
+  /// Server 生成的不透明公开 ID（UUID v4 文本；DB 无默认，强制 service 显式生成）
+  id String @id
+
+  manifestId Int
+  manifest   StoryAudioManifest @relation(fields: [manifestId], references: [id], onDelete: Cascade)
+
+  segmentIndex Int
+
+  /// 冻结的段文本与其哈希（textHash 沿用既有 computeStoryContentHash，不另造正文 hash，spec §6.4/§6.5）
+  text     String
+  textHash String
+
+  /// Segment 四态：missing → preparing → ready；失败 preparing → failed → retry preparing（spec §12.1）
+  status String @default("missing")
+
+  /// Opaque 对象 key，全局唯一；浏览器永不直接获取（spec §6.2/§33）
+  storageKey String @unique
+
+  contentType String @default("audio/mpeg")
+  byteLength  Int?
+  durationMs  Int?
+
+  /// SHA-256(audio bytes) blob 完整性（与 contentHash 正文身份严格区分，spec §6.6）
+  audioChecksum String?
+
+  /// 并发 synthesis 租约（claim 后在事务外调用 TTS，严禁持 SQLite 写锁等网络，spec §15）
+  leaseId        String?
+  leaseExpiresAt DateTime?
+
+  attemptCount  Int @default(0)
+  lastErrorCode String?
+
+  readyAt   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([manifestId, segmentIndex])
+  @@index([manifestId, status])
+  @@index([leaseExpiresAt])
+}
+
+/// M8 Canonical Audio Manifest（Guest 侧，与 StoryAudioManifest 结构对称；ownership 经 GuestStoryWork → guest）。
+model GuestStoryAudioManifest {
+  id Int @id @default(autoincrement())
+
+  storyWorkId Int
+  storyWork   GuestStoryWork @relation(fields: [storyWorkId], references: [id], onDelete: Cascade)
+
+  version Int @default(1)
+
+  status String @default("missing")
+
+  contentHash         String
+  segmentationVersion String
+
+  voiceId String
+
+  ttsBackendId String
+  ttsModel     String
+
+  synthesisVersion String
+  synthesisSpeed   Float  @default(1.0)
+  audioFormat      String @default("mp3")
+
+  segmentCount      Int
+  readySegmentCount Int @default(0)
+
+  totalDurationMs Int?
+  totalByteLength Int?
+
+  lastErrorCode String?
+
+  readyAt      DateTime?
+  supersededAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  segments GuestStoryAudioSegment[]
+
+  @@unique([storyWorkId, version])
+  @@index([storyWorkId, status])
+  @@index([status, updatedAt])
+}
+
+/// M8 Canonical Audio Segment（Guest 侧，与 StoryAudioSegment 结构对称；注册迁移时 transfer ownership，object bytes 不动，spec §27）。
+model GuestStoryAudioSegment {
+  id String @id
+
+  manifestId Int
+  manifest   GuestStoryAudioManifest @relation(fields: [manifestId], references: [id], onDelete: Cascade)
+
+  segmentIndex Int
+
+  text     String
+  textHash String
+
+  status String @default("missing")
+
+  storageKey String @unique
+
+  contentType String @default("audio/mpeg")
+  byteLength  Int?
+  durationMs  Int?
+
+  audioChecksum String?
+
+  leaseId        String?
+  leaseExpiresAt DateTime?
+
+  attemptCount  Int @default(0)
+  lastErrorCode String?
+
+  readyAt   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([manifestId, segmentIndex])
+  @@index([manifestId, status])
+  @@index([leaseExpiresAt])
+}
+
+/// M8 Audio 对象删除 tombstone（spec §29；真删除工作流留 M8-05，本项只 expand 表结构）。
+/// 永久删除 / Guest GC 先在同一 DB 事务内记 tombstone 再删 Work 行，外部清理成功后删 tombstone；
+/// 清理失败则保留 tombstone 供 startup / 机会式 retry，避免永久 orphan。
+model AudioStorageDeletion {
+  id Int @id @default(autoincrement())
+
+  storageKey String @unique
+
+  attempts Int @default(0)
+
+  nextAttemptAt DateTime?
+  lastError     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nextAttemptAt])
 }

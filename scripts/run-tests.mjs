@@ -100,6 +100,8 @@ const SUITES = [
     { id: 'audio-ensure-segment', path: './tests/integration/audio/audio-ensure-segment.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'audio-work-playback-read', path: './tests/unit/audio/audio-work-playback-read.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'audio-work-playback-reuse', path: './tests/integration/audio/audio-work-playback-reuse.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'audio-storage-cleanup', path: './tests/unit/audio/audio-storage-cleanup.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'audio-storage-cleanup-integration', path: './tests/integration/audio/audio-storage-cleanup-integration.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-read', path: './tests/integration/persistence-config/story-work-read.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-create', path: './tests/integration/persistence-config/story-work-create.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-lifecycle', path: './tests/integration/persistence-config/story-work-lifecycle.integration.test.ts', group: 'integration', needs_db: true },

@@ -201,11 +201,14 @@ export interface SessionRehydrateDeps {
   /**
    * M8-04 Work Manifest 只读投影（spec §23 Segmentation SSOT）。
    * 生产默认经 storyAudio.getPlaybackManifest；测试可注入 fake；
-   * 返回 null 表示无 Manifest（回落本地切分）；抛错一律回落本地，不阻断水合。
+   * 正常返回 missing/segments=[] 表示真无 Manifest（回落本地切分合法）；
+   * fetch throws 表示 unknown（M8-04 FIXUP Blocking 2：canonical Work fail-closed，
+   * 不得回落本地，不得进 ready，可 retry，不得删 Session/清 Anchor）。
    */
   getManifest?: (workId: number) => Promise<{
     segments: Array<{ index: number; text: string }>;
     segmentationVersion?: string;
+    segmentCount?: number;
   } | null>;
   /**
    * M5-09 fixup canonical：Draft 快照解析（Modern first → Legacy fallback）。
@@ -364,16 +367,15 @@ const defaultDeps: Required<SessionRehydrateDeps> = {
     await useChatStore.getState().initForUser();
   },
   getManifest: async (workId: number) => {
-    try {
-      const manifest = await fetchPlaybackManifest({ workId });
-      if (!manifest) return null;
-      return {
-        segments: manifest.segments,
-        segmentationVersion: manifest.segmentationVersion,
-      };
-    } catch {
-      return null;
-    }
+    // M8-04 FIXUP Blocking 2：fetch throws 与 missing 必须区分。
+    // missing（null/segments=[]）由 hydrate 回落本地；throws 直接抛由 hydrate fail-closed。
+    const manifest = await fetchPlaybackManifest({ workId });
+    if (!manifest) return null;
+    return {
+      segments: manifest.segments,
+      segmentationVersion: manifest.segmentationVersion,
+      segmentCount: manifest.segmentCount,
+    };
   },
   findDraftSnapshot: (messageId: string) => defaultFindDraftSnapshot(messageId),
   findDraftStoryText: (messageId: string) => defaultFindDraftStoryText(messageId),
@@ -545,12 +547,17 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const normalized = normalizeStoryText(storyText);
     const currentHash = computeStoryContentHash(normalized);
     const localParagraphs = segmentStoryText(normalized);
-    // M8-04 Segmentation SSOT（spec §23）：Manifest 已存在 → Work 播放段落文本
-    // SSOT = Manifest.segments[].text，不得重跑未来版本 segmentStoryText()；
-    // 无 Manifest → 回落本地切分，第一次真正请求时 ensure 侧 lazy 建 manifest。
-    // Draft 恒本地切分（不受开关影响）。
+    // M8-04 Segmentation SSOT（spec §23）+ FIXUP Blocking 1/2：
+    // Manifest 已存在 → Work 播放段落文本 SSOT = Manifest.segments[].text，
+    // effectiveSegmentationVersion = manifest.segmentationVersion，
+    // effectiveTotalParagraphs = manifest.segmentCount（Manifest 权威）；
+    // 无 Manifest（null/segments=[]）→ 回落本地切分，第一次真正请求时 ensure 侧 lazy 建；
+    // Manifest 读取 throws（unknown）→ canonical Work fail-closed：不进 ready，
+    // 不把 local 当 canonical SSOT，不改写 version，不推进/重置 Progress，可 retry，
+    // 不删 Session、不清 Anchor。Draft 恒本地切分（不受开关影响）。
     let paragraphs = localParagraphs;
     let effectiveSegmentationVersion = SEGMENTATION_VERSION;
+    let effectiveTotalParagraphs = Math.max(1, localParagraphs.length);
     if (anchor.source.kind === 'work') {
       let useCanonical = false;
       try {
@@ -559,30 +566,55 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         useCanonical = false;
       }
       if (useCanonical) {
+        let manifest: {
+          segments: Array<{ index: number; text: string }>;
+          segmentationVersion?: string;
+          segmentCount?: number;
+        } | null;
         try {
-          const manifest = await d.getManifest(anchor.source.workId);
+          manifest = await d.getManifest(anchor.source.workId);
+        } catch (err) {
+          // Blocking 2 fail-closed：unknown ≠ missing，不得回落本地。
+          console.warn('[playbackSessionStore] canonical manifest read failed, fail-closed', err);
           if (get().hydrationEpoch !== epochAtStart) return false;
-          if (manifest && Array.isArray(manifest.segments) && manifest.segments.length > 0) {
-            paragraphs = selectWorkParagraphs(localParagraphs, manifest);
-            if (
-              typeof manifest.segmentationVersion === 'string' &&
-              manifest.segmentationVersion.length > 0
-            ) {
-              effectiveSegmentationVersion = manifest.segmentationVersion;
-            }
-          }
-        } catch {
-          // Manifest 读取失败 → 回落本地切分，不阻断水合。
+          set({ status: 'error' });
+          return false;
         }
+        if (get().hydrationEpoch !== epochAtStart) return false;
+        if (manifest && Array.isArray(manifest.segments) && manifest.segments.length > 0) {
+          paragraphs = selectWorkParagraphs(localParagraphs, manifest);
+          if (
+            typeof manifest.segmentationVersion === 'string' &&
+            manifest.segmentationVersion.length > 0
+          ) {
+            effectiveSegmentationVersion = manifest.segmentationVersion;
+          }
+          if (
+            typeof manifest.segmentCount === 'number' &&
+            Number.isFinite(manifest.segmentCount) &&
+            Math.floor(manifest.segmentCount) >= 1
+          ) {
+            effectiveTotalParagraphs = Math.floor(manifest.segmentCount);
+          } else {
+            effectiveTotalParagraphs = Math.max(1, paragraphs.length);
+          }
+        } else {
+          effectiveTotalParagraphs = Math.max(1, paragraphs.length);
+        }
+      } else {
+        effectiveTotalParagraphs = Math.max(1, paragraphs.length);
       }
+    } else {
+      effectiveTotalParagraphs = Math.max(1, paragraphs.length);
     }
-    const totalParagraphs = Math.max(1, paragraphs.length);
+    const totalParagraphs = effectiveTotalParagraphs;
     const position = decideRehydratedPosition({
       savedNextParagraphIndex: anchor.nextParagraphIndex,
       savedLastCompletedParagraphIndex: anchor.lastCompletedParagraphIndex,
       savedContentHash: anchor.contentHash,
       savedSegmentationVersion: anchor.segmentationVersion,
       currentContentHash: currentHash,
+      currentSegmentationVersion: effectiveSegmentationVersion,
       totalParagraphs,
     });
     if (position.drifted) {

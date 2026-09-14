@@ -8,6 +8,8 @@ import { setupIsolatedDb } from '../../support/db/isolated-db.helper';
 import { buildFakeCanonicalMp3 } from '../../support/fixtures/fake-canonical-mp3';
 import { ensureStoryAudioSegmentForSubject } from '../../../lib/server/storyAudio';
 import { getAudioProjectionsForSubject, listStoryWorksForSubject, getStoryWorkForSubject } from '../../../lib/server/storyWork';
+import { beginPlaybackSessionForSubject } from '../../../lib/server/playbackSession';
+import { SEGMENTATION_VERSION } from '../../../utils/segmentation';
 import { resetAudioAssetStorageForTests } from '../../../lib/audio/storage/index';
 import { resetCache } from '../../../lib/server/openai';
 
@@ -106,6 +108,8 @@ const getConfig = () => (nodeRequire('../../../stores/configStore') as typeof im
 
 const SID_A = 'a47ac10b-58cc-4372-a567-0e02b2c3d47a';
 const SID_B = 'b47ac10b-58cc-4372-a567-0e02b2c3d47b';
+const SID_C = 'c47ac10b-58cc-4372-a567-0e02b2c3d47c';
+const SID_D = 'd47ac10b-58cc-4372-a567-0e02b2c3d47d';
 const P1 = `第一自然段：很久很久以前在宁静的大森林深处住着一只聪明活泼的小松鼠它有一条蓬松柔软的大尾巴每天清晨都在高高的树梢之间欢快地跳来跳去寻找新鲜的坚果与甘甜的露水日子过得无忧无虑。`;
 const P2 = `第二自然段：小松鼠每天迎着金色的朝阳出门收集松果仔细辨别每一颗果实是否饱满香甜然后整整齐齐存放在自己温暖干燥的树洞深处为即将到来的漫长寒冬储备充足的粮食心里充满了丰收的喜悦。`;
 const TWO = `${P1}\n${P2}`;
@@ -271,6 +275,81 @@ async function runTests() {
     const before = ensureCalls;
     await getSession().getState().prefetchNextParagraph(99);
     assert.strictEqual(ensureCalls, before, '越界/非+1 不预取');
+    console.log('=== B7. Oracle A Blocking1 Manifest 权威（legacy-v0 不 reset） ===');
+    assert.notStrictEqual(SEGMENTATION_VERSION, 'legacy-v0', '前提：全局版本须与 legacy 不同值');
+    const workA = await prisma.storyWork.create({ data: { userId: user.id, prompt: 'oracleA', storyText: TWO, voiceId: 'alloy', title: 'oracleA', excerpt: 'e', contentHash: '', sourceMessageId: 'oracleA-m1' } });
+    const { computeStoryContentHash: cchA } = await import('../../../utils/segmentation');
+    const hashA = cchA(TWO);
+    await prisma.storyWork.update({ where: { id: workA.id }, data: { contentHash: hashA } });
+    const rA = await ensureStoryAudioSegmentForSubject(subject, { workId: workA.id, segmentIndex: 0, sessionId: SID_C }, { synthesize: synth });
+    assert.strictEqual(rA.status, 'ready', 'oracleA manifest 先建');
+    const manA = await prisma.storyAudioManifest.findUnique({ where: { storyWorkId_version: { storyWorkId: workA.id, version: 1 } } });
+    assert.ok(manA, 'oracleA manifest 行存在');
+    assert.strictEqual(manA!.segmentCount, 2, 'oracleA manifest segmentCount=2');
+    await prisma.storyAudioManifest.update({ where: { id: manA!.id }, data: { segmentationVersion: 'legacy-v0' } });
+    await prisma.storyPlaybackProgress.upsert({
+      where: { storyWorkId: workA.id },
+      create: { storyWorkId: workA.id, contentHash: hashA, segmentationVersion: 'legacy-v0', lastCompletedParagraphIndex: 0, nextParagraphIndex: 1, totalParagraphs: 2, completedAt: null, lastPlayedAt: new Date() },
+      update: { contentHash: hashA, segmentationVersion: 'legacy-v0', lastCompletedParagraphIndex: 0, nextParagraphIndex: 1, totalParagraphs: 2 },
+    });
+    const anchorA = await beginPlaybackSessionForSubject(subject, { sessionId: SID_D, source: { kind: 'work', workId: workA.id }, mode: 'resume', speed: 1.0 });
+    assert.strictEqual(anchorA.nextParagraphIndex, 1, 'Oracle A：begin resume 不 reset（Manifest 权威，legacy==legacy）');
+    assert.strictEqual(anchorA.lastCompletedParagraphIndex, 0, 'Oracle A：last 保留 0');
+    assert.strictEqual(anchorA.segmentationVersion, 'legacy-v0', "Oracle A：Anchor segmentationVersion='legacy-v0'");
+    assert.strictEqual(anchorA.totalParagraphs, 2, 'Oracle A：totalParagraphs=Manifest.segmentCount');
+    const progA = await prisma.storyPlaybackProgress.findUnique({ where: { storyWorkId: workA.id } });
+    assert.strictEqual(progA?.segmentationVersion, 'legacy-v0', 'Oracle A：Progress 仍 legacy（未被改写为当前版本）');
+    assert.strictEqual(progA?.nextParagraphIndex, 1, 'Oracle A：Progress 未推进/重置');
+    resetWorld(); fakeController(pc1);
+    const FROZEN_A = `${P1}【冻】`;
+    const FROZEN_B = `${P2}【冻】`;
+    const okA = await getSession().getState().hydrateFromAnchor(anchorA as never, {
+      getWork: async () => ({ title: 'oracleA', storyText: TWO, voiceId: 'alloy', contentHash: hashA }),
+      getManifest: async () => ({ segments: [{ index: 0, text: FROZEN_A }, { index: 1, text: FROZEN_B }], segmentationVersion: 'legacy-v0', segmentCount: 2 }),
+    });
+    assert.strictEqual(okA, true, 'Oracle A：hydrate 成功');
+    assert.strictEqual(getSession().getState().status, 'ready', 'Oracle A：hydrate 进入 ready');
+    assert.deepStrictEqual(getSession().getState().paragraphs, [FROZEN_A, FROZEN_B], 'Oracle A：hydrate paragraphs=frozen text');
+    assert.strictEqual(getSession().getState().nextParagraphIndex, 1, 'Oracle A：hydrate next 仍 1');
+    assert.strictEqual(getSession().getState().segmentationVersion, 'legacy-v0', 'Oracle A：hydrate version 仍 legacy');
+    assert.strictEqual(getSession().getState().totalParagraphs, 2, 'Oracle A：hydrate total=Manifest.segmentCount');
+    console.log('=== B8. Oracle B Blocking2 读失败 fail-closed（不 fallback/可 retry） ===');
+    resetWorld(); fakeController(pc1);
+    let clearCalls = 0;
+    const anchorB = { sessionId: SID_C, source: { kind: 'work' as const, workId: workA.id }, title: 'oracleA', contentHash: hashA, segmentationVersion: 'legacy-v0', nextParagraphIndex: 1, lastCompletedParagraphIndex: 0, totalParagraphs: 2, voiceId: 'alloy', speed: 1.0, sleepTimerMode: 'off' as const, remainingAllowedMs: null, totalAllowedMs: null };
+    const okB0 = await getSession().getState().hydrateFromAnchor(anchorB as never, {
+      getWork: async () => ({ title: 'oracleA', storyText: TWO, voiceId: 'alloy', contentHash: hashA }),
+      getManifest: async () => ({ segments: [{ index: 0, text: FROZEN_A }, { index: 1, text: FROZEN_B }], segmentationVersion: 'legacy-v0', segmentCount: 2 }),
+      clearAnchor: async () => { clearCalls += 1; return { cleared: true }; },
+    });
+    assert.strictEqual(okB0, true, 'Oracle B 前提：先成功水合 legacy');
+    const keptParagraphs = [...getSession().getState().paragraphs];
+    const keptVersion = getSession().getState().segmentationVersion;
+    const progBefore = await prisma.storyPlaybackProgress.findUnique({ where: { storyWorkId: workA.id } });
+    hooks.__resetPlaybackSessionTestHooks();
+    const okB = await getSession().getState().hydrateFromAnchor(anchorB as never, {
+      getWork: async () => ({ title: 'oracleA', storyText: TWO, voiceId: 'alloy', contentHash: hashA }),
+      getManifest: async () => { throw new Error('manifest-fetch-boom'); },
+      clearAnchor: async () => { clearCalls += 1; return { cleared: true }; },
+    });
+    assert.strictEqual(okB, false, 'Oracle B：hydrate 读失败返回 false');
+    assert.notStrictEqual(getSession().getState().status, 'ready', 'Oracle B：不进入 ready');
+    assert.strictEqual(getSession().getState().status, 'error', 'Oracle B：fail-closed 置 error（可 retry）');
+    assert.deepStrictEqual(getSession().getState().paragraphs, keptParagraphs, 'Oracle B：不得把 local paragraphs 当 canonical SSOT');
+    assert.strictEqual(getSession().getState().segmentationVersion, keptVersion, 'Oracle B：不得改写 segmentationVersion 为当前版本');
+    assert.ok(!getSession().getState().paragraphs.includes(P1) || getSession().getState().paragraphs.includes('【冻】'), 'Oracle B：paragraphs 仍 frozen 非本地回落');
+    const progAfter = await prisma.storyPlaybackProgress.findUnique({ where: { storyWorkId: workA.id } });
+    assert.deepStrictEqual({ next: progAfter?.nextParagraphIndex, last: progAfter?.lastCompletedParagraphIndex, ver: progAfter?.segmentationVersion }, { next: progBefore?.nextParagraphIndex, last: progBefore?.lastCompletedParagraphIndex, ver: progBefore?.segmentationVersion }, 'Oracle B：不得推进/重置 Progress');
+    assert.strictEqual(clearCalls, 0, 'Oracle B：不得删 Session/清 Anchor');
+    hooks.__resetPlaybackSessionTestHooks();
+    const okRetry = await getSession().getState().hydrateFromAnchor(anchorB as never, {
+      getWork: async () => ({ title: 'oracleA', storyText: TWO, voiceId: 'alloy', contentHash: hashA }),
+      getManifest: async () => ({ segments: [{ index: 0, text: FROZEN_A }, { index: 1, text: FROZEN_B }], segmentationVersion: 'legacy-v0', segmentCount: 2 }),
+      clearAnchor: async () => { clearCalls += 1; return { cleared: true }; },
+    });
+    assert.strictEqual(okRetry, true, 'Oracle B：retry 后可恢复');
+    assert.strictEqual(getSession().getState().status, 'ready', 'Oracle B：retry 后 ready');
+    assert.deepStrictEqual(getSession().getState().paragraphs, [FROZEN_A, FROZEN_B], 'Oracle B：retry 后 frozen');
     console.log('\nALL WORK PLAYBACK REUSE INTEGRATION TESTS PASSED!');
   } finally {
     if (savedFlag === undefined) delete process.env.CANONICAL_AUDIO_ENABLED;

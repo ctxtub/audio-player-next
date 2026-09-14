@@ -11,13 +11,11 @@
  * - §25.5 Rehydrate 最终状态：transport idle 断言（isPlaying=false/audioUrl=null/currentTime=0/duration=0，不 autoplay）。
  */
 
-import {
+export {
   SEGMENTATION_VERSION,
   computeStoryContentHash,
   normalizeStoryText,
 } from '@/utils/segmentation';
-
-export { SEGMENTATION_VERSION, computeStoryContentHash, normalizeStoryText };
 
 /** 重水合位置输入（saved 为 Anchor 快照，current 为 Source resolve 后实时值）。 */
 export interface RehydratedPositionInput {
@@ -26,6 +24,12 @@ export interface RehydratedPositionInput {
   savedContentHash: string;
   savedSegmentationVersion: string;
   currentContentHash: string;
+  /**
+   * M8-04 FIXUP（Blocking 1）：Manifest 权威的当前切分版本。
+   * 有 Manifest → manifest.segmentationVersion；无 → SEGMENTATION_VERSION。
+   * 调用方传入，helper 内部不得读全局常量（v1→v2 时旧合法 Manifest 不得误判 drift）。
+   */
+  currentSegmentationVersion: string;
   totalParagraphs: number;
 }
 
@@ -65,15 +69,18 @@ function clampLast(last: unknown, total: number): number {
 
 /**
  * 重水合位置决策（§25.3 纯函数，保留 M2 已有逻辑）：
- * currentHash != savedHash OR savedVersion != SEGMENTATION_VERSION
+ * currentHash != savedHash OR savedVersion != currentSegmentationVersion
  * → reset paragraph 0（next=0/last=-1/drifted=true）；
  * 否则沿用 saved 位置（越界钳制，不抛错）。
+ *
+ * M8-04 FIXUP（Blocking 1）：currentSegmentationVersion 由调用方传入
+ * effectiveSegmentationVersion（Manifest 权威），helper 内部不读全局常量。
  */
 export function decideRehydratedPosition(input: RehydratedPositionInput): RehydratedPosition {
   const total = normalizeTotal(input.totalParagraphs);
   const drifted =
     input.currentContentHash !== input.savedContentHash ||
-    input.savedSegmentationVersion !== SEGMENTATION_VERSION;
+    input.savedSegmentationVersion !== input.currentSegmentationVersion;
   if (drifted) {
     return { nextParagraphIndex: 0, lastCompletedParagraphIndex: -1, drifted: true };
   }

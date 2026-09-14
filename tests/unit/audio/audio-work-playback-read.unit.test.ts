@@ -8,6 +8,8 @@ import {
   shouldUseCanonicalAudio,
 } from '../../../lib/client/storyAudio';
 import { toAudioProjectionFromManifest } from '../../../lib/server/storyWork';
+import { SEGMENTATION_VERSION } from '../../../utils/segmentation';
+import { decideRehydratedPosition } from '../../../lib/playback/rehydrate';
 
 function stripComments(source: string): string {
   return source
@@ -239,6 +241,89 @@ async function runWorkPlaybackReadUnitTests() {
       'store 不得写 env（只读 flag）',
     );
     console.log('PASS: 7. production 门通过');
+  }
+
+  console.log('=== 8. M8-04 FIXUP Blocking1/2（Manifest 权威 + fail-closed） ===');
+  {
+    // Blocking 1 Oracle A 纯函数面：Manifest legacy-v0 权威时不误判 drift。
+    // 当前全局 SEGMENTATION_VERSION 为 v1（断言前提：与 legacy 不同值）。
+    assert.notStrictEqual(SEGMENTATION_VERSION, 'legacy-v0', '前提：当前全局版本须与 legacy 不同值');
+    assert.deepStrictEqual(
+      decideRehydratedPosition({
+        savedNextParagraphIndex: 1,
+        savedLastCompletedParagraphIndex: 0,
+        savedContentHash: 'h-legacy',
+        savedSegmentationVersion: 'legacy-v0',
+        currentContentHash: 'h-legacy',
+        currentSegmentationVersion: 'legacy-v0',
+        totalParagraphs: 2,
+      }),
+      { nextParagraphIndex: 1, lastCompletedParagraphIndex: 0, drifted: false },
+      'Oracle A 纯函数：saved legacy == effective legacy → 不 reset（即使全局为 v1）',
+    );
+    assert.strictEqual(
+      decideRehydratedPosition({
+        savedNextParagraphIndex: 1,
+        savedLastCompletedParagraphIndex: 0,
+        savedContentHash: 'h-legacy',
+        savedSegmentationVersion: 'legacy-v0',
+        currentContentHash: 'h-legacy',
+        currentSegmentationVersion: SEGMENTATION_VERSION,
+        totalParagraphs: 2,
+      }).drifted,
+      true,
+      'saved legacy vs 当前版本 → drifted=true（回落路径仍重置）',
+    );
+    // helper 不得内部读全局常量：函数体须用 input.currentSegmentationVersion 比较。
+    const rehydrateSrc = stripComments(
+      fs.readFileSync(path.resolve(process.cwd(), 'lib/playback/rehydrate.ts'), 'utf8'),
+    );
+    assert.ok(
+      rehydrateSrc.includes('currentSegmentationVersion'),
+      'rehydrate 必须经调用方传入 currentSegmentationVersion',
+    );
+    const decideBody = rehydrateSrc.slice(
+      rehydrateSrc.indexOf('decideRehydratedPosition'),
+      rehydrateSrc.indexOf('decideRehydratedPosition') + 2000,
+    );
+    assert.ok(
+      decideBody.includes('input.currentSegmentationVersion'),
+      'decide 必须比较 input.currentSegmentationVersion（Manifest 权威）',
+    );
+    assert.ok(
+      !decideBody.includes('SEGMENTATION_VERSION'),
+      'decide 内部不得读全局 SEGMENTATION_VERSION（防 v1→v2 误判）',
+    );
+    // Blocking 2 静态面：getManifest throws ≠ missing；canonical fail-closed。
+    const storeSrc8 = stripComments(
+      fs.readFileSync(path.resolve(process.cwd(), 'stores/playbackSessionStore.ts'), 'utf8'),
+    );
+    assert.ok(
+      !/getManifest[\s\S]{0,600}\} catch \{\s*return null/.test(storeSrc8),
+      'defaultDeps.getManifest 不得 catch→null（throws 须与 missing 区分）',
+    );
+    assert.ok(
+      storeSrc8.includes('fail-closed') && storeSrc8.includes("set({ status: 'error' })"),
+      'hydrate manifest throws 须 fail-closed（不进 ready，可 retry，不清 Anchor）',
+    );
+    assert.ok(
+      storeSrc8.includes('effectiveTotalParagraphs') && storeSrc8.includes('segmentCount'),
+      'hydrate 有效 total 须取 manifest.segmentCount（Manifest 权威）',
+    );
+    const serverSrc = stripComments(
+      fs.readFileSync(path.resolve(process.cwd(), 'lib/server/playbackSession.ts'), 'utf8'),
+    );
+    assert.ok(
+      serverSrc.includes('resolveWorkEffectiveSegmentation') &&
+        serverSrc.includes('effectiveSegmentationVersion') &&
+        serverSrc.includes('effectiveTotalParagraphs'),
+      'server beginSession 须经 Manifest 权威 effective pair',
+    );
+    assert.ok(
+      serverSrc.includes('=== effectiveSegmentationVersion'),
+      'server resume version 校验须对 effective（非全局常量）',
+    );
+    console.log('PASS: 8. FIXUP Blocking1/2 通过');
   }
 
   console.log('\nALL AUDIO WORK PLAYBACK READ UNIT TESTS PASSED!');

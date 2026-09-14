@@ -429,6 +429,56 @@ const computeWorkTotalParagraphs = (storyText: string): number => {
   return Math.max(1, segments.length);
 };
 
+/**
+ * M8-04 FIXUP（Blocking 1/2）：Work 有效切分身份（Manifest 权威，spec §23）。
+ *
+ * - 已有 Manifest（canonical manifest 行存在）→
+ *   effectiveSegmentationVersion = manifest.segmentationVersion，
+ *   effectiveTotalParagraphs = manifest.segmentCount；
+ * - 无 Manifest（null）→ SEGMENTATION_VERSION / 当前 segmentStoryText().length；
+ * - Manifest 读取失败（throws）→ 直接抛（fail-closed，不得回落本地切分，
+ *   不得写 Progress/Anchor，调用方按失败处理，可 retry）。
+ *
+ * PlaybackSourceRef / sessionId / Anchor schema / Progress schema / CAS 规则全部不变。
+ */
+const resolveWorkEffectiveSegmentation = async (
+  subject: Subject,
+  workId: number,
+  storyText: string,
+): Promise<{ effectiveSegmentationVersion: string; effectiveTotalParagraphs: number }> => {
+  const fallback = (): { effectiveSegmentationVersion: string; effectiveTotalParagraphs: number } => ({
+    effectiveSegmentationVersion: SEGMENTATION_VERSION,
+    effectiveTotalParagraphs: computeWorkTotalParagraphs(storyText),
+  });
+  // Manifest 世代恒 1（与 lib/server/storyAudio.STORY_AUDIO_MANIFEST_VERSION 同值；
+  // 此处不 import storyAudio 以避免 server 写入面耦合，仅读行）。
+  const MANIFEST_VERSION = 1;
+  let row: { segmentationVersion: string; segmentCount: number } | null = null;
+  if (subject.type === 'user') {
+    row = await prisma.storyAudioManifest.findUnique({
+      where: { storyWorkId_version: { storyWorkId: workId, version: MANIFEST_VERSION } },
+      select: { segmentationVersion: true, segmentCount: true },
+    });
+  } else {
+    row = await prisma.guestStoryAudioManifest.findUnique({
+      where: { storyWorkId_version: { storyWorkId: workId, version: MANIFEST_VERSION } },
+      select: { segmentationVersion: true, segmentCount: true },
+    });
+  }
+  if (!row) return fallback();
+  const version =
+    typeof row.segmentationVersion === 'string' && row.segmentationVersion.length > 0
+      ? row.segmentationVersion
+      : SEGMENTATION_VERSION;
+  const total =
+    typeof row.segmentCount === 'number' &&
+    Number.isFinite(row.segmentCount) &&
+    Math.floor(row.segmentCount) >= 1
+      ? Math.floor(row.segmentCount)
+      : computeWorkTotalParagraphs(storyText);
+  return { effectiveSegmentationVersion: version, effectiveTotalParagraphs: total };
+};
+
 /** §16 playback.beginSession：创建新 Session 并落 Anchor（M5-05 落地）。 */
 export const beginPlaybackSessionForSubject = async (
   subject: Subject,
@@ -485,7 +535,10 @@ export const beginPlaybackSessionForSubject = async (
     // 不得重算 title、不得重定义 contentHash、不得直查 GenerationHistory。
     // getStoryWorkForSubject 对 missing / foreign / trash 统一抛 NOT_FOUND，原样透出。
     const work = await getStoryWorkForSubject(subject, input.source.workId);
-    const totalParagraphs = computeWorkTotalParagraphs(work.storyText);
+    // M8-04 FIXUP（Blocking 1/2）：Manifest 权威 effective pair；读失败直接抛 fail-closed。
+    const { effectiveSegmentationVersion, effectiveTotalParagraphs } =
+      await resolveWorkEffectiveSegmentation(subject, work.id, work.storyText);
+    const totalParagraphs = effectiveTotalParagraphs;
 
     // 读取 Per-Work 长期进度（ownership 经 StoryWork → Subject，不重复存 userId/guestId，§6.2）。
     const existingProgress =
@@ -505,7 +558,7 @@ export const beginPlaybackSessionForSubject = async (
       const preservedCompletedAt = existingProgress?.completedAt ?? null;
       const progressData = {
         contentHash: work.contentHash,
-        segmentationVersion: SEGMENTATION_VERSION,
+        segmentationVersion: effectiveSegmentationVersion,
         lastCompletedParagraphIndex: -1,
         nextParagraphIndex: 0,
         totalParagraphs,
@@ -538,9 +591,9 @@ export const beginPlaybackSessionForSubject = async (
       lastCompletedParagraphIndex = -1;
       nextParagraphIndex = 0;
     } else if (existingProgress) {
-      // §16.2 Work Resume：校验 hash + segmentationVersion。
+      // §16.2 Work Resume：校验 hash + segmentationVersion（M8-04 FIXUP：version 对 Manifest 权威）。
       const hashMatch = existingProgress.contentHash === work.contentHash;
-      const versionMatch = existingProgress.segmentationVersion === SEGMENTATION_VERSION;
+      const versionMatch = existingProgress.segmentationVersion === effectiveSegmentationVersion;
       if (hashMatch && versionMatch) {
         // 一致：继续（位置钳制到当前 total，避免越界脏读）。
         const clampedNext = Math.max(0, Math.min(existingProgress.nextParagraphIndex, totalParagraphs));
@@ -552,7 +605,7 @@ export const beginPlaybackSessionForSubject = async (
         const preservedCompletedAt = existingProgress.completedAt ?? null;
         const resetData = {
           contentHash: work.contentHash,
-          segmentationVersion: SEGMENTATION_VERSION,
+          segmentationVersion: effectiveSegmentationVersion,
           lastCompletedParagraphIndex: -1,
           nextParagraphIndex: 0,
           totalParagraphs,
@@ -586,7 +639,7 @@ export const beginPlaybackSessionForSubject = async (
       anchorState: 'ready' as const,
       title: work.title,
       contentHash: work.contentHash,
-      segmentationVersion: SEGMENTATION_VERSION,
+      segmentationVersion: effectiveSegmentationVersion,
       lastCompletedParagraphIndex,
       nextParagraphIndex,
       totalParagraphs,

@@ -35,8 +35,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 # M8-05-04 canonical enable gate（运行时变量；缺省空 = fail-closed，生产默认关闭。
-# 开启方式：CANONICAL_AUDIO_ENABLED=1；与构建期 NEXT_PUBLIC_* 变量任一 strict '1' 即开，
-# 语义见 lib/audio/canonicalFlag.ts，源码默认不得改。）
+# server 兼容可保留 CANONICAL_AUDIO_ENABLED=1，但不能替代 client build flag；
+# 浏览器 provider 的 production rollout 必须在 build 时设置 NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=1，
+# 运行时变量单独不足以开启生产播放。语义见 lib/audio/canonicalFlag.ts，源码默认不得改。）
 ENV CANONICAL_AUDIO_ENABLED=""
 RUN apk add --no-cache libc6-compat su-exec \
   && addgroup -g 1001 nodejs \

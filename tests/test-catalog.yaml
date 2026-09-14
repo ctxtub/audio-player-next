@@ -958,7 +958,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-work, canonical-audio, closure, cleanup, enable-gate]
     spec_path: docs/e2e/07-故事库与作品资产/16-Canonical-Work-Playback-Read-Path.md
-    executable_ids: [exec-audio-cleanup-triggers, exec-audio-production-closure, exec-audio-cleanup-triggers-integration, exec-l3-canonical-closure]
+    executable_ids: [exec-audio-cleanup-triggers, exec-audio-production-closure, exec-audio-ghcr-canonical-release-gate, exec-audio-cleanup-triggers-integration, exec-l3-canonical-closure]
     fixtures: []
     owner: story-library
   - case_id: chat-artifact-domain-contract
@@ -1496,6 +1496,10 @@ executables:
     display_name_zh: M8生产收官静态守卫单元
     layer: L1
     path: ./tests/unit/audio/audio-production-closure.unit.test.ts
+  - executable_id: exec-audio-ghcr-canonical-release-gate
+    display_name_zh: M8 GHCR发布链client开关透传门单元
+    layer: L1
+    path: ./tests/unit/audio/audio-ghcr-canonical-release-gate.unit.test.ts
   - executable_id: exec-audio-cleanup-triggers-integration
     display_name_zh: M8清理触发器真库集成
     layer: L2

@@ -108,6 +108,7 @@ const SUITES = [
     { id: 'audio-ownership-transfer-integration', path: './tests/integration/audio/audio-ownership-transfer-integration.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'audio-cleanup-triggers', path: './tests/unit/audio/audio-cleanup-triggers.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'audio-production-closure', path: './tests/unit/audio/audio-production-closure.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'audio-ghcr-canonical-release-gate', path: './tests/unit/audio/audio-ghcr-canonical-release-gate.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'audio-cleanup-triggers-integration', path: './tests/integration/audio/audio-cleanup-triggers-integration.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-read', path: './tests/integration/persistence-config/story-work-read.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-create', path: './tests/integration/persistence-config/story-work-create.integration.test.ts', group: 'integration', needs_db: true },

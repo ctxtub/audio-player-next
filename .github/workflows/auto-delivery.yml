@@ -120,9 +120,13 @@ jobs:
 
       # 中文注释：无参数调用 = 只发 sha-<short> 不可变标签（脚本既有语义：空 tag 即 sha-only）。
       # 不传 ref 名，不造任何移动标签；脚本内另有 latest 字面守卫。
+      # M8-05-04 FIXUP：显式透传 repository variable NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED
+      # 给 push-ghcr.sh 作 docker build-arg（未设置时为空串=fail-closed OFF）；只决定
+      # client bundle 开关，不改变 sha-only 标签行为。
       - name: Push immutable image via script (sha tag only, never floating)
         env:
           GITHUB_SHA: ${{ github.sha }}
+          NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED: ${{ vars.NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED }}
         run: |
           chmod +x scripts/push-ghcr.sh
           echo "sha=${{ github.sha }} (sha-only, no floating tag)"

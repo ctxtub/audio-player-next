@@ -15,11 +15,15 @@
  *    - manual permanentlyDeleteStoryWorkForSubject 与 retention purgeExpiredUserTrash 共用同一内部底层执行点；
  *    - active 作品禁止物理删除（CONFLICT）；
  * 7. 边界与幂等性：空数据调用、重复调用安全幂等。
+ * 8. M8-05-02 Audio-aware 扩展：过期 Trash/Guest 清理经统一 seam 自动完成
+ *    tombstone + object lifecycle；Trash/Restore 零 Audio side effect 回归。
  */
 
 import assert from 'node:assert';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { prisma } from '../../../lib/db';
 import type { Subject } from '../../../lib/server/subject';
@@ -35,6 +39,12 @@ import {
   permanentlyDeleteStoryWorkForSubject,
   executeStoryWorkPhysicalDelete,
 } from '../../../lib/server/storyWork';
+import {
+  getAudioAssetStorage,
+  resetAudioAssetStorageForTests,
+} from '../../../lib/audio/storage/index';
+import { resetCache } from '../../../lib/server/openai';
+import { buildFakeCanonicalMp3 } from '../../../tests/support/fixtures/fake-canonical-mp3';
 
 async function runStoryWorkRetentionTests() {
   const baseTime = new Date('2026-09-12T12:00:00.000Z');
@@ -505,6 +515,210 @@ async function runStoryWorkRetentionTests() {
   assert.strictEqual(dupGc1.generationsDeleted, 0);
   assert.strictEqual(dupGc2.generationsDeleted, 0);
   console.log('PASS: 边界条件与幂等性校验通过');
+
+  console.log('=== 8. M8-05-02 Audio-aware 扩展：过期清理 + Trash/Restore 零副作用 ===');
+  {
+    const m8052Tag = `m8052ext_${tag}`;
+    const prevDriver = process.env.AUDIO_STORAGE_DRIVER;
+    const prevRoot = process.env.AUDIO_LOCAL_ROOT;
+    const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), `m8052ext-${Date.now()}-`));
+    process.env.AUDIO_STORAGE_DRIVER = 'local';
+    process.env.AUDIO_LOCAL_ROOT = tmpRoot;
+    resetCache();
+    resetAudioAssetStorageForTests();
+    const storage = getAudioAssetStorage();
+    try {
+      // 8.1 Trash 零 Audio side effect（User）：Manifest/Segment/Object 全留，tombstone=0
+      const trashAudioWork = await prisma.storyWork.create({
+        data: {
+          userId: user1.id,
+          prompt: 'M8-05-02 trash audio prompt',
+          storyText: 'M8-05-02 trash audio text……',
+          title: 'M8-05-02 Trash Audio',
+          contentHash: `hash_m8052_trash_${m8052Tag}`,
+          createdAt: sixtyDaysAgo,
+          updatedAt: sixtyDaysAgo,
+          deletedAt: null,
+        },
+      });
+      const trashManifest = await prisma.storyAudioManifest.create({
+        data: {
+          storyWorkId: trashAudioWork.id,
+          version: 1,
+          status: 'ready',
+          contentHash: `hash_m8052_trash_${m8052Tag}`,
+          segmentationVersion: 'v1',
+          voiceId: 'nova',
+          ttsBackendId: 'openai',
+          ttsModel: 'tts-1',
+          synthesisVersion: 'canonical-mp3-v1',
+          synthesisSpeed: 1.0,
+          audioFormat: 'mp3',
+          segmentCount: 1,
+          readySegmentCount: 1,
+          totalDurationMs: 261,
+          totalByteLength: 4170,
+        },
+      });
+      const trashKey = `story-audio/${m8052Tag}-trash-u.mp3`;
+      await storage.put({ key: trashKey, bytes: buildFakeCanonicalMp3(10, 9), contentType: 'audio/mpeg' });
+      await prisma.storyAudioSegment.create({
+        data: {
+          id: randomUUID(),
+          manifestId: trashManifest.id,
+          segmentIndex: 0,
+          text: 'trash seg',
+          textHash: `th_m8052_trash_${m8052Tag}`,
+          status: 'ready',
+          storageKey: trashKey,
+          contentType: 'audio/mpeg',
+          byteLength: 4170,
+          durationMs: 261,
+          readyAt: new Date(),
+        },
+      });
+      await trashStoryWorkForSubject(user1Subject, trashAudioWork.id);
+      assert.strictEqual(await prisma.storyAudioManifest.count({ where: { storyWorkId: trashAudioWork.id } }), 1, 'Trash Manifest remain');
+      assert.strictEqual(await prisma.storyAudioSegment.count({ where: { manifestId: trashManifest.id } }), 1, 'Trash Segment remain');
+      assert.strictEqual(await storage.exists(trashKey), true, 'Trash Object remains');
+      assert.strictEqual(await prisma.audioStorageDeletion.count({ where: { storageKey: trashKey } }), 0, 'Trash tombstone 不变');
+      await restoreStoryWorkForSubject(user1Subject, trashAudioWork.id);
+      const restoredSeg = await prisma.storyAudioSegment.findFirst({ where: { manifestId: trashManifest.id } });
+      assert.ok(restoredSeg && restoredSeg.storageKey === trashKey, 'Restore 同一 storageKey');
+      assert.strictEqual(await storage.exists(trashKey), true, 'Restore Object remains');
+      assert.strictEqual(await prisma.audioStorageDeletion.count({ where: { storageKey: trashKey } }), 0, 'Restore tombstone 不变');
+
+      // 8.2 过期 User Trash 经 purgeExpiredUserTrash 自动 audio-aware（全消失）
+      const expiredAudioWork = await prisma.storyWork.create({
+        data: {
+          userId: user1.id,
+          prompt: 'M8-05-02 expired audio prompt',
+          storyText: 'M8-05-02 expired audio text……',
+          title: 'M8-05-02 Expired Audio',
+          contentHash: `hash_m8052_exp_${m8052Tag}`,
+          createdAt: sixtyDaysAgo,
+          updatedAt: thirtyFiveDaysAgo,
+          deletedAt: thirtyFiveDaysAgo,
+        },
+      });
+      const expManifest = await prisma.storyAudioManifest.create({
+        data: {
+          storyWorkId: expiredAudioWork.id,
+          version: 1,
+          status: 'ready',
+          contentHash: `hash_m8052_exp_${m8052Tag}`,
+          segmentationVersion: 'v1',
+          voiceId: 'nova',
+          ttsBackendId: 'openai',
+          ttsModel: 'tts-1',
+          synthesisVersion: 'canonical-mp3-v1',
+          synthesisSpeed: 1.0,
+          audioFormat: 'mp3',
+          segmentCount: 1,
+          readySegmentCount: 1,
+          totalDurationMs: 261,
+          totalByteLength: 4170,
+        },
+      });
+      const expKey = `story-audio/${m8052Tag}-exp-u.mp3`;
+      await storage.put({ key: expKey, bytes: buildFakeCanonicalMp3(10, 10), contentType: 'audio/mpeg' });
+      await prisma.storyAudioSegment.create({
+        data: {
+          id: randomUUID(),
+          manifestId: expManifest.id,
+          segmentIndex: 0,
+          text: 'exp seg',
+          textHash: `th_m8052_exp_${m8052Tag}`,
+          status: 'ready',
+          storageKey: expKey,
+          contentType: 'audio/mpeg',
+          byteLength: 4170,
+          durationMs: 261,
+          readyAt: new Date(),
+        },
+      });
+      const purgeExp = await purgeExpiredUserTrash(baseTime);
+      assert.ok(purgeExp.purged >= 1, '过期音频 Trash 应被 purge');
+      assert.strictEqual(await prisma.storyWork.findUnique({ where: { id: expiredAudioWork.id } }), null, '过期 Work gone');
+      assert.strictEqual(await prisma.storyAudioManifest.count({ where: { storyWorkId: expiredAudioWork.id } }), 0, '过期 Manifest gone');
+      assert.strictEqual(await prisma.storyAudioSegment.count({ where: { manifestId: expManifest.id } }), 0, '过期 Segment gone');
+      assert.strictEqual(await storage.exists(expKey), false, '过期 Object gone');
+      assert.strictEqual(await prisma.audioStorageDeletion.count({ where: { storageKey: expKey } }), 0, '过期 tombstone gone');
+
+      // 8.3 过期 Guest 经 purgeExpiredGuestData 自动 audio-aware（全消失；统一 seam 回归）
+      const guestAudioId = `g_m8052_${m8052Tag}`;
+      const guestAudioWork = await prisma.guestStoryWork.create({
+        data: {
+          guestId: guestAudioId,
+          prompt: 'M8-05-02 guest audio prompt',
+          storyText: 'M8-05-02 guest audio text',
+          title: 'M8-05-02 Guest Audio',
+          contentHash: `ghash_m8052_${m8052Tag}`,
+          createdAt: thirtyFiveDaysAgo,
+          updatedAt: thirtyFiveDaysAgo,
+          deletedAt: null,
+        },
+      });
+      const gManifest = await prisma.guestStoryAudioManifest.create({
+        data: {
+          storyWorkId: guestAudioWork.id,
+          version: 1,
+          status: 'ready',
+          contentHash: `ghash_m8052_${m8052Tag}`,
+          segmentationVersion: 'v1',
+          voiceId: 'nova',
+          ttsBackendId: 'openai',
+          ttsModel: 'tts-1',
+          synthesisVersion: 'canonical-mp3-v1',
+          synthesisSpeed: 1.0,
+          audioFormat: 'mp3',
+          segmentCount: 1,
+          readySegmentCount: 1,
+          totalDurationMs: 261,
+          totalByteLength: 4170,
+        },
+      });
+      const gKey = `story-audio/${m8052Tag}-exp-g.mp3`;
+      await storage.put({ key: gKey, bytes: buildFakeCanonicalMp3(10, 11), contentType: 'audio/mpeg' });
+      await prisma.guestStoryAudioSegment.create({
+        data: {
+          id: randomUUID(),
+          manifestId: gManifest.id,
+          segmentIndex: 0,
+          text: 'gexp seg',
+          textHash: `gth_m8052_${m8052Tag}`,
+          status: 'ready',
+          storageKey: gKey,
+          contentType: 'audio/mpeg',
+          byteLength: 4170,
+          durationMs: 261,
+          readyAt: new Date(),
+        },
+      });
+      await purgeExpiredGuestData(guestCutoff);
+      assert.strictEqual(await prisma.guestStoryWork.findUnique({ where: { id: guestAudioWork.id } }), null, '过期 Guest Work gone');
+      assert.strictEqual(await prisma.guestStoryAudioManifest.count({ where: { storyWorkId: guestAudioWork.id } }), 0, '过期 Guest Manifest gone');
+      assert.strictEqual(await prisma.guestStoryAudioSegment.count({ where: { manifestId: gManifest.id } }), 0, '过期 Guest Segment gone');
+      assert.strictEqual(await storage.exists(gKey), false, '过期 Guest Object gone');
+      assert.strictEqual(await prisma.audioStorageDeletion.count({ where: { storageKey: gKey } }), 0, '过期 Guest tombstone gone');
+      // 清理本节 trash 残留（合法路径删掉，避免污染；restore 后为 active，需先再 trash）
+      await trashStoryWorkForSubject(user1Subject, trashAudioWork.id);
+      await permanentlyDeleteStoryWorkForSubject(user1Subject, trashAudioWork.id);
+      assert.strictEqual(await storage.exists(trashKey), false, '本节 trash 清理后 Object gone');
+    } finally {
+      if (prevDriver === undefined) delete process.env.AUDIO_STORAGE_DRIVER;
+      else process.env.AUDIO_STORAGE_DRIVER = prevDriver;
+      if (prevRoot === undefined) delete process.env.AUDIO_LOCAL_ROOT;
+      else process.env.AUDIO_LOCAL_ROOT = prevRoot;
+      resetCache();
+      resetAudioAssetStorageForTests();
+      await fs.promises.rm(tmpRoot, { recursive: true, force: true });
+      await prisma.audioStorageDeletion.deleteMany({
+        where: { storageKey: { startsWith: `story-audio/${m8052Tag}-` } },
+      });
+    }
+    console.log('PASS: M8-05-02 Audio-aware 扩展通过');
+  }
 }
 
 const testPromise = runStoryWorkRetentionTests()

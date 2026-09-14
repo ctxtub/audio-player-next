@@ -22,6 +22,9 @@ export interface PurgeResult {
  * 清理指定截止时间前未更新的访客数据（默认 30 天前）。
  * M5-02：Anchor delegate 逻辑 rename（物理表不变）；Guest Work Progress 以 Work FK cascade 为主，
  * 随 GuestStoryWork 物理删除级联清理，此处无需额外 deleteMany（保持既有 GC 语义不变）。
+ * M8-05-02：Guest Work 物理删除经 executeStoryWorkPhysicalDelete 统一 seam 自动获得
+ * audio-aware lifecycle（事务内 tombstone + commit 后 best-effort cleanup）；此处严禁复制
+ * Audio GC 实现（不得直调 storage.delete / tombstone 表），回归由 audio-lifecycle-delete 套件锁定。
  */
 export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeResult> {
     const threshold = cutoffDate ?? new Date(Date.now() - THIRTY_DAYS_MS);

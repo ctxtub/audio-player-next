@@ -838,7 +838,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-work, library, retention, gc, trash]
     spec_path: docs/e2e/07-故事库与作品资产/07-StoryWork数据保留与Guest-GC.md
-    executable_ids: [exec-story-work-retention, exec-audio-storage-cleanup, exec-audio-storage-cleanup-integration]
+    executable_ids: [exec-story-work-retention, exec-audio-storage-cleanup, exec-audio-storage-cleanup-integration, exec-audio-lifecycle-delete, exec-audio-lifecycle-delete-integration]
     fixtures: []
     owner: story-library
   - case_id: server-state-identity-isolation
@@ -1460,6 +1460,14 @@ executables:
     display_name_zh: M8 deletion tombstone与清理引擎集成
     layer: L2
     path: ./tests/integration/audio/audio-storage-cleanup-integration.integration.test.ts
+  - executable_id: exec-audio-lifecycle-delete
+    display_name_zh: M8 audio-aware删除生命周期单元
+    layer: L1
+    path: ./tests/unit/audio/audio-lifecycle-delete.unit.test.ts
+  - executable_id: exec-audio-lifecycle-delete-integration
+    display_name_zh: M8 audio-aware删除生命周期集成
+    layer: L2
+    path: ./tests/integration/audio/audio-lifecycle-delete-integration.integration.test.ts
   - executable_id: exec-story-work-read
     display_name_zh: StoryWork读模型与检索
     layer: L2

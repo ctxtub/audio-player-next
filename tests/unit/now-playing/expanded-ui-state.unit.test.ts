@@ -140,13 +140,12 @@ async function runExpandedUiStateTests(): Promise<void> {
         assert.ok(!code.includes('usePathname'), 'M7 entry 不得再绑定 usePathname');
         assert.ok(!code.includes('router.push'), 'M7 entry 不得再 router.push');
         assert.ok(!code.includes("push('/player')"), 'M7 产品路径不得 push /player');
-        assert.ok(!code.includes('push(NOW_PLAYING_COMPAT_ROUTE) && false'), 'sanity');
-        // /player 常量保留为 deprecated 兼容（M9-02 物理删除后常量仍保留，见禁止项；验收 10）。
-        assert.ok(code.includes("'/player'"), 'compat 常量仍保留 /player（deprecated 兼容）');
-        assert.ok(
-            src.includes('@deprecated') || src.includes('deprecated'),
-            '遗留路由工厂应标记 deprecated'
-        );
+        // M9-04：legacy 三符号已删除（M6-02-08 行为锁同步退役），此处同步清理 sanity 行；
+        // 注释剥离后零 /player 字面量，barrel 亦不再导出死符号。
+        assert.ok(!code.includes("'/player'"), 'M9-04 起 entry 注释剥离后不得再含 /player');
+        assert.ok(!src.includes('NOW_PLAYING_COMPAT_ROUTE'), '兼容常量必须已删除');
+        assert.ok(!src.includes('shouldSuppressNowPlayingEntry'), '兼容判定必须已删除');
+        assert.ok(!/\bcreateNowPlayingEntryController\b/.test(src), '兼容工厂必须已删除');
         // M9-02：旧 Player surface 已物理退役（仅剩 redirect page.tsx）。
         assert.ok(
             !fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.tsx')),

@@ -3,11 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
-// 中文注释：M7-04-04 Production Cutover 静态守卫（L1，纯静态，不触库/网络）。
+// 中文注释：M7-04-04 Production Cutover 静态守卫（L1，纯静态，不触库/网络，M9-04 closure 收紧）。
 // 锁定 spec §6.1/§49/§50/§52：正常产品行为 0 个 navigate/push/link 到 /player
-// （allowlist 制，不是 repo 全局字符串归零）；/player 物理保留至 M9；
-// deprecated 兼容符号保留至 M9；NowPlaying 不依赖旧 AudioPlayer；
-// NowPlaying 不拼 continuation Prompt；M7-01 UI Store 不含领域状态。
+// （allowlist 制，不是 repo 全局字符串归零）；/player 兼容路由仅剩单文件
+// app/(main)/player/page.tsx（redirect）；M9-04 起 deprecated 兼容三符号已删除；
+// NowPlaying 不依赖旧 AudioPlayer；NowPlaying 不拼 continuation Prompt；M7-01 UI Store 不含领域状态。
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
 
@@ -57,17 +57,16 @@ const stripComments = (src: string): string =>
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/(^|\s)\/\/.*$/gm, '$1');
 
-// allowlist（允许保留，守卫里写死，spec §50/M9）：
-// 1. app/(main)/player/** —— M9-02 起仅剩 redirect page.tsx（旧 surface 已物理删除）；
-// 2. components/NowPlaying/useNowPlayingEntry.ts —— @deprecated
-//    NOW_PLAYING_COMPAT_ROUTE / shouldSuppressNowPlayingEntry /
-//    createNowPlayingEntryController（M9 删除 /player 时一并移除；M7 产品路径不用它们）；
-// 3. M6/M9 compatibility tests —— tests/unit/now-playing/mini-now-playing-semantic.unit.test.ts
-//    M6-02-08 锁定 push('/player') 语义（deprecated 工厂行为锁）；
-// 4. 描述 legacy/M9 的文档 —— docs/specs/2026-09-11-m7-expanded-now-playing.md
-//    §6.1/§50 与 docs/e2e legacy 描述（产品运行时代码外，允许出现 /player 字符串）。
-const ALLOWLIST_DIR_PREFIX = 'app/(main)/player/';
-const ALLOWLIST_FILES = new Set<string>(['components/NowPlaying/useNowPlayingEntry.ts']);
+// allowlist（M9-04 closure 收紧，spec §50/M9）：
+// 1. app/(main)/player/page.tsx 单文件语义 —— M9-02 起目录仅剩 redirect page.tsx，
+//    宽目录 allowlist 已收窄为单文件；守卫同步断言目录内无其他文件（防回流）；
+//    components/NowPlaying/useNowPlayingEntry.ts 已从 allowlist 移除
+//    （三符号删除后注释剥离后零 /player 字面量）；
+// 2. tests/docs → 仅允许验证 /player → /library compatibility 的上下文
+//    （tests/unit/navigation/*compat*、tests/system/browser harness/scenarios compat、
+//    docs/e2e/09-*；产品运行时代码外允许出现 /player 字符串；
+//    .e2e-runtime/snapshots 等非产品面不参与审计，审计路径仅下述 AUDIT_ROOTS）。
+const ALLOWLIST_FILES = new Set<string>(['app/(main)/player/page.tsx']);
 
 // 审计路径（spec §50 正常产品流）：components/**、app/(main)/**、lib/client/**、stores/**。
 const AUDIT_ROOTS = ['components', 'app/(main)', 'lib/client', 'stores'];
@@ -96,9 +95,6 @@ const walkAuditFiles = (): string[] => {
 
 const isAllowlisted = (rel: string): boolean => {
     const posix = rel.split(path.sep).join('/');
-    if (posix === 'app/(main)/player' || posix.startsWith(ALLOWLIST_DIR_PREFIX)) {
-        return true;
-    }
     if (ALLOWLIST_FILES.has(posix)) {
         return true;
     }
@@ -157,15 +153,24 @@ async function runProductionCutoverUnit(): Promise<void> {
             }
         }
         assert.deepStrictEqual(violations, [], `正常产品流不得 navigate/push/link 到 /player（allowlist 外零容忍）：${violations.join('；')}`);
-        // allowlist 自身存在性（防误删/防 guard 空转；M9-02 起 player 目录仅剩 redirect page）：
+        // allowlist 自身存在性（防误删/防 guard 空转；M9-04 起收窄为单文件 page.tsx）：
         assert.ok(
             fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/page.tsx')),
-            'allowlist 目录 app/(main)/player/** 必须存在（M9-02 起仅剩 page.tsx）'
+            'allowlist 单文件 app/(main)/player/page.tsx 必须存在（M9-02 起仅剩 redirect page）'
         );
-        assert.ok(
-            fs.existsSync(path.resolve(process.cwd(), 'components/NowPlaying/useNowPlayingEntry.ts')),
-            'allowlist 文件 useNowPlayingEntry.ts 必须存在（deprecated 兼容）'
-        );
+        // 目录防回流：除 page.tsx 外无其他产品文件（系统点文件除外）。
+        {
+            const entries = fs
+                .readdirSync(path.resolve(process.cwd(), 'app/(main)/player'))
+                .filter((n) => !n.startsWith('.'));
+            assert.deepStrictEqual(entries.sort(), ['page.tsx'], `player 目录必须只含 page.tsx（防回流），实际=${entries.join(',')}`);
+        }
+        // useNowPlayingEntry 已从 allowlist 移除：注释剥离后零 /player 字面量。
+        {
+            const entryCode = stripComments(readRepoText('components/NowPlaying/useNowPlayingEntry.ts'));
+            assert.ok(!entryCode.includes('/player'), 'useNowPlayingEntry 注释剥离后不得再含 /player（M9-04 已删三符号）');
+            assert.ok(!entryCode.includes('NOW_PLAYING_COMPAT_ROUTE'), 'useNowPlayingEntry 不得再含兼容常量名');
+        }
         console.log(`PASS: M7-04-04-P1 zero-player-navigation files=${files.length}`);
     }
 
@@ -184,26 +189,34 @@ async function runProductionCutoverUnit(): Promise<void> {
         console.log('PASS: M7-04-04-P2 player-physically-retired');
     }
 
-    console.log('=== M7-04-04-P3: deprecated 兼容符号仍存在（M9 前不删除） ===');
+    console.log('=== M7-04-04-P3: deprecated 兼容符号已移除（M9-04 closure） ===');
     {
         const src = readRepoText('components/NowPlaying/useNowPlayingEntry.ts');
-        assert.ok(src.includes('NOW_PLAYING_COMPAT_ROUTE'), '兼容常量必须保留');
-        assert.ok(src.includes('shouldSuppressNowPlayingEntry'), '兼容判定必须保留');
-        assert.ok(src.includes('createNowPlayingEntryController'), '兼容工厂必须保留');
+        const code = stripComments(src);
+        assert.ok(!src.includes('NOW_PLAYING_COMPAT_ROUTE'), '兼容常量必须已删除');
+        assert.ok(!src.includes('shouldSuppressNowPlayingEntry'), '兼容判定必须已删除');
+        assert.ok(!/\bcreateNowPlayingEntryController\b/.test(src), '兼容工厂必须已删除');
         assert.ok(src.includes('createExpandedNowPlayingEntryController'), 'M7 纯工厂必须保留');
-        assert.ok(src.includes('@deprecated'), '遗留符号必须标记 @deprecated');
-        const mod = loadViaJiti('./components/NowPlaying/useNowPlayingEntry.ts') as unknown as {
-            NOW_PLAYING_COMPAT_ROUTE: string;
-            shouldSuppressNowPlayingEntry: (p: string | null) => boolean;
-            createNowPlayingEntryController: (push: (u: string) => void, p: string | null) => {
-                openDetails: () => void;
-                openExpanded: () => void;
-            };
-        };
-        assert.strictEqual(mod.NOW_PLAYING_COMPAT_ROUTE, '/player', '兼容常量精确为 /player');
-        assert.strictEqual(mod.shouldSuppressNowPlayingEntry('/player'), true);
-        assert.strictEqual(mod.shouldSuppressNowPlayingEntry('/library'), false);
-        console.log('PASS: M7-04-04-P3 compat-symbols-kept');
+        assert.ok(src.includes('useNowPlayingEntry'), 'M7 hook 必须保留');
+        assert.ok(src.includes('NowPlayingEntryController'), 'M7 控制器类型必须保留');
+        assert.ok(!code.includes('/player'), '注释剥离后不得再含 /player 字面量');
+        // barrel 同步清理：不再 re-export 死符号，仅保留 live facade。
+        const barrel = readRepoText('components/NowPlaying/index.ts');
+        assert.ok(!barrel.includes('NOW_PLAYING_COMPAT_ROUTE'), 'barrel 不得再导出兼容常量');
+        assert.ok(!barrel.includes('shouldSuppressNowPlayingEntry'), 'barrel 不得再导出兼容判定');
+        assert.ok(!/\bcreateNowPlayingEntryController\b/.test(barrel), 'barrel 不得再导出兼容工厂');
+        assert.ok(barrel.includes('createExpandedNowPlayingEntryController'), 'barrel 必须保留 M7 纯工厂');
+        assert.ok(barrel.includes('useNowPlayingEntry'), 'barrel 必须保留 M7 hook');
+        // 运行时亦已移除（防静态/运行时分叉）。
+        const mod = loadViaJiti('./components/NowPlaying/useNowPlayingEntry.ts') as unknown as Record<
+            string,
+            unknown
+        >;
+        assert.strictEqual(mod['NOW_PLAYING_COMPAT_ROUTE'], undefined, '运行时兼容常量必须已移除');
+        assert.strictEqual(mod['shouldSuppressNowPlayingEntry'], undefined, '运行时兼容判定必须已移除');
+        assert.strictEqual(mod['createNowPlayingEntryController'], undefined, '运行时兼容工厂必须已移除');
+        assert.ok(typeof mod['createExpandedNowPlayingEntryController'] === 'function', '运行时 M7 纯工厂必须保留');
+        console.log('PASS: M7-04-04-P3 compat-symbols-removed');
     }
 
     console.log('=== M7-04-04-P4: NowPlaying 不依赖旧 AudioPlayer ===');

@@ -15,10 +15,7 @@ export {
 } from './deriveMiniNowPlayingViewModel';
 export { MiniMetadataButton, MiniPlaybackButton, MiniProgressRail } from './presentation';
 export {
-    NOW_PLAYING_COMPAT_ROUTE,
     createExpandedNowPlayingEntryController,
-    createNowPlayingEntryController,
-    shouldSuppressNowPlayingEntry,
     useNowPlayingEntry,
     type NowPlayingEntryController,
 } from './useNowPlayingEntry';

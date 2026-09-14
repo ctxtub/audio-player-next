@@ -1261,6 +1261,18 @@ cases:
     executable_ids: [exec-legacy-playback-compatibility-retirement]
     fixtures: []
     owner: smoke-baseline
+  - case_id: m9-player-retirement-closure
+    display_name_zh: 死代码与终局守卫收口
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: 死代码收口与allowlist收紧且M9终局门禁全绿
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [router, compatibility, playback, session, cleanup, closure]
+    spec_path: docs/e2e/09-旧播放器退役与兼容收口/04-死代码与终局守卫收口.md
+    executable_ids: [exec-m9-player-retirement-closure, exec-l3-m9-player-retirement-closure]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1815,3 +1827,11 @@ executables:
     display_name_zh: 旧播放兼容适配器退役静态守卫
     layer: L1
     path: ./tests/unit/navigation/legacy-playback-compatibility-retirement.unit.test.ts
+  - executable_id: exec-m9-player-retirement-closure
+    display_name_zh: 死代码终局守卫静态守卫
+    layer: L1
+    path: ./tests/unit/navigation/m9-player-retirement-closure.unit.test.ts
+  - executable_id: exec-l3-m9-player-retirement-closure
+    display_name_zh: L3死代码终局4例全链路
+    layer: L3
+    path: ./tests/system/browser/scenarios/m9-player-retirement-closure.spec.ts

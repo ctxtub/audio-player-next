@@ -14,9 +14,7 @@ import {
     mapSessionStatusToMiniStatus,
 } from '../../../components/NowPlaying/deriveMiniNowPlayingViewModel';
 import {
-    NOW_PLAYING_COMPAT_ROUTE,
-    createNowPlayingEntryController,
-    shouldSuppressNowPlayingEntry,
+    createExpandedNowPlayingEntryController,
 } from '../../../components/NowPlaying/useNowPlayingEntry';
 import { MINI_NOW_PLAYING_FALLBACK_TITLE } from '../../../components/NowPlaying/types';
 
@@ -365,43 +363,38 @@ async function runMiniSemanticTests(): Promise<void> {
     }
     console.log('PASS: M6-02-07 config independence');
 
-    console.log('=== M6-02-08: openExpanded 精确 push(/player) ===');
+    console.log('=== M6-02-08: openExpanded 经 live facade 直开 Expanded（M9-04 退役路由锁） ===');
     {
-        assert.strictEqual(NOW_PLAYING_COMPAT_ROUTE, '/player');
-        assert.strictEqual(shouldSuppressNowPlayingEntry('/player'), true, '/player 上 no-op');
-        assert.strictEqual(shouldSuppressNowPlayingEntry('/library'), false);
-        assert.strictEqual(shouldSuppressNowPlayingEntry(null), false);
-        const calls: string[] = [];
-        const ctl = createNowPlayingEntryController(
-            (url) => {
-                calls.push(url);
-            },
-            '/library'
-        );
+        // M9-04：M6 legacy 工厂（push /player）已删除，行为锁同步退役；
+        // 改写为对 live facade（createExpandedNowPlayingEntryController）的等价断言：
+        // openDetails/openExpanded 同义委托同一 UI open，不触路由/播放，URL 不变。
+        const entrySrc = readRepoText('components/NowPlaying/useNowPlayingEntry.ts');
+        assert.ok(!entrySrc.includes('NOW_PLAYING_COMPAT_ROUTE'), 'legacy 常量必须已删除');
+        assert.ok(!entrySrc.includes('shouldSuppressNowPlayingEntry'), 'legacy 判定必须已删除');
+        assert.ok(!/\bcreateNowPlayingEntryController\b/.test(entrySrc), 'legacy 工厂必须已删除');
+        const calls: Array<HTMLElement | null | undefined> = [];
+        const ctl = createExpandedNowPlayingEntryController((target) => {
+            calls.push(target);
+        });
         ctl.openExpanded();
-        assert.deepStrictEqual(calls, ['/player'], 'openExpanded 精确 push(/player)');
+        assert.strictEqual(calls.length, 1, 'openExpanded 必须委托 UI open 一次');
         calls.length = 0;
         ctl.openDetails();
-        assert.deepStrictEqual(calls, ['/player'], 'openDetails 同义 push(/player)');
-        const suppressed: string[] = [];
-        const ctlSuppressed = createNowPlayingEntryController(
-            (url) => {
-                suppressed.push(url);
-            },
-            '/player'
-        );
-        ctlSuppressed.openExpanded();
-        ctlSuppressed.openDetails();
-        assert.deepStrictEqual(suppressed, [], '/player 上两次调用均 no-op');
-        const entrySrc = readRepoText('components/NowPlaying/useNowPlayingEntry.ts');
-        assert.ok(entrySrc.includes("'/player'"), 'facade 必须含精确路由字符串');
-        assert.ok(!entrySrc.includes('/player/') && !entrySrc.includes('/player?'), '不得附加后缀/查询');
+        assert.strictEqual(calls.length, 1, 'openDetails 同义委托 UI open 一次');
+        const target = {} as unknown as HTMLElement;
+        calls.length = 0;
+        ctl.openExpanded(target);
+        assert.strictEqual(calls[0], target, '透传触发元素供焦点返回');
+        // facade 不触路由：源码执行面零路由绑定。
+        assert.ok(!entrySrc.includes('useRouter'), 'live facade 不得绑定 useRouter');
+        assert.ok(!entrySrc.includes('usePathname'), 'live facade 不得绑定 usePathname');
+        assert.ok(!entrySrc.includes("'/player'"), 'live facade 不得再含旧路由字符串');
         const miniSrc = readRepoText('components/NowPlaying/MiniNowPlaying.tsx');
         assert.ok(miniSrc.includes('openDetails'), 'Mini 必须经 facade 打开详情');
         assert.ok(!miniSrc.includes("router.push('/player')"), 'Mini 不得硬编码路由 push');
         assert.ok(!miniSrc.includes("push('/player')"), 'Mini 不得直调 push');
     }
-    console.log('PASS: M6-02-08 entry contract');
+    console.log('PASS: M6-02-08 entry contract (live facade)');
 
     console.log('=== M6-02-09: Mini 模块禁止 import 历史播放面 ===');
     {

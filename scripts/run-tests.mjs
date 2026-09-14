@@ -152,6 +152,7 @@ const SUITES = [
     { id: 'player-compat-redirect', path: './tests/unit/navigation/player-compat-redirect.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'legacy-player-surface-retirement', path: './tests/unit/navigation/legacy-player-surface-retirement.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'legacy-playback-compatibility-retirement', path: './tests/unit/navigation/legacy-playback-compatibility-retirement.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'm9-player-retirement-closure', path: './tests/unit/navigation/m9-player-retirement-closure.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'sleep-timer-semantics', path: './tests/unit/now-playing/sleep-timer-semantics.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'sleep-timer-control', path: './tests/unit/now-playing/sleep-timer-control.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'sleep-timer-countdown', path: './tests/unit/playback/sleep-timer-countdown.unit.test.ts', group: 'unit', needs_db: false },

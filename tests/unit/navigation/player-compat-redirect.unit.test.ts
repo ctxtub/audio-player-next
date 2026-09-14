@@ -14,9 +14,10 @@ const stripComments = (src: string): string =>
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/(^|\s)\/\/.*$/gm, '$1');
 
-// allowlist：M9-01 兼容收口形态；M9-02 起旧 Player 已物理删除，player 目录仅剩 page.tsx（见 M9-02 oracle）。
-const ALLOWLIST_DIR_PREFIX = 'app/(main)/player/';
-const ALLOWLIST_FILES = new Set<string>(['components/NowPlaying/useNowPlayingEntry.ts']);
+// allowlist（M9-04 closure 收紧）：宽目录收窄为单文件 app/(main)/player/page.tsx；
+// components/NowPlaying/useNowPlayingEntry.ts 已移除（三符号删除后零 /player）。
+// 审计路径口径与既有审计一致（.e2e-runtime/snapshots 等非产品面不参与）。
+const ALLOWLIST_FILES = new Set<string>(['app/(main)/player/page.tsx']);
 
 // 审计路径（M7 §50 正常产品流口径，M9-01 沿用）：components/**、app/(main)/**、lib/client/**、stores/**。
 const AUDIT_ROOTS = ['components', 'app/(main)', 'lib/client', 'stores'];
@@ -41,12 +42,13 @@ const walkAuditFiles = (): string[] => {
 
 const isAllowlisted = (rel: string): boolean => {
   const posix = rel.split(path.sep).join('/');
-  if (posix === 'app/(main)/player' || posix.startsWith(ALLOWLIST_DIR_PREFIX)) return true;
   if (ALLOWLIST_FILES.has(posix)) return true;
   return false;
 };
 
 // 产品导航到 /player 的字面形态（注释剥离后匹配；M9-01 新增 redirect 形态不计入产品导航，单列断言）。
+// 本文件内的检测正则属于 compat 验证（允许保留检测形态），不需要引用死符号；
+// 产品代码侧 push(NOW_PLAYING_COMPAT_ROUTE) 形态 M9-04 起亦为 0（符号已删，守卫防回流）。
 const NAV_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: "router.push('/player')", re: /\.push\s*\(\s*['"]\/player['"]\s*\)/ },
   { name: "router.replace('/player')", re: /\.replace\s*\(\s*['"]\/player['"]\s*\)/ },
@@ -161,15 +163,22 @@ async function runPlayerCompatRedirectUnit(): Promise<void> {
       }
     }
     assert.deepStrictEqual(violations, [], `产品路径不得新增 /player 导航：${violations.join('；')}`);
-    // allowlist 自身存在性（防 guard 空转；M9-02 起 player 目录仅剩 page.tsx）。
+    // allowlist 自身存在性（防 guard 空转；M9-04 起收窄为单文件 page.tsx，目录防回流）。
     assert.ok(
       fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/page.tsx')),
-      'allowlist 目录必须存在（M9-02 起仅剩 page.tsx）',
+      'allowlist 单文件必须存在（M9-02 起仅剩 page.tsx）',
     );
-    assert.ok(
-      fs.existsSync(path.resolve(process.cwd(), 'components/NowPlaying/useNowPlayingEntry.ts')),
-      'allowlist deprecated 文件必须存在',
-    );
+    {
+      const entries = fs
+        .readdirSync(path.resolve(process.cwd(), 'app/(main)/player'))
+        .filter((n) => !n.startsWith('.'));
+      assert.deepStrictEqual(entries.sort(), ['page.tsx'], `player 目录必须只含 page.tsx，实际=${entries.join(',')}`);
+    }
+    // useNowPlayingEntry 已从 allowlist 移除：注释剥离后零 /player。
+    {
+      const entryCode = stripComments(readRepoText('components/NowPlaying/useNowPlayingEntry.ts'));
+      assert.ok(!entryCode.includes('/player'), 'useNowPlayingEntry 不得再含 /player（M9-04）');
+    }
     console.log(`PASS: M9-01-P4 zero-new-player-navigation files=${files.length}`);
   }
 

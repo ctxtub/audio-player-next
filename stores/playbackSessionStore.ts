@@ -54,7 +54,7 @@ import {
   resolvePromotedNextParagraphIndex,
   shouldPreserveDraftBreakpointOnPromote,
 } from '@/lib/playback/progress';
-import { createPlaybackSessionId } from '@/lib/playback/session';
+import { createPlaybackSessionId, isValidPlaybackSessionId } from '@/lib/playback/session';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
 import {
   resolveDefaultSessionTimer,
@@ -64,6 +64,13 @@ import { usePlaybackStore } from '@/stores/playbackStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useConfigStore } from '@/stores/configStore';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
+import {
+  ensureSegment as ensureCanonicalSegment,
+  getPlaybackManifest as fetchPlaybackManifest,
+  isCanonicalPlaybackUrl,
+  selectWorkParagraphs,
+  shouldUseCanonicalAudio,
+} from '@/lib/client/storyAudio';
 import {
   resolvePlaybackDraftSnapshot,
   type PlaybackDraftSnapshot,
@@ -192,6 +199,15 @@ export interface SessionRehydrateDeps {
   }>;
   ensureChatLoaded?: () => Promise<void>;
   /**
+   * M8-04 Work Manifest 只读投影（spec §23 Segmentation SSOT）。
+   * 生产默认经 storyAudio.getPlaybackManifest；测试可注入 fake；
+   * 返回 null 表示无 Manifest（回落本地切分）；抛错一律回落本地，不阻断水合。
+   */
+  getManifest?: (workId: number) => Promise<{
+    segments: Array<{ index: number; text: string }>;
+    segmentationVersion?: string;
+  } | null>;
+  /**
    * M5-09 fixup canonical：Draft 快照解析（Modern first → Legacy fallback）。
    * 生产默认经 resolvePlaybackDraftSnapshot；测试可注入 fake snapshot。
    */
@@ -247,6 +263,80 @@ const abortPrefetch = () => {
 };
 
 /**
+ * M8-04 canonical ensure 重试上限（spec §15.3 retryAfter 500ms 轮询）。
+ * Lease TTL 60s，TTS 通常数秒；上限 20 次（约 10s）后按失败抛错，
+ * 由 play/prefetch 按 error/静默路径处理，不无限等待。
+ */
+const CANONICAL_ENSURE_MAX_ATTEMPTS = 20;
+
+/** 仅 blob: 才 revoke（canonical /api/audio/segments/* 永不 revoke，spec §19）。 */
+function revokeAudioUrlIfBlob(url: string | null): void {
+  if (typeof url !== 'string' || url.length === 0) return;
+  if (isCanonicalPlaybackUrl(url)) return;
+  if (!url.startsWith('blob:')) return;
+  try {
+    URL.revokeObjectURL(url);
+  } catch {
+    // 忽略回收失败。
+  }
+}
+
+function sleepMs(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * M8-04 Work Segment canonical 获取（含 preparing 轮询，不动 M5 stale 语义）。
+ *
+ * - ready → 返回 playbackUrl（/api/audio/segments/<id>，永不 revoke）；
+ * - preparing → 按 retryAfterMs 等待后重试（上限内），abort/stale 由调用方判定；
+ * - 抛错 → 由调用方按 error/静默路径处理（play 置 error+Toast，prefetch 静默）。
+ */
+async function fetchCanonicalAudioUrlWithRetry(
+  workId: number,
+  segmentIndex: number,
+  sessionId: string,
+  options?: { signal?: AbortSignal },
+): Promise<string> {
+  let attempts = 0;
+  for (;;) {
+    attempts += 1;
+    const output = await ensureCanonicalSegment({ workId, segmentIndex, sessionId });
+    if (output.status === 'ready') {
+      return output.segment.playbackUrl;
+    }
+    if (attempts >= CANONICAL_ENSURE_MAX_ATTEMPTS) {
+      throw new Error('canonical segment preparing timeout');
+    }
+    if (options?.signal?.aborted) {
+      throw new Error('canonical prefetch aborted');
+    }
+    const retryAfter =
+      typeof (output as { retryAfterMs?: unknown }).retryAfterMs === 'number'
+        ? ((output as { retryAfterMs: number }).retryAfterMs as number)
+        : 500;
+    await sleepMs(Math.max(0, Math.min(retryAfter, 2000)), options?.signal);
+    if (options?.signal?.aborted) {
+      throw new Error('canonical prefetch aborted');
+    }
+  }
+}
+
+/**
  * M5-09 fixup：Draft 快照默认解析——只消费 canonical resolver，不再理解 wire 结构。
  * Modern-first 优先级与 Legacy 只读 fallback 均收敛在 Chat domain 层。
  */
@@ -273,6 +363,18 @@ const defaultDeps: Required<SessionRehydrateDeps> = {
   ensureChatLoaded: async () => {
     await useChatStore.getState().initForUser();
   },
+  getManifest: async (workId: number) => {
+    try {
+      const manifest = await fetchPlaybackManifest({ workId });
+      if (!manifest) return null;
+      return {
+        segments: manifest.segments,
+        segmentationVersion: manifest.segmentationVersion,
+      };
+    } catch {
+      return null;
+    }
+  },
   findDraftSnapshot: (messageId: string) => defaultFindDraftSnapshot(messageId),
   findDraftStoryText: (messageId: string) => defaultFindDraftStoryText(messageId),
   clearAnchor: (sessionId: string) => clearPlaybackAnchor({ sessionId }),
@@ -286,6 +388,7 @@ function resolveDeps(deps?: SessionRehydrateDeps): Required<SessionRehydrateDeps
     getAnchor: deps?.getAnchor ?? defaultDeps.getAnchor,
     getWork: deps?.getWork ?? defaultDeps.getWork,
     ensureChatLoaded: deps?.ensureChatLoaded ?? defaultDeps.ensureChatLoaded,
+    getManifest: deps?.getManifest ?? defaultDeps.getManifest,
     findDraftSnapshot: deps?.findDraftSnapshot ?? defaultDeps.findDraftSnapshot,
     findDraftStoryText: deps?.findDraftStoryText ?? defaultDeps.findDraftStoryText,
     clearAnchor: deps?.clearAnchor ?? defaultDeps.clearAnchor,
@@ -441,7 +544,38 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     // —— §25.3 Hash Validation（统一 segmentation SSOT） ——
     const normalized = normalizeStoryText(storyText);
     const currentHash = computeStoryContentHash(normalized);
-    const paragraphs = segmentStoryText(normalized);
+    const localParagraphs = segmentStoryText(normalized);
+    // M8-04 Segmentation SSOT（spec §23）：Manifest 已存在 → Work 播放段落文本
+    // SSOT = Manifest.segments[].text，不得重跑未来版本 segmentStoryText()；
+    // 无 Manifest → 回落本地切分，第一次真正请求时 ensure 侧 lazy 建 manifest。
+    // Draft 恒本地切分（不受开关影响）。
+    let paragraphs = localParagraphs;
+    let effectiveSegmentationVersion = SEGMENTATION_VERSION;
+    if (anchor.source.kind === 'work') {
+      let useCanonical = false;
+      try {
+        useCanonical = shouldUseCanonicalAudio({ kind: 'work', workId: anchor.source.workId });
+      } catch {
+        useCanonical = false;
+      }
+      if (useCanonical) {
+        try {
+          const manifest = await d.getManifest(anchor.source.workId);
+          if (get().hydrationEpoch !== epochAtStart) return false;
+          if (manifest && Array.isArray(manifest.segments) && manifest.segments.length > 0) {
+            paragraphs = selectWorkParagraphs(localParagraphs, manifest);
+            if (
+              typeof manifest.segmentationVersion === 'string' &&
+              manifest.segmentationVersion.length > 0
+            ) {
+              effectiveSegmentationVersion = manifest.segmentationVersion;
+            }
+          }
+        } catch {
+          // Manifest 读取失败 → 回落本地切分，不阻断水合。
+        }
+      }
+    }
     const totalParagraphs = Math.max(1, paragraphs.length);
     const position = decideRehydratedPosition({
       savedNextParagraphIndex: anchor.nextParagraphIndex,
@@ -474,7 +608,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       storyText: normalized,
       paragraphs,
       contentHash: currentHash,
-      segmentationVersion: SEGMENTATION_VERSION,
+      segmentationVersion: effectiveSegmentationVersion,
       lastCompletedParagraphIndex: position.lastCompletedParagraphIndex,
       nextParagraphIndex: position.nextParagraphIndex,
       totalParagraphs,
@@ -705,27 +839,61 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const voiceId = state.voiceId || useConfigStore.getState().apiConfig.voiceId;
     const speed = state.speed || useConfigStore.getState().apiConfig.speed;
 
+    // M8-04 Work Segment audio provider 替换（只替换 provider，不动 M5 identity）：
+    // Work + flag 开启 + 合法 sessionId → canonical（ensureSegment → ready playbackUrl）；
+    // Draft / flag 关闭 / 非法 session → legacy ephemeral TTS。speed 永不进入 asset 身份。
+    let useCanonical = false;
+    let canonicalWorkId: number | null = null;
+    let canonicalSessionId: string | null = null;
+    try {
+      if (
+        state.source?.kind === 'work' &&
+        shouldUseCanonicalAudio(state.source) &&
+        typeof originatingSessionId === 'string' &&
+        isValidPlaybackSessionId(originatingSessionId)
+      ) {
+        useCanonical = true;
+        canonicalWorkId = state.source.workId;
+        canonicalSessionId = originatingSessionId;
+      }
+    } catch {
+      useCanonical = false;
+    }
+
     let audioUrl = state.prefetchedAudioUrl;
     if (state.prefetchingIndex !== paragraphIndex || !audioUrl) {
       set({ status: 'synthesizing' });
-      try {
-        audioUrl = await fetchAudio(textToPlay, voiceId, speed);
-      } catch (err) {
-        // §50 session guard：失败也须确认仍是同一 session 才置 error，避免旧 TTS 失败覆盖新会话。
-        if (get().sessionId !== originatingSessionId) return;
-        set({ status: 'error' });
-        GlassToast.show({ icon: 'fail', content: '语音生成稍有延迟，请重试' });
-        throw err;
+      if (useCanonical && canonicalWorkId !== null && canonicalSessionId !== null) {
+        try {
+          audioUrl = await fetchCanonicalAudioUrlWithRetry(
+            canonicalWorkId,
+            paragraphIndex,
+            canonicalSessionId,
+          );
+        } catch (err) {
+          // §50 session guard：失败也须确认仍是同一 session 才置 error，避免旧结果覆盖新会话。
+          if (get().sessionId !== originatingSessionId) return;
+          set({ status: 'error' });
+          GlassToast.show({ icon: 'fail', content: '语音生成稍有延迟，请重试' });
+          throw err;
+        }
+      } else {
+        try {
+          audioUrl = await fetchAudio(textToPlay, voiceId, speed);
+        } catch (err) {
+          // §50 session guard：失败也须确认仍是同一 session 才置 error，避免旧 TTS 失败覆盖新会话。
+          if (get().sessionId !== originatingSessionId) return;
+          set({ status: 'error' });
+          GlassToast.show({ icon: 'fail', content: '语音生成稍有延迟，请重试' });
+          throw err;
+        }
       }
     }
 
-    // §50 session guard：TTS 晚到必须检查 sessionId，不一致直接丢弃，绝不覆盖新会话。
+    // §50 session guard：async 结果晚到必须检查 sessionId，不一致直接丢弃，绝不覆盖新会话。
+    // M8-04 stale：A ensure 慢、切到 B 后 A 资产可完成保留，但回客户端时 session 失配 → 绝不播放 A。
     if (get().sessionId !== originatingSessionId) {
-      try {
-        if (audioUrl && audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl);
-      } catch {
-        // 忽略回收失败。
-      }
+      revokeAudioUrlIfBlob(audioUrl);
       return;
     }
 
@@ -775,16 +943,35 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const voiceId = state.voiceId || useConfigStore.getState().apiConfig.voiceId;
     const speed = state.speed || useConfigStore.getState().apiConfig.speed;
 
+    // M8-04 lookahead 仍=1（本函数仅被 next+1 调用，绝不首播全篇）：
+    // Work + flag 开启 → ensure N+1；Draft/关闭 → legacy fetchAudio。
+    let prefetchCanonical: { workId: number; sessionId: string } | null = null;
     try {
-      const audioUrl = await fetchAudio(textToPrefetch, voiceId, speed);
+      if (
+        state.source?.kind === 'work' &&
+        shouldUseCanonicalAudio(state.source) &&
+        typeof originatingSessionId === 'string' &&
+        isValidPlaybackSessionId(originatingSessionId)
+      ) {
+        prefetchCanonical = { workId: state.source.workId, sessionId: originatingSessionId };
+      }
+    } catch {
+      prefetchCanonical = null;
+    }
+
+    try {
+      const audioUrl = prefetchCanonical
+        ? await fetchCanonicalAudioUrlWithRetry(
+            prefetchCanonical.workId,
+            paragraphIndex,
+            prefetchCanonical.sessionId,
+            { signal: abortCtrl.signal },
+          )
+        : await fetchAudio(textToPrefetch, voiceId, speed);
       if (abortCtrl.signal.aborted) return;
       // session 已切换则丢弃预取结果，不污染新会话。
       if (get().sessionId !== originatingSessionId) {
-        try {
-          if (audioUrl.startsWith('blob:')) URL.revokeObjectURL(audioUrl);
-        } catch {
-          // ignore
-        }
+        revokeAudioUrlIfBlob(audioUrl);
         return;
       }
       set({ prefetchedAudioUrl: audioUrl, prefetchingIndex: paragraphIndex });
@@ -908,6 +1095,18 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       voiceId: anchor.voiceId,
       speed: anchor.speed,
     });
+    // M8-04 Draft→Work promotion continuity（spec §22.4）：
+    // 当前正在播放的 Draft Blob（transport currentAudioUrl）不打断、不换音源；
+    // 仅丢弃尚未播放的 Draft 预取（prefetched），下一次需要后续/重播 Work Segment
+    // 时才走 canonical path。transport 侧不做任何 stop/pause。
+    try {
+      const stalePrefetch = get().prefetchedAudioUrl;
+      abortPrefetch();
+      revokeAudioUrlIfBlob(stalePrefetch);
+    } catch {
+      // ignore
+    }
+    set({ prefetchedAudioUrl: null, prefetchingIndex: null });
     // 提升后 rate 同步 Transport（与 hydrate/setActive 同口径，不碰 UserConfig）。
     try {
       if (typeof anchor.speed === 'number' && Number.isFinite(anchor.speed)) {

@@ -98,6 +98,8 @@ const SUITES = [
     { id: 'audio-segment-read', path: './tests/integration/audio/audio-segment-read.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'audio-canonical-write', path: './tests/unit/audio/audio-canonical-write.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'audio-ensure-segment', path: './tests/integration/audio/audio-ensure-segment.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'audio-work-playback-read', path: './tests/unit/audio/audio-work-playback-read.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'audio-work-playback-reuse', path: './tests/integration/audio/audio-work-playback-reuse.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-read', path: './tests/integration/persistence-config/story-work-read.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-create', path: './tests/integration/persistence-config/story-work-create.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-lifecycle', path: './tests/integration/persistence-config/story-work-lifecycle.integration.test.ts', group: 'integration', needs_db: true },

@@ -72,8 +72,15 @@ export type StoryWorkSummaryRow = {
 
 /**
  * DB 摘要行 → 前端 Summary DTO
+ *
+ * M8-04 Library audio projection（spec §12.4/§24）：调用方可传入已查到的
+ * Manifest 投影；缺省（mutations/新作品无 Manifest）仍为 missing/null，
+ * DTO 结构恒定，M3 无需处理 null vs missing 双语义。
  */
-export const toSummaryDto = (row: StoryWorkSummaryRow): StoryWorkSummaryDTO => ({
+export const toSummaryDto = (
+  row: StoryWorkSummaryRow,
+  audio?: StoryWorkSummaryDTO['audio'],
+): StoryWorkSummaryDTO => ({
   id: row.id,
   title: row.title,
   excerpt: row.excerpt,
@@ -83,13 +90,16 @@ export const toSummaryDto = (row: StoryWorkSummaryRow): StoryWorkSummaryDTO => (
   deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
-  audio: createMissingAudioProjection(),
+  audio: audio ?? createMissingAudioProjection(),
 });
 
 /**
- * DB 全量行 → 前端 Detail DTO
+ * DB 全量行 → 前端 Detail DTO（audio 同上按需注入，缺省 missing）。
  */
-export const toDetailDto = (row: StoryWorkRow): StoryWorkDetailDTO => ({
+export const toDetailDto = (
+  row: StoryWorkRow,
+  audio?: StoryWorkDetailDTO['audio'],
+): StoryWorkDetailDTO => ({
   id: row.id,
   title: row.title,
   excerpt: row.excerpt,
@@ -99,11 +109,71 @@ export const toDetailDto = (row: StoryWorkRow): StoryWorkDetailDTO => ({
   deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
-  audio: createMissingAudioProjection(),
+  audio: audio ?? createMissingAudioProjection(),
   prompt: row.prompt,
   storyText: row.storyText,
   sourceMessageId: row.sourceMessageId ?? null,
 });
+
+/**
+ * M8-04 Manifest 行 → Library audio 投影（spec §12.4 纯函数）。
+ *
+ * - status = Manifest.status（missing/preparing/ready/failed）；
+ * - durationMs = status==='ready' ? totalDurationMs : null（partial 不暴露）；
+ * - 无 Manifest（null）→ missing/null。
+ */
+export function toAudioProjectionFromManifest(
+  manifest: { status: string; totalDurationMs: number | null } | null,
+): StoryWorkSummaryDTO['audio'] {
+  if (!manifest) return createMissingAudioProjection();
+  const status =
+    manifest.status === 'preparing' ||
+    manifest.status === 'ready' ||
+    manifest.status === 'failed'
+      ? manifest.status
+      : ('missing' as const);
+  if (status === 'ready' && typeof manifest.totalDurationMs === 'number') {
+    return { status, durationMs: manifest.totalDurationMs };
+  }
+  return { status, durationMs: null };
+}
+
+/**
+ * M8-04 按主体批量读取 Manifest 投影（Library list/get 读路径用）。
+ *
+ * User → StoryAudioManifest(storyWorkId in ids)；Guest → GuestStoryAudioManifest。
+ * 无 Manifest 的 workId 缺席 Map，调用方回落 missing。失败不抛（调用方回落 missing）。
+ */
+export async function getAudioProjectionsForSubject(
+  subject: Subject,
+  workIds: number[],
+): Promise<Map<number, StoryWorkSummaryDTO['audio']>> {
+  const out = new Map<number, StoryWorkSummaryDTO['audio']>();
+  const ids = [...new Set(workIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (ids.length === 0) return out;
+  try {
+    if (subject.type === 'user') {
+      const rows = await prisma.storyAudioManifest.findMany({
+        where: { storyWorkId: { in: ids } },
+        select: { storyWorkId: true, status: true, totalDurationMs: true },
+      });
+      for (const r of rows) {
+        out.set(r.storyWorkId, toAudioProjectionFromManifest(r));
+      }
+    } else {
+      const rows = await prisma.guestStoryAudioManifest.findMany({
+        where: { storyWorkId: { in: ids } },
+        select: { storyWorkId: true, status: true, totalDurationMs: true },
+      });
+      for (const r of rows) {
+        out.set(r.storyWorkId, toAudioProjectionFromManifest(r));
+      }
+    }
+  } catch {
+    // 投影读取失败不阻断列表/详情（回落 missing），由 canonical 播放侧按需重建。
+  }
+  return out;
+}
 
 /**
  * Legacy 元数据懒修补（Lazy Backfill）：
@@ -352,8 +422,17 @@ export async function listStoryWorksForSubject(
   // 6. hasMore 必须唯一从 nextCursor 派生（严禁独立计算）
   const hasMore = nextCursor !== null;
 
+  // M8-04 Library audio projection enrichment（spec §12.4/§24）：
+  // 批量读本页 Manifest（无则 missing），DTO 结构恒定。
+  const audioMap = await getAudioProjectionsForSubject(
+    subject,
+    pageRows.map((r) => r.id),
+  );
+
   return {
-    items: pageRows.map(toSummaryDto),
+    items: pageRows.map((row) =>
+      toSummaryDto(row, audioMap.get(row.id) ?? createMissingAudioProjection()),
+    ),
     nextCursor,
     hasMore,
   };
@@ -412,7 +491,9 @@ export async function getStoryWorkForSubject(
     });
   }
 
-  return toDetailDto(row);
+  // M8-04 Library audio projection（spec §12.4）：单条按需 enrichment，无则 missing。
+  const audioMap = await getAudioProjectionsForSubject(subject, [row.id]);
+  return toDetailDto(row, audioMap.get(row.id) ?? createMissingAudioProjection());
 }
 
 /**

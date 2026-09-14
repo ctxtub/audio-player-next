@@ -21,7 +21,7 @@ import {
     symlinkSync,
     writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { startMockServer, stopMockServer } from './mock-openai.mjs';
 
@@ -295,6 +295,10 @@ export async function ensureSnapshot(sha, env, opts = {}) {
  * 构造快照子进程合成环境（隔离库 + 合成 secret + 全合成假上游）。
  * M5-10 fixup-2：统一注入 probe 显式开启信号（构建时内联进 client/server 产物，
  * 运行时同样可见）；缺省 ambient 即使含该变量亦被覆盖为开启（harness 内恒开）。
+ * M8-04：统一注入 canonical 音频本地存储（driver=local + 可写独立根；缺省
+ * `/app/audio` 在开发机/CI 均不可写，ensureSegment 会 AUDIO_STORAGE_FAILED）。
+ * 音频根取隔离库同目录下 `audio/`（与隔离库同生命周期；storageKey 全 UUID，
+ * 跨 run 无碰撞；legacy TTS 不经此存储，其他 spec 行为不变）。
  * @param dbFile 本次启动独占的隔离库文件
  * @param mockBaseUrl mock 上游 baseURL（如 http://localhost:PORT/v1）
  * @returns 合成环境
@@ -316,6 +320,8 @@ export function buildSnapshotEnv(dbFile, mockBaseUrl) {
             { value: 'nova', label: 'Nova', description: '女性、活泼' },
             { value: 'shimmer', label: 'Shimmer', description: '女性、温暖' },
         ]),
+        AUDIO_STORAGE_DRIVER: 'local',
+        AUDIO_LOCAL_ROOT: join(dirname(dbFile), 'audio'),
     };
 }
 

@@ -19,6 +19,7 @@ import { createConnection } from 'node:net';
  * 7. 干净树放行：干净 fixture 走到守卫通过点（不跑完整 build），untracked 不阻断。
  * 8. M5-10 fixup-2 probe 开启信号：buildSnapshotEnv 恒注入显式开启值；
  *    含 probe 令牌的 ready marker 直接复用，旧格式 marker 一律重建（不信任旧构建）。
+ * 9. M8-04 canonical 音频存储：buildSnapshotEnv 恒注入 local 驱动 + 隔离库同目录 audio/ 根。
  *
  * 隔离约束：全程仅 localhost；app-server 用 31120-31150 范围空闲端口，
  * mock 用随机空闲端口；禁止触碰 :31111/:9301/:38080、prisma/dev.db、.env*；
@@ -421,7 +422,34 @@ async function caseProbeEnableSignal(): Promise<void> {
 }
 
 /**
- * 测试入口：串行执行 8 个用例（端口/快照互斥，避免交叉干扰）。
+ * M8-04 用例 9：canonical 音频本地存储由 harness 合成环境承载。
+ * - buildSnapshotEnv 恒注入 AUDIO_STORAGE_DRIVER='local'（ambient 不得覆盖）；
+ * - AUDIO_LOCAL_ROOT 恒为隔离库同目录下 audio/（与隔离库同生命周期，storageKey 全 UUID 无碰撞）；
+ * - 且不在历史耦合目录 /app/data 下、不使用缺省 /app/audio（开发机/CI 不可写）。
+ */
+async function caseCanonicalAudioStorageEnv(): Promise<void> {
+    const mod = await import(path.join(harnessDir, 'app-server.mjs'));
+    const prevDriver: string | undefined = process.env.AUDIO_STORAGE_DRIVER;
+    const prevRoot: string | undefined = process.env.AUDIO_LOCAL_ROOT;
+    try {
+        const env = mod.buildSnapshotEnv('/tmp/synthetic-harness.db', 'http://localhost:9/v1') as Record<string, unknown>;
+        assert.strictEqual(env['AUDIO_STORAGE_DRIVER'], 'local', '合成环境必须固定 local 驱动');
+        assert.strictEqual(env['AUDIO_LOCAL_ROOT'], '/tmp/audio', '音频根必须为隔离库同目录 audio/');
+        process.env.AUDIO_STORAGE_DRIVER = 's3';
+        process.env.AUDIO_LOCAL_ROOT = '/app/data/audio';
+        const forced = mod.buildSnapshotEnv('/tmp/synthetic-harness.db', 'http://localhost:9/v1') as Record<string, unknown>;
+        assert.strictEqual(forced['AUDIO_STORAGE_DRIVER'], 'local', 'ambient 驱动不得覆盖 harness 合成值');
+        assert.strictEqual(forced['AUDIO_LOCAL_ROOT'], '/tmp/audio', 'ambient 路径不得覆盖 harness 合成值');
+    } finally {
+        if (prevDriver === undefined) delete process.env.AUDIO_STORAGE_DRIVER;
+        else process.env.AUDIO_STORAGE_DRIVER = prevDriver;
+        if (prevRoot === undefined) delete process.env.AUDIO_LOCAL_ROOT;
+        else process.env.AUDIO_LOCAL_ROOT = prevRoot;
+    }
+}
+
+/**
+ * 测试入口：串行执行 9 个用例（端口/快照互斥，避免交叉干扰）。
  */
 async function main(): Promise<void> {
     await caseAppServerLifecycle();
@@ -440,6 +468,8 @@ async function main(): Promise<void> {
     console.log('PASS: 用例7 干净树守卫通过（untracked 不阻断）');
     await caseProbeEnableSignal();
     console.log('PASS: 用例8 probe 开启信号合成环境承载/令牌复用/旧快照重建');
+    await caseCanonicalAudioStorageEnv();
+    console.log('PASS: 用例9 canonical 音频存储合成环境承载（local+隔离库同目录audio）');
     console.log('ALL BROWSER HARNESS TESTS PASSED');
 }
 

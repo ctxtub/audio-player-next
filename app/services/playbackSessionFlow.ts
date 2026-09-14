@@ -19,6 +19,11 @@
  * stores/playbackSessionStore 以 originatingSessionId 校验后才 play()，
  * 失配直接 revoke blob / discard；legacy 合成路径见 storyFlow 同名守卫。
  *
+ * M8-04 Work canonical read（spec §22–§23）：本 flow 不直接选音源，
+ * 仅经 store.playParagraph/prefetchNextParagraph 委托（lookahead 仍=1）；
+ * store 内 Work+flag 开启 → ensureSegment → ready playbackUrl，
+ * stale（sessionId 失配）绝不播放 A；Draft 恒旧路径；promotion 不打断当前 Blob。
+ *
  * storyFlow.ts 回到故事生成流程兼容层；其中播放 session / preload / ended
  * 逻辑已迁出，此处为过渡期唯一兼容 fallback：无 session 的 legacy 音频
  *（未经理 Session SSOT 的旧 oneShot 链）仍委托 storyFlow 处理，M9 删除。

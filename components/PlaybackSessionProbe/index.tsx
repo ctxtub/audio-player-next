@@ -88,6 +88,16 @@ export default function PlaybackSessionProbe(): null {
             await flow.playParagraph(index, { explicit: true });
             return snapshot();
           },
+          // M8-04 canonical targeted 入口（E2E-only：显式 lookahead 预取 + 倍速切换，
+          // 仅委托既有 flow/store，不新增产品语义；speed 仍经 Session+Transport 双写）。
+          prefetchNext: async (index: number): Promise<Record<string, unknown>> => {
+            await usePlaybackSessionStore.getState().prefetchNextParagraph(index);
+            return snapshot();
+          },
+          setSpeed: async (rate: number): Promise<Record<string, unknown>> => {
+            await usePlaybackSessionStore.getState().setSpeed(rate);
+            return snapshot();
+          },
           pause: (): Record<string, unknown> => {
             flow.pausePlayback();
             return snapshot();

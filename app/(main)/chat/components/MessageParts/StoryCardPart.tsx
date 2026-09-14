@@ -7,6 +7,7 @@ import { useGenerationStore } from '@/stores/generationStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { playStoryText } from '@/app/services/storyFlow';
+import { resumePlayback } from '@/app/services/playbackSessionFlow';
 import StoryViewer from '@/app/(main)/chat/components/StoryViewer';
 import type { PartRendererProps } from './index';
 import styles from './index.module.scss';
@@ -39,15 +40,19 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
     const isPlaybackPlaying = usePlaybackStore((state) => state.isPlaying);
     const pauseAudioPlayback = usePlaybackStore((state) => state.pauseAudioPlayback);
 
-    // 订阅断点续播状态（M9-03：经 M5 Session SSOT；Draft 按 messageId 匹配，
+    // 订阅断点续播状态（M9-03 fixup：经 M5 Session SSOT；Draft 按 messageId 匹配，
     // Work 经 library 精确 resolve，不走旧 progress store / generationHistory 最近 N 条）。
+    // 合法未完成断点：next > 0 AND next < total（ended 后 next==total 不得再显示续播；
+    // UI 判定与 action 判定同源共用 isThisCardResumePoint）。
     const sessionSource = usePlaybackSessionStore((state) => state.source);
     const sessionNextIndex = usePlaybackSessionStore((state) => state.nextParagraphIndex);
+    const sessionTotalParagraphs = usePlaybackSessionStore((state) => state.totalParagraphs);
     const isThisCardResumePoint = Boolean(
         messageId &&
         sessionSource?.kind === 'draft' &&
         sessionSource.messageId === messageId &&
-        sessionNextIndex > 0,
+        sessionNextIndex > 0 &&
+        sessionNextIndex < sessionTotalParagraphs,
     );
 
     const isThisCardPlaying = isPlaybackPlaying && (currentAudioUrl === part.audioUrl || (isThisCardResumePoint && isPlaybackPlaying));
@@ -90,10 +95,18 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
         return `${currentText.slice(0, PREVIEW_MAX_LENGTH)}...`;
     }, [isGenerating, needsTruncation, currentText]);
 
-    /** 处理播放按钮点击。 */
+    /** 处理播放按钮点击（M9-03 fixup：M5 Session 存在时 M5 拥有播放决策；
+     * 只有无 Session 的 legacy card 才走 storyFlow transport fallback；
+     * 断点逻辑不得塞回 storyFlow.playStoryText，避免第二套播放决策）。 */
     const handlePlay = () => {
         if (isThisCardPlaying) {
             pauseAudioPlayback();
+            return;
+        }
+        // M5 正式链：resumePlayback → PlaybackSessionStore.resumeRehydratedPlayback
+        // → playParagraph(nextParagraphIndex, { explicit: true })。
+        if (isThisCardResumePoint) {
+            void resumePlayback();
             return;
         }
         if (part.audioUrl) {

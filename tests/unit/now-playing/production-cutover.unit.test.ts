@@ -1,0 +1,279 @@
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+
+// 中文注释：M7-04-04 Production Cutover 静态守卫（L1，纯静态，不触库/网络）。
+// 锁定 spec §6.1/§49/§50/§52：正常产品行为 0 个 navigate/push/link 到 /player
+// （allowlist 制，不是 repo 全局字符串归零）；/player 物理保留至 M9；
+// deprecated 兼容符号保留至 M9；NowPlaying 不依赖旧 AudioPlayer；
+// NowPlaying 不拼 continuation Prompt；M7-01 UI Store 不含领域状态。
+
+const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
+
+const readRepoText = (rel: string): string =>
+    fs.readFileSync(path.resolve(process.cwd(), rel), 'utf8');
+
+const loadViaJiti = (rel: string): Record<string, unknown> => {
+    const factory = nodeRequire('jiti') as unknown as (
+        base: string,
+        opts: Record<string, unknown>
+    ) => (id: string) => Record<string, unknown>;
+    const inner = factory(path.join(process.cwd(), 'index.js'), {
+        alias: { '@': process.cwd() },
+        jsx: true,
+    });
+    return inner(rel.startsWith('./') || rel.startsWith('../') ? rel : `./${rel}`);
+};
+
+const installUnitStubs = (): void => {
+    const extTable = (
+        nodeRequire as unknown as {
+            extensions: Record<string, (m: NodeModule, f: string) => void>;
+        }
+    ).extensions;
+    if (extTable && !extTable['.scss']) {
+        const scssStub = (m: NodeModule): void => {
+            const proxy = new Proxy(
+                {},
+                {
+                    get: (_t: object, p: string | symbol): unknown => {
+                        if (p === '__esModule') {
+                            return true;
+                        }
+                        return String(p);
+                    },
+                }
+            );
+            (m as unknown as { exports: unknown }).exports = proxy;
+        };
+        extTable['.scss'] = scssStub as (m: NodeModule, f: string) => void;
+        extTable['.css'] = scssStub as (m: NodeModule, f: string) => void;
+    }
+};
+
+const stripComments = (src: string): string =>
+    src
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(^|\s)\/\/.*$/gm, '$1');
+
+// allowlist（允许保留，守卫里写死，spec §50/M9）：
+// 1. app/(main)/player/** —— 物理保留至 M9（不删除/不 redirect）；
+// 2. components/NowPlaying/useNowPlayingEntry.ts —— @deprecated
+//    NOW_PLAYING_COMPAT_ROUTE / shouldSuppressNowPlayingEntry /
+//    createNowPlayingEntryController（M9 删除 /player 时一并移除；M7 产品路径不用它们）；
+// 3. M6/M9 compatibility tests —— tests/unit/now-playing/mini-now-playing-semantic.unit.test.ts
+//    M6-02-08 锁定 push('/player') 语义（deprecated 工厂行为锁）；
+// 4. 描述 legacy/M9 的文档 —— docs/specs/2026-09-11-m7-expanded-now-playing.md
+//    §6.1/§50 与 docs/e2e legacy 描述（产品运行时代码外，允许出现 /player 字符串）。
+const ALLOWLIST_DIR_PREFIX = 'app/(main)/player/';
+const ALLOWLIST_FILES = new Set<string>(['components/NowPlaying/useNowPlayingEntry.ts']);
+
+// 审计路径（spec §50 正常产品流）：components/**、app/(main)/**、lib/client/**、stores/**。
+const AUDIT_ROOTS = ['components', 'app/(main)', 'lib/client', 'stores'];
+
+const walkAuditFiles = (): string[] => {
+    const out: string[] = [];
+    const walk = (dir: string): void => {
+        const abs = path.resolve(process.cwd(), dir);
+        if (!fs.existsSync(abs)) {
+            return;
+        }
+        for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
+            const rel = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(rel);
+            } else if (rel.endsWith('.ts') || rel.endsWith('.tsx')) {
+                out.push(rel);
+            }
+        }
+    };
+    for (const root of AUDIT_ROOTS) {
+        walk(root);
+    }
+    return out.sort();
+};
+
+const isAllowlisted = (rel: string): boolean => {
+    const posix = rel.split(path.sep).join('/');
+    if (posix === 'app/(main)/player' || posix.startsWith(ALLOWLIST_DIR_PREFIX)) {
+        return true;
+    }
+    if (ALLOWLIST_FILES.has(posix)) {
+        return true;
+    }
+    return false;
+};
+
+// 正常产品导航到 /player 的字面形态（注释已剥离后匹配；双引号/单引号/空白变体全覆盖）。
+const NAV_PATTERNS: Array<{ name: string; re: RegExp }> = [
+    { name: "router.push('/player')", re: /\.push\s*\(\s*['"]\/player['"]\s*\)/ },
+    { name: "router.replace('/player')", re: /\.replace\s*\(\s*['"]\/player['"]\s*\)/ },
+    { name: "navigate('/player')", re: /navigate\s*\(\s*['"]\/player['"]\s*\)/ },
+    { name: '<Link href="/player">', re: /<Link[^>]*href\s*=\s*['"]\/player['"]/ },
+    { name: 'href="/player"', re: /href\s*=\s*['"]\/player['"]/ },
+    { name: "location.href='/player'", re: /location\.href\s*=\s*['"]\/player['"]/ },
+    // 常量间接 push（deprecated 工厂语义）：allowlist 外出现即视为产品导航。
+    { name: 'push(NOW_PLAYING_COMPAT_ROUTE)', re: /push\s*\(\s*NOW_PLAYING_COMPAT_ROUTE\s*\)/ },
+];
+
+const walkNowPlayingFiles = (): string[] => {
+    const out: string[] = [];
+    const walk = (dir: string): void => {
+        const abs = path.resolve(process.cwd(), dir);
+        if (!fs.existsSync(abs)) {
+            return;
+        }
+        for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
+            const rel = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(rel);
+            } else if (rel.endsWith('.ts') || rel.endsWith('.tsx')) {
+                out.push(rel);
+            }
+        }
+    };
+    walk('components/NowPlaying');
+    return out.sort();
+};
+
+async function runProductionCutoverUnit(): Promise<void> {
+    installUnitStubs();
+
+    console.log('=== M7-04-04-P1: 正常产品流 /player 零导航（allowlist 制，§6.1/§50） ===');
+    {
+        const files = walkAuditFiles();
+        assert.ok(files.length > 50, `审计文件过少（实际 ${files.length}，审计路径可能缺失）`);
+        const violations: string[] = [];
+        for (const rel of files) {
+            if (isAllowlisted(rel)) {
+                continue;
+            }
+            const code = stripComments(readRepoText(rel));
+            for (const pat of NAV_PATTERNS) {
+                if (pat.re.test(code)) {
+                    violations.push(`${rel} 含 ${pat.name}`);
+                }
+            }
+        }
+        assert.deepStrictEqual(violations, [], `正常产品流不得 navigate/push/link 到 /player（allowlist 外零容忍）：${violations.join('；')}`);
+        // allowlist 自身存在性（防误删/防 guard 空转）：
+        assert.ok(
+            fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.tsx')),
+            'allowlist 目录 app/(main)/player/** 必须存在（M9 前不删除）'
+        );
+        assert.ok(
+            fs.existsSync(path.resolve(process.cwd(), 'components/NowPlaying/useNowPlayingEntry.ts')),
+            'allowlist 文件 useNowPlayingEntry.ts 必须存在（deprecated 兼容）'
+        );
+        console.log(`PASS: M7-04-04-P1 zero-player-navigation files=${files.length}`);
+    }
+
+    console.log('=== M7-04-04-P2: app/(main)/player/** 物理保留（M9 前不删除/不 redirect） ===');
+    {
+        assert.ok(
+            fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/index.tsx')),
+            '/player index 必须仍存在'
+        );
+        assert.ok(
+            fs.existsSync(path.resolve(process.cwd(), 'app/(main)/player/page.tsx')),
+            '/player page 必须仍存在'
+        );
+        const indexSrc = readRepoText('app/(main)/player/index.tsx');
+        assert.ok(indexSrc.includes('AudioPlayer'), '/player 页仍挂载旧 AudioPlayer（M9 前保留）');
+        console.log('PASS: M7-04-04-P2 player-physically-kept');
+    }
+
+    console.log('=== M7-04-04-P3: deprecated 兼容符号仍存在（M9 前不删除） ===');
+    {
+        const src = readRepoText('components/NowPlaying/useNowPlayingEntry.ts');
+        assert.ok(src.includes('NOW_PLAYING_COMPAT_ROUTE'), '兼容常量必须保留');
+        assert.ok(src.includes('shouldSuppressNowPlayingEntry'), '兼容判定必须保留');
+        assert.ok(src.includes('createNowPlayingEntryController'), '兼容工厂必须保留');
+        assert.ok(src.includes('createExpandedNowPlayingEntryController'), 'M7 纯工厂必须保留');
+        assert.ok(src.includes('@deprecated'), '遗留符号必须标记 @deprecated');
+        const mod = loadViaJiti('./components/NowPlaying/useNowPlayingEntry.ts') as unknown as {
+            NOW_PLAYING_COMPAT_ROUTE: string;
+            shouldSuppressNowPlayingEntry: (p: string | null) => boolean;
+            createNowPlayingEntryController: (push: (u: string) => void, p: string | null) => {
+                openDetails: () => void;
+                openExpanded: () => void;
+            };
+        };
+        assert.strictEqual(mod.NOW_PLAYING_COMPAT_ROUTE, '/player', '兼容常量精确为 /player');
+        assert.strictEqual(mod.shouldSuppressNowPlayingEntry('/player'), true);
+        assert.strictEqual(mod.shouldSuppressNowPlayingEntry('/library'), false);
+        console.log('PASS: M7-04-04-P3 compat-symbols-kept');
+    }
+
+    console.log('=== M7-04-04-P4: NowPlaying 不依赖旧 AudioPlayer ===');
+    {
+        const files = walkNowPlayingFiles();
+        assert.ok(files.length > 10, 'NowPlaying 文件过少');
+        for (const rel of files) {
+            const code = stripComments(readRepoText(rel));
+            assert.ok(!code.includes('app/(main)/player'), `${rel} 不得引用旧 player 路径`);
+            assert.ok(!/import[^;]*AudioPlayer/.test(code), `${rel} 不得 import 旧 AudioPlayer 组件`);
+        }
+        console.log(`PASS: M7-04-04-P4 no-audio-player-dep files=${files.length}`);
+    }
+
+    console.log('=== M7-04-04-P5: NowPlaying 不拼 continuation Prompt ===');
+    {
+        const files = walkNowPlayingFiles();
+        for (const rel of files) {
+            const code = stripComments(readRepoText(rel));
+            assert.ok(!code.includes('AUTO_CONTINUE_PROMPT'), `${rel} 不得引用自动续写常量`);
+            assert.ok(!code.includes('continueFromStoryWork('), `${rel} 不得真实调用 continuation（行为归 M4）`);
+            assert.ok(!code.includes('请继续'), `${rel} 不得拼装 continuation Prompt`);
+        }
+        console.log('PASS: M7-04-04-P5 no-continuation-prompt');
+    }
+
+    console.log('=== M7-04-04-P6: M7-01 UI Store 不含领域状态（纯 UI） ===');
+    {
+        const code = stripComments(readRepoText('stores/nowPlayingUiStore.ts'));
+        assert.ok(code.includes('isExpanded'), 'UI store 必须含 isExpanded');
+        assert.ok(code.includes('openExpanded'), 'UI store 必须含 openExpanded');
+        assert.ok(code.includes('closeExpanded'), 'UI store 必须含 closeExpanded');
+        for (const forbidden of [
+            'session',
+            'work',
+            'timer',
+            'transcript',
+            'isPlaying',
+            'currentTime',
+            'playback',
+            'storyText',
+            'speed',
+            'progress',
+            'sleep',
+            'sessionId',
+            'workId',
+            'status',
+            'audio',
+            'paragraph',
+            'voice',
+            'duration',
+        ]) {
+            assert.ok(!code.includes(forbidden), `UI store 不得含领域状态：${forbidden}`);
+        }
+        assert.ok(!code.includes('playbackSessionStore'), 'UI store 不得 import Session');
+        assert.ok(!code.includes('playbackStore'), 'UI store 不得 import Transport');
+        assert.ok(!code.includes('router'), 'UI store 不得碰路由');
+        console.log('PASS: M7-04-04-P6 ui-store-pure');
+    }
+
+    console.log('\nALL PRODUCTION CUTOVER UNIT TESTS PASSED SUCCESSFULLY!');
+}
+
+const testPromise = runProductionCutoverUnit()
+    .then(() => {
+        console.log('ALL PRODUCTION CUTOVER UNIT TESTS PASSED SUCCESSFULLY!');
+    })
+    .catch((error) => {
+        console.error('Production cutover unit test failed:', error);
+        process.exit(1);
+    });
+
+export default testPromise;

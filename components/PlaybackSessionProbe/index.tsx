@@ -149,6 +149,16 @@ export default function PlaybackSessionProbe(): null {
             });
             return snapshot();
           },
+          // M7-04-04 closure browser 入口（E2E-only：复用既有 reset() 触发 source null + idle，
+          // 验证 clear/idle → auto-close；不新增领域语义，不改 M5/M7-01 契约）。
+          clearForClosureTest: (): Record<string, unknown> => {
+            try {
+              usePlaybackSessionStore.getState().reset();
+            } catch {
+              // 重置失败不阻断（调用方以 snapshot 是否 idle 为准）。
+            }
+            return snapshot();
+          },
         };
         anchorEl = document.createElement('div');
         anchorEl.setAttribute('data-testid', 'm5-playback-probe');

@@ -1189,6 +1189,18 @@ cases:
     executable_ids: [exec-creation-actions, exec-creation-actions-view, exec-l3-creation-actions]
     fixtures: []
     owner: smoke-baseline
+  - case_id: m7-p3a-closure
+    display_name_zh: M7 P3A聚合收官与生产切流
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: Work与Draft聚合旅程全程不经player且生命周期与切流守卫全绿
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [ui, playback, session, closure, cutover]
+    spec_path: docs/e2e/01-基础冒烟与页面基线/20-M7-P3A聚合收官M7-04-04.md
+    executable_ids: [exec-production-cutover, exec-l3-m7-p3a-closure]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1616,6 +1628,14 @@ executables:
     display_name_zh: L3 Expanded创作动作边界全链路
     layer: L3
     path: ./tests/system/browser/scenarios/creation-actions.spec.ts
+  - executable_id: exec-production-cutover
+    display_name_zh: 生产切流静态守卫与领域隔离
+    layer: L1
+    path: ./tests/unit/now-playing/production-cutover.unit.test.ts
+  - executable_id: exec-l3-m7-p3a-closure
+    display_name_zh: L3 M7 P3A聚合收官全链路
+    layer: L3
+    path: ./tests/system/browser/scenarios/m7-p3a-closure.spec.ts
   - executable_id: exec-l3-desktop-floating-mode
     display_name_zh: L3桌面悬浮拖拽吸附收官
     layer: L3

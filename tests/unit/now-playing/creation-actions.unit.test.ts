@@ -186,11 +186,6 @@ async function runCreationActionsUnit(): Promise<void> {
             seg.indexOf('handleClose') < seg.indexOf('router.push'),
             '顺序固定：close 先于 push（§44）'
         );
-        for (const forbidden of ['pause', 'setActiveStory', 'AudioController', 'dispatch', 'sendMessage', 'pendingAutoSend', 'setPendingAutoSend', 'setInputValue', 'append', 'chatFlow', 'storyFlow', 'useChatStore', 'AUTO_CONTINUE_PROMPT', 'storyText', 'prompt', 'continueFromStoryWork(']) {
-            // 注：send 为高频子串（sendMessage 含之），此处用小写 send 统一覆盖：
-            // handler 段内不得出现任何发送语义（大小写不敏感）。
-            void forbidden;
-        }
         const segLower = seg.toLowerCase();
         assert.ok(!segLower.includes('send'), '返回创作不得自动发送（零 send）');
         assert.ok(!seg.includes('dispatch'), '不得经 dispatch 预填即发');

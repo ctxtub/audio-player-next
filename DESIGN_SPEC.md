@@ -597,31 +597,28 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
   Expanded Now Playing     ← z-modal；<768 Bottom Sheet，>=768 Right Side Panel（NowPlayingLayer，全局 single instance，导航不卸载）
 ```
 
-### 4.2 Home 页布局
+### 4.2 Home 页布局（M7 收口：Page 不拥有播放器）
+
+Home/Page 不拥有播放器；播放 presentation 统一由全局 Mini + Expanded 承担（见 4.1 全局布局与 3.20 Expanded Now Playing，本节不复制新结构）。
 
 ```
 ┌─────────────────────────────┐
-│     PlaybackStatusBoard     │  ← 顶部状态条
+│     PlaybackStatusBoard     │  ← 顶部状态条（/player 遗留页内组件，M9 退役）
 ├─────────────────────────────┤
 │                             │
 │     GenerationPreview       │  ← 条件显示 (生成中)
 │                             │
 ├─────────────────────────────┤
-│                             │
-│       AudioPlayer           │  ← 视觉焦点，居中
-│    (Disc + Controls)        │
-│                             │
-├─────────────────────────────┤
-│     InputStatusSection      │  ← 输入框 + 快捷按钮
+│     InputStatusSection      │  ← 输入框 + 快捷按钮（空闲态视觉焦点）
 ├─────────────────────────────┤
 │      HistoryRecords         │  ← 可滚动列表
 └─────────────────────────────┘
 ```
 
-**状态切换：**
-- **空闲态**：AudioPlayer 缩小/隐藏，InputStatusSection 为视觉焦点
+**状态切换（M7 后 Home 不设独立播放器焦点）：**
+- **空闲态**：InputStatusSection 为视觉焦点
 - **生成中**：GenerationPreview 展开，显示文字流 + 波形动画
-- **播放中**：AudioPlayer 为视觉焦点，唱片旋转，进度条活跃
+- **播放中**：无页内播放器焦点；播放由全局 Mini + Expanded 承载（见 4.1 / 3.20）
 
 ### 4.3 Chat 页布局
 
@@ -649,7 +646,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 ├── section-gap ──────────────┤
 │     ThemeModeSection        │
 ├── section-gap ──────────────┤
-│     BasicConfigSection      │
+│     DefaultSleepTimerSection  │  ← 默认睡眠定时（M7-03 真实现状；10–120 step 10）
 ├── section-gap ──────────────┤
 │     SpeedConfigSection      │
 ├── section-gap ──────────────┤

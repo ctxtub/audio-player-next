@@ -2,7 +2,7 @@
  * M8 Canonical Audio TTS 身份配置（spec §5.3/§5.4 + §8/§9；M8-01 纯领域层）。
  *
  * 只放类型、常量与纯解析函数，不读取音频 bytes、不调用 TTS、不触 DB。
- * 真实合成入口 synthesizeSpeechWithProfile() 留待 M8-02，本项只冻结 identity 常量与解析语义。
+ * 真实合成入口 synthesizeSpeechWithProfile() 留待 M8-03（正式拆分口径）。
  */
 
 /** TTS backend 稳定身份默认值（非 secret；OPENAI_BASE_URL 可指向不同后端时仅靠 model 不足以表达真实身份，spec §5.3） */

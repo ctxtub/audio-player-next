@@ -96,6 +96,8 @@ const SUITES = [
     { id: 'audio-storage-local', path: './tests/integration/audio/audio-storage-local.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'audio-storage-s3', path: './tests/integration/audio/audio-storage-s3.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'audio-segment-read', path: './tests/integration/audio/audio-segment-read.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'audio-canonical-write', path: './tests/unit/audio/audio-canonical-write.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'audio-ensure-segment', path: './tests/integration/audio/audio-ensure-segment.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-read', path: './tests/integration/persistence-config/story-work-read.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-create', path: './tests/integration/persistence-config/story-work-create.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-lifecycle', path: './tests/integration/persistence-config/story-work-lifecycle.integration.test.ts', group: 'integration', needs_db: true },

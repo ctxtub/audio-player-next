@@ -169,3 +169,105 @@ export function buildFrozenSegmentInputs(
 export function isCanonicalAudioFormat(format: string): boolean {
   return format === CANONICAL_AUDIO_FORMAT;
 }
+
+/**
+ * Manifest 状态派生输入（纯函数；spec §12.2，M8-03）。
+ *
+ * - ready：readySegmentCount == segmentCount 且全部 durationMs != null；
+ * - preparing：至少一个 canonical Segment lease 有效（调用方判定）；
+ * - failed：最近一次需要的 Segment 准备失败且当前无 active synthesis；
+ * - missing：无 Manifest，或仅部分 ready 且当前无 synthesis 在执行。
+ * 本函数不触 DB、不读 storage；lease 有效性由调用方按 leaseExpiresAt/now 判定后传入。
+ */
+export type ManifestStatusDerivationInput = {
+  /** Manifest 总段数（>0；0 视为 missing 防御） */
+  segmentCount: number;
+  /** 已 ready 段数 */
+  readySegmentCount: number;
+  /** 全部 Segment 都有 duration（ready 的必要条件，spec §12.2/§17.1） */
+  allDurationsPresent: boolean;
+  /** 是否存在有效 lease（至少一段 preparing 且 lease 未过期） */
+  hasActiveLease: boolean;
+  /** 是否存在失败段且当前无 active synthesis（最近一次需要失败） */
+  hasFailedSegment: boolean;
+};
+
+export type ManifestStatusDerivation = Pick<
+  ManifestStatusDerivationInput,
+  | 'segmentCount'
+  | 'readySegmentCount'
+  | 'allDurationsPresent'
+  | 'hasActiveLease'
+  | 'hasFailedSegment'
+>;
+
+/** Manifest 状态四态（与 profile.AudioStatus 同值；领域层避免循环依赖故用字面量） */
+export type DerivedManifestStatus = 'missing' | 'preparing' | 'ready' | 'failed';
+
+/**
+ * 由计数与 lease/失败信号派生 Manifest 状态（纯函数）。
+ */
+export function deriveManifestStatus(
+  input: ManifestStatusDerivationInput
+): DerivedManifestStatus {
+  const {
+    segmentCount,
+    readySegmentCount,
+    allDurationsPresent,
+    hasActiveLease,
+    hasFailedSegment,
+  } = input;
+  if (
+    Number.isInteger(segmentCount) &&
+    segmentCount > 0 &&
+    readySegmentCount === segmentCount &&
+    allDurationsPresent
+  ) {
+    return 'ready';
+  }
+  if (hasActiveLease) return 'preparing';
+  if (hasFailedSegment) return 'failed';
+  return 'missing';
+}
+
+/**
+ * 由 Segment 行快照派生 Manifest 状态（纯函数；供 service 与单测共用）。
+ * @param segments 各段 {status, durationMs, leaseExpiresAt} 快照
+ * @param now 当前时间（默认 now；测试可注入固定时间判定 lease 有效性）
+ */
+export function deriveManifestStatusFromSegments(
+  segments: Array<{
+    status: string;
+    durationMs: number | null | undefined;
+    leaseExpiresAt?: Date | null;
+  }>,
+  now: Date = new Date()
+): DerivedManifestStatus {
+  const segmentCount = segments.length;
+  if (segmentCount === 0) return 'missing';
+  const readySegments = segments.filter((s) => s.status === 'ready');
+  const readySegmentCount = readySegments.length;
+  const allDurationsPresent =
+    readySegmentCount === segmentCount &&
+    readySegments.every(
+      (s) =>
+        typeof s.durationMs === 'number' &&
+        Number.isInteger(s.durationMs) &&
+        (s.durationMs as number) > 0
+    );
+  const hasActiveLease = segments.some(
+    (s) =>
+      s.status === 'preparing' &&
+      s.leaseExpiresAt instanceof Date &&
+      s.leaseExpiresAt.getTime() > now.getTime()
+  );
+  const hasFailedSegment =
+    segments.some((s) => s.status === 'failed') && !hasActiveLease;
+  return deriveManifestStatus({
+    segmentCount,
+    readySegmentCount,
+    allDurationsPresent,
+    hasActiveLease,
+    hasFailedSegment,
+  });
+}

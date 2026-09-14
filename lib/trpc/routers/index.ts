@@ -14,6 +14,7 @@ import { generationHistoryRouter } from './generationHistory';
 import { chatConversationRouter } from './chatConversation';
 import { playbackRouter } from './playback';
 import { libraryRouter } from './library';
+import { storyAudioRouter } from './storyAudio';
 
 /**
  * 应用根 Router。
@@ -28,6 +29,7 @@ export const appRouter = router({
     chat: chatConversationRouter,
     playback: playbackRouter,
     library: libraryRouter,
+    storyAudio: storyAudioRouter,
 });
 
 /**

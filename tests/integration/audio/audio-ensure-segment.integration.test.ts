@@ -21,6 +21,8 @@ import {
 import {
   ensureStoryAudioSegmentForSubject,
   getPlaybackManifestForSubject,
+  refreshUserManifestState,
+  STORY_AUDIO_LEASE_TTL_MS,
   STORY_AUDIO_RETRY_AFTER_MS,
 } from '../../../lib/server/storyAudio';
 import { resetCache } from '../../../lib/server/openai';
@@ -40,6 +42,11 @@ import { computeStoryContentHash } from '../../../utils/segmentation';
  * 7. Trash 门禁（active 允许；trash 仅 Anchor 匹配允许，否则 WORK_UNAVAILABLE）；
  * 8. totals 仅全 ready 才写（partial null；全 ready sum）；
  * 9. 非法输入（INVALID_SEGMENT / WORK_NOT_FOUND / foreign 隔离）与 Guest 对称。
+ * FIXUP（M8-03 复审 Blocking1/2）：
+ * 10. lease fencing：A claim→TTS suspend→时间推进>TTL→B reclaim/ready→resume A→A 不得 put，
+ *     最终 object checksum==DB checksum（B 保留）；
+ * 11. Manifest aggregate 无 stale 回退：双段并发完成→Manifest ready/count2/totals 精确，
+ *     旧快照不能覆盖新状态，并发 refresh 仍收敛 ready。
  */
 
 type FakeTtsState = {
@@ -641,6 +648,196 @@ async function runAudioEnsureSegmentTests() {
       }
       assert.ok(errCross, '跨主体应错');
       console.log('PASS: 9. 非法/隔离断言通过');
+    }
+
+    console.log('=== 10. FIXUP Blocking2 oracle：lease fencing（旧worker不得覆盖新owner object） ===');
+    {
+      const { userId, workId } = await createUserWork({
+        tag: 'fence',
+        storyText: storyTextSingle(),
+        voiceId: 'nova',
+      });
+      const sessionA = randomUUID();
+      const sessionB = randomUUID();
+      const subject = { type: 'user' as const, id: userId };
+      const realStorage = getAudioAssetStorage();
+      let putCount = 0;
+      const countingStorage: AudioAssetStorage = {
+        put: async (input) => {
+          putCount += 1;
+          return realStorage.put(input);
+        },
+        exists: (k) => realStorage.exists(k),
+        delete: (k) => realStorage.delete(k),
+        getMetadata: (k) => realStorage.getMetadata(k),
+        resolveRead: (k, r) => realStorage.resolveRead(k, r),
+      };
+      let nowMs = Date.now();
+      const nowFn = () => new Date(nowMs);
+      // A 的 TTS 挂起（suspend）
+      let resolveA!: (v: { audioData: ArrayBuffer; requestId: string }) => void;
+      const gateA = new Promise<{ audioData: ArrayBuffer; requestId: string }>(
+        (res) => {
+          resolveA = res;
+        }
+      );
+      const synthA = async () => gateA;
+      const bytesA = buildFakeCanonicalMp3(10, 41);
+      const bytesB = buildFakeCanonicalMp3(10, 42);
+      // A 先 claim（挂起在 TTS）
+      const promiseA = ensureStoryAudioSegmentForSubject(
+        subject,
+        { workId, segmentIndex: 0, sessionId: sessionA },
+        { storage: countingStorage, synthesize: synthA, now: nowFn }
+      );
+      let leaseA: string | null = null;
+      for (let i = 0; i < 200; i += 1) {
+        const seg = await prisma.storyAudioSegment.findFirst({
+          where: { manifest: { storyWorkId: workId }, segmentIndex: 0 },
+        });
+        if (seg?.status === 'preparing' && seg.leaseId) {
+          leaseA = seg.leaseId;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.ok(leaseA, 'A 已 claim lease');
+      // 时间推进 > TTL（A 的 lease 过期，但 A 的 Node 未死，仍挂起在 TTS）
+      nowMs += STORY_AUDIO_LEASE_TTL_MS + 1000;
+      // B 重新 claim 并完成（自己的 bytes）
+      const synthB = async () => {
+        const buf = bytesB.buffer.slice(
+          bytesB.byteOffset,
+          bytesB.byteOffset + bytesB.byteLength
+        ) as ArrayBuffer;
+        return { audioData: buf, requestId: '' };
+      };
+      const resB = await ensureStoryAudioSegmentForSubject(
+        subject,
+        { workId, segmentIndex: 0, sessionId: sessionB },
+        { storage: countingStorage, synthesize: synthB, now: nowFn }
+      );
+      assert.strictEqual(resB.status, 'ready', 'B 应 reclaim 成功 ready');
+      assert.strictEqual(putCount, 1, 'B put 一次');
+      // resume A（晚到，携带不同 bytes）：必须被 fencing 丢弃
+      const bufA = bytesA.buffer.slice(
+        bytesA.byteOffset,
+        bytesA.byteOffset + bytesA.byteLength
+      ) as ArrayBuffer;
+      resolveA({ audioData: bufA, requestId: '' });
+      const resA = await promiseA;
+      assert.strictEqual(
+        resA.status,
+        'preparing',
+        'A 失去 lease 应返回 preparing/RETRY（不得 ready）'
+      );
+      assert.strictEqual(putCount, 1, 'A 不得 storage.put（fencing 锁住）');
+      // 最终 object 与 metadata 永久一致（B 保留）
+      const segFinal = await prisma.storyAudioSegment.findFirst({
+        where: { manifest: { storyWorkId: workId }, segmentIndex: 0 },
+      });
+      assert.strictEqual(segFinal!.status, 'ready', '最终 ready');
+      assert.strictEqual(
+        segFinal!.audioChecksum,
+        expectedFakeMp3Checksum(bytesB),
+        'DB checksum == B'
+      );
+      assert.strictEqual(segFinal!.byteLength, bytesB.byteLength, 'DB byteLength == B');
+      const stored = await realStorage.resolveRead(segFinal!.storageKey);
+      assert.strictEqual(stored.kind, 'bytes', '读回 bytes');
+      if (stored.kind === 'bytes') {
+        assert.strictEqual(
+          computeAudioChecksum(stored.bytes),
+          segFinal!.audioChecksum,
+          'object checksum == DB checksum'
+        );
+        assert.strictEqual(
+          stored.bytes.byteLength,
+          segFinal!.byteLength,
+          'object length == DB byteLength'
+        );
+        assert.deepStrictEqual(
+          Buffer.from(stored.bytes),
+          Buffer.from(bytesB),
+          "B's bytes retained"
+        );
+      }
+      console.log('PASS: 10. fencing 断言通过');
+    }
+
+    console.log('=== 11. FIXUP Blocking1 oracle：双段并发完成无stale回退 ===');
+    {
+      const { userId, workId } = await createUserWork({
+        tag: 'aggrace',
+        storyText: storyTextTwoSegments(),
+        voiceId: 'nova',
+      });
+      const sessionId = randomUUID();
+      const subject = { type: 'user' as const, id: userId };
+      const storage = getAudioAssetStorage();
+      // 双段并发完成（TTS 延迟迫使两 completion 的 aggregate refresh 窗口交叠）
+      const fake: FakeTtsState = { count: 0, inputs: [], delayMs: 80, failNext: false, bytesSeed: 43 };
+      const synth = makeFakeTts(fake);
+      const [r0, r1] = await Promise.all([
+        ensureStoryAudioSegmentForSubject(
+          subject,
+          { workId, segmentIndex: 0, sessionId },
+          { storage, synthesize: synth }
+        ),
+        ensureStoryAudioSegmentForSubject(
+          subject,
+          { workId, segmentIndex: 1, sessionId },
+          { storage, synthesize: synth }
+        ),
+      ]);
+      assert.ok(r0.status === 'ready' || r0.status === 'preparing', '段0 收敛态');
+      assert.ok(r1.status === 'ready' || r1.status === 'preparing', '段1 收敛态');
+      //  follow-up 收敛（若有 preparing 则再 ensure 一次）
+      for (const idx of [0, 1]) {
+        const cur = await prisma.storyAudioSegment.findFirst({
+          where: { manifest: { storyWorkId: workId }, segmentIndex: idx },
+        });
+        if (cur?.status !== 'ready') {
+          await ensureStoryAudioSegmentForSubject(
+            subject,
+            { workId, segmentIndex: idx, sessionId },
+            { storage, synthesize: synth }
+          );
+        }
+      }
+      // 人为交错回归：先构造“旧快照语义”（若按旧 split 读会得 preparing），
+      // 再让新事务 refresh 落地 → 最终必须 ready 且永不回退。
+      const manifest = await prisma.storyAudioManifest.findFirst({
+        where: { storyWorkId: workId },
+      });
+      assert.ok(manifest, 'Manifest 已建');
+      // 并发 refresh 风暴：旧 snapshot 不可能覆盖新状态，后完成者看到最新
+      await Promise.all([
+        refreshUserManifestState(manifest!.id, new Date()),
+        refreshUserManifestState(manifest!.id, new Date()),
+        refreshUserManifestState(manifest!.id, new Date()),
+      ]);
+      const final = await prisma.storyAudioManifest.findFirst({
+        where: { storyWorkId: workId },
+        include: { segments: true },
+      });
+      assert.ok(final!.segments.every((s) => s.status === 'ready'), '两 Segment 均 ready');
+      assert.strictEqual(final!.status, 'ready', 'Manifest ready（不回退 preparing）');
+      assert.strictEqual(final!.readySegmentCount, 2, 'readySegmentCount=2');
+      assert.strictEqual(
+        final!.totalDurationMs,
+        expectedFakeMp3DurationMs(10) * 2,
+        'totalDurationMs 精确'
+      );
+      assert.strictEqual(final!.totalByteLength, 10 * 417 * 2, 'totalByteLength 精确');
+      // 幂等再刷仍 ready（无 ready→preparing 回退）
+      await refreshUserManifestState(final!.id, new Date());
+      const stable = await prisma.storyAudioManifest.findUnique({
+        where: { id: final!.id },
+      });
+      assert.strictEqual(stable!.status, 'ready', '再刷仍 ready，无回退');
+      assert.strictEqual(stable!.readySegmentCount, 2, '再刷 count 稳定');
+      console.log('PASS: 11. aggregate无回退断言通过');
     }
   } finally {
     if (savedDriver === undefined) delete process.env.AUDIO_STORAGE_DRIVER;

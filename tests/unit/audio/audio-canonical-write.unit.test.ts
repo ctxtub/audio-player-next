@@ -451,6 +451,47 @@ async function runAudioCanonicalWriteUnitTests() {
     console.log('PASS: 10. 静态守卫断言通过');
   }
 
+  console.log('=== 11. FIXUP静态守卫：refresh单事务+fencing renew（Blocking1/2） ===');
+  {
+    const storyRaw = fs.readFileSync(
+      path.join(process.cwd(), 'lib/server/storyAudio.ts'),
+      'utf-8'
+    );
+    const storySrc = stripComments(storyRaw);
+    // Blocking1：refresh 读→derive→update 收进同一短 $transaction（User/Guest 各一处）
+    const txUses = storySrc.match(/prisma\.\$transaction\(/g) ?? [];
+    // creation 2 处 + refresh 2 处 = 至少 4 处（claim/synthesis 仍无事务包裹）
+    assert.ok(txUses.length >= 4, `refresh必须收进短事务(creation2+refresh2)，实际$transaction=${txUses.length}`);
+    assert.ok(
+      storyRaw.includes('refreshUserManifestState') &&
+        storyRaw.includes('refreshGuestManifestState'),
+      'User/Guest 两边一起修'
+    );
+    // refresh 事务内只做 DB 读+单写：事务块内无 storage.put / synthesize
+    //（以 refresh 函数体为界检查：两函数均含 findMany + update 且块内无 put/synthesize）
+    for (const fn of ['refreshUserManifestState', 'refreshGuestManifestState']) {
+      const start = storyRaw.indexOf(`export async function ${fn}`);
+      assert.ok(start >= 0, `${fn} 必须导出供oracle复用`);
+      const nextExport = storyRaw.indexOf('export async function', start + 10);
+      const body = nextExport > 0 ? storyRaw.slice(start, nextExport) : storyRaw.slice(start);
+      const code = stripComments(body);
+      assert.ok(code.includes('$transaction'), `${fn} 必须用 $transaction`);
+      assert.ok(code.includes('findMany'), `${fn} 事务内读 segments`);
+      assert.ok(code.includes('Manifest.update'), `${fn} 事务内写 Manifest`);
+      assert.ok(!code.includes('storage.put'), `${fn} 事务内不得 storage.put`);
+      assert.ok(!code.includes('deps.synthesize'), `${fn} 事务内不得 synthesize`);
+    }
+    // Blocking2：put 前原子 renew fencing（User/Guest 各一处），put 后 WHERE leaseId CAS 保留
+    const renewGuards = storySrc.match(/where:\s*\{\s*id:\s*segment\.id,\s*leaseId,\s*status:\s*'preparing'\s*\}/g) ?? [];
+    assert.ok(renewGuards.length >= 2, `put前renew守卫User/Guest各一处，实际=${renewGuards.length}`);
+    assert.ok(storyRaw.includes('FIXUP Blocking2'), '必须注释 fencing 语义');
+    // renew 成功才 put：renew 块后紧跟 storage.put（顺序守卫）
+    const renewIdx = storyRaw.indexOf('leaseExpiresAt: new Date(renewAt.getTime()');
+    const putIdx = storyRaw.indexOf('storage.put({ key: storageKey');
+    assert.ok(renewIdx > 0 && putIdx > renewIdx, 'renew 成功才 put（顺序）');
+    console.log('PASS: 11. FIXUP静态守卫断言通过');
+  }
+
   console.log('ALL AUDIO CANONICAL WRITE UNIT TESTS PASSED SUCCESSFULLY');
 }
 

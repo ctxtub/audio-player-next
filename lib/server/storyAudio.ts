@@ -504,132 +504,161 @@ async function ensureGuestManifest(
 }
 
 // ============================================================================
-// Manifest 状态刷新（DB 侧聚合；只在短事务/单写外调用，永不跨 TTS）
+// Manifest 状态刷新（DB 侧聚合；短 DB transaction 内读+写原子完成，永不跨 TTS）
 // ============================================================================
+//
+// FIXUP Blocking1（M8-03 复审）：读取 segments → derive → Manifest update 必须在同一短
+// transaction 内完成。内部无 TTS/storage/network（纯 DB 读+单写），不违反 §15.2。
+// SQLite 写事务把不同 completion 的 aggregate commit 顺序序列化；后完成的 refresh
+// 看到最新状态，旧 snapshot 不能覆盖新状态（杜绝 ready → preparing 回退）。
 
-async function refreshUserManifestState(
+export async function refreshUserManifestState(
   manifestId: number,
   now: Date
 ): Promise<void> {
-  const segments = await prisma.storyAudioSegment.findMany({
-    where: { manifestId },
-    select: { status: true, durationMs: true, leaseExpiresAt: true },
-  });
-  const derived = deriveManifestStatusFromSegments(segments, now);
-  const readyRows = await prisma.storyAudioSegment.findMany({
-    where: { manifestId, status: 'ready' },
-    select: { durationMs: true, byteLength: true, lastErrorCode: true },
-  });
-  const readyCount = readyRows.length;
-  const allHaveNumbers = readyRows.every(
-    (r) =>
-      typeof r.durationMs === 'number' &&
-      Number.isInteger(r.durationMs) &&
-      (r.durationMs as number) > 0 &&
-      typeof r.byteLength === 'number' &&
-      Number.isInteger(r.byteLength) &&
-      (r.byteLength as number) >= 0
-  );
-  const manifest = await prisma.storyAudioManifest.findUnique({
-    where: { id: manifestId },
-    select: { segmentCount: true },
-  });
-  const segmentCount = manifest?.segmentCount ?? segments.length;
-  const isFullyReady =
-    derived === 'ready' &&
-    readyCount === segmentCount &&
-    segmentCount > 0 &&
-    allHaveNumbers;
-  let totalDurationMs: number | null = null;
-  let totalByteLength: number | null = null;
-  let readyAt: Date | null = null;
-  if (isFullyReady) {
-    totalDurationMs = readyRows.reduce((a, r) => a + (r.durationMs as number), 0);
-    totalByteLength = readyRows.reduce((a, r) => a + (r.byteLength as number), 0);
-    readyAt = now;
-  }
-  let lastErrorCode: string | null = null;
-  if (derived === 'failed') {
-    const failed = await prisma.storyAudioSegment.findFirst({
-      where: { manifestId, status: 'failed' },
-      orderBy: { updatedAt: 'desc' },
-      select: { lastErrorCode: true },
+  await prisma.$transaction(async (tx) => {
+    const segments = await tx.storyAudioSegment.findMany({
+      where: { manifestId },
+      select: {
+        status: true,
+        durationMs: true,
+        byteLength: true,
+        leaseExpiresAt: true,
+        lastErrorCode: true,
+        updatedAt: true,
+      },
     });
-    lastErrorCode = failed?.lastErrorCode ?? 'AUDIO_SYNTHESIS_FAILED';
-  }
-  await prisma.storyAudioManifest.update({
-    where: { id: manifestId },
-    data: {
-      status: isFullyReady ? 'ready' : derived,
-      readySegmentCount: readyCount,
-      totalDurationMs,
-      totalByteLength,
-      ...(isFullyReady ? { readyAt } : {}),
-      ...(derived === 'failed' ? { lastErrorCode } : { lastErrorCode: null }),
-    },
+    const derived = deriveManifestStatusFromSegments(segments, now);
+    const manifest = await tx.storyAudioManifest.findUnique({
+      where: { id: manifestId },
+      select: { segmentCount: true },
+    });
+    const segmentCount = manifest?.segmentCount ?? segments.length;
+    const readyRows = segments.filter((s) => s.status === 'ready');
+    const readyCount = readyRows.length;
+    const allHaveNumbers = readyRows.every(
+      (r) =>
+        typeof r.durationMs === 'number' &&
+        Number.isInteger(r.durationMs) &&
+        (r.durationMs as number) > 0 &&
+        typeof r.byteLength === 'number' &&
+        Number.isInteger(r.byteLength) &&
+        (r.byteLength as number) >= 0
+    );
+    const isFullyReady =
+      derived === 'ready' &&
+      readyCount === segmentCount &&
+      segmentCount > 0 &&
+      allHaveNumbers;
+    let totalDurationMs: number | null = null;
+    let totalByteLength: number | null = null;
+    let readyAt: Date | null = null;
+    if (isFullyReady) {
+      totalDurationMs = readyRows.reduce(
+        (a, r) => a + (r.durationMs as number),
+        0
+      );
+      totalByteLength = readyRows.reduce(
+        (a, r) => a + (r.byteLength as number),
+        0
+      );
+      readyAt = now;
+    }
+    let lastErrorCode: string | null = null;
+    if (derived === 'failed') {
+      const latestFailed = readyRows.length === segments.length
+        ? null
+        : segments
+            .filter((s) => s.status === 'failed')
+            .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+      lastErrorCode = latestFailed?.lastErrorCode ?? 'AUDIO_SYNTHESIS_FAILED';
+    }
+    await tx.storyAudioManifest.update({
+      where: { id: manifestId },
+      data: {
+        status: isFullyReady ? 'ready' : derived,
+        readySegmentCount: readyCount,
+        totalDurationMs,
+        totalByteLength,
+        ...(isFullyReady ? { readyAt } : {}),
+        ...(derived === 'failed' ? { lastErrorCode } : { lastErrorCode: null }),
+      },
+    });
   });
 }
 
-async function refreshGuestManifestState(
+export async function refreshGuestManifestState(
   manifestId: number,
   now: Date
 ): Promise<void> {
-  const segments = await prisma.guestStoryAudioSegment.findMany({
-    where: { manifestId },
-    select: { status: true, durationMs: true, leaseExpiresAt: true },
-  });
-  const derived = deriveManifestStatusFromSegments(segments, now);
-  const readyRows = await prisma.guestStoryAudioSegment.findMany({
-    where: { manifestId, status: 'ready' },
-    select: { durationMs: true, byteLength: true },
-  });
-  const readyCount = readyRows.length;
-  const allHaveNumbers = readyRows.every(
-    (r) =>
-      typeof r.durationMs === 'number' &&
-      Number.isInteger(r.durationMs) &&
-      (r.durationMs as number) > 0 &&
-      typeof r.byteLength === 'number' &&
-      Number.isInteger(r.byteLength) &&
-      (r.byteLength as number) >= 0
-  );
-  const manifest = await prisma.guestStoryAudioManifest.findUnique({
-    where: { id: manifestId },
-    select: { segmentCount: true },
-  });
-  const segmentCount = manifest?.segmentCount ?? segments.length;
-  const isFullyReady =
-    derived === 'ready' &&
-    readyCount === segmentCount &&
-    segmentCount > 0 &&
-    allHaveNumbers;
-  let totalDurationMs: number | null = null;
-  let totalByteLength: number | null = null;
-  let readyAt: Date | null = null;
-  if (isFullyReady) {
-    totalDurationMs = readyRows.reduce((a, r) => a + (r.durationMs as number), 0);
-    totalByteLength = readyRows.reduce((a, r) => a + (r.byteLength as number), 0);
-    readyAt = now;
-  }
-  let lastErrorCode: string | null = null;
-  if (derived === 'failed') {
-    const failed = await prisma.guestStoryAudioSegment.findFirst({
-      where: { manifestId, status: 'failed' },
-      orderBy: { updatedAt: 'desc' },
-      select: { lastErrorCode: true },
+  await prisma.$transaction(async (tx) => {
+    const segments = await tx.guestStoryAudioSegment.findMany({
+      where: { manifestId },
+      select: {
+        status: true,
+        durationMs: true,
+        byteLength: true,
+        leaseExpiresAt: true,
+        lastErrorCode: true,
+        updatedAt: true,
+      },
     });
-    lastErrorCode = failed?.lastErrorCode ?? 'AUDIO_SYNTHESIS_FAILED';
-  }
-  await prisma.guestStoryAudioManifest.update({
-    where: { id: manifestId },
-    data: {
-      status: isFullyReady ? 'ready' : derived,
-      readySegmentCount: readyCount,
-      totalDurationMs,
-      totalByteLength,
-      ...(isFullyReady ? { readyAt } : {}),
-      ...(derived === 'failed' ? { lastErrorCode } : { lastErrorCode: null }),
-    },
+    const derived = deriveManifestStatusFromSegments(segments, now);
+    const manifest = await tx.guestStoryAudioManifest.findUnique({
+      where: { id: manifestId },
+      select: { segmentCount: true },
+    });
+    const segmentCount = manifest?.segmentCount ?? segments.length;
+    const readyRows = segments.filter((s) => s.status === 'ready');
+    const readyCount = readyRows.length;
+    const allHaveNumbers = readyRows.every(
+      (r) =>
+        typeof r.durationMs === 'number' &&
+        Number.isInteger(r.durationMs) &&
+        (r.durationMs as number) > 0 &&
+        typeof r.byteLength === 'number' &&
+        Number.isInteger(r.byteLength) &&
+        (r.byteLength as number) >= 0
+    );
+    const isFullyReady =
+      derived === 'ready' &&
+      readyCount === segmentCount &&
+      segmentCount > 0 &&
+      allHaveNumbers;
+    let totalDurationMs: number | null = null;
+    let totalByteLength: number | null = null;
+    let readyAt: Date | null = null;
+    if (isFullyReady) {
+      totalDurationMs = readyRows.reduce(
+        (a, r) => a + (r.durationMs as number),
+        0
+      );
+      totalByteLength = readyRows.reduce(
+        (a, r) => a + (r.byteLength as number),
+        0
+      );
+      readyAt = now;
+    }
+    let lastErrorCode: string | null = null;
+    if (derived === 'failed') {
+      const latestFailed = readyRows.length === segments.length
+        ? null
+        : segments
+            .filter((s) => s.status === 'failed')
+            .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+      lastErrorCode = latestFailed?.lastErrorCode ?? 'AUDIO_SYNTHESIS_FAILED';
+    }
+    await tx.guestStoryAudioManifest.update({
+      where: { id: manifestId },
+      data: {
+        status: isFullyReady ? 'ready' : derived,
+        readySegmentCount: readyCount,
+        totalDurationMs,
+        totalByteLength,
+        ...(isFullyReady ? { readyAt } : {}),
+        ...(derived === 'failed' ? { lastErrorCode } : { lastErrorCode: null }),
+      },
+    });
   });
 }
 
@@ -898,6 +927,34 @@ async function ensureUserSegment(
   const checksum = computeAudioChecksum(audioBytes);
   const byteLength = audioBytes.byteLength;
 
+  // FIXUP Blocking2 ①：storage.put 之前原子 renew lease ownership（fencing）。
+  // lease 过期≠旧 Node 已死：若已被他人接管（leaseId 已换），count=0 → 丢弃本次
+  // bytes、不写 object、不改 DB，返回 preparing/RETRY。renew 成功才 put。
+  // 有效 lease 内仍为同一 key 覆盖写（spec §18）；② put 后仍保留 WHERE leaseId
+  // 的 DB CAS 作为第二层。
+  const renewAt = deps.now();
+  const renewed = await prisma.storyAudioSegment.updateMany({
+    where: { id: segment.id, leaseId, status: 'preparing' },
+    data: {
+      leaseExpiresAt: new Date(renewAt.getTime() + STORY_AUDIO_LEASE_TTL_MS),
+    },
+  });
+  if (renewed.count === 0) {
+    const snap = await readUserManifestSnapshot(manifest.id);
+    return {
+      status: 'preparing',
+      retryAfterMs: STORY_AUDIO_RETRY_AFTER_MS,
+      segment: { id: segment.id, index: segmentIndex },
+      manifest: {
+        status: snap?.status ?? 'preparing',
+        segmentCount: snap?.segmentCount ?? manifest.segmentCount,
+        readySegmentCount: snap?.readySegmentCount ?? manifest.readySegmentCount,
+        totalDurationMs: snap?.totalDurationMs ?? null,
+        totalByteLength: snap?.totalByteLength ?? null,
+      },
+    };
+  }
+
   // storage.put 同一 key 覆盖写（DB ready 更新失败的 retry 亦复用此 key，spec §18.1）
   try {
     await deps.storage.put({ key: storageKey, bytes: audioBytes, contentType });
@@ -1142,6 +1199,30 @@ async function ensureGuestSegment(
   }
   const checksum = computeAudioChecksum(audioBytes);
   const byteLength = audioBytes.byteLength;
+
+  // FIXUP Blocking2 ①（Guest 对称）：put 前原子 renew fencing；② put 后 WHERE leaseId CAS 保留。
+  const renewAt = deps.now();
+  const renewed = await prisma.guestStoryAudioSegment.updateMany({
+    where: { id: segment.id, leaseId, status: 'preparing' },
+    data: {
+      leaseExpiresAt: new Date(renewAt.getTime() + STORY_AUDIO_LEASE_TTL_MS),
+    },
+  });
+  if (renewed.count === 0) {
+    const snap = await readGuestManifestSnapshot(manifest.id);
+    return {
+      status: 'preparing',
+      retryAfterMs: STORY_AUDIO_RETRY_AFTER_MS,
+      segment: { id: segment.id, index: segmentIndex },
+      manifest: {
+        status: snap?.status ?? 'preparing',
+        segmentCount: snap?.segmentCount ?? manifest.segmentCount,
+        readySegmentCount: snap?.readySegmentCount ?? manifest.readySegmentCount,
+        totalDurationMs: snap?.totalDurationMs ?? null,
+        totalByteLength: snap?.totalByteLength ?? null,
+      },
+    };
+  }
 
   try {
     await deps.storage.put({ key: storageKey, bytes: audioBytes, contentType });

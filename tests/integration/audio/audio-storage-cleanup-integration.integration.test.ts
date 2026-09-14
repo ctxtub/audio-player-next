@@ -24,7 +24,8 @@ import {
  * 6. 对象本来 missing → success → gone；
  * 7. Local / fake 远端 lifecycle 语义相同；
  * 8. bounded：limit == 2 时只消费 2 行；
- * 9. directed：成功清行、失败保留。
+ * 9. directed：成功清行、失败保留；
+ * 10. 404 窄分类：NoSuchKey+404=missing 成功清行；NoSuchBucket+404/generic-404=retry 保留。
  */
 
 const TAG = `m805_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
@@ -457,6 +458,95 @@ async function runAudioStorageCleanupIntegrationTests() {
       assert.strictEqual(await countTombstones([failKey]), 0, '收尾 gone');
       await wipeTombstones([okKey, failKey]);
       console.log('PASS: 9. directed 通过');
+    }
+    console.log('=== 10. 404 窄分类：NoSuchKey=missing / NoSuchBucket,generic=retry ===');
+    {
+      const noSuchKey404 = Object.assign(new Error('NoSuchKey: key gone'), {
+        name: 'NoSuchKey',
+        $metadata: { httpStatusCode: 404 },
+      });
+      const noSuchBucket404 = Object.assign(
+        new Error('NoSuchBucket: wrong bucket'),
+        { name: 'NoSuchBucket', $metadata: { httpStatusCode: 404 } },
+      );
+      const generic404 = Object.assign(new Error('SomeBackendError boom'), {
+        name: 'SomeBackendError',
+        $metadata: { httpStatusCode: 404 },
+      });
+      // NoSuchKey → missing success → tombstone gone
+      {
+        const key = keyOf('narrow-nosuchkey');
+        await wipeTombstones([key]);
+        await prisma.$transaction(async (tx) => {
+          await enqueueAudioDeletionTombstones(tx, [key]);
+        });
+        const remote = createFakeRemoteBackend();
+        const throwing = createCountingBackend(remote, {
+          throwOnDelete: noSuchKey404,
+        });
+        const res = await cleanupAudioStorageDeletions({
+          storage: throwing,
+          now: new Date(),
+        });
+        assert.strictEqual(res.succeeded, 1, 'NoSuchKey 即 success');
+        assert.strictEqual(res.failed, 0, 'NoSuchKey 不计 failed');
+        assert.strictEqual(await countTombstones([key]), 0, 'NoSuchKey tombstone gone');
+        await wipeTombstones([key]);
+      }
+      // NoSuchBucket → failed=1、tombstone 保留、attempts=1、nextAttemptAt > now
+      {
+        const baseNow = new Date();
+        const key = keyOf('narrow-nosuchbucket');
+        await wipeTombstones([key]);
+        await prisma.$transaction(async (tx) => {
+          await enqueueAudioDeletionTombstones(tx, [key]);
+        });
+        const remote = createFakeRemoteBackend();
+        const throwing = createCountingBackend(remote, {
+          throwOnDelete: noSuchBucket404,
+        });
+        const res = await cleanupAudioStorageDeletions({
+          storage: throwing,
+          now: baseNow,
+        });
+        assert.strictEqual(res.succeeded, 0, 'NoSuchBucket 不得计 success');
+        assert.strictEqual(res.failed, 1, 'NoSuchBucket failed == 1');
+        assert.strictEqual(await countTombstones([key]), 1, 'NoSuchBucket tombstone 保留');
+        const row = await prisma.audioStorageDeletion.findUnique({
+          where: { storageKey: key },
+        });
+        assert.strictEqual(row!.attempts, 1, 'NoSuchBucket attempts == 1');
+        assert.ok(
+          row!.nextAttemptAt instanceof Date &&
+            (row!.nextAttemptAt as Date).getTime() > baseNow.getTime(),
+          'NoSuchBucket nextAttemptAt > now',
+        );
+        await wipeTombstones([key]);
+      }
+      // generic-404 → retry，不得清 tombstone
+      {
+        const key = keyOf('narrow-generic404');
+        await wipeTombstones([key]);
+        await prisma.$transaction(async (tx) => {
+          await enqueueAudioDeletionTombstones(tx, [key]);
+        });
+        const remote = createFakeRemoteBackend();
+        const throwing = createCountingBackend(remote, {
+          throwOnDelete: generic404,
+        });
+        const res = await cleanupAudioStorageDeletions({
+          storage: throwing,
+          now: new Date(),
+        });
+        assert.strictEqual(res.failed, 1, 'generic-404 failed == 1');
+        assert.strictEqual(
+          await countTombstones([key]),
+          1,
+          'generic-404 tombstone 保留',
+        );
+        await wipeTombstones([key]);
+      }
+      console.log('PASS: 10. 404 窄分类通过');
     }
   } finally {
     await fs.promises.rm(tmpRoot, { recursive: true, force: true });

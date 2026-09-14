@@ -30,6 +30,7 @@ import type { AudioAssetStorage } from '../../../lib/audio/storage/types';
  * 6. 对象本来 missing → cleanup success → tombstone gone；
  * 7. 双后端形态 lifecycle 语义相同；
  * 8. 静态 oracle：cleanup 不触 owner/会话/路由层，不直连远端 SDK，bounded 消费。
+ * 12. 404 窄分类：NoSuchKey+404=missing 成功清行；NoSuchBucket+404/generic-404=retry 保留。
  */
 
 type TombstoneRow = {
@@ -632,6 +633,109 @@ async function runAudioStorageCleanupUnitTests() {
     assert.strictEqual(res2.failed, 1, 'directed 失败计数');
     assert.strictEqual(db2.rows.size, 1, 'directed 失败保留 tombstone');
     console.log('PASS: 10. directed 通过');
+  }
+
+  console.log('=== 12. 404 窄分类：NoSuchKey=missing / NoSuchBucket,generic=retry ===');
+  {
+    const noSuchKey404 = Object.assign(new Error('NoSuchKey: key gone'), {
+      name: 'NoSuchKey',
+      $metadata: { httpStatusCode: 404 },
+    });
+    const noSuchBucket404 = Object.assign(
+      new Error('NoSuchBucket: wrong bucket'),
+      { name: 'NoSuchBucket', $metadata: { httpStatusCode: 404 } },
+    );
+    const generic404 = Object.assign(new Error('SomeBackendError boom'), {
+      name: 'SomeBackendError',
+      $metadata: { httpStatusCode: 404 },
+    });
+    assert.strictEqual(
+      isMissingObjectDeletionError(noSuchKey404),
+      true,
+      'NoSuchKey+404 必须判 missing',
+    );
+    assert.strictEqual(
+      isMissingObjectDeletionError(noSuchBucket404),
+      false,
+      'NoSuchBucket+404 不得判 missing（retry）',
+    );
+    assert.strictEqual(
+      isMissingObjectDeletionError(generic404),
+      false,
+      'generic-404 不得判 missing（retry）',
+    );
+    // cleanup 行为对锁：NoSuchKey → missing success → tombstone gone
+    {
+      const db = createFakeDeletionDb(baseMs);
+      const key = 'story-audio/m805-unit-narrow-nosuchkey.mp3';
+      await enqueueAudioDeletionTombstones(db, [key]);
+      const throwing = createThrowingBackend(
+        createMemoryBackend(),
+        async () => {
+          throw noSuchKey404;
+        },
+      );
+      const res = await cleanupAudioStorageDeletions({
+        storage: throwing,
+        now: baseNow,
+        db: db as unknown as AudioDeletionTx,
+      });
+      assert.strictEqual(res.succeeded, 1, 'NoSuchKey 即 success');
+      assert.strictEqual(res.failed, 0, 'NoSuchKey 不计 failed');
+      assert.strictEqual(db.rows.size, 0, 'NoSuchKey tombstone gone');
+    }
+    // NoSuchBucket → failed=1、tombstone 保留、attempts=1、nextAttemptAt > now
+    {
+      const db = createFakeDeletionDb(baseMs);
+      const key = 'story-audio/m805-unit-narrow-nosuchbucket.mp3';
+      await enqueueAudioDeletionTombstones(db, [key]);
+      const throwing = createThrowingBackend(
+        createMemoryBackend(),
+        async () => {
+          throw noSuchBucket404;
+        },
+      );
+      const res = await cleanupAudioStorageDeletions({
+        storage: throwing,
+        now: baseNow,
+        db: db as unknown as AudioDeletionTx,
+      });
+      assert.strictEqual(res.succeeded, 0, 'NoSuchBucket 不得计 success');
+      assert.strictEqual(res.failed, 1, 'NoSuchBucket failed == 1');
+      assert.strictEqual(db.rows.size, 1, 'NoSuchBucket tombstone 保留');
+      const row = db.rows.get(key)!;
+      assert.strictEqual(row.attempts, 1, 'NoSuchBucket attempts == 1');
+      assert.ok(
+        row.nextAttemptAt instanceof Date &&
+          row.nextAttemptAt.getTime() > baseNow.getTime(),
+        'NoSuchBucket nextAttemptAt > now',
+      );
+    }
+    // generic-404 → retry，不得清 tombstone
+    {
+      const db = createFakeDeletionDb(baseMs);
+      const key = 'story-audio/m805-unit-narrow-generic404.mp3';
+      await enqueueAudioDeletionTombstones(db, [key]);
+      const throwing = createThrowingBackend(
+        createMemoryBackend(),
+        async () => {
+          throw generic404;
+        },
+      );
+      const res = await cleanupAudioStorageDeletions({
+        storage: throwing,
+        now: baseNow,
+        db: db as unknown as AudioDeletionTx,
+      });
+      assert.strictEqual(res.failed, 1, 'generic-404 failed == 1');
+      assert.strictEqual(db.rows.size, 1, 'generic-404 tombstone 保留');
+      assert.strictEqual(
+        db.rows.get(key)!.attempts,
+        1,
+        'generic-404 attempts == 1',
+      );
+    }
+    console.log('PASS: 12. 404 窄分类通过');
   }
 
   console.log('=== 11. 静态 oracle：领域隔离 + 后端中立 + 有界消费 ===');

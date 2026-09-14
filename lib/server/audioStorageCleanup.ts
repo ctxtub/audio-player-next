@@ -190,6 +190,12 @@ export function normalizeDeletionCleanupLimit(limit?: number | null): number {
  *
  * Both backends delete idempotently, so this path is a safety net for
  * drivers that surface typed/absent markers instead of silent success.
+ *
+ * Narrow classification (M8-05-01 FIXUP): a bare HTTP 404 is NOT enough to
+ * declare the object gone. S3-compatible DeleteObject reports NoSuchBucket
+ * (or a misconfigured bucket) as 404 as well, and clearing the tombstone on
+ * that signal would orphan the canonical object once the bucket is fixed.
+ * Only explicit key/object-missing signals count as missing.
  */
 export function isMissingObjectDeletionError(err: unknown): boolean {
   if (err instanceof AudioObjectNotFoundError) return true;
@@ -198,7 +204,6 @@ export function isMissingObjectDeletionError(err: unknown): boolean {
     name?: unknown;
     code?: unknown;
     message?: unknown;
-    $metadata?: { httpStatusCode?: unknown };
   };
   if (
     candidate.name === 'AudioObjectNotFoundError' ||
@@ -215,8 +220,9 @@ export function isMissingObjectDeletionError(err: unknown): boolean {
   ) {
     return true;
   }
-  const status = candidate.$metadata?.httpStatusCode;
-  if (status === 404) return true;
+  // NOTE: a bare `$metadata.httpStatusCode === 404` is deliberately NOT
+  // treated as missing (NoSuchBucket / wrong-bucket misconfig also surface
+  // as 404 and must stay retryable so the tombstone is preserved).
   if (typeof candidate.message === 'string') {
     if (/NoSuchKey|\bNotFound\b/i.test(candidate.message)) {
       return true;

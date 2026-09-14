@@ -549,7 +549,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [auth, migrate]
     spec_path: docs/e2e/05-认证授权与会话生命周期/01-访客注册三步迁移与数据保真.md
-    executable_ids: [exec-guest-creative-sync, exec-story-work-guest-registration, exec-playback-subject-remap, exec-playback-remap-merge]
+    executable_ids: [exec-guest-creative-sync, exec-story-work-guest-registration, exec-playback-subject-remap, exec-playback-remap-merge, exec-audio-ownership-transfer, exec-audio-ownership-transfer-integration]
     fixtures: []
     owner: auth-session
   - case_id: register-interrupt-orphan-rollback
@@ -1468,6 +1468,14 @@ executables:
     display_name_zh: M8 audio-aware删除生命周期集成
     layer: L2
     path: ./tests/integration/audio/audio-lifecycle-delete-integration.integration.test.ts
+  - executable_id: exec-audio-ownership-transfer
+    display_name_zh: M8 Guest→User音频所有权转移单元
+    layer: L1
+    path: ./tests/unit/audio/audio-ownership-transfer.unit.test.ts
+  - executable_id: exec-audio-ownership-transfer-integration
+    display_name_zh: M8 Guest→User音频所有权转移集成
+    layer: L2
+    path: ./tests/integration/audio/audio-ownership-transfer-integration.integration.test.ts
   - executable_id: exec-story-work-read
     display_name_zh: StoryWork读模型与检索
     layer: L2

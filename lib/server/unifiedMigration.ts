@@ -9,6 +9,7 @@ import { prisma } from '@/lib/db';
 import { canonicalizeSourceKind } from '@/lib/playback/legacy';
 import { isValidDraftMessageId } from '@/lib/playback/source';
 import { mergeRemappedWorkProgress } from '@/lib/playback/progress';
+import { transferGuestAudioOwnershipTx } from '@/lib/server/audioOwnershipTransfer';
 
 export interface MigrationResult {
     messagesMigrated: number;
@@ -95,9 +96,11 @@ export async function migrateGuestCreativeRecordsToUser(
             }
 
             for (const g of guestStoryWorks) {
-                // 若已迁移，直接复用既有映射
+                // 若已迁移，直接复用既有映射（M8-05-03：同事务内幂等补转 audio ownership；
+                // Guest Manifest 已清则 no-op，等价已存在则清 Guest rows，冲突则整事务 CONFLICT 回滚）
                 if (existingMap.has(g.id)) {
                     storyWorkIdMap.set(g.id, existingMap.get(g.id)!);
+                    await transferGuestAudioOwnershipTx(tx, g.id, existingMap.get(g.id)!);
                     continue;
                 }
 
@@ -125,6 +128,9 @@ export async function migrateGuestCreativeRecordsToUser(
                                 userStoryWorkId: existing.id,
                             },
                         });
+                        // M8-05-03：复用既有 User Work 时同事务 transfer audio
+                        //（User Manifest 缺席→transfer；等价→幂等清 Guest；冲突→CONFLICT 全回滚）
+                        await transferGuestAudioOwnershipTx(tx, g.id, existing.id);
                         continue;
                     } else {
                         // 同源异 hash：拒绝冲突，严禁建立错误 map，严禁覆盖原 User Work
@@ -170,6 +176,11 @@ export async function migrateGuestCreativeRecordsToUser(
                         userStoryWorkId: created.id,
                     },
                 });
+
+                // M8-05-03：同一 DB transaction 内 transfer audio ownership
+                //（Guest Manifest→User Manifest(storyWorkId=created.id)，storageKey 不变，
+                // 随后删 Guest Segment/Manifest rows；object/TTS/tombstone 零触达）
+                await transferGuestAudioOwnershipTx(tx, g.id, created.id);
             }
         }, { timeout: 30000 });
     }

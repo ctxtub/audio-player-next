@@ -4,6 +4,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # M8-05-04 canonical enable gate（构建期；默认空 = fail-closed 关闭。
+        # 安全开启：NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=1 docker compose build）
+        NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED: "${NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED:-}"
     env_file:
       - .env.local
     ports:
@@ -13,6 +17,10 @@ services:
       DATABASE_URL: "file:/app/data/app.db"
       AUDIO_STORAGE_DRIVER: "local"
       AUDIO_LOCAL_ROOT: "/app/audio"
+      # M8-05-04 canonical enable gate（运行时；默认空 = fail-closed 关闭。
+      # 安全开启：CANONICAL_AUDIO_ENABLED=1；与构建期变量任一 strict '1' 即开，
+      # 语义见 lib/audio/canonicalFlag.ts）
+      CANONICAL_AUDIO_ENABLED: "${CANONICAL_AUDIO_ENABLED:-}"
     volumes:
       - ./data:/app/data
       - ./audio:/app/audio

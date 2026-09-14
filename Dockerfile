@@ -14,6 +14,12 @@ RUN yarn install --frozen-lockfile
 
 FROM base AS builder
 ENV NODE_ENV=production
+# M8-05-04 canonical enable gate（构建期变量，供 Next 构建内联
+# NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED；缺省空 = fail-closed，生产默认关闭。
+# 开启方式：docker build --build-arg NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=1，
+# 源码默认不得改（canonicalFlag.ts strict '1' 才开）。）
+ARG NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=""
+ENV NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=${NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # 构建阶段提供占位 DATABASE_URL，避免服务端模块校验报错；实际连接在运行时由环境变量注入
@@ -28,6 +34,10 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# M8-05-04 canonical enable gate（运行时变量；缺省空 = fail-closed，生产默认关闭。
+# 开启方式：CANONICAL_AUDIO_ENABLED=1；与构建期 NEXT_PUBLIC_* 变量任一 strict '1' 即开，
+# 语义见 lib/audio/canonicalFlag.ts，源码默认不得改。）
+ENV CANONICAL_AUDIO_ENABLED=""
 RUN apk add --no-cache libc6-compat su-exec \
   && addgroup -g 1001 nodejs \
   && adduser -D -G nodejs nodejs

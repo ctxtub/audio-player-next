@@ -54,6 +54,10 @@ import { computeAudioChecksum } from '@/lib/audio/checksum';
 import { getMp3DurationMs } from '@/lib/audio/duration';
 import { getAudioAssetStorage } from '@/lib/audio/storage';
 import type { AudioAssetStorage } from '@/lib/audio/storage/types';
+import {
+  AUDIO_DELETION_DEFAULT_LIMIT,
+  cleanupAudioStorageDeletions,
+} from '@/lib/server/audioStorageCleanup';
 import { isValidPlaybackSessionId } from '@/lib/playback/session';
 import {
   getTtsConfig,
@@ -113,6 +117,82 @@ function throwDomain(
 /** 稳定 playback URL（opaque segmentId；浏览器永不直接获取 storageKey，spec §19） */
 export function buildSegmentPlaybackUrl(segmentId: string): string {
   return `/api/audio/segments/${segmentId}`;
+}
+
+// ============================================================================
+// Opportunistic bounded tombstone cleanup（M8-05-04 production closure）
+// ============================================================================
+
+/**
+ * 两次机会清理之间的最小间隔（ms）。
+ *
+ * 低频节流：ensureSegment 是高频读路径，禁止每次请求全表扫描；只有距离上次
+ * 触发超过本间隔才跑一次有界消费。module 级时间戳（单测经 reset 函数归零）。
+ */
+export const OPPORTUNISTIC_AUDIO_CLEANUP_MIN_INTERVAL_MS = 5 * 60 * 1000;
+
+let opportunisticAudioCleanupLastRunMs = 0;
+let opportunisticAudioCleanupRunnerOverride:
+  | (() => Promise<unknown>)
+  | null = null;
+
+/** 单测注入机会清理 runner（null = 恢复缺省冻结引擎；生产永不调用）。 */
+export function setOpportunisticAudioCleanupRunnerForTests(
+  runner: (() => Promise<unknown>) | null,
+): void {
+  opportunisticAudioCleanupRunnerOverride = runner;
+}
+
+/** 单测归零节流时间戳（生产永不调用）。 */
+export function resetOpportunisticAudioCleanupThrottleForTests(): void {
+  opportunisticAudioCleanupLastRunMs = 0;
+}
+
+/** 单测读取上次触发毫秒时间戳（生产永不调用）。 */
+export function getOpportunisticAudioCleanupLastRunMsForTests(): number {
+  return opportunisticAudioCleanupLastRunMs;
+}
+
+/**
+ * 低频机会触发一次有界 tombstone 清理。
+ *
+ * - 节流：间隔内重复调用直接返回 false（零 DB/存储访问，禁止全表扫描）；
+ * - 有界：复用冻结引擎 + DEFAULT limit（MAX 钳制由引擎内部保证）；
+ * - 失败绝不影响调用方：捕获 + 日志 + 返回 true（已触发），永不抛错。
+ *
+ * @param nowMs 当前毫秒时间戳（缺省 Date.now()；单测注入虚拟时钟）
+ * @returns 本次是否实际触发消费（节流跳过返回 false）
+ */
+export async function maybeRunOpportunisticAudioDeletionCleanup(
+  nowMs: number = Date.now(),
+): Promise<boolean> {
+  if (
+    nowMs - opportunisticAudioCleanupLastRunMs <
+    OPPORTUNISTIC_AUDIO_CLEANUP_MIN_INTERVAL_MS
+  ) {
+    return false;
+  }
+  opportunisticAudioCleanupLastRunMs = nowMs;
+  const run =
+    opportunisticAudioCleanupRunnerOverride ??
+    (() =>
+      cleanupAudioStorageDeletions({
+        limit: AUDIO_DELETION_DEFAULT_LIMIT,
+      }));
+  try {
+    await run();
+  } catch (err) {
+    try {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.warn(
+        '[storyAudio] opportunistic audio deletion cleanup failed (non-fatal)',
+        detail,
+      );
+    } catch {
+      // 日志失败亦吞掉，永不影响 ensureSegment 结果。
+    }
+  }
+  return true;
 }
 
 // ============================================================================
@@ -727,6 +807,9 @@ export async function ensureStoryAudioSegmentForSubject(
   const deps = resolveDeps(depsInput);
   const now = deps.now();
   const { workId, segmentIndex, sessionId } = input;
+  // M8-05-04 opportunistic bounded cleanup：低频节流 + 有界 + 失败吞错。
+  // fire-and-forget（不 await），永不影响 ensureSegment 结果与延迟主路径。
+  void maybeRunOpportunisticAudioDeletionCleanup();
   if (!Number.isInteger(workId) || workId <= 0) {
     throwDomain('WORK_NOT_FOUND', 'NOT_FOUND');
   }

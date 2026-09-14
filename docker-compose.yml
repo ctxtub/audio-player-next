@@ -11,6 +11,9 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: "file:/app/data/app.db"
+      AUDIO_STORAGE_DRIVER: "local"
+      AUDIO_LOCAL_ROOT: "/app/audio"
     volumes:
       - ./data:/app/data
+      - ./audio:/app/audio
     restart: unless-stopped

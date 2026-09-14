@@ -50,7 +50,9 @@ COPY --from=builder /app/scripts/docker-start.sh ./scripts/docker-start.sh
 RUN chmod +x ./scripts/docker-start.sh
 
 # 数据持久化目录（映射宿主机 volume）
-RUN mkdir -p /app/data && chown -R nodejs:nodejs /app/data /app/scripts
+# /app/data → SQLite；/app/audio → M8 Canonical Audio（Local backend 独立 volume，
+# 与数据库解耦，禁止落入 /app/data/audio，见 spec §2.1/§3.1）
+RUN mkdir -p /app/data /app/audio && chown -R nodejs:nodejs /app/data /app/audio /app/scripts
 
 # 以 root 启动 entrypoint，由脚本内部 chown + su-exec 降权运行
 EXPOSE 3000

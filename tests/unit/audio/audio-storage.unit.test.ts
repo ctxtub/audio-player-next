@@ -9,6 +9,7 @@ import {
 } from '../../../lib/audio/storage/types';
 import {
   DEFAULT_LOCAL_AUDIO_ROOT,
+  isNotFoundFsError,
   LocalFilesystemStorage,
   resolveLocalRoot,
 } from '../../../lib/audio/storage/local';
@@ -187,6 +188,33 @@ async function runAudioStorageUnitTests() {
       '/app/data/audio',
       '耦合目录常量冻结'
     );
+    // 路径别名绕过封堵（先 canonicalize 再判定；FIXUP Blocking 2）
+    for (const alias of [
+      '/app/data/./audio',
+      '/app/data/foo/../audio',
+      '/app/data/audio/../audio',
+    ]) {
+      assert.throws(
+        () =>
+          resolveAudioStorageConfig({
+            AUDIO_STORAGE_DRIVER: 'local',
+            AUDIO_LOCAL_ROOT: alias,
+          }),
+        /must not be under/,
+        `别名路径必须同样 fail-fast：${alias}`
+      );
+    }
+    // config 返回 canonical path（归一化尾斜杠）
+    {
+      const canon = resolveAudioStorageConfig({
+        AUDIO_STORAGE_DRIVER: 'local',
+        AUDIO_LOCAL_ROOT: '/app/audio/',
+      });
+      assert.strictEqual(canon.driver, 'local');
+      if (canon.driver === 'local') {
+        assert.strictEqual(canon.localRoot, '/app/audio', '返回 canonical path');
+      }
+    }
     console.log('PASS: 2. Local root 断言通过');
   }
 
@@ -420,6 +448,35 @@ async function runAudioStorageUnitTests() {
       }
     }
     console.log('PASS: 6. 静态守卫断言通过');
+  }
+
+  console.log('=== 7. fs 故障区分：仅 ENOENT/ENOTDIR 为 not-found（spec §45） ===');
+  {
+    const notFound = [{ code: 'ENOENT' }, { code: 'ENOTDIR' }];
+    for (const err of notFound) {
+      assert.strictEqual(
+        isNotFoundFsError(Object.assign(new Error('x'), err)),
+        true,
+        `必须识别 not-found：${(err as { code: string }).code}`
+      );
+    }
+    const faults: unknown[] = [
+      Object.assign(new Error('denied'), { code: 'EACCES' }),
+      Object.assign(new Error('io'), { code: 'EIO' }),
+      Object.assign(new Error('isdir'), { code: 'EISDIR' }),
+      new Error('plain'),
+      null,
+      undefined,
+      'ENOENT',
+    ];
+    for (const err of faults) {
+      assert.strictEqual(
+        isNotFoundFsError(err),
+        false,
+        `故障不得降级为 not-found：${String((err as { code?: unknown } | null)?.code ?? typeof err)}`
+      );
+    }
+    console.log('PASS: 7. fs 故障区分断言通过');
   }
 
   console.log('ALL AUDIO STORAGE UNIT TESTS PASSED SUCCESSFULLY');

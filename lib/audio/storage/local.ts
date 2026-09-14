@@ -27,6 +27,20 @@ export const DEFAULT_LOCAL_AUDIO_ROOT = '/app/audio';
 /** contentType sidecar 后缀（bytes 文件同目录同名 + 后缀；缺失时回落 canonical 缺省） */
 const CONTENT_TYPE_SIDECAR_SUFFIX = '.contenttype';
 
+/**
+ * 判定 fs 错误是否为“对象不存在”语义（spec §45 故障区分口径）。
+ *
+ * 仅 ENOENT（路径不存在）及 ENOTDIR（中间段非目录，如 key 被目录遮挡）视为
+ * not-found；其余（EACCES 权限、EIO、EISDIR 等）必须原样 throw：
+ * 一次存储服务故障不得被误判为 canonical asset corruption（DB ready +
+ * object missing），否则会错误触发后续 regeneration 路径。
+ */
+export function isNotFoundFsError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const code = (err as { code?: unknown }).code;
+  return code === 'ENOENT' || code === 'ENOTDIR';
+}
+
 /** canonical 缺省 content-type（与 lib/audio/profile.ts 同值；仅作 sidecar 缺失回落） */
 const FALLBACK_CONTENT_TYPE = 'audio/mpeg';
 
@@ -96,8 +110,10 @@ export class LocalFilesystemStorage implements AudioAssetStorage {
     try {
       const stat = await fs.promises.stat(this.resolvePathForKey(key));
       return stat.isFile();
-    } catch {
-      return false;
+    } catch (err) {
+      // 中文注释：仅 not-found 语义返回 false；权限/EIO 等故障原样 throw（spec §45）。
+      if (isNotFoundFsError(err)) return false;
+      throw err;
     }
   }
 
@@ -115,8 +131,10 @@ export class LocalFilesystemStorage implements AudioAssetStorage {
     let stat: fs.Stats;
     try {
       stat = await fs.promises.stat(abs);
-    } catch {
-      return null;
+    } catch (err) {
+      // 中文注释：仅 not-found 语义返回 null；其余故障原样 throw（route → 500，spec §45）。
+      if (isNotFoundFsError(err)) return null;
+      throw err;
     }
     if (!stat.isFile()) return null;
     let contentType = FALLBACK_CONTENT_TYPE;
@@ -138,8 +156,10 @@ export class LocalFilesystemStorage implements AudioAssetStorage {
     let data: Buffer;
     try {
       data = await fs.promises.readFile(abs);
-    } catch {
-      throw new AudioObjectNotFoundError(key);
+    } catch (err) {
+      // 中文注释：仅 not-found 转 NotFound（route → 404）；其余故障原样 throw（route → 500）。
+      if (isNotFoundFsError(err)) throw new AudioObjectNotFoundError(key);
+      throw err;
     }
     const meta = await this.getMetadata(key);
     // 中文注释：bytes 已读到但 stat 失败属异常 corrupt；按缺失处理（route → 404，不改 DB）。

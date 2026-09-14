@@ -10,6 +10,7 @@ import {
   resetAudioAssetStorageForTests,
   setAudioAssetStorageForTests,
 } from '../../../lib/audio/storage/index';
+import type { AudioAssetStorage } from '../../../lib/audio/storage/types';
 import { S3AudioAssetStorage } from '../../../lib/audio/storage/s3';
 import { GET } from '../../../app/api/audio/segments/[segmentId]/route';
 
@@ -20,7 +21,8 @@ process.env.SESSION_SECRET = 'test-secret-m802-audio-read-12345';
  *
  * 覆盖：owner 可读（200 + Range 206 三类 + invalid 416）/ 其他 subject 拒绝（403）/
  * Trash owned Work 的 ready asset 可读 / unknown 或已删除 segment → 404 /
- * 非 ready → 404 / 未鉴权 → 401 / S3 后端 307 redirect / 错误体不泄漏内部标识。
+ * 非 ready → 404 / 未鉴权 → 401 / S3 后端 307 redirect / 错误体不泄漏内部标识 /
+ * 存储故障 → 500（不降级 404，spec §45）/ ready 但对象缺失 → 404 AUDIO_OBJECT_MISSING。
  */
 
 function sampleBytes(length: number): Uint8Array {
@@ -407,6 +409,53 @@ async function runAudioSegmentReadTests() {
       assert.strictEqual(text.toLowerCase().includes('bucket'), false);
     }
     console.log('PASS: 10. 脱敏通过');
+
+    console.log('=== 11. 存储故障（getMetadata throw）→ 500，非 404（spec §45） ===');
+    {
+      const fx = await createReadyUserSegment('backend-down');
+      const downStorage: AudioAssetStorage = {
+        put: async () => {},
+        exists: async () => true,
+        delete: async () => {},
+        getMetadata: async () => {
+          throw new Error('backend-down');
+        },
+        resolveRead: async () => {
+          throw new Error('backend-down');
+        },
+      };
+      setAudioAssetStorageForTests(downStorage);
+      try {
+        const res = await callGet(fx.segmentId, fx.cookie);
+        assert.strictEqual(res.status, 500, '存储故障必须 500');
+        assert.notStrictEqual(res.status, 404, '存储故障不得降级为 404');
+        assert.deepStrictEqual(await res.json(), {
+          error: { code: 'AUDIO_READ_FAILED' },
+        });
+      } finally {
+        resetAudioAssetStorageForTests();
+      }
+      // 故障解除后同一资产仍可读（确为瞬时故障，非 corruption）
+      const recovered = await callGet(fx.segmentId, fx.cookie);
+      assert.strictEqual(recovered.status, 200, '故障解除后仍可读');
+    }
+    console.log('PASS: 11. 故障 500 通过');
+
+    console.log('=== 12. ready 但对象缺失 → 404 AUDIO_OBJECT_MISSING ===');
+    {
+      const fx = await createReadyUserSegment('obj-missing');
+      await getAudioAssetStorage().delete(fx.storageKey);
+      const res = await callGet(fx.segmentId, fx.cookie);
+      assert.strictEqual(res.status, 404, '对象缺失必须 404');
+      assert.deepStrictEqual(await res.json(), {
+        error: { code: 'AUDIO_OBJECT_MISSING' },
+      });
+      const seg = await prisma.storyAudioSegment.findUnique({
+        where: { id: fx.segmentId },
+      });
+      assert.strictEqual(seg!.status, 'ready', '404 不得改写 segment 状态');
+    }
+    console.log('PASS: 12. 缺失 404 通过');
   } finally {
     if (savedDriver === undefined) delete process.env.AUDIO_STORAGE_DRIVER;
     else process.env.AUDIO_STORAGE_DRIVER = savedDriver;

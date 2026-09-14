@@ -156,6 +156,26 @@ async function runLocalStorageIntegrationTests() {
       );
       console.log('PASS: 5. traversal 拒绝通过');
     }
+
+    console.log('=== 6. 非 ENOENT 故障原样 throw（spec §45，不降级为缺失） ===');
+    {
+      const storage = new LocalFilesystemStorage({ root: tmpRoot });
+      // 合法 key 但对应路径为目录 → readFile 报 EISDIR（非 ENOENT/ENOTDIR）
+      const dirKey = 'story-audio/eisdir-probe.mp3';
+      await fs.promises.mkdir(path.join(tmpRoot, dirKey), { recursive: true });
+      await assert.rejects(
+        storage.resolveRead(dirKey),
+        (err: unknown) =>
+          err instanceof Error &&
+          !(err instanceof AudioObjectNotFoundError) &&
+          (err as NodeJS.ErrnoException).code === 'EISDIR',
+        'EISDIR 故障必须原样 throw，不得伪装成对象缺失'
+      );
+      // 目录不是文件：exists 按 false（stat 成功但非文件），metadata 按 null（同口径）
+      assert.strictEqual(await storage.exists(dirKey), false);
+      assert.strictEqual(await storage.getMetadata(dirKey), null);
+      console.log('PASS: 6. 故障不降级通过');
+    }
   } finally {
     await fs.promises.rm(tmpRoot, { recursive: true, force: true });
   }

@@ -9,7 +9,8 @@
  *   不更新 segment ready、不接 M5）。
  *
  * 本模块只做 ownership 与 ready 门禁，不触 bytes（bytes 由 storage backend 经
- * route 传输；客户端永远看不到 storageKey / bucket / 文件系统路径）。
+ * route 传输；storageKey 不作为 DTO/API 字段暴露，客户端不构造、不持久化
+ * storageKey；S3 signed redirect 的 Location 可包含 opaque 对象 key）。
  */
 
 import { prisma } from '@/lib/db';

@@ -8,6 +8,7 @@
  * 之外的 SDK 或构造 filesystem path / bucket URL。
  */
 
+import path from 'node:path';
 import {
   LocalFilesystemStorage,
   resolveLocalRoot,
@@ -105,7 +106,9 @@ export function resolveAudioStorageConfig(
   const e = readEnv(env);
   const driver = resolveStorageDriverName(e.AUDIO_STORAGE_DRIVER ?? null);
   if (driver === 'local') {
-    const localRoot = resolveLocalRoot(e.AUDIO_LOCAL_ROOT ?? null);
+    // 中文注释：先 canonicalize（resolve 归一化 `.`/`..`/尾斜杠与相对路径）再判定，
+    // 使 `/app/data/./audio` 等路径别名无法绕过耦合目录 fail-fast；返回 canonical path。
+    const localRoot = path.resolve(resolveLocalRoot(e.AUDIO_LOCAL_ROOT ?? null));
     if (isCoupledLegacyAudioRoot(localRoot)) {
       throw new Error(
         'invalid audio storage config: AUDIO_LOCAL_ROOT must not be under /app/data (use an independent volume)'

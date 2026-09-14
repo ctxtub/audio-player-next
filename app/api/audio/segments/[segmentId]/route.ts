@@ -11,7 +11,8 @@
  * - Local 后端：200 / 206 Range 流（Accept-Ranges / Content-Range /
  *   Content-Length / Content-Type；非法 Range → 416）。
  * - S3 后端：ownership 通过 → 短时 signed URL → 307 redirect（App 不代理 bytes）。
- * - 客户端永远看不到 storageKey / 文件系统路径 / 对象存储内部标识（错误体仅固定 code）。
+ * - storageKey 不作为 DTO/API 字段暴露；客户端不构造、不持久化 storageKey；
+ *   S3 signed redirect 的 Location 可包含 opaque 对象 key（UUID）。错误体仅固定 code。
  */
 
 import {
@@ -78,7 +79,13 @@ export async function GET(
 
   // 中文注释：DB ready 但 object 缺失视为 corruption → 404，且不改写任何 DB 状态
   //（M8-02 只读已有资产；recovery 留 M8-03）。
-  const meta = await storage.getMetadata(segment.storageKey).catch(() => null);
+  // getMetadata 抛错 = 存储故障（非 corruption）→ 500，不得降级为 404（spec §45）。
+  let meta;
+  try {
+    meta = await storage.getMetadata(segment.storageKey);
+  } catch {
+    return jsonError(500, 'AUDIO_READ_FAILED');
+  }
   if (!meta) {
     return jsonError(404, 'AUDIO_OBJECT_MISSING');
   }

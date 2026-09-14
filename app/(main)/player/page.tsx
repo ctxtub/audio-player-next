@@ -1,12 +1,9 @@
-import React from 'react';
-import HomePage from './index';
+import { redirect } from 'next/navigation';
 
 /**
- * 首页路由入口，转发至 HomePage 组件。
- * @returns 首页路由节点。
+ * M9-01 /player 兼容入口：最薄 server redirect（route ownership 已切换至 /library）。
+ * 旧 Player UI（index.tsx / components/**）物理保留至 M9-02，但此后不可达。
  */
-const Page: React.FC = () => {
-  return <HomePage />;
-};
-
-export default Page;
+export default function PlayerCompatPage() {
+  redirect('/library');
+}

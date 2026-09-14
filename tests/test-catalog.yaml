@@ -1225,6 +1225,18 @@ cases:
     executable_ids: [exec-production-cutover, exec-l3-m7-p3a-closure]
     fixtures: []
     owner: smoke-baseline
+  - case_id: player-compat-redirect
+    display_name_zh: /player 兼容重定向与会话契约
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: 旧/player入口全部重定向至/library且会话经冻结Anchor连续不伪造
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [router, compatibility, playback, session]
+    spec_path: docs/e2e/09-旧播放器退役与兼容收口/01-player兼容重定向与会话契约.md
+    executable_ids: [exec-player-compat-redirect, exec-l3-player-compat-redirect]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1780,3 +1792,11 @@ executables:
     display_name_zh: L3暂停刷新后同会话就绪恢复
     layer: L3
     path: ./tests/system/browser/scenarios/playback-pause-refresh-resume.spec.ts
+  - executable_id: exec-player-compat-redirect
+    display_name_zh: /player兼容重定向静态守卫
+    layer: L1
+    path: ./tests/unit/navigation/player-compat-redirect.unit.test.ts
+  - executable_id: exec-l3-player-compat-redirect
+    display_name_zh: L3/player兼容重定向四例全链路
+    layer: L3
+    path: ./tests/system/browser/scenarios/player-compat-redirect.spec.ts

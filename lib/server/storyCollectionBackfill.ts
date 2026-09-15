@@ -40,6 +40,69 @@ const emptyCounts = (): StoryCollectionBackfillCounts => ({
 });
 
 /**
+ * M9-C1 Blocker 2：legacy Chat 存在重复 messageId 时的 fail-closed 错误。
+ *
+ * 携带脱敏计数（重复的 owner×messageId 组数）；调用方在任何写入前抛出，保证该 Subject 零写入。
+ */
+export class LegacyMessageIdConflictError extends Error {
+  readonly duplicateCount: number;
+
+  constructor(duplicateCount: number) {
+    super(
+      `legacy Chat 存在重复 messageId（${duplicateCount} 组），已 fail-closed 中止回填（零写入）`,
+    );
+    this.name = 'LegacyMessageIdConflictError';
+    this.duplicateCount = duplicateCount;
+  }
+}
+
+/** 统计 (owner, messageId) 中出现次数 > 1 的组数（owner 隔离，避免跨主体误判）。 */
+function countDuplicateIdGroups(rows: Array<{ owner: string; messageId: string }>): number {
+  const seen = new Map<string, Set<string>>();
+  const duplicates = new Set<string>();
+  for (const row of rows) {
+    const key = `${row.owner}\u0000${row.messageId}`;
+    if (duplicates.has(key)) continue;
+    let set = seen.get(row.owner);
+    if (!set) {
+      set = new Set();
+      seen.set(row.owner, set);
+    }
+    if (set.has(row.messageId)) duplicates.add(key);
+    else set.add(row.messageId);
+  }
+  return duplicates.size;
+}
+
+/**
+ * 统计某主体尚未归属会话的 legacy Chat 消息中重复 messageId 组数（只读）。
+ *
+ * 新结构有 `unique(conversationId, messageId)`；legacy 表历史上允许重复。若有重复，
+ * 回填会「第一轮挂一个、第二轮撞唯一约束」，因此必须在写入前 fail-closed。
+ */
+export async function countDuplicateLegacyMessageIdsForSubject(
+  subject: Subject,
+): Promise<number> {
+  const rows =
+    subject.type === 'user'
+      ? await prisma.chatMessage.findMany({
+          where: { userId: subject.id, conversationId: null },
+          select: { messageId: true },
+        })
+      : await prisma.guestChatMessage.findMany({
+          where: { guestId: subject.id, conversationId: null },
+          select: { messageId: true },
+        });
+  const owner = subject.type === 'user' ? `user:${subject.id}` : `guest:${subject.id}`;
+  return countDuplicateIdGroups(rows.map((r) => ({ owner, messageId: r.messageId })));
+}
+
+async function assertNoDuplicateLegacyMessageIds(subject: Subject): Promise<void> {
+  const duplicateCount = await countDuplicateLegacyMessageIdsForSubject(subject);
+  if (duplicateCount > 0) throw new LegacyMessageIdConflictError(duplicateCount);
+}
+
+/**
  * 单主体 backfill（User / Guest 对称）。
  */
 export async function backfillStoryCollectionsForSubject(
@@ -56,9 +119,6 @@ export async function backfillStoryCollectionsForSubject(
 export async function runStoryCollectionBackfill(): Promise<StoryCollectionBackfillCounts> {
   const counts = emptyCounts();
   const users = await prisma.user.findMany({ select: { id: true } });
-  for (const user of users) {
-    mergeCounts(counts, await backfillUser(user.id));
-  }
   const guestIds = new Set<string>();
   for (const row of await prisma.guestChatMessage.findMany({
     select: { guestId: true },
@@ -71,6 +131,19 @@ export async function runStoryCollectionBackfill(): Promise<StoryCollectionBackf
     distinct: ['guestId'],
   })) {
     guestIds.add(row.guestId);
+  }
+
+  // M9-C1 Blocker 2：全局 fail-closed 前置扫描——任一主体存在重复 legacy messageId
+  // 即在任何写入之前中止（而非写一半后第二轮才撞 unique）。
+  for (const user of users) {
+    await assertNoDuplicateLegacyMessageIds({ type: 'user', id: user.id });
+  }
+  for (const guestId of guestIds) {
+    await assertNoDuplicateLegacyMessageIds({ type: 'guest', id: guestId });
+  }
+
+  for (const user of users) {
+    mergeCounts(counts, await backfillUser(user.id));
   }
   for (const guestId of guestIds) {
     mergeCounts(counts, await backfillGuest(guestId));
@@ -93,6 +166,9 @@ function mergeCounts(
 
 async function backfillUser(userId: number): Promise<StoryCollectionBackfillCounts> {
   const counts = emptyCounts();
+
+  // M9-C1 Blocker 2：写入前 fail-closed（重复 legacy messageId → 本 Subject 零写入）。
+  await assertNoDuplicateLegacyMessageIds({ type: 'user', id: userId });
 
   // 1. 现有 Chat 快照 → legacy Conversation（仅处理尚未归属会话的消息）
   const unassignedMessages = await prisma.chatMessage.findMany({
@@ -215,6 +291,9 @@ async function backfillUser(userId: number): Promise<StoryCollectionBackfillCoun
 
 async function backfillGuest(guestId: string): Promise<StoryCollectionBackfillCounts> {
   const counts = emptyCounts();
+
+  // M9-C1 Blocker 2：写入前 fail-closed（重复 legacy messageId → 本 Subject 零写入）。
+  await assertNoDuplicateLegacyMessageIds({ type: 'guest', id: guestId });
 
   const unassignedMessages = await prisma.guestChatMessage.findMany({
     where: { guestId, conversationId: null },
@@ -351,6 +430,8 @@ export type StoryCollectionMigrationState = {
   guestWorksOrphaned: number;
   userWorksPositionless: number;
   guestWorksPositionless: number;
+  /** M9-C1 Blocker 2：尚未归属会话的 legacy Chat 中重复 messageId 组数（脱敏计数）。 */
+  duplicateLegacyMessageIds: number;
 };
 
 /**
@@ -367,6 +448,8 @@ export async function measureStoryCollectionMigrationState(): Promise<StoryColle
     guestWorksTotal,
     userWorks,
     guestWorks,
+    userLegacyMessages,
+    guestLegacyMessages,
   ] = await Promise.all([
     prisma.conversation.count(),
     prisma.guestConversation.count(),
@@ -376,6 +459,14 @@ export async function measureStoryCollectionMigrationState(): Promise<StoryColle
     prisma.guestStoryWork.count(),
     prisma.storyWork.findMany({ select: { collectionId: true, position: true } }),
     prisma.guestStoryWork.findMany({ select: { collectionId: true, position: true } }),
+    prisma.chatMessage.findMany({
+      where: { conversationId: null },
+      select: { userId: true, messageId: true },
+    }),
+    prisma.guestChatMessage.findMany({
+      where: { conversationId: null },
+      select: { guestId: true, messageId: true },
+    }),
   ]);
 
   const userCollectionIds = new Set(
@@ -415,5 +506,9 @@ export async function measureStoryCollectionMigrationState(): Promise<StoryColle
     guestWorksOrphaned: guestOrphaned,
     userWorksPositionless: userPositionless,
     guestWorksPositionless: guestPositionless,
+    duplicateLegacyMessageIds: countDuplicateIdGroups([
+      ...userLegacyMessages.map((m) => ({ owner: `user:${m.userId}`, messageId: m.messageId })),
+      ...guestLegacyMessages.map((m) => ({ owner: `guest:${m.guestId}`, messageId: m.messageId })),
+    ]),
   };
 }

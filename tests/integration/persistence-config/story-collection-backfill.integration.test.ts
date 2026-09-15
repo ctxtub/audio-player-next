@@ -223,6 +223,68 @@ async function runStoryCollectionBackfillTests() {
   assert.strictEqual(await prisma.storyWork.count({ where: { userId: registeredUser.id } }), 1);
   console.log('PASS: 7');
 
+  console.log('=== 8. 重复 legacy messageId：首轮 fail-closed、零写入、绝不第二轮才炸 ===');
+  {
+    const dupUser = await createUser(tag, 'dupmsg');
+    const dupSubject: Subject = { type: 'user', id: dupUser.id };
+    const dupMessageId = `dup_${tag}`;
+    await prisma.chatMessage.createMany({
+      data: [
+        { userId: dupUser.id, position: 0, messageId: dupMessageId, role: 'user', content: 'dup-a', parts: null, agentType: null, createdAt: new Date().toISOString() },
+        { userId: dupUser.id, position: 1, messageId: dupMessageId, role: 'assistant', content: 'dup-b', parts: null, agentType: null, createdAt: new Date().toISOString() },
+      ],
+    });
+
+    // 第一轮就必须 fail-closed（重复 → 该 Subject 零写入），而非写一半、第二轮撞 unique。
+    await assert.rejects(
+      backfillStoryCollectionsForSubject(dupSubject),
+      (error: unknown) => error instanceof Error && /messageId/.test(error.message),
+      '重复 legacy messageId 必须首轮 fail-closed',
+    );
+    assert.strictEqual(await prisma.conversation.count({ where: { userId: dupUser.id } }), 0, '零写入：不得创建会话');
+    assert.strictEqual(await prisma.storyCollection.count({ where: { userId: dupUser.id } }), 0, '零写入：不得创建集合');
+    assert.strictEqual(
+      await prisma.chatMessage.count({ where: { userId: dupUser.id, conversationId: { not: null } } }),
+      0,
+      '零写入：不得归属任何消息',
+    );
+
+    // 修复重复后再回填可成功（守卫只对真实重复 fail closed）
+    const dupRows = await prisma.chatMessage.findMany({
+      where: { userId: dupUser.id },
+      orderBy: { position: 'asc' },
+    });
+    await prisma.chatMessage.update({
+      where: { id: dupRows[1]!.id },
+      data: { messageId: `${dupMessageId}_b` },
+    });
+    const fixedCounts = await backfillStoryCollectionsForSubject(dupSubject);
+    assert.strictEqual(fixedCounts.chatMessagesAssigned, 2, '去重后必须全部归属');
+    assert.strictEqual(await prisma.conversation.count({ where: { userId: dupUser.id } }), 1);
+
+    // Guest 对称
+    const dupGuestId = `guest_dup_${tag}`;
+    const dupGuestSubject: Subject = { type: 'guest', id: dupGuestId };
+    await prisma.guestChatMessage.createMany({
+      data: [
+        { guestId: dupGuestId, position: 0, messageId: `gdup_${tag}`, role: 'user', content: 'x' },
+        { guestId: dupGuestId, position: 1, messageId: `gdup_${tag}`, role: 'assistant', content: 'y' },
+      ],
+    });
+    await assert.rejects(
+      backfillStoryCollectionsForSubject(dupGuestSubject),
+      (error: unknown) => error instanceof Error && /messageId/.test(error.message),
+      'Guest 重复 legacy messageId 必须首轮 fail-closed',
+    );
+    assert.strictEqual(await prisma.guestConversation.count({ where: { guestId: dupGuestId } }), 0, 'Guest 零写入');
+    assert.strictEqual(
+      await prisma.guestChatMessage.count({ where: { guestId: dupGuestId, conversationId: { not: null } } }),
+      0,
+      'Guest 零写入：不得归属任何消息',
+    );
+  }
+  console.log('PASS: 8');
+
   console.log('ALL STORY COLLECTION BACKFILL INTEGRATION TESTS PASSED SUCCESSFULLY');
 }
 

@@ -31,7 +31,9 @@ T4 故事库 UI 与全链收口
 
 ### 交付目标
 
-建立 Conversation、StoryCollection、Work membership 和 AI 集合标题；完成 expand/backfill 与新 API；停止 Prompt/Generation History 新写入。
+建立 Conversation、StoryCollection、Work membership 和 AI 集合标题；完成 expand/backfill 与新 API。
+
+**范围重排（2026-09-15 M9-C1 T1 closeout，独立评审方裁定）**：T1 只保证**新 Conversation/Collection/promotion 路径存在结构性零 History 写入**（由 `collection-domain` L1 静态守卫与 `lib/storyCollection/rollout.ts` 回退开关锁定）。**legacy History 停写（阻断 Prompt/Generation 新写）、Prompt History 停止迁移、以及 History 前后端（UI/store/router/client）整体退役，全部转入 T2**；T1 不改写/不删除 legacy History 写入路径，也不做 contract migration。
 
 ### 代码工作
 
@@ -39,7 +41,8 @@ T4 故事库 UI 与全链收口
 - 扩展 `chatConversation`、`storyWork` 服务，新增 collection domain/server/router/client。
 - 实现首作事务建集、AI title 短超时与 fallback、sourceMessageId 幂等、集合 position。
 - 实现 collection list/get/rename/favorite/delete/restore/forever-delete。
-- 更新 Guest GC、注册迁移与 ownership；停止旧 History 新写。
+- 更新 Guest GC、注册迁移与 ownership。
+- 新路径零 History 写入（legacy 停写与前后端退役见上方范围重排，整体转入 T2）。
 - 编写可重复 backfill：现有 Chat 快照建 legacy Conversation；旧 Work 默认一 Work 一 Collection，不按时间猜测合并。
 
 ### 测试流程

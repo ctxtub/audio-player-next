@@ -30,7 +30,7 @@ import { normalizeQuery } from '@/lib/storyWork/cursor';
 import { buildStoryExcerpt, computeStoryContentHash, resolveStoryTitle } from '@/lib/storyWork/metadata';
 import {
   getAudioProjectionsForSubject,
-  executeStoryWorkPhysicalDelete,
+  executeStoryCollectionPhysicalDelete,
   toDetailDto,
   toSummaryDto,
   type StoryWorkRow,
@@ -391,66 +391,30 @@ export async function restoreCollectionForSubject(
 }
 
 /**
- * 永久删除集合：级联 Work（经统一物理删除 seam，含音频 tombstone outbox）、进度与音频元数据。
- * 仅允许对回收站中的集合执行；active 为 CONFLICT。
+ * 永久删除集合：级联 Work（经 collection-aware 统一物理删除 seam，含音频 tombstone outbox）、
+ * 进度与音频元数据。仅允许对回收站中的集合执行；active 为 CONFLICT。
+ *
+ * M9-C1 Blocker 1：重验、成员固定、tombstone、成员删除、无 survivor 确认与 Collection 删除
+ * 全部收敛在 `executeStoryCollectionPhysicalDelete` 的同一 DB 原子边界内；restore 竞态
+ * fail closed，绝不依赖 FK cascade 删除成员。
  */
 export async function deleteForeverCollectionForSubject(
   subject: Subject,
   id: string,
 ): Promise<{ success: true; id: string }> {
-  const workIds: number[] = [];
-  let deletedAt: Date | null = null;
-  let found = false;
-
   if (subject.type === 'user') {
-    const row = await prisma.storyCollection.findFirst({
-      where: { id, userId: subject.id },
-      select: { deletedAt: true, works: { select: { id: true } } },
+    await executeStoryCollectionPhysicalDelete({
+      target: 'user',
+      collectionId: id,
+      userId: subject.id,
     });
-    if (row) {
-      found = true;
-      deletedAt = row.deletedAt;
-      workIds.push(...row.works.map((w) => w.id));
-    }
   } else {
-    const row = await prisma.guestStoryCollection.findFirst({
-      where: { id, guestId: subject.id },
-      select: { deletedAt: true, works: { select: { id: true } } },
+    await executeStoryCollectionPhysicalDelete({
+      target: 'guest',
+      collectionId: id,
+      guestId: subject.id,
     });
-    if (row) {
-      found = true;
-      deletedAt = row.deletedAt;
-      workIds.push(...row.works.map((w) => w.id));
-    }
   }
-
-  if (!found) throw new TRPCError({ code: 'NOT_FOUND', message: '作品集不存在' });
-  if (deletedAt === null) {
-    throw new TRPCError({ code: 'CONFLICT', message: '仅允许对回收站中的作品集执行永久删除' });
-  }
-
-  if (workIds.length > 0) {
-    if (subject.type === 'user') {
-      await executeStoryWorkPhysicalDelete({
-        target: 'user',
-        reason: 'trash',
-        where: { userId: subject.id, id: { in: workIds }, deletedAt: { not: null } },
-      });
-    } else {
-      await executeStoryWorkPhysicalDelete({
-        target: 'guest',
-        reason: 'trash',
-        where: { guestId: subject.id, id: { in: workIds }, deletedAt: { not: null } },
-      });
-    }
-  }
-
-  if (subject.type === 'user') {
-    await prisma.storyCollection.delete({ where: { id } });
-  } else {
-    await prisma.guestStoryCollection.delete({ where: { id } });
-  }
-
   return { success: true, id };
 }
 

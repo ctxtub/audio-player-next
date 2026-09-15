@@ -66,9 +66,12 @@ Promotion 输入必须携带 `conversationId + sourceMessageId + storyText + pro
 ```text
 conversation.getActive / get / createNew / saveSnapshot / close
 collection.list / get / rename / setFavorite / softDelete / restore / deleteForever
+collection.promoteArtifact({ conversationId, sourceMessageId, prompt, storyText, voiceId? })
 storyAudio.ensure({ workId, sessionId }) / getProjection
 GET /api/audio/assets/:assetId
 ```
+
+`collection.promoteArtifact` 即 §1「Promotion Service 是 Artifact → Collection/Work 唯一写入口」的唯一 router procedure；M9-C1 T1 落实后补录，消除文档与实现的字面差。
 
 `conversation.createNew(expectedOldId)` 关闭旧 active Conversation 并创建新 UUID，不删除旧 Collection。Collection list 返回轻量 Summary；详情按 Work position 返回成员。搜索命中 Work 时仍按 Collection 去重。
 

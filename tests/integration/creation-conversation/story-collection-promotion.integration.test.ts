@@ -31,6 +31,7 @@ import {
   restoreCollectionForSubject,
   deleteForeverCollectionForSubject,
 } from '../../../lib/server/storyCollection';
+import { restoreStoryWorkForSubject } from '../../../lib/server/storyWork';
 
 const isTrpcErrorWithCode = (error: unknown, code: string): boolean =>
   error instanceof TRPCError && error.code === code;
@@ -402,6 +403,59 @@ async function runStoryCollectionPromotionTests() {
   const closedAgain2 = await closeConversationForSubject(guestSubject, guestConv.id);
   assert.strictEqual(closedAgain2.state, 'closed');
   console.log('PASS: 14');
+
+  console.log('=== 15. restore-vs-deleteForever 竞态：成员恢复后永久删除必须 fail closed ===');
+  for (const side of ['user', 'guest'] as const) {
+    const raceMessageId = `race_${side}_${tag}`;
+    const subject: Subject =
+      side === 'user'
+        ? { type: 'user', id: (await createUser(tag, `race_${side}`)).id }
+        : { type: 'guest', id: `sc_race_guest_${tag}` };
+    const raceConv = await createNewConversationForSubject(subject);
+    const raceWork = await promoteArtifactForSubject(
+      subject,
+      {
+        conversationId: raceConv.id,
+        sourceMessageId: raceMessageId,
+        prompt: '竞态作品',
+        storyText: '# 竞态\n正文',
+      },
+      { generateTitle: async () => null },
+    );
+    const raceCollectionId =
+      side === 'user'
+        ? (await prisma.storyCollection.findUnique({ where: { conversationId: raceConv.id } }))!.id
+        : (await prisma.guestStoryCollection.findUnique({ where: { conversationId: raceConv.id } }))!.id;
+
+    // 集合软删 → 成员进入回收站
+    await softDeleteCollectionForSubject(subject, raceCollectionId);
+    // 模拟 restore 竞态窗口末态：deleteForever 已捕获成员后，单个成员被恢复为 active
+    await restoreStoryWorkForSubject(subject, raceWork.id);
+
+    // 竞态下永久删除必须 fail closed（禁止依赖 FK cascade 静默删除恢复后的 Work）
+    await assert.rejects(
+      deleteForeverCollectionForSubject(subject, raceCollectionId),
+      (error: unknown) => isTrpcErrorWithCode(error, 'CONFLICT'),
+      `${side}: 存在已恢复成员时永久删除必须 CONFLICT`,
+    );
+
+    if (side === 'user') {
+      const survivor = await prisma.storyWork.findUnique({ where: { id: raceWork.id } });
+      assert.ok(survivor && survivor.deletedAt === null, `${side}: 恢复后的 Work 不得被 FK cascade 删除`);
+      assert.ok(
+        await prisma.storyCollection.findUnique({ where: { id: raceCollectionId } }),
+        `${side}: fail closed 后集合必须保留`,
+      );
+    } else {
+      const survivor = await prisma.guestStoryWork.findUnique({ where: { id: raceWork.id } });
+      assert.ok(survivor && survivor.deletedAt === null, `${side}: 恢复后的 Work 不得被 FK cascade 删除`);
+      assert.ok(
+        await prisma.guestStoryCollection.findUnique({ where: { id: raceCollectionId } }),
+        `${side}: fail closed 后集合必须保留`,
+      );
+    }
+  }
+  console.log('PASS: 15');
 
   console.log('ALL STORY COLLECTION PROMOTION INTEGRATION TESTS PASSED SUCCESSFULLY');
 }

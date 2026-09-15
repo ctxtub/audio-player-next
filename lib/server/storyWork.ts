@@ -1392,6 +1392,7 @@ type UserTrashDeleteTx = {
   };
   storyAudioManifest: { findMany(args: any): Promise<Array<{ id: number }>> };
   storyAudioSegment: { findMany(args: any): Promise<Array<{ storageKey: string }>> };
+  storyAudioAsset: { findMany(args: any): Promise<Array<{ storageKey: string }>> };
   audioStorageDeletion: { deleteMany(args: any): Promise<unknown> };
 };
 
@@ -1403,6 +1404,7 @@ type GuestTrashDeleteTx = {
   };
   guestStoryAudioManifest: { findMany(args: any): Promise<Array<{ id: number }>> };
   guestStoryAudioSegment: { findMany(args: any): Promise<Array<{ storageKey: string }>> };
+  guestStoryAudioAsset: { findMany(args: any): Promise<Array<{ storageKey: string }>> };
   audioStorageDeletion: { deleteMany(args: any): Promise<unknown> };
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -1434,6 +1436,12 @@ async function deleteUserTrashWorksInTx(
       });
       allKeys = segments.map((s) => s.storageKey);
     }
+    // T3：单轨 Asset 对象同批 tombstone（DB 行随 cascade 消失；旧 Segment 表不物理删除）。
+    const assets = await tx.storyAudioAsset.findMany({
+      where: { storyWorkId: { in: matchedIds } },
+      select: { storageKey: true },
+    });
+    allKeys = [...allKeys, ...assets.map((a) => a.storageKey)];
     if (allKeys.length > 0) {
       await enqueueAudioDeletionTombstones(
         tx as unknown as Parameters<typeof enqueueAudioDeletionTombstones>[0],
@@ -1475,6 +1483,11 @@ async function deleteUserTrashWorksInTx(
     });
     survivorKeys = survivorSegments.map((s) => s.storageKey);
   }
+  const survivorAssets = await tx.storyAudioAsset.findMany({
+    where: { storyWorkId: { in: remainingIds } },
+    select: { storageKey: true },
+  });
+  survivorKeys = [...survivorKeys, ...survivorAssets.map((a) => a.storageKey)];
   if (survivorKeys.length > 0) {
     await pruneSurvivorAudioTombstones(tx, survivorKeys);
     const committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
@@ -1507,6 +1520,11 @@ async function deleteGuestTrashWorksInTx(
       });
       allKeys = segments.map((s) => s.storageKey);
     }
+    const guestAssets = await tx.guestStoryAudioAsset.findMany({
+      where: { storyWorkId: { in: matchedIds } },
+      select: { storageKey: true },
+    });
+    allKeys = [...allKeys, ...guestAssets.map((a) => a.storageKey)];
     if (allKeys.length > 0) {
       await enqueueAudioDeletionTombstones(
         tx as unknown as Parameters<typeof enqueueAudioDeletionTombstones>[0],
@@ -1546,6 +1564,11 @@ async function deleteGuestTrashWorksInTx(
     });
     survivorKeys = survivorSegments.map((s) => s.storageKey);
   }
+  const survivorGuestAssets = await tx.guestStoryAudioAsset.findMany({
+    where: { storyWorkId: { in: remainingIds } },
+    select: { storageKey: true },
+  });
+  survivorKeys = [...survivorKeys, ...survivorGuestAssets.map((a) => a.storageKey)];
   if (survivorKeys.length > 0) {
     await pruneSurvivorAudioTombstones(tx, survivorKeys);
     const committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
@@ -1642,6 +1665,11 @@ export async function executeStoryWorkPhysicalDelete(
           });
           allKeys = segments.map((s: { storageKey: string }) => s.storageKey);
         }
+        const retentionAssets = await tx.guestStoryAudioAsset.findMany({
+          where: { storyWorkId: { in: matchedIds } },
+          select: { storageKey: true },
+        });
+        allKeys = [...allKeys, ...retentionAssets.map((a: { storageKey: string }) => a.storageKey)];
         if (allKeys.length > 0) {
           await enqueueAudioDeletionTombstones(
             tx as unknown as Parameters<typeof enqueueAudioDeletionTombstones>[0],
@@ -1684,6 +1712,14 @@ export async function executeStoryWorkPhysicalDelete(
         });
         survivorKeys = survivorSegments.map((s: { storageKey: string }) => s.storageKey);
       }
+      const survivorRetentionAssets = await tx.guestStoryAudioAsset.findMany({
+        where: { storyWorkId: { in: survivorIds } },
+        select: { storageKey: true },
+      });
+      survivorKeys = [
+        ...survivorKeys,
+        ...survivorRetentionAssets.map((a: { storageKey: string }) => a.storageKey),
+      ];
       if (survivorKeys.length > 0) {
         // M8-05-02 FIXUP fail-closed：prune 失败即 throw → 全事务 rollback。
         await pruneSurvivorAudioTombstones(tx as unknown as SurvivorPruneTx, survivorKeys);

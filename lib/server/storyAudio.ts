@@ -67,7 +67,6 @@ import {
 import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
 import { buildAssetPlaybackUrl } from '@/lib/audio/asset';
 import {
-  ensureStoryAudioAssetForSubject,
   getStoryAudioAssetProjectionForSubject,
   STORY_AUDIO_ASSET_VERSION,
   type StoryAudioAssetDTO,
@@ -802,69 +801,21 @@ async function readGuestManifestSnapshot(manifestId: number) {
   });
 }
 
-/** T3：单轨 ensure → 旧 EnsureSegmentResult 形状（segment/manifest 恒为单元素，附 asset）。 */
-async function ensureSingleTrackSegmentResult(
-  subject: Subject,
-  input: EnsureStoryAudioSegmentInput,
-  depsInput: StoryAudioDeps
-): Promise<EnsureSegmentResult> {
-  const result = await ensureStoryAudioAssetForSubject(
-    subject,
-    { workId: input.workId, sessionId: input.sessionId },
-    depsInput
-  );
-  if (result.status === 'preparing') {
-    return {
-      status: 'preparing',
-      retryAfterMs: result.retryAfterMs,
-      segment: { id: `asset:${input.workId}`, index: 0 },
-      manifest: {
-        status: 'preparing',
-        segmentCount: 1,
-        readySegmentCount: 0,
-        totalDurationMs: null,
-        totalByteLength: null,
-      },
-    };
-  }
-  const asset = result.asset;
-  return {
-    status: 'ready',
-    segment: {
-      id: asset.assetId,
-      index: 0,
-      text: '',
-      durationMs: asset.durationMs,
-      byteLength: asset.byteLength,
-      playbackUrl: asset.playbackUrl,
-    },
-    manifest: {
-      status: 'ready',
-      segmentCount: 1,
-      readySegmentCount: 1,
-      totalDurationMs: asset.durationMs,
-      totalByteLength: asset.byteLength,
-    },
-    asset,
-  };
-}
-
 /**
  * ensureSegment（M8-03 canonical 写入唯一入口）。
  *
  * 输入严格三字段；frozen text/profile/storageKey 全由 server 推导。
  * 并发：ready → 直接返回；有效 lease → preparing + retryAfter；
  * missing/failed/过期 lease → 原子 claim 后在 transaction 外合成。
+ *
+ * T3 去耦：单轨开关不再劫持本入口；ensureSegment 恒为旧多段 canonical 路径，
+ * 单轨写入口只在 `storyAudio.ensure`（服务端 flag 门禁）。
  */
 export async function ensureStoryAudioSegmentForSubject(
   subject: Subject,
   input: EnsureStoryAudioSegmentInput,
   depsInput: StoryAudioDeps = {}
 ): Promise<EnsureSegmentResult> {
-  // T3：开关开启时改走单轨资产写入口（同一输入契约，输出增补 asset 投影）。
-  if (isSingleTrackAudioEnabled()) {
-    return ensureSingleTrackSegmentResult(subject, input, depsInput);
-  }
   const deps = resolveDeps(depsInput);
   const now = deps.now();
   const { workId, segmentIndex, sessionId } = input;

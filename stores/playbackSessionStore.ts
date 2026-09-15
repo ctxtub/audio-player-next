@@ -70,10 +70,12 @@ import {
   getPlaybackManifest as fetchPlaybackManifest,
   isCanonicalPlaybackUrl,
   isSingleTrackPlaybackUrl,
+  saveProgress as saveSingleTrackProgress,
   selectWorkParagraphs,
   shouldUseCanonicalAudio,
 } from '@/lib/client/storyAudio';
 import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
+import { SINGLE_TRACK_PROGRESS_THROTTLE_MS } from '@/lib/audio/asset';
 import {
   resolvePlaybackDraftSnapshot,
   type PlaybackDraftSnapshot,
@@ -119,6 +121,10 @@ interface PlaybackSessionState {
   lastSavedKey: string | null;
   /** hydration 纪元（每次 init 自增，过期 resolve 丢弃）。 */
   hydrationEpoch: number;
+  /** T3 单轨服务端恢复位（positionMs；duration 已知后一次性 seek）。 */
+  singleTrackResumePositionMs: number | null;
+  /** T3 单轨恢复位是否已应用（防重复 seek）。 */
+  singleTrackResumeSeekApplied: boolean;
 }
 
 interface PlaybackSessionActions {
@@ -183,6 +189,16 @@ interface PlaybackSessionActions {
   cancelDeferredCheckpoint: () => void;
   saveCheckpointDebounced: (options?: { forceReset?: boolean }) => void;
   saveCheckpointImmediate: (options?: { forceReset?: boolean }) => Promise<void>;
+  /**
+   * T3 单轨：duration 已知（loadedmetadata/timeupdate）后把服务端 positionMs 应用到
+   * transport（仅一次；duration=0 时 no-op，等待元数据）。
+   */
+  applyPendingSingleTrackResume: (durationSeconds: number) => void;
+  /**
+   * T3 单轨：把 transport 当前位置写入 server（client 侧 10s 节流 + 单调守卫；
+   * `force` 用于暂停/完播等关键点，server 端仍做 clamp/单调/节流二次保证）。
+   */
+  persistSingleTrackProgress: (options?: { force?: boolean }) => Promise<void>;
   clearSession: () => Promise<void>;
   stop: () => void;
   reset: () => void;
@@ -247,12 +263,17 @@ const INITIAL_SESSION_STATE: PlaybackSessionState = {
   prefetchingIndex: null,
   lastSavedKey: null,
   hydrationEpoch: 0,
+  singleTrackResumePositionMs: null,
+  singleTrackResumeSeekApplied: false,
 };
 
 let debounceSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let prefetchAbortController: AbortController | null = null;
 let initPromise: Promise<boolean> | null = null;
 let hydrationEpochCounter = 0;
+/** T3 单轨进度 client 侧节流/去重（server 端仍二次 clamp/单调/节流）。 */
+let lastSingleTrackPersistMs = 0;
+let lastSingleTrackPersistPositionMs = -1;
 
 const clearDebounceTimer = () => {
   if (debounceSaveTimer) {
@@ -325,7 +346,19 @@ async function fetchCanonicalAudioUrlWithRetry(
     for (;;) {
       singleAttempts += 1;
       const output = await ensureCanonicalAsset({ workId, sessionId });
-      if (output.status === 'ready') return output.asset.playbackUrl;
+      if (output.status === 'ready') {
+        // T3：服务端 positionMs 作为待恢复位，等 duration 已知后一次性 seek。
+        try {
+          usePlaybackSessionStore.setState({
+            singleTrackResumePositionMs:
+              typeof output.asset.positionMs === 'number' ? output.asset.positionMs : null,
+            singleTrackResumeSeekApplied: false,
+          });
+        } catch {
+          // store 尚未就绪（理论不可达）时忽略恢复位，不影响播放。
+        }
+        return output.asset.playbackUrl;
+      }
       if (singleAttempts >= CANONICAL_ENSURE_MAX_ATTEMPTS) {
         throw new Error('canonical single-track preparing timeout');
       }
@@ -1034,6 +1067,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const state = get();
     // T3 单轨：整篇是一条时间轴，audio ended 即整 Work 完播；绝不按段落推进导致整轨重放。
     if (isSingleTrackAudioEnabled()) {
+      // 完播前强制落库最终 positionMs（server 端据此置 completedAt）。
+      await get().persistSingleTrackProgress({ force: true });
       set({
         lastCompletedParagraphIndex: Math.max(0, state.totalParagraphs - 1),
         nextParagraphIndex: state.totalParagraphs,
@@ -1086,6 +1121,54 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     abortPrefetch();
     set({ status: 'paused' });
     get().saveCheckpointDebounced({ forceReset: false });
+    // T3：暂停时强制落库单轨 positionMs（server 端 clamp/单调/节流仍生效）。
+    void get().persistSingleTrackProgress({ force: true });
+  },
+
+  applyPendingSingleTrackResume: (durationSeconds) => {
+    const state = get();
+    if (state.singleTrackResumePositionMs === null || state.singleTrackResumeSeekApplied) {
+      return;
+    }
+    if (!(durationSeconds > 0)) return; // 等待 loadedmetadata
+    set({ singleTrackResumeSeekApplied: true });
+    const targetSeconds = Math.max(
+      0,
+      Math.min(state.singleTrackResumePositionMs / 1000, durationSeconds),
+    );
+    try {
+      usePlaybackStore.getState().seekAudio(targetSeconds);
+    } catch (err) {
+      console.warn('[playbackSessionStore] apply single-track resume failed', err);
+    }
+  },
+
+  persistSingleTrackProgress: async (options) => {
+    const state = get();
+    if (!isSingleTrackAudioEnabled()) return;
+    if (!state.sessionId || !state.source || state.source.kind !== 'work') return;
+    const transport = usePlaybackStore.getState();
+    const durationSeconds = Number.isFinite(transport.duration) ? transport.duration : 0;
+    if (!(durationSeconds > 0)) return;
+    const positionMs = Math.max(0, Math.round(transport.currentTime * 1000));
+    const nowMs = Date.now();
+    if (!options?.force) {
+      if (nowMs - lastSingleTrackPersistMs < SINGLE_TRACK_PROGRESS_THROTTLE_MS) return;
+      if (Math.abs(positionMs - lastSingleTrackPersistPositionMs) < 1000) return;
+    }
+    lastSingleTrackPersistMs = nowMs;
+    lastSingleTrackPersistPositionMs = positionMs;
+    try {
+      await saveSingleTrackProgress({
+        workId: state.source.workId,
+        sessionId: state.sessionId,
+        positionMs,
+        durationMs: Math.round(durationSeconds * 1000),
+        force: options?.force ?? false,
+      });
+    } catch (err) {
+      console.warn('[playbackSessionStore] persist single-track progress failed', err);
+    }
   },
 
   restart: async () => {
@@ -1455,6 +1538,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
   reset: () => {
     clearDebounceTimer();
     abortPrefetch();
+    lastSingleTrackPersistMs = 0;
+    lastSingleTrackPersistPositionMs = -1;
     const epoch = get().hydrationEpoch;
     set({ ...INITIAL_SESSION_STATE, hydrationEpoch: epoch });
   },

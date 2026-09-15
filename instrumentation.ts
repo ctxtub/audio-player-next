@@ -22,6 +22,8 @@ export async function register(): Promise<void> {
   try {
     const mod = await import('./lib/server/audioStorageStartup');
     void mod.runStartupAudioDeletionCleanup();
+    // T3：单轨资产 30 天滑动 GC 启动触发（同一薄钩子，fire-and-forget，失败不崩）。
+    void mod.runStartupStoryAudioAssetGc();
   } catch (err) {
     try {
       const detail = err instanceof Error ? err.message : String(err);

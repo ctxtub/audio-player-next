@@ -80,3 +80,22 @@ export async function runStartupAudioDeletionCleanup(
     return { ...STARTUP_AUDIO_CLEANUP_EMPTY_RESULT };
   }
 }
+
+/**
+ * T3 单轨资产 30 天滑动 GC 启动触发（薄包装，动态 import 避免启动模块静态拉入 DB/存储）。
+ *
+ * 无节流跑一次有界清扫；任何失败吞错（启动清理失败不得崩服务）。
+ */
+export async function runStartupStoryAudioAssetGc(): Promise<void> {
+  try {
+    const mod = await import('@/lib/server/storyAudioAsset');
+    await mod.runStartupStoryAudioAssetGc();
+  } catch (err) {
+    try {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.warn('[startup] story audio asset GC failed (non-fatal)', detail);
+    } catch {
+      // 日志失败亦继续启动。
+    }
+  }
+}

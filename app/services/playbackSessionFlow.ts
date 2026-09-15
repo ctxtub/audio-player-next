@@ -42,6 +42,7 @@ import {
 } from '@/utils/segmentation';
 import { isValidDraftMessageId, isValidWorkId } from '@/lib/playback/source';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
+import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
 import type { SessionContinuationMode } from '@/stores/playbackSessionStore';
 import type { SleepTimerMode } from '@/lib/playback/sleepTimer';
 
@@ -561,6 +562,10 @@ export function reportAudioActive(active: boolean): void {
 /** 播放进度推进（供 timeupdate/loadedmetadata 复用）。 */
 export function reportProgress(payload: { currentTime: number; duration: number }): void {
   usePlaybackStore.getState().updateProgress(payload);
+  // T3 单轨：duration 已知后一次性应用服务端恢复位（内部 duration>0 守卫 + 幂等）。
+  usePlaybackSessionStore.getState().applyPendingSingleTrackResume(payload.duration);
+  // T3 单轨：常规 timeupdate 机会式落库（client 10s 节流；暂停/完播走 force）。
+  void usePlaybackSessionStore.getState().persistSingleTrackProgress();
 }
 
 /**
@@ -648,7 +653,10 @@ export function reportTimeUpdate(payload: {
 export async function handleEnded(play: (audioUrl: string, messageId?: string) => Promise<void>): Promise<boolean> {
   const session = usePlaybackSessionStore.getState();
   if (session.source && session.totalParagraphs > 0) {
-    const atTail = session.nextParagraphIndex + 1 >= session.totalParagraphs;
+    // T3 单轨：整轨只有一个 Asset，任意物理 ended 都代表「整 track 播完」，
+    // 必须走尾段分支（先试连续创作下一 Work，再整 Work 完播），不得按段落推进。
+    const singleTrack = isSingleTrackAudioEnabled();
+    const atTail = singleTrack || session.nextParagraphIndex + 1 >= session.totalParagraphs;
     if (!atTail) {
       // 非尾段：会话段落机推进，不碰连续创作。
       return await session.handleParagraphEnded();

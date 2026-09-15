@@ -1,9 +1,18 @@
 /**
  * M9-C1 T3 单轨音频（StoryAudio single-track）Feature Flag。
  *
- * 读路径（storyAudio.ensure / getProjection / GET /api/audio/assets/:assetId）
- * 仅当本开关显式开启时生效；关闭时完整回退旧 Segment canonical 路径，
- * 旧 `StoryAudioSegment` 与对象暂不物理删除（spec §7 回退点）。
+ * 最终双 flag 契约（T3-r1 去耦后，spec §7）：
+ * - **server 单轨路径**（`storyAudio.ensure` / `getProjection` / `saveProgress`、
+ *   `GET /api/audio/assets/:assetId`、`getPlaybackManifest` 单轨投影）仅当
+ *   `SINGLE_TRACK_AUDIO_ENABLED === '1'` 时生效；关闭时这些入口一律拒绝
+ *   （`SINGLE_TRACK_AUDIO_DISABLED` / 读取 404），**不产生任何单轨流量**。
+ *   `ensureSegment` 恒为旧多段 canonical 路径，**不再被本 flag 劫持**。
+ * - **client provider 选择**（Work 播放是否走单轨资产）仅当本 runtime 判定为真时生效；
+ *   浏览器侧经 Next 构建内联 `NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED`（或 E2E
+ *   `globalThis.__SINGLE_TRACK_AUDIO_ENABLED`）决定。
+ * - production 开启必须同时设置构建期 `NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED=1`
+ *   与运行时 `SINGLE_TRACK_AUDIO_ENABLED=1`（Dockerfile ARG/ENV、compose build.args/
+ *   environment、.env.sample 均已登记），缺一不可。
  *
  * 生产默认：关闭（双变量缺席/非法值一律 false，fail closed）。
  * 本文件刻意零依赖（不读 window/document，不引 React），server/client/测试可共用。

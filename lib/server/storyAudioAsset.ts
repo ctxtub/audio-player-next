@@ -39,6 +39,7 @@ import {
   enqueueAudioDeletionTombstones,
 } from '@/lib/server/audioStorageCleanup';
 import { isValidPlaybackSessionId } from '@/lib/playback/session';
+import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
 import {
   getTtsConfig,
   synthesizeSpeechWithProfile,
@@ -69,6 +70,12 @@ export const STORY_AUDIO_ASSET_LEASE_TTL_MS = 60_000;
 
 /** 竞态重试提示（客户端轮询间隔）。 */
 export const STORY_AUDIO_ASSET_RETRY_AFTER_MS = 500;
+
+/** 机会式单轨 GC 最小触发间隔（避免每请求全表扫描；与 M8 tombstone 清理同口径低频）。 */
+export const STORY_AUDIO_ASSET_GC_MIN_INTERVAL_MS = 5 * 60 * 1000;
+
+/** 「正在播放」判定窗口：近期（窗口内）有未完成进度写入的 Work 视为播放中，GC 跳过。 */
+export const STORY_AUDIO_ASSET_PLAYING_WINDOW_MS = 5 * 60 * 1000;
 
 /** 服务依赖（与 StoryAudioDeps 同形，便于在 ensureSegment 入口透传注入）。 */
 export type StoryAudioAssetDeps = {
@@ -345,9 +352,11 @@ async function cleanupChunkObjects(
 
 const inflight = new Map<string, Promise<EnsureStoryAudioAssetResult>>();
 
-/** 取消进行中的 single-flight（仅测试 hook 用）。 */
+/** 取消进行中的 single-flight + 重置机会式 GC 节流（仅测试 hook 用）。 */
 export function __resetStoryAudioAssetTestHooks(): void {
   inflight.clear();
+  storyAudioAssetGcLastRunMs = null;
+  storyAudioAssetGcRunnerForTests = null;
 }
 
 /**
@@ -378,6 +387,11 @@ async function ensureStoryAudioAssetInternal(
   input: { workId: number; sessionId: string },
   depsInput: StoryAudioAssetDeps,
 ): Promise<EnsureStoryAudioAssetResult> {
+  if (!isSingleTrackAudioEnabled()) {
+    throwDomain('SINGLE_TRACK_AUDIO_DISABLED', 'FORBIDDEN');
+  }
+  // 生产机会式 GC 触发：过期空闲资产有界清扫，fire-and-forget，绝不影响 ensure 延迟/结果。
+  void maybeRunStoryAudioAssetGc();
   const deps = resolveDeps(depsInput);
   const { workId, sessionId } = input;
   if (!Number.isInteger(workId) || workId <= 0) {
@@ -672,6 +686,9 @@ export async function getStoryAudioAssetProjectionForSubject(
   input: { workId: number },
   depsInput: StoryAudioAssetDeps = {},
 ): Promise<StoryAudioAssetProjectionDTO> {
+  if (!isSingleTrackAudioEnabled()) {
+    throwDomain('SINGLE_TRACK_AUDIO_DISABLED', 'FORBIDDEN');
+  }
   const deps = resolveDeps(depsInput);
   const { workId } = input;
   if (!Number.isInteger(workId) || workId <= 0) throwDomain('WORK_NOT_FOUND', 'NOT_FOUND');
@@ -741,6 +758,9 @@ export async function saveStoryAudioProgressForSubject(
   input: { workId: number; sessionId: string; positionMs: number; durationMs?: number | null; force?: boolean },
   depsInput: StoryAudioAssetDeps = {},
 ): Promise<boolean> {
+  if (!isSingleTrackAudioEnabled()) {
+    throwDomain('SINGLE_TRACK_AUDIO_DISABLED', 'FORBIDDEN');
+  }
   const deps = resolveDeps(depsInput);
   const { workId, sessionId } = input;
   if (!Number.isInteger(workId) || workId <= 0) throwDomain('WORK_NOT_FOUND', 'NOT_FOUND');
@@ -836,4 +856,136 @@ export async function cleanupExpiredStoryAudioAssets(options: {
     }
   }
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// 生产 GC 触发器（startup + opportunistic）
+// ---------------------------------------------------------------------------
+
+/** 机会式 GC 上次触发时间（module 级节流；测试可经 __resetStoryAudioAssetTestHooks 重置）。 */
+let storyAudioAssetGcLastRunMs: number | null = null;
+
+/** 机会式 GC runner 覆盖（仅测试用；缺省走 sweepExpiredStoryAudioAssets）。 */
+type StoryAudioAssetGcRunner = (options?: {
+  now?: Date;
+  limit?: number;
+  storage?: AudioAssetStorage;
+}) => Promise<CleanupExpiredStoryAudioAssetsResult>;
+
+let storyAudioAssetGcRunnerForTests: StoryAudioAssetGcRunner | null = null;
+
+/** 注入机会式 GC runner（仅测试；传 null 恢复缺省）。 */
+export function setStoryAudioAssetGcRunnerForTests(
+  runner: StoryAudioAssetGcRunner | null,
+): void {
+  storyAudioAssetGcRunnerForTests = runner;
+}
+
+/** 观测机会式 GC 上次触发时间（仅测试）。 */
+export function getStoryAudioAssetGcLastRunMsForTests(): number | null {
+  return storyAudioAssetGcLastRunMs;
+}
+
+/** 「正在播放」Work id 集合（近期未完成进度的 Work；User/Guest 分别按各自表构建避免 id 碰撞）。 */
+async function playingWorkIdsForScope(
+  scope: 'user' | 'guest',
+  now: Date,
+): Promise<Set<number>> {
+  const since = new Date(now.getTime() - STORY_AUDIO_ASSET_PLAYING_WINDOW_MS);
+  const rows = await progressDelegate(scope).findMany({
+    where: { lastPlayedAt: { gte: since }, completedAt: null },
+    select: { storyWorkId: true },
+  });
+  return new Set(rows.map((r: { storyWorkId: number }) => r.storyWorkId));
+}
+
+/**
+ * 有界清扫过期单轨资产（生产入口）：按 User/Guest 分域构建「正在播放」守卫后调用
+ * `cleanupExpiredStoryAudioAssets`；缺省总上限 `AUDIO_DELETION_DEFAULT_LIMIT`（每域）。
+ *
+ * flag 关闭时直接零结果（fail closed，不产生任何单轨流量）。
+ */
+export async function sweepExpiredStoryAudioAssets(options: {
+  now?: Date;
+  limit?: number;
+  storage?: AudioAssetStorage;
+} = {}): Promise<CleanupExpiredStoryAudioAssetsResult> {
+  if (!isSingleTrackAudioEnabled()) {
+    return { scanned: 0, enqueued: 0, deleted: 0 };
+  }
+  const now = options.now ?? new Date();
+  const [playingUser, playingGuest] = await Promise.all([
+    playingWorkIdsForScope('user', now),
+    playingWorkIdsForScope('guest', now),
+  ]);
+  const user = await cleanupExpiredStoryAudioAssets({
+    now,
+    limit: options.limit,
+    storage: options.storage,
+    subjectScope: 'user',
+    isPlaying: (workId) => playingUser.has(workId),
+  });
+  const guest = await cleanupExpiredStoryAudioAssets({
+    now,
+    limit: options.limit,
+    storage: options.storage,
+    subjectScope: 'guest',
+    isPlaying: (workId) => playingGuest.has(workId),
+  });
+  return {
+    scanned: user.scanned + guest.scanned,
+    enqueued: user.enqueued + guest.enqueued,
+    deleted: user.deleted + guest.deleted,
+  };
+}
+
+/**
+ * 机会式触发：按 `STORY_AUDIO_ASSET_GC_MIN_INTERVAL_MS` 节流，单次有界清扫。
+ * 失败吞错（永不抛），返回是否在本次调用真正触发（节流跳过返回 false）。
+ */
+export async function maybeRunStoryAudioAssetGc(nowMs: number = Date.now()): Promise<boolean> {
+  if (
+    storyAudioAssetGcLastRunMs !== null &&
+    nowMs - storyAudioAssetGcLastRunMs < STORY_AUDIO_ASSET_GC_MIN_INTERVAL_MS
+  ) {
+    return false;
+  }
+  storyAudioAssetGcLastRunMs = nowMs;
+  try {
+    const runner = storyAudioAssetGcRunnerForTests ?? sweepExpiredStoryAudioAssets;
+    await runner({ now: new Date(nowMs) });
+  } catch (err) {
+    try {
+      console.warn(
+        '[storyAudioAsset] opportunistic GC failed (non-fatal)',
+        err instanceof Error ? err.message : String(err),
+      );
+    } catch {
+      // 日志失败亦不得影响调用方。
+    }
+  }
+  return true;
+}
+
+/**
+ * 启动触发（instrumentation register 钩子）：无节流跑一次有界清扫，失败永不抛。
+ */
+export async function runStartupStoryAudioAssetGc(options: {
+  now?: Date;
+  limit?: number;
+  storage?: AudioAssetStorage;
+} = {}): Promise<CleanupExpiredStoryAudioAssetsResult> {
+  try {
+    return await sweepExpiredStoryAudioAssets(options);
+  } catch (err) {
+    try {
+      console.warn(
+        '[storyAudioAsset] startup GC failed (non-fatal)',
+        err instanceof Error ? err.message : String(err),
+      );
+    } catch {
+      // 日志失败亦不得崩启动。
+    }
+    return { scanned: 0, enqueued: 0, deleted: 0 };
+  }
 }

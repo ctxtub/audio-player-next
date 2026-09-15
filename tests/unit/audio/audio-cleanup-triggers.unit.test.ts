@@ -318,6 +318,90 @@ async function runAudioCleanupTriggersUnitTests() {
     console.log('PASS: 7. Docker plumbing 通过');
   }
 
+  console.log('=== 8. T3 单轨 GC 触发 + isPlaying 守卫 + 双 flag plumbing 静态 ===');
+  {
+    const assetSrc = stripComments(readRepoFile('lib/server/storyAudioAsset.ts'));
+    assert.ok(
+      /void\s+maybeRunStoryAudioAssetGc\(\)/.test(assetSrc),
+      'ensure 必须 void fire-and-forget 触发单轨 GC（不 await）',
+    );
+    assert.strictEqual(
+      /await\s+maybeRunStoryAudioAssetGc\(/.test(assetSrc),
+      false,
+      'ensure 不得 await 单轨 GC（不得影响结果/延迟）',
+    );
+    assert.ok(
+      assetSrc.includes('STORY_AUDIO_ASSET_GC_MIN_INTERVAL_MS') &&
+        assetSrc.includes('STORY_AUDIO_ASSET_PLAYING_WINDOW_MS'),
+      '必须定义机会式 GC 节流与「正在播放」窗口常量',
+    );
+    assert.ok(
+      /lastPlayedAt:\s*\{\s*gte:\s*since\s*\},\s*completedAt:\s*null\s*\}/.test(assetSrc),
+      'isPlaying 判定必须来自近期 lastPlayedAt 且 completedAt 为 null 的进度行',
+    );
+    assert.ok(
+      assetSrc.includes('isPlaying: (workId) => playingUser.has(workId)') &&
+        assetSrc.includes('isPlaying: (workId) => playingGuest.has(workId)'),
+      'User/Guest 必须分域构建 isPlaying（避免 id 碰撞）',
+    );
+    assert.ok(
+      assetSrc.includes('isSingleTrackAudioEnabled()'),
+      '单轨服务必须受 flag 门禁（flag off ⇒ 无单轨流量）',
+    );
+    const readSrc = stripComments(readRepoFile('lib/server/audioAssetRead.ts'));
+    assert.ok(
+      readSrc.includes('isSingleTrackAudioEnabled()'),
+      '读取路由必须受 flag 门禁（flag off ⇒ 404）',
+    );
+    const startupSrc = stripComments(readRepoFile('lib/server/audioStorageStartup.ts'));
+    assert.ok(
+      startupSrc.includes('runStartupStoryAudioAssetGc'),
+      '启动模块必须导出单轨 GC 入口',
+    );
+    assert.ok(
+      startupSrc.includes("await import('@/lib/server/storyAudioAsset')"),
+      '启动入口必须动态 import 单轨服务（避免静态拉入 DB/存储）',
+    );
+    const instrumentationSrc = stripComments(readRepoFile('instrumentation.ts'));
+    assert.ok(
+      /void\s+mod\.runStartupStoryAudioAssetGc\(\)/.test(instrumentationSrc),
+      'instrumentation 必须 void 触发单轨 GC（薄钩子）',
+    );
+    assert.strictEqual(
+      /await\s+mod\.runStartupStoryAudioAssetGc\(/.test(instrumentationSrc),
+      false,
+      'instrumentation 不得 await 单轨 GC',
+    );
+    const dockerfile = readRepoFile('Dockerfile');
+    assert.ok(
+      /ARG\s+NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED\s*=\s*""/.test(dockerfile),
+      'builder 必须新增单轨 build ARG（缺省空=fail-closed）',
+    );
+    assert.ok(
+      dockerfile.includes('ENV NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED=') &&
+        dockerfile.includes('ENV SINGLE_TRACK_AUDIO_ENABLED='),
+      'build/runtime 阶段必须支持单轨双变量',
+    );
+    const compose = readRepoFile('docker-compose.yml');
+    assert.ok(
+      compose.includes('NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED') &&
+        compose.includes('SINGLE_TRACK_AUDIO_ENABLED'),
+      'compose 必须传递单轨双变量',
+    );
+    const envSample = readRepoFile('.env.sample');
+    assert.ok(
+      envSample.includes('NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED') &&
+        envSample.includes('SINGLE_TRACK_AUDIO_ENABLED'),
+      '.env.sample 必须文档化单轨双变量',
+    );
+    const flagSrc = readRepoFile('lib/audio/singleTrackFlag.ts');
+    assert.ok(
+      /SINGLE_TRACK_AUDIO_ENABLED_VALUE\s*=\s*'1'/.test(flagSrc),
+      '单轨唯一合法开启值恒为 1',
+    );
+    console.log('PASS: 8. T3 单轨 GC + 双 flag plumbing 通过');
+  }
+
   console.log('ALL AUDIO CLEANUP TRIGGERS UNIT TESTS PASSED SUCCESSFULLY');
 }
 

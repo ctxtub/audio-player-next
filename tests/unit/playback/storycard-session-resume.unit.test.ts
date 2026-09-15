@@ -830,14 +830,14 @@ async function runStorycardSessionFlowTests(): Promise<void> {
     getFlow().reportProgress({ currentTime: 3, duration: 8 });
     // 清空：切曲动作本身必须产生一次旧作品落库。
     singleTrackSaveProgressCalls.length = 0;
-    useSession.getState().setActiveStory({
-      source: { kind: 'work', workId: 22 },
+    // 真实切曲 seam：beginPlayback / restart 均经 hydrateFromAnchor 覆盖 source。
+    const switchAnchor = defaultBeginEcho({
       sessionId: switchNewSession,
-      title: '新作品',
-      storyText: STORY_TEXT,
-      voiceId: 'alloy',
+      source: { kind: 'work', workId: WORK_ID },
+      mode: 'resume',
       speed: 1,
     });
+    await useSession.getState().hydrateFromAnchor(switchAnchor as never);
     assert.ok(
       singleTrackSaveProgressCalls.length >= 1,
       'J：切曲前必须强制落库即将离开的旧作品进度',
@@ -846,6 +846,12 @@ async function runStorycardSessionFlowTests(): Promise<void> {
     assert.ok(flushed, 'J：落库 workId 必须为即将离开的旧作品 11');
     assert.strictEqual(flushed.sessionId, switchOldSession, 'J：落库旧 sessionId');
     assert.strictEqual(typeof flushed.positionMs, 'number', 'J：落库 positionMs');
+    const switchedSource = useSession.getState().source;
+    assert.strictEqual(
+      switchedSource?.kind === 'work' ? switchedSource.workId : -1,
+      WORK_ID,
+      'J：切曲后 source 切到新作品',
+    );
     console.log('PASS: J switch-track force-save verified');
   } finally {
     delete process.env.NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED;

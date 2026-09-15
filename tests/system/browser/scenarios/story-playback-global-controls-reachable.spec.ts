@@ -132,6 +132,66 @@ async function detachClient(page: import("@playwright/test").Page): Promise<void
     await page.waitForTimeout(2000);
 }
 
+/**
+ * 从 tRPC 请求体解析指定 procedure 的 input（身份绑定的判据）。
+ *
+ * wire 依据（tRPC v11 + superjson；客户端见 `lib/trpc/client.ts` 的
+ * `httpBatchLink`，服务端按同一 shape 反序列化）：
+ * - URL pathname 末段为逗号分隔的 procedure 名（batch），形如
+ *   `/api/trpc/playback.beginSession,playback.getAnchor`；
+ * - POST body 为 `{"<index>":{"json":<input>,"meta":{...}},...}`，`index` 与
+ *   URL 中 procedure 的先后顺序一致；单发（非 batch）时为
+ *   `{"json":<input>,"meta":{...}}`。
+ * 故先按 procedure 在 URL 中的下标取对应 body 项，再解 superjson 的 `json`
+ * 包装。任何一步解析失败都返回 null，由调用方 fail-closed——绝不退化为
+ * 「只看 URL」的弱匹配。
+ * @param response Playwright 抓到的响应
+ * @param procedure 目标 procedure 名（如 `playback.beginSession`）
+ * @returns 该 procedure 的 input 对象，或 null
+ */
+function parseTrpcInput(
+    response: import("@playwright/test").Response,
+    procedure: string,
+): Record<string, unknown> | null {
+    let path: string;
+    try {
+        path = new URL(response.url()).pathname.split("/").pop() ?? "";
+    } catch {
+        return null;
+    }
+    const index: number = path.split(",").indexOf(procedure);
+    if (index < 0) {
+        return null;
+    }
+    const rawBody: string | null = response.request().postData();
+    if (!rawBody) {
+        return null;
+    }
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(rawBody);
+    } catch {
+        return null;
+    }
+    if (!parsed || typeof parsed !== "object") {
+        return null;
+    }
+    const batchEntry = (parsed as Record<string, unknown>)[String(index)];
+    for (const candidate of [batchEntry, parsed]) {
+        if (!candidate || typeof candidate !== "object") {
+            continue;
+        }
+        const record = candidate as Record<string, unknown>;
+        if (record.json && typeof record.json === "object") {
+            return record.json as Record<string, unknown>;
+        }
+        if (!("json" in record) && !("meta" in record)) {
+            return record;
+        }
+    }
+    return null;
+}
+
 test("M9-F01 故事卡播放（Legacy audioUrl 两种形态）全局控制同帧可达", async ({ page, harnessEnv, evidence }) => {
     test.setTimeout(180000);
     const recorder = evidence as unknown as { step: (name: string, detail?: unknown) => void };
@@ -210,15 +270,35 @@ test("M9-F01 生成历史回放走正式 Work Session 且全局控制同帧可�
     const historyItem = page.locator('[class*="historyItem"]').filter({ hasText: prompt }).first();
     await expect(historyItem).toBeVisible({ timeout: 30000 });
 
-    // M10-05-H1-F1：先武装本次 Work 回放的 beginSession 响应等待，再点击回放；
+    // M10-05-H1-F1-F2：先武装本次 Work 回放的 beginSession 响应等待，再点击回放；
     // 待该次 beginSession settle（产品 anchor upsert 已提交）后，才开始下方
     // safeAnchorKind 直连只读轮询，避免 test 侧直读与产品写窗口对撞触发
     // SQLITE_BUSY → 500 → Anchor 停在 draft。只等 settle，不新增「必须 200」
     // 之类新 oracle：若产品自身仍 500，settle 后 Anchor 仍 draft，原断言照常失败。
-    const beginSessionSettled = page.waitForResponse(
-        (response) => response.url().includes("playback.beginSession"),
-        { timeout: 30000 },
-    );
+    //
+    // 身份绑定（F2 收口）：只按 URL 匹配 procedure 名不足以放行——一次无关的
+    // draft beginSession 晚到并 resolve 会提前放行 barrier，使用户 work click 的
+    // beginSession 仍在写 Anchor 时 safeAnchorKind 就开始直读，observer-effect
+    // 窗口重现。故必须同时满足：
+    //   1) procedure 名 = playback.beginSession（URL pathname 末段）；
+    //   2) 该请求 input.source.kind === "work"；
+    //   3) String(input.source.workId) === newestWorkId（本用例已解析的最新 Work id）。
+    const isNewestWorkBeginSession = (
+        response: import("@playwright/test").Response,
+    ): boolean => {
+        const input = parseTrpcInput(response, "playback.beginSession");
+        if (!input) {
+            return false;
+        }
+        const source = input.source as Record<string, unknown> | undefined;
+        if (!source || source.kind !== "work") {
+            return false;
+        }
+        return String(source.workId) === newestWorkId;
+    };
+    const beginSessionSettled = page.waitForResponse(isNewestWorkBeginSession, {
+        timeout: 30000,
+    });
     await historyItem.getByRole("button", { name: "回放此故事" }).click({ timeout: 15000 });
     await beginSessionSettled;
 

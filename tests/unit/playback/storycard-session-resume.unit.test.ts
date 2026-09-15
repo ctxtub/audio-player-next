@@ -160,6 +160,9 @@ nodeRequire.cache[libraryPath] = {
 } as unknown as NodeModule;
 
 // 中文注释：storyAudio 桩（Manifest 缺失 → 本地回退合法路径；canonical provider 关闭）。
+// T3：单轨 ensure/进度可编程（缺省关闭，仅 I 用例启用），并记录 saveProgress 调用。
+const singleTrackSaveProgressCalls: Array<Record<string, unknown>> = [];
+let singleTrackEnsureResult: unknown = null;
 const storyAudioPath = path.resolve(process.cwd(), 'lib/client/storyAudio.ts');
 nodeRequire.cache[storyAudioPath] = {
   id: storyAudioPath,
@@ -170,15 +173,19 @@ nodeRequire.cache[storyAudioPath] = {
       throw new Error('canonical provider closed in M9-F01 L1');
     },
     ensureAsset: async () => {
+      if (singleTrackEnsureResult) return singleTrackEnsureResult;
       throw new Error('single-track provider closed in M9-F01 L1');
     },
     getProjection: async () => {
       throw new Error('single-track projection closed in M9-F01 L1');
     },
-    saveProgress: async () => ({ written: false }),
+    saveProgress: async (input: Record<string, unknown>) => {
+      singleTrackSaveProgressCalls.push(input);
+      return { written: true };
+    },
     getPlaybackManifest: async () => null,
     isCanonicalPlaybackUrl: () => false,
-    isSingleTrackPlaybackUrl: () => false,
+    isSingleTrackPlaybackUrl: (url: string) => url.startsWith('/api/audio/assets/'),
     selectWorkParagraphs: (local: string[]) => local,
     shouldUseCanonicalAudio: () => false,
     shouldUseSingleTrackAudio: () => false,
@@ -693,6 +700,81 @@ async function runStorycardSessionFlowTests(): Promise<void> {
   assert.strictEqual(ttsInputs.length, 0, 'G：pause 不得触发任何合成');
   assert.strictEqual(playG.length, 0, 'G：pause 不得起播');
   console.log('PASS: G same-card pause verified');
+
+  // —— I：T3 单轨 positionMs：恢复 seek + 暂停强制落库（真实 store/flow 路径） ——
+  console.log('--- I: single-track positionMs restore + persist ---');
+  resetPlaybackWorld();
+  const singleTrackSession = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+  const seekCalls: number[] = [];
+  singleTrackEnsureResult = {
+    status: 'ready',
+    asset: {
+      assetId: 'a1',
+      workId: 1,
+      status: 'ready',
+      version: 1,
+      contentHash: 'h',
+      voiceId: 'alloy',
+      ttsProfileHash: 'p',
+      synthesisVersion: 's',
+      audioFormat: 'mp3',
+      chunkCount: 1,
+      durationMs: 10000,
+      byteLength: 100,
+      checksum: 'c',
+      contentType: 'audio/mpeg',
+      playbackUrl: '/api/audio/assets/a1',
+      positionMs: 5000,
+      readyAt: new Date().toISOString(),
+    },
+  };
+  process.env.SINGLE_TRACK_AUDIO_ENABLED = '1';
+  try {
+    const useSession = getSessionStore();
+    const useTransport = getTransportStore();
+    useTransport.getState().registerAudioController({
+      unlock: async () => {},
+      play: async () => {},
+      resume: async () => {},
+      pause: () => {},
+      seek: (time: number) => {
+        seekCalls.push(time);
+      },
+      setPlaybackRate: () => {},
+    });
+    useSession.getState().setActiveStory({
+      source: { kind: 'work', workId: 1 },
+      sessionId: singleTrackSession,
+      title: '单轨作品',
+      storyText: STORY_TEXT,
+      voiceId: 'alloy',
+      speed: 1,
+    });
+    singleTrackSaveProgressCalls.length = 0;
+    await useSession.getState().playParagraph(0, { explicit: true });
+    // 元数据到达（duration>0）后应用服务端 positionMs 恢复位。
+    getFlow().reportProgress({ currentTime: 0, duration: 10 });
+    assert.ok(
+      seekCalls.length >= 1,
+      'I：单轨恢复必须 seek 到服务端 positionMs（元数据到达后）',
+    );
+    assert.ok(
+      Math.abs(seekCalls[0] - 5) < 0.001,
+      `I：seek 目标应为 5s，实际 ${seekCalls[0]}`,
+    );
+    // 暂停 → 强制落库（workId/sessionId/positionMs）。
+    getFlow().pausePlayback();
+    assert.ok(singleTrackSaveProgressCalls.length >= 1, 'I：暂停必须经 saveProgress 落库');
+    const lastPersist = singleTrackSaveProgressCalls[singleTrackSaveProgressCalls.length - 1];
+    assert.strictEqual(lastPersist.workId, 1, 'I：落库 workId');
+    assert.strictEqual(lastPersist.sessionId, singleTrackSession, 'I：落库 sessionId');
+    assert.strictEqual(typeof lastPersist.positionMs, 'number', 'I：落库 positionMs');
+    console.log('PASS: I single-track positionMs verified');
+  } finally {
+    delete process.env.SINGLE_TRACK_AUDIO_ENABLED;
+    singleTrackEnsureResult = null;
+    singleTrackSaveProgressCalls.length = 0;
+  }
 
   // —— H：全入口静态审计（产品 playAudio 调用点 ⊆ SessionStore） ——
   console.log('--- H: static audit of all playback entries ---');

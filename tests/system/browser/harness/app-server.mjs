@@ -322,6 +322,9 @@ export function buildSnapshotEnv(dbFile, mockBaseUrl) {
         ]),
         AUDIO_STORAGE_DRIVER: 'local',
         AUDIO_LOCAL_ROOT: join(dirname(dbFile), 'audio'),
+        // T3：browser 套件内单轨服务端路径需真实开启；生产由部署 env 显式置位（默认关）。
+        // 既有 canonical segment spec 不改走单轨（客户端 provider 由各自 browser flag 选择）。
+        SINGLE_TRACK_AUDIO_ENABLED: '1',
     };
 }
 

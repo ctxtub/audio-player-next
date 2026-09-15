@@ -25,6 +25,12 @@ import {
   ensureStoryAudioSegmentForSubject,
   getPlaybackManifestForSubject,
 } from '../../../lib/server/storyAudio';
+import {
+  __resetStoryAudioAssetTestHooks,
+  ensureStoryAudioAssetForSubject,
+  getStoryAudioAssetProjectionForSubject,
+  saveStoryAudioProgressForSubject,
+} from '../../../lib/server/storyAudioAsset';
 import { resetCache } from '../../../lib/server/openai';
 import { computeStoryContentHash } from '../../../utils/segmentation';
 
@@ -132,17 +138,17 @@ async function main(): Promise<void> {
 
     // ---- 1. 单资产发布：ensure 一次只发布一个 Asset，内部 chunk 数 >= 2 ----
     const tts1: FakeTtsState = { count: 0, texts: [], failOnCall: null };
-    const ensured = await ensureStoryAudioSegmentForSubject(
+    const ensured = await ensureStoryAudioAssetForSubject(
       subject,
-      { workId, segmentIndex: 0, sessionId },
+      { workId, sessionId },
       { storage, synthesize: makeFakeTts(tts1) },
     );
     const ensuredAsset = (ensured as unknown as { asset?: Record<string, unknown> }).asset;
     check('1a ensure 暴露单轨 asset 投影', ensuredAsset !== undefined);
     check(
-      '1b manifest 只声明一个 asset 单元',
-      (ensured as unknown as { manifest?: { segmentCount?: number } }).manifest?.segmentCount === 1,
-      `segmentCount=${(ensured as unknown as { manifest?: { segmentCount?: number } }).manifest?.segmentCount}`,
+      '1b 单轨 ensure 不再返回逐 segment manifest（一个 asset 单元）',
+      (ensured as unknown as { manifest?: unknown }).manifest === undefined,
+      `manifest=${JSON.stringify((ensured as unknown as { manifest?: unknown }).manifest)}`,
     );
     const chunkCount = Number(ensuredAsset?.chunkCount ?? -1);
     check('1c 长文被内部拆为多个 chunk 后合并为一个 asset', chunkCount >= 2, `chunkCount=${chunkCount}`);
@@ -203,9 +209,9 @@ async function main(): Promise<void> {
     // ---- 3. 暂停恢复/重播不重复 TTS（30 天内复用） ----
     const tts2: FakeTtsState = { count: 0, texts: [], failOnCall: null };
     const t29 = new Date(Date.now() + 29 * DAY_MS);
-    const reused = await ensureStoryAudioSegmentForSubject(
+    const reused = await ensureStoryAudioAssetForSubject(
       subject,
-      { workId, segmentIndex: 0, sessionId },
+      { workId, sessionId },
       { storage, synthesize: makeFakeTts(tts2), now: () => t29 },
     );
     check('3a 29 天内命中同一 Asset（不重建）', (reused as unknown as { asset?: { assetId?: string } }).asset?.assetId === assetId);
@@ -214,17 +220,17 @@ async function main(): Promise<void> {
     // ---- 4. 30 天滑动 TTL：29 天访问已把锚点滑到 D29，故 D31 仍复用、D60 才重建 ----
     const ttsSlide: FakeTtsState = { count: 0, texts: [], failOnCall: null };
     const t31 = new Date(Date.now() + 31 * DAY_MS);
-    await ensureStoryAudioSegmentForSubject(
+    await ensureStoryAudioAssetForSubject(
       subject,
-      { workId, segmentIndex: 0, sessionId },
+      { workId, sessionId },
       { storage, synthesize: makeFakeTts(ttsSlide), now: () => t31 },
     );
     check('4a 距上次访问不足 30 天不重建（滑动 TTL）', ttsSlide.count === 0, `tts=${ttsSlide.count}`);
     const tts3: FakeTtsState = { count: 0, texts: [], failOnCall: null };
     const t60 = new Date(t31.getTime() + 31 * DAY_MS);
-    const rebuilt = await ensureStoryAudioSegmentForSubject(
+    const rebuilt = await ensureStoryAudioAssetForSubject(
       subject,
-      { workId, segmentIndex: 0, sessionId },
+      { workId, sessionId },
       { storage, synthesize: makeFakeTts(tts3), now: () => t60 },
     );
     const rebuiltAsset = (rebuilt as unknown as { asset?: { assetId?: string; chunkCount?: number } }).asset;
@@ -237,9 +243,9 @@ async function main(): Promise<void> {
     const ttsFail: FakeTtsState = { count: 0, texts: [], failOnCall: 2 };
     let failedStatus = '';
     try {
-      await ensureStoryAudioSegmentForSubject(
+      await ensureStoryAudioAssetForSubject(
         subject2,
-        { workId: workId2, segmentIndex: 0, sessionId },
+        { workId: workId2, sessionId },
         { storage, synthesize: makeFakeTts(ttsFail) },
       );
       failedStatus = 'ready';
@@ -256,9 +262,9 @@ async function main(): Promise<void> {
     const ttsRace: FakeTtsState = { count: 0, texts: [], failOnCall: null };
     const raceResults = await Promise.all(
       [0, 1, 2].map(() =>
-        ensureStoryAudioSegmentForSubject(
+        ensureStoryAudioAssetForSubject(
           subject3,
-          { workId: workId3, segmentIndex: 0, sessionId },
+          { workId: workId3, sessionId },
           { storage, synthesize: makeFakeTts(ttsRace) },
         ),
       ),
@@ -315,6 +321,129 @@ async function main(): Promise<void> {
       crossUserStatus = (err as { httpStatus?: number }).httpStatus ?? 0;
     }
     check('8c 跨主体读取被拒（403）', crossUserStatus === 403, `status=${crossUserStatus}`);
+
+    // ---- 9. 服务端 flag 门禁：关闭即拒绝单轨写/读/进度（不产生单轨流量） ----
+    process.env.SINGLE_TRACK_AUDIO_ENABLED = '0';
+    const { userId: userIdDisabled, workId: workIdDisabled } = await createUserWork(storyText);
+    const subjectDisabled = { type: 'user' as const, id: userIdDisabled };
+    let disabledEnsureMessage = '';
+    try {
+      await ensureStoryAudioAssetForSubject(
+        subjectDisabled,
+        { workId: workIdDisabled, sessionId },
+        { storage, synthesize: makeFakeTts({ count: 0, texts: [], failOnCall: null }) },
+      );
+      disabledEnsureMessage = 'no-throw';
+    } catch (err) {
+      disabledEnsureMessage = err instanceof Error ? err.message : String(err);
+    }
+    check(
+      '9a flag 关闭时 ensure 被拒（不产生单轨流量）',
+      disabledEnsureMessage === 'SINGLE_TRACK_AUDIO_DISABLED',
+      disabledEnsureMessage,
+    );
+    const disabledRows = await prisma.storyAudioAsset.count({
+      where: { storyWorkId: workIdDisabled },
+    });
+    check('9b flag 关闭时 ensure 不落任何资产行', disabledRows === 0, `rows=${disabledRows}`);
+    let disabledProjectionMessage = '';
+    try {
+      await getStoryAudioAssetProjectionForSubject(subjectDisabled, { workId: workIdDisabled });
+      disabledProjectionMessage = 'no-throw';
+    } catch (err) {
+      disabledProjectionMessage = err instanceof Error ? err.message : String(err);
+    }
+    check(
+      '9c flag 关闭时投影读取被拒',
+      disabledProjectionMessage === 'SINGLE_TRACK_AUDIO_DISABLED',
+      disabledProjectionMessage,
+    );
+    let disabledProgressMessage = '';
+    try {
+      await saveStoryAudioProgressForSubject(subjectDisabled, {
+        workId: workIdDisabled,
+        sessionId,
+        positionMs: 1000,
+        durationMs: 5000,
+        force: true,
+      });
+      disabledProgressMessage = 'no-throw';
+    } catch (err) {
+      disabledProgressMessage = err instanceof Error ? err.message : String(err);
+    }
+    check(
+      '9d flag 关闭时进度写入被拒',
+      disabledProgressMessage === 'SINGLE_TRACK_AUDIO_DISABLED',
+      disabledProgressMessage,
+    );
+    let disabledReadStatus = 0;
+    try {
+      await readModule.resolveReadableAudioAssetForSubject(subject, assetId);
+    } catch (err) {
+      disabledReadStatus = (err as { httpStatus?: number }).httpStatus ?? 0;
+    }
+    check('9e flag 关闭时资产读取路由 404（无单轨流量）', disabledReadStatus === 404, `status=${disabledReadStatus}`);
+    process.env.SINGLE_TRACK_AUDIO_ENABLED = '1';
+
+    // ---- 10. ensureSegment 不再是单轨入口（旧多段路径不被单轨 flag 劫持） ----
+    const { userId: userIdSeg, workId: workIdSeg } = await createUserWork(storyText);
+    const subjectSeg = { type: 'user' as const, id: userIdSeg };
+    const ttsSeg: FakeTtsState = { count: 0, texts: [], failOnCall: null };
+    const segResult = await ensureStoryAudioSegmentForSubject(
+      subjectSeg,
+      { workId: workIdSeg, segmentIndex: 0, sessionId },
+      { storage, synthesize: makeFakeTts(ttsSeg) },
+    );
+    check(
+      '10a flag 开启时 ensureSegment 仍走旧多段路径（不暴露单轨 asset）',
+      (segResult as unknown as { asset?: unknown }).asset === undefined,
+    );
+
+    // ---- 11. 生产 GC 触发器 + 「正在播放」守卫（30 天滑动） ----
+    const { userId: userIdIdle, workId: workIdIdle } = await createUserWork(storyText);
+    const { userId: userIdPlaying, workId: workIdPlaying } = await createUserWork(storyText);
+    const subjectIdle = { type: 'user' as const, id: userIdIdle };
+    const subjectPlaying = { type: 'user' as const, id: userIdPlaying };
+    const past = new Date(Date.now() - 40 * DAY_MS);
+    const idleAsset = (
+      (await ensureStoryAudioAssetForSubject(
+        subjectIdle,
+        { workId: workIdIdle, sessionId },
+        { storage, synthesize: makeFakeTts({ count: 0, texts: [], failOnCall: null }), now: () => past },
+      )) as unknown as { asset?: { assetId?: string } }
+    ).asset;
+    const playingAsset = (
+      (await ensureStoryAudioAssetForSubject(
+        subjectPlaying,
+        { workId: workIdPlaying, sessionId },
+        { storage, synthesize: makeFakeTts({ count: 0, texts: [], failOnCall: null }), now: () => past },
+      )) as unknown as { asset?: { assetId?: string } }
+    ).asset;
+    const idleKey = `story-audio/${String(idleAsset?.assetId ?? '')}.mp3`;
+    const playingKey = `story-audio/${String(playingAsset?.assetId ?? '')}.mp3`;
+    await saveStoryAudioProgressForSubject(subjectPlaying, {
+      workId: workIdPlaying,
+      sessionId,
+      positionMs: 1200,
+      durationMs: 5000,
+      force: true,
+    });
+    const { userId: userIdTrigger, workId: workIdTrigger } = await createUserWork(storyText);
+    __resetStoryAudioAssetTestHooks();
+    await ensureStoryAudioAssetForSubject(
+      { type: 'user' as const, id: userIdTrigger },
+      { workId: workIdTrigger, sessionId },
+      { storage, synthesize: makeFakeTts({ count: 0, texts: [], failOnCall: null }) },
+    );
+    check(
+      '11a ensure 机会式触发：过期且空闲的资产对象被清理',
+      !(await storage.exists(idleKey)),
+    );
+    check(
+      '11b 正在播放（近期进度）的过期资产被跳过保留',
+      await storage.exists(playingKey),
+    );
+
   } finally {
     if (savedEnv.single === undefined) delete process.env.SINGLE_TRACK_AUDIO_ENABLED;
     else process.env.SINGLE_TRACK_AUDIO_ENABLED = savedEnv.single;

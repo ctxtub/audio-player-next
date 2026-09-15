@@ -112,7 +112,7 @@ cases:
     display_name_zh: 主导航路由契约与页面旅程
     legacy_aliases: [E2E-01-09]
     journey_id: smoke-baseline
-    user_goal: 验证一二级路由导航跳转兼容边界与全局布局生命周期连续
+    user_goal: 验证一二级路由导航跳转(/player重定向/library)与全局布局生命周期连续
     priority: P0
     lifecycle_status: ACTIVE
     risk_tags: [smoke, router, navigation]
@@ -1133,7 +1133,7 @@ cases:
     display_name_zh: MainChrome 移动端固定 Mini
     legacy_aliases: []
     journey_id: smoke-baseline
-    user_goal: 移动端 Mini 固定 TabBar 上方不可拖且键盘纯隐藏跨路由同会话
+    user_goal: 移动端 Mini 固定 TabBar 上方不可拖且点Mini展开URL不变键盘纯隐藏跨路由同会话
     priority: P1
     lifecycle_status: ACTIVE
     risk_tags: [ui, layout, session, keyboard, navigation]

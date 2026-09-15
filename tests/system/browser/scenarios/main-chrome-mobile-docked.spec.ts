@@ -3,7 +3,7 @@
 // M6-03 MainChrome & Mobile Docked Mini（聚合单场景，验收 A-G）。
 // 767 + active session → Mini 在 TabBar 上方、不可拖、TabBar/Composer 可达；
 // 无 session → 无幽灵预留；keyboard open → 纯隐藏（session/音频不变），close → 同一 sessionId 恢复；
-// 点击 Mini → /player；跨 /chat /library /setting 同一 Session、唯一 Host、零重建；768 不进 mobile 分支。
+// 点击 Mini → openExpanded()（URL 不变）；跨 /chat /library /setting 同一 Session、唯一 Host、零重建；768 不进 mobile 分支。
 // 慢沙箱一律确定性轮询（expect.poll），无长 sleep。桌面无真实软键盘，走聚焦 fallback 抑制。
 import { test, expect } from "../harness/fixtures";
 import type { Page } from "@playwright/test";
@@ -245,15 +245,38 @@ test("MainChrome 移动端固定 Mini 全链路", async ({ page, harnessEnv, evi
     beginSessionCount = 0;
     ttsSynthCount = 0;
 
-    // E：点击 Mini → /player；返回后恢复原路由，播放不断。
+    // E：点击 Mini metadata → openExpanded()（M7 冻结：URL 不变、会话连续、Host 不重建）。
+    const urlBeforeExpand = page.url();
     await page.getByTestId("mini-metadata-button").click({ timeout: 15000 });
-    await page.waitForURL("**/player", { timeout: 15000 });
-    const onPlayer = await readProbe(page);
-    expect(onPlayer.sessionId).toBe(sessionId);
-    await page.goBack();
-    await page.waitForURL("**/chat", { timeout: 15000 });
-    await expect.poll(async () => (await readProbe(page)).sessionId, { timeout: 30000 }).toBe(sessionId);
-    recorder.step("点击进入播放器往返", {});
+    await expect(page.getByTestId("expanded-now-playing")).toBeVisible({ timeout: 15000 });
+    // URL 不变，且从未进入 /player。
+    expect(page.url()).toBe(urlBeforeExpand);
+    expect(page.url()).not.toContain("/player");
+    // Session 连续：同一 sessionId，播放态/轨道不变。
+    await expect.poll(async () => (await readProbe(page)).sessionId, { timeout: 15000 }).toBe(sessionId);
+    const onExpand = await readProbe(page);
+    expect(onExpand.status).toBe("paused");
+    expect(onExpand.transport?.audioUrl).toBe(pausedAudioUrl);
+    // Host 未重建：同一 audio 元素标记存活且唯一。
+    const expandMarker = await page.evaluate(() => {
+        const audio = document.querySelector("audio");
+        if (!audio) return { alive: false, count: document.querySelectorAll("audio").length };
+        return {
+            alive:
+                (audio as unknown as Record<string, unknown>)["__m6ChromeMarker"] === "m6-chrome-v1" &&
+                audio.dataset.hostSurrogate === "active",
+            count: document.querySelectorAll("audio").length,
+        };
+    });
+    expect(expandMarker.count).toBe(1);
+    expect(expandMarker.alive).toBe(true);
+    // 关闭 Expanded（Escape）：Mini 恢复，会话仍同一，URL 仍不变。
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("expanded-now-playing")).toHaveCount(0, { timeout: 15000 });
+    await expect.poll(async () => page.getByTestId("mini-now-playing").count(), { timeout: 15000 }).toBe(1);
+    await expect.poll(async () => (await readProbe(page)).sessionId, { timeout: 15000 }).toBe(sessionId);
+    expect(page.url()).toBe(urlBeforeExpand);
+    recorder.step("点击展开URL不变会话连续", { sessionId });
 
     // F：跨 /chat /library /setting → 同一 Session、唯一 Host、零重建。
     const libraryTab = page.getByRole("tab", { name: "故事库" });

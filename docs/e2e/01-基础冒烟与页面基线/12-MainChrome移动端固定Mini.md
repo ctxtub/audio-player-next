@@ -4,12 +4,12 @@
 
 ## 用户目标
 
-移动端有可展示播放会话时 Mini 固定在 TabBar 上方、不可拖，TabBar 与输入区不被遮挡；无会话时不保留幽灵空间；软键盘展开时 Mini 纯隐藏且播放/会话不变，键盘收起后自动恢复；点击 Mini 进入 `/player`；跨 `/chat` `/library` `/setting` 同一会话派生且音频宿主唯一。
+移动端有可展示播放会话时 Mini 固定在 TabBar 上方、不可拖，TabBar 与输入区不被遮挡；无会话时不保留幽灵空间；软键盘展开时 Mini 纯隐藏且播放/会话不变，键盘收起后自动恢复；点击 Mini 展开 Expanded（URL 不变、会话连续、音频宿主不重建）；跨 `/chat` `/library` `/setting` 同一会话派生且音频宿主唯一。
 
 ## 前置条件
 
 - M5 PlaybackSessionStore + Transport 为唯一播放事实源（M5 冻结）；布局层不 mutation `sessionId/status/source/continuationMode`。
-- M6-01 冻结断点（767→compact，768→wide）与三态形态；M6-02 语义核心（标题/动作/进度）与 entry 契约（`router.push('/player')`）。
+- M6-01 冻结断点（767→compact，768→wide）与三态形态；M6-02 语义核心（标题/动作/进度）与 entry 契约（M7 冻结为 `openExpanded()`，URL 不变，不再 `router.push('/player')`）。
 - 本项 desktop 允许 compatibility floating 路径继续存在，不实现桌面 drag。
 
 ## 操作步骤
@@ -18,7 +18,7 @@
 2. 建立 Work 播放会话并暂停驻留（真实 `beginSession` + 首段合成 + pause），视口 767：Mini 出现在 TabBar 上方、不可拖，TabBar 与 Composer 均可达，内容区底部预留抬高。
 3. 聚焦 Chat 输入框（移动端软键盘 fallback 抑制）：Mini 隐藏；`sessionId`/播放态/音频轨道不变。
 4. 失焦/键盘收起：同一 `sessionId` 的 Mini 自动恢复。
-5. 点击 Mini 元数据：进入 `/player`；返回后回到原路由，播放不断。
+5. 点击 Mini 元数据：Expanded 可见，URL 不变，`sessionId` 不变，`AudioControllerHost` 不重建；关闭 Expanded 后 Mini 恢复，会话仍同一。
 6. 跨 `/chat`→`/library`→`/setting`→返回：同一 `sessionId`、同一 `source`、唯一 audio owner、无重复 `beginSession`、无新增合成。
 7. 视口 768：不进入 mobile docked 分支（`wide-floating`/`wide-docked`），Mini 仍由同一 Session 派生。
 
@@ -27,7 +27,7 @@
 - 767 + active session → `compact-docked`、Mini 在 TabBar 上方、不可拖、TabBar 与 Composer 不被遮挡。
 - 无 session → `data-has-docked-mini=false` 且无 Mini DOM。
 - keyboard open → Mini 隐藏但 Session 与音频不变；close → 同一 `sessionId` 恢复。
-- 点击 Mini → 精确 `/player`；`/player` 上 no-op 由 M6-02 facade 保证。
+- 点击 Mini → Expanded 可见、URL 不变、`sessionId` 不变、音频宿主不重建（同一 audio 元素标记存活且唯一）；关闭后 Mini 恢复，会话仍同一。
 - 跨路由同一 Session、唯一 Host、零重建（`beginSession=0`、`tts.synthesize=0`、同轨道 URL、同一 audio 元素标记存活）。
 - 768 为 wide（含边界），不走 `compact-docked` 抑制分支。
 

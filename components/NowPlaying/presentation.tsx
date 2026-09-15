@@ -15,6 +15,7 @@ import React from 'react';
 import { Loader2, Pause, Play, RotateCcw, RotateCw } from 'lucide-react';
 
 import type { MiniPlaybackAction } from './types';
+import styles from './MiniNowPlaying.module.scss';
 
 /** Metadata 按钮 props（点击 → openDetails/openExpanded，显式透传触发元素供焦点返回）。 */
 export type MiniMetadataButtonProps = {
@@ -81,6 +82,7 @@ export const MiniMetadataButton: React.FC<MiniMetadataButtonProps> = ({
     onOpenDetails,
 }) => (
     <button
+        className={styles.metadataButton}
         type="button"
         aria-label={`展开正在播放：${title}`}
         // WebKit 点击 <button> 不自动聚焦（activeElement 仍为 body）：
@@ -110,6 +112,7 @@ export const MiniPlaybackButton: React.FC<MiniPlaybackButtonProps> = ({
     const disabled = action === 'disabled';
     return (
         <button
+            className={styles.playbackButton}
             type="button"
             aria-label={meta.label}
             title={statusLabel}

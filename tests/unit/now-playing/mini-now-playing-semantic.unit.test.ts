@@ -444,6 +444,27 @@ async function runMiniSemanticTests(): Promise<void> {
     }
     console.log('PASS: M6-02-09 legacy import guard');
 
+    console.log('=== M6-02-10: Mini 按钮样式不依赖 DOM 子节点顺序 ===');
+    {
+        const presentationSrc = readRepoText('components/NowPlaying/presentation.tsx');
+        const scss = readRepoText('components/NowPlaying/MiniNowPlaying.module.scss');
+        assert.ok(
+            presentationSrc.includes('className={styles.metadataButton}'),
+            'Metadata 按钮必须使用显式样式类'
+        );
+        assert.ok(
+            presentationSrc.includes('className={styles.playbackButton}'),
+            'Playback 按钮必须使用显式样式类'
+        );
+        assert.ok(scss.includes('.metadataButton'), 'SCSS 必须定义 Metadata 显式类');
+        assert.ok(scss.includes('.playbackButton'), 'SCSS 必须定义 Playback 显式类');
+        assert.ok(
+            !scss.includes('button:first-child') && !scss.includes('button:last-child'),
+            'Mini 按钮样式不得依赖 DragGrip 前后的 DOM 子节点顺序'
+        );
+    }
+    console.log('PASS: M6-02-10 explicit button style classes');
+
     console.log('=== M9-03: FloatingPlayer 兼容 shim 已删除（M6-04-FIXUP 到期）===');
     {
         // M9-03：兼容期结束，shim 目录物理删除；正式命名唯一（MiniNowPlaying）。

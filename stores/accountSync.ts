@@ -11,7 +11,7 @@ import { useConfigStore } from '@/stores/configStore';
 import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
 import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
 import { useChatStore } from '@/stores/chatStore';
-import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
+import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 
 /**
@@ -57,11 +57,13 @@ const participants: AccountSyncParticipant[] = [
     reset: () => useChatStore.getState().reset(),
   },
   {
-    name: 'playbackProgress',
-    initForUser: () => usePlaybackProgressStore.getState().initForUser(),
-    initForGuest: () => usePlaybackProgressStore.getState().initForGuest(),
+    // M9-03：只 init PlaybackSessionStore（新 SSOT）；旧 playbackProgressStore 已删除，
+    // 历史 local 进度自然失效，不重新成为 SSOT，不增 fallback。
+    name: 'playbackSession',
+    initForUser: () => usePlaybackSessionStore.getState().initForUser().then(() => {}),
+    initForGuest: () => usePlaybackSessionStore.getState().initForGuest().then(() => {}),
     reset: () => {
-      usePlaybackProgressStore.getState().reset();
+      usePlaybackSessionStore.getState().reset();
       usePlaybackStore.getState().reset();
     },
   },

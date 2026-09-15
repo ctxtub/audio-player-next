@@ -1,0 +1,9 @@
+/* M6 Responsive Breakpoint Token（compile-time Sass）。
+ * 冻结契约：mobile/docked <768px；desktop >=768px。
+ * 与 TS 同一契约来源：components/NowPlaying/useNowPlayingLayoutMode.ts 的 NOW_PLAYING_BREAKPOINT_PX。
+ * 两处必须同为 768（由单测三方锁定，禁止另起第二边界）。
+ * CSS Custom Property 不能直接用于 media query，因此此处用 Sass 变量；
+ * DESIGN_SPEC --breakpoint-lg = 768px 与此语义一致。
+ */
+
+$breakpoint-lg: 768px;

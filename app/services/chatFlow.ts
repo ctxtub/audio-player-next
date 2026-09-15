@@ -7,7 +7,7 @@ import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
 import type { ChatConversationMessage } from '@/types/chat';
 import type { AgentMessage } from '@/types/agent';
 import { interactWithAgent } from './agentFlow';
-import { startStoryPlayback } from './storyFlow';
+import { autoplayDraftStory } from './playbackSessionFlow';
 
 /**
  * 自动续写指令文案：预加载下一段故事时作为用户消息提交。
@@ -35,12 +35,18 @@ let globalAbortController: AbortController | null = null;
 
 /**
  * 执行一次聊天流式调用，根据流事件更新 store。
+ * M4-02：全链路按 assistantMessageId（attempt 身份）定位 Artifact；
+ * story_complete 仅完成正文（draft→complete），done 仅标记 delivered，音频仅瞬态播放不写入消息。
  * @param context 即将发送给后端的对话上下文。
+ * @param recordHistory 是否记入生成历史与提示词历史（预载续写传 false）。
+ * @param assistantMessageId 本次 attempt 的助手消息 id（sourceMessageId 同值）。
  * @returns 包含最终音频地址和生成内容的对象
  */
 const executeChatStream = async (
   context: ChatConversationMessage[],
   recordHistory: boolean,
+  assistantMessageId: string,
+  frozenVoiceId?: string,
 ): Promise<{ audioUrl: string; content: string }> => {
   const generationStore = useGenerationStore.getState();
 
@@ -65,7 +71,8 @@ const executeChatStream = async (
     typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
 
   try {
-    let audioUrl: string = '';
+    // 瞬态音频 Blob（仅用于播放，不写入 Chat 消息/Artifact；M4-02 起消息层 audioUrl write = 0）。
+    let pendingAudioBlob: string = '';
     let generatedContent: string = '';
 
     // 重置状态并设置生成文本阶段
@@ -73,7 +80,10 @@ const executeChatStream = async (
     generationStore.setPhase('generating_text');
 
     // 获取当前配置
-    const { speed, voiceId } = useConfigStore.getState().apiConfig;
+    // M4-03 快照冻结：实际生成请求所使用的 voice 即 frozenVoiceId（由 begin/retry 在 dispatch 前单次捕获并同时写入 draft）；
+    // 此处优先使用传入快照，缺省才回读 Settings，确保 draft 冻结值与真实请求用值恒等，且 promotion 绝不重读 Settings。
+    const { speed } = useConfigStore.getState().apiConfig;
+    const voiceId = typeof frozenVoiceId === 'string' ? frozenVoiceId : useConfigStore.getState().apiConfig.voiceId;
     const agentConfig = {
       audio: {
         speed,
@@ -87,8 +97,8 @@ const executeChatStream = async (
         onTextDelta: (delta) => {
           // 同步更新 UI 状态
           generationStore.appendText(delta);
-          // 同步更新 Chat 消息
-          useChatStore.getState().dispatch({ type: 'stream.delta', content: delta });
+          // M4-02：按 attempt 身份追加（draft→draft），stale 直接忽略。
+          useChatStore.getState().dispatch({ type: 'stream.delta', content: delta, messageId: assistantMessageId });
           // 累积生成内容
           generatedContent += delta;
         },
@@ -96,51 +106,76 @@ const executeChatStream = async (
           if (intent === "Story") {
             generationStore.setPhase('generating_text');
           }
-          useChatStore.getState().dispatch({ type: 'stream.intent', intent });
+          useChatStore.getState().dispatch({ type: 'stream.intent', intent, messageId: assistantMessageId });
+        },
+        onStoryComplete: (storyText) => {
+          // M4-02 冻结语义：故事正文 terminal → draft→complete（仅正文，不触达音频/promotion）。
+          generatedContent = storyText;
+          useChatStore.getState().dispatch({
+            type: 'stream.story_complete',
+            messageId: assistantMessageId,
+            storyText,
+          });
         },
         onAudioStart: () => {
           generationStore.setPhase('generating_audio');
         },
         onAudioComplete: (url) => {
-          audioUrl = url;
+          pendingAudioBlob = url;
         },
         onComplete: () => {
-          // 生成完成 & 更新 ChatStore
+          // M4-02：done 仅标记传输结束，绝不隐式 promotion；音频仅在消息仍存在时瞬态播放。
           generationStore.setPhase('ready');
 
           if (!streamErrored) {
-            if (audioUrl) {
-              // 如果收到了音频，作为故事消息完成
-              // 2. 检查上下文中是否存在历史故事 (用于判断是否自动播放)。
-              // 注意：需排除当前刚刚生成的这一条。
-              const lastMsg = useChatStore.getState().selectors.latestMessage();
-              const existingStories = useChatStore.getState().selectors.hasStoryMessages(lastMsg?.id);
+            const stillExists = useChatStore
+              .getState()
+              .messages.some((m) => m.id === assistantMessageId);
+            // done 与 story_complete 解耦：无论有无音频，一律只标记 delivered（Artifact 原样保留）。
+            useChatStore.getState().dispatch({
+              type: 'stream.finish',
+              payload: { type: 'done', finishReason: 'stop' },
+              messageId: assistantMessageId,
+            });
 
-              // 此时 generatedContent 已累积了完整内容，直接使用确保一致性
-              useChatStore.getState().dispatch({
-                type: 'stream.story_finish',
-                storyText: generatedContent,
-                audioUrl,
-              });
-
-              // 3. 仅当历史中没有故事时（即首次生成故事），才自动开始播放。
-              if (!existingStories && lastMsg) {
-                startStoryPlayback(lastMsg.id, audioUrl).catch(console.error);
+            if (stillExists && pendingAudioBlob) {
+              // 仅当历史中没有故事时（即首次生成故事），才自动开始播放；清空后消息已不存在则绝不孤儿播放。
+              const existingStories = useChatStore
+                .getState()
+                .selectors.hasStoryMessages(assistantMessageId);
+              if (!existingStories) {
+                // M9-F01：autoplay 经正式 Draft Session（先落盘保证 ChatMessage 行存在，
+                // 再 begin+provider 起播；旧整篇 blob 无 segment identity 不得当 paragraph
+                // 播放，一律吊销丢弃）。失败则 fail-closed 静默（聊天持久化本身亦已失败）。
+                // onComplete 是同步回调，落盘/起播链经 async IIFE 串行，不阻塞流收尾。
+                void (async () => {
+                  try {
+                    await useChatStore.getState().flushPendingSave().catch(() => false);
+                  } catch {
+                    // 落盘失败不阻断 begin 尝试（行可能已存在）；begin 侧自行 fail-closed。
+                  }
+                  autoplayDraftStory({
+                    messageId: assistantMessageId,
+                    storyText: generatedContent,
+                  }).catch(console.error);
+                  try {
+                    if (typeof pendingAudioBlob === 'string' && pendingAudioBlob.startsWith('blob:')) {
+                      URL.revokeObjectURL(pendingAudioBlob);
+                    }
+                  } catch {
+                    // 吊销失败不影响播放链。
+                  }
+                })();
               }
-
-              // 4. 记录到生成历史 + 提示词历史（仅用户主动发起、真正生成了故事时记；预加载续写不记录）
+              // 记录到生成历史 + 提示词历史（仅用户主动发起、真正生成了故事时记；预加载续写不记录）
               if (recordHistory) {
                 useGenerationHistoryStore
                   .getState()
                   .record(triggerPrompt, generatedContent, voiceId);
                 usePromptHistoryStore.getState().addOrUpdate(triggerPrompt);
               }
-            } else {
-              // 若无音频 URL，则按照普通对话消息结束流程
-              useChatStore.getState().dispatch({
-                type: 'stream.finish',
-                payload: { type: 'done', finishReason: 'stop' }
-              });
+            } else if (stillExists) {
+              // 无音频的普通对话同样已在上标记 delivered，无需额外分支。
             }
 
             // 触发历史总结检查 (异步执行，不阻塞 UI)
@@ -150,7 +185,7 @@ const executeChatStream = async (
         onError: (error) => {
           streamErrored = true;
           lastErrorMessage = error.message;
-          useChatStore.getState().dispatch({ type: 'stream.fail', error: error.message });
+          useChatStore.getState().dispatch({ type: 'stream.fail', error: error.message, messageId: assistantMessageId });
         },
       },
       globalAbortController.signal,
@@ -161,16 +196,17 @@ const executeChatStream = async (
       throw new Error(lastErrorMessage ?? '聊天请求失败，请稍后再试');
     }
 
-    return { audioUrl, content: generatedContent };
+    return { audioUrl: pendingAudioBlob, content: generatedContent };
   } catch (error) {
     globalAbortController = null;
     if (error instanceof DOMException && error.name === 'AbortError') {
-      useChatStore.getState().resetActiveSession();
+      // M4-02：abort 按身份中断 draft→interrupted，不复活、不污染其它 attempt。
+      useChatStore.getState().dispatch({ type: 'stream.abort', messageId: assistantMessageId, reason: 'aborted' });
 
       throw error;
     }
     if (!streamErrored) {
-      useChatStore.getState().dispatch({ type: 'stream.fail', error: String(error) });
+      useChatStore.getState().dispatch({ type: 'stream.fail', error: String(error), messageId: assistantMessageId });
     }
     const normalized = normalizeError(error);
     throw normalized;
@@ -191,8 +227,17 @@ export const beginChatStream = async (
   content: string,
   options?: { recordHistory?: boolean; origin?: ChatMessageOrigin },
 ): Promise<{ messageId: string; audioUrl: string; content: string }> => {
-  // 1. 提交用户消息
-  useChatStore.getState().dispatch({ type: 'user.submit', content, origin: options?.origin });
+  // M4-03 快照冻结：在生成开始前单次捕获实际请求所用 voice，并与 prompt 一同冻结进 draft；
+  // 同一快照透传给 executeChatStream，确保 draft 冻结值与真实请求用值恒等；promotion 严禁重读 Settings。
+  const frozenVoiceId = useConfigStore.getState().apiConfig.voiceId;
+  // 1. 提交用户消息（含本次 prompt/voice 快照）
+  useChatStore.getState().dispatch({
+    type: 'user.submit',
+    content,
+    origin: options?.origin,
+    promptSnapshot: content,
+    voiceSnapshot: frozenVoiceId,
+  });
 
   // 2. 获取上下文消息列表
   const context = useChatStore.getState().selectors.conversationMessages();
@@ -205,6 +250,8 @@ export const beginChatStream = async (
     const { audioUrl, content: generatedContent } = await executeChatStream(
       context,
       options?.recordHistory ?? true,
+      assistantMsgId,
+      frozenVoiceId,
     );
     return { messageId: assistantMsgId, audioUrl, content: generatedContent };
   }
@@ -220,12 +267,30 @@ export const retryChatStream = async (): Promise<void> => {
     throw new Error('当前没有需要重试的消息');
   }
 
-  // 1. 触发重试 Action
-  useChatStore.getState().dispatch({ type: 'user.retry' });
+  // M4-03 快照冻结：retry 重建新 assistant/sourceMessageId，但本次实际使用的 prompt/voice 必须进入新 attempt；
+  // voice 在 dispatch 前单次捕获，prompt 取配对失败 user 内容（与 chatStore 回退一致），二者显式传入，不等 promotion 时再读 store。
+  const failedMessages = useChatStore.getState().messages;
+  const lastFailedUser = [...failedMessages]
+    .reverse()
+    .find((m) => m.role === 'user' && m.status === 'failed');
+  const retryPromptSnapshot =
+    typeof lastFailedUser?.content === 'string' ? lastFailedUser.content : undefined;
+  const retryVoiceSnapshot = useConfigStore.getState().apiConfig.voiceId;
+
+  // 1. 触发重试 Action（含本次 prompt/voice 快照）
+  useChatStore.getState().dispatch({
+    type: 'user.retry',
+    promptSnapshot: retryPromptSnapshot,
+    voiceSnapshot: retryVoiceSnapshot,
+  });
 
   // 2. 获取上下文
   const context = useChatStore.getState().selectors.conversationMessages();
 
-  // 3. 执行流（用户主动重试，记录生成历史）
-  await executeChatStream(context, true);
+  // 3. 执行流（用户主动重试，记录生成历史）：按新 Attempt 身份执行，stale 旧事件不得覆盖。
+  const retryAssistantId = useChatStore.getState().selectors.latestAssistantMessage()?.id;
+  if (!retryAssistantId) {
+    throw new Error('Failed to create assistant message');
+  }
+  await executeChatStream(context, true, retryAssistantId, retryVoiceSnapshot);
 };

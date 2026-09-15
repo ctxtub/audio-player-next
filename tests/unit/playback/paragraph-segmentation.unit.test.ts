@@ -41,6 +41,7 @@ async function runParagraphSegmentationTests(): Promise<void> {
     const hash1 = computeStoryContentHash("故事正文内容ABC");
     const hash2 = computeStoryContentHash("故事正文内容ABC\r\n"); // normalizes to same text
     assert.strictEqual(hash1.length, 12, "Hash must be 12 hex characters");
+    assert.strictEqual(hash1, "dcd35acfdfde", "Hash must match exact regression vector dcd35acfdfde");
     assert.strictEqual(hash1, hash2, "Normalized text must yield identical hash regardless of CRLF");
 
     // 0.5 Adaptive prefetch window formula

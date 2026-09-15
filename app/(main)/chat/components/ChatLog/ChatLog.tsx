@@ -38,7 +38,6 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
     emptyHint,
     loadingHint,
     onRetry,
-    onPlayStory,
     className,
   } = props;
 
@@ -119,7 +118,6 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
                 key={message.id}
                 message={message}
                 onRetry={onRetry}
-                onPlayStory={onPlayStory}
               />
             ))}
           </div>

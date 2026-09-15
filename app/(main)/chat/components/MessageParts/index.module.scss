@@ -280,3 +280,55 @@
     background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
   }
 }
+
+/* ============================================================================
+   M4-05 Artifact Chat UI 功能性状态（仅功能语义，不做终视觉；
+   上方共享 playback 样式保持不动，供 Legacy storyCard 继续使用）
+   ============================================================================ */
+
+/* promotion_failed 重试按钮：与 expandButton 同 token 的功能性 CTA */
+.retryButton {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-on-primary);
+  background: var(--gradient-brand);
+  border: none;
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+  transition: var(--transition-all);
+  box-shadow: var(--shadow-accent);
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+
+  &:active {
+    transform: translateY(0) scale(0.97);
+  }
+}
+
+/* ready 的 Library handoff CTA：纯导航锚点，与按钮同 token 对齐 */
+.libraryLink {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--accent-primary);
+  background: transparent;
+  border: 0.5px solid color-mix(in srgb, var(--accent-primary) 40%, transparent);
+  border-radius: var(--radius-xl);
+  text-decoration: none;
+  cursor: pointer;
+  transition: var(--transition-all);
+
+  &:hover {
+    background: var(--accent-primary-subtle);
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
+}

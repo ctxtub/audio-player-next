@@ -28,8 +28,6 @@ type MessageBubbleProps = {
   message: ChatMessage | ChatPendingMessage;
   /** 失败时的重试回调。 */
   onRetry?: (messageId?: string) => void;
-  /** 播放故事的回调，由 StoryCardPart 触发。 */
-  onPlayStory?: (audioUrl: string, messageId: string) => void;
 };
 
 /**
@@ -90,10 +88,9 @@ const agentPersonaMap: Record<string, { name: string; avatar: StaticImageData }>
  * 单条聊天消息的气泡组件，负责处理角色样式与发送状态提示。
  * @param props.message 聊天消息实体
  * @param props.onRetry 失败重试回调
- * @param props.onPlayStory 播放故事回调
  * @returns JSX.Element 消息气泡
  */
-const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }) => {
+const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry }) => {
   const status = (message.status ?? 'delivered') as ChatMessageDeliveryStatus;
   const isSending = status === 'sending';
   const isFailed = status === 'failed';
@@ -114,10 +111,15 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
   /** 发送中助手消息的占位内容，避免空白气泡。 */
   const isEmptyAssistant = useMemo(() => {
     if (roleKey === 'assistant' && isSending) {
-      // 检查是否有实质内容
+      // 检查是否有实质内容（兼容 text/guidance/summary 的 content、storyCard 的 storyText、storyArtifact 的 artifact.storyText）
       const hasContent = messageParts.some((part) => {
         if ('content' in part && typeof part.content === 'string') return part.content.trim().length > 0;
-        if ('storyText' in part) return part.storyText.trim().length > 0;
+        if ('storyText' in part && typeof (part as { storyText?: unknown }).storyText === 'string') {
+          return ((part as { storyText: string }).storyText ?? '').trim().length > 0;
+        }
+        if (part.type === 'storyArtifact') {
+          return (part.artifact.storyText ?? '').trim().length > 0;
+        }
         return false;
       });
       return !hasContent;
@@ -128,7 +130,7 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
   /** 是否为卡片类视图（Story/Guidance/Summary），此类视图不展示气泡背景 */
   const isCardView = useMemo(() => {
     return messageParts.some((part) =>
-      ['storyCard', 'guidance', 'summary'].includes(part.type)
+      ['storyCard', 'storyArtifact', 'guidance', 'summary'].includes(part.type)
     );
   }, [messageParts]);
 
@@ -211,8 +213,6 @@ const MessageBubble: FC<MessageBubbleProps> = ({ message, onRetry, onPlayStory }
                 key={index}
                 part={part}
                 messageId={message.id}
-                // 确保将当前消息 ID 传递出去，用于播放时的 ID 追踪
-                onPlayStory={(url) => onPlayStory?.(url, message.id || '')}
               />
             ))
           )}

@@ -24,10 +24,12 @@ nodeRequire.cache[glassToastPath] = {
 } as unknown as NodeModule;
 
 type ServerConfig = {
+    defaultSleepTimerMinutes: number;
+    defaultSleepTimerEnabled: boolean;
     playDuration: number;
     voiceId: string;
     speed: number;
-    floatingPlayerEnabled: boolean;
+    desktopFloatingPlayerEnabled: boolean;
     themeMode: 'dark' | 'light' | 'system';
 };
 let saveCalls = 0;
@@ -36,10 +38,12 @@ let saveBehavior: 'fail-then-success' | 'always-fail' | 'always-success' = 'fail
 let fetchDelays: number[] = [];
 let fetchValues: ServerConfig[] = [];
 const serverTruth: ServerConfig = {
+    defaultSleepTimerMinutes: 30,
+    defaultSleepTimerEnabled: true,
     playDuration: 30,
     voiceId: 'alloy',
     speed: 1.0,
-    floatingPlayerEnabled: true,
+    desktopFloatingPlayerEnabled: true,
     themeMode: 'dark',
 };
 const userConfigPath = path.resolve(process.cwd(), 'lib/client/userConfig.ts');

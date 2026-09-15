@@ -23,7 +23,7 @@ export const generationHistoryRouter = router({
     }),
 
     /**
-     * 记录一次生成（写入后裁剪保留最近 100 条）。
+     * 记录一次生成（Legacy compatibility write；底层落为 StoryWork，不做数量裁剪）。
      */
     record: guardedProcedure
         .input(recordInputSchema)

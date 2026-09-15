@@ -62,7 +62,6 @@ async function runH06Tests(): Promise<void> {
         isPlaying: true,
         currentAudioUrl: 'blob:mock-h06-audio',
         currentMessageId: 'msg_h06',
-        isFloatingVisible: true,
     });
     assert.strictEqual(usePlaybackStore.getState().isPlaying, true, '前置条件：登出前应处于播放中');
     assert.ok(
@@ -83,11 +82,15 @@ async function runH06Tests(): Promise<void> {
     const sample = samples[0];
     assert.ok(
         Array.isArray(sample.participants) && sample.participants.length >= 5,
-        '探针应记录参与块序列（含 config/chat/playbackProgress 等）',
+        '探针应记录参与块序列（含 config/chat/playbackSession 等）',
     );
     assert.ok(
-        sample.participants.includes('config') && sample.participants.includes('playbackProgress'),
-        '参与序列应包含 config 与 playbackProgress',
+        sample.participants.includes('config') && sample.participants.includes('playbackSession'),
+        '参与序列应包含 config 与 playbackSession（M9-03 旧 playbackProgress 已删）',
+    );
+    assert.ok(
+        !sample.participants.includes('playbackProgress'),
+        'M9-03 不得再含旧 playbackProgress 参与项',
     );
     assert.strictEqual(
         sample.playbackBefore.isPlaying,

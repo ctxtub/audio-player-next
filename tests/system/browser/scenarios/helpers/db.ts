@@ -22,12 +22,19 @@ const allowedTables: readonly string[] = [
     "GuestGenerationHistory",
     "GuestPromptHistory",
     "GuestChatMessage",
+    "GuestPlaybackAnchor",
     "GuestPlaybackProgress",
     "GenerationHistory",
     "PromptHistory",
     "ChatMessage",
     "UserPlaybackProgress",
 ];
+
+/**
+ * 允许夹具直写的表（仅隔离库，用于构造“旧历史卡”等 L3 前置形态）。
+ * 生产/开发库禁止任何写操作；dbFile 由 resolveIsolationDbPath 保证隔离。
+ */
+const allowedWriteTables: readonly string[] = ["GuestChatMessage", "GuestPlaybackProgress"];
 
 /**
  * 解析当次运行的隔离库文件路径。
@@ -52,7 +59,9 @@ export function resolveIsolationDbPath(runId: string): string {
  * @returns stdout 文本
  */
 function queryReadOnly(dbFile: string, sql: string): string {
-    const out: string = execFileSync("sqlite3", [dbFile, sql], {
+    // `-cmd .timeout`：L3 可能在 App 正在写 checkpoint/anchor 时轮询读取，避免瞬时 locked 假失败；
+    // 用 dot-command 而非 `PRAGMA busy_timeout`（后者会向 stdout 回显 "10000" 污染结果行）。
+    const out: string = execFileSync("sqlite3", ["-cmd", ".timeout 10000", dbFile, sql], {
         encoding: "utf8",
         timeout: 15000,
     });
@@ -143,4 +152,104 @@ export function findGuestGenerationsByPrompt(
         });
     }
     return rows;
+}
+
+/** 隔离库内某次生成对应访客的首个 assistant 消息 id 子查询（按提示词定位 guestId）。 */
+function assistantMessageSubquery(prompt: string): string {
+    return `SELECT m.id FROM GuestChatMessage m JOIN GuestGenerationHistory g ON g.guestId = m.guestId WHERE g.prompt = '${escapeLiteral(prompt)}' AND m.role = 'assistant' ORDER BY m.position ASC LIMIT 1`;
+}
+
+/**
+ * 校验写目标表白名单（fail-closed）。
+ * @param table 表名
+ */
+function assertWriteTable(table: string): void {
+    if (!allowedWriteTables.includes(table)) {
+        throw new Error(`[db-helper] 非法写表名：${table}`);
+    }
+}
+
+/**
+ * 对隔离库执行写语句（busy_timeout 防 App 连接短暂锁库；仅夹具前置）。
+ * @param dbFile 隔离库文件路径
+ * @param table 目标表（白名单校验）
+ * @param sql 写 SQL（调用方保证仅本次隔离库）
+ */
+function execWrite(dbFile: string, table: string, sql: string): void {
+    assertWriteTable(table);
+    execFileSync("sqlite3", ["-cmd", ".timeout 10000", dbFile, sql], {
+        encoding: "utf8",
+        timeout: 20000,
+    });
+}
+
+/**
+ * 将某次生成的 assistant 消息改写为 Legacy storyCard 形态（模拟旧历史卡）。
+ * 服务端对“新增 legacy storyCard 写入”有 guard（M4-08），故此夹具只经隔离库直写，
+ * 用于验证渲染/播放的只读兼容路径。
+ * @param dbFile 隔离库文件路径
+ * @param prompt 该次生成的唯一提示词
+ * @param audioUrl Legacy 持久音频地址（可为空串）
+ * @returns 被改写的消息正文（storyCard.storyText）
+ */
+export function seedLegacyStoryCardPartsByPrompt(
+    dbFile: string,
+    prompt: string,
+    audioUrl: string,
+): string {
+    const subquery: string = assistantMessageSubquery(prompt);
+    const storyText: string = queryReadOnly(
+        dbFile,
+        `SELECT content FROM GuestChatMessage WHERE id = (${subquery});`,
+    );
+    if (storyText.length === 0) {
+        throw new Error("[db-helper] 未找到该提示词对应的 assistant 消息，无法植入 Legacy 卡");
+    }
+    const parts: string = JSON.stringify([{ type: "storyCard", storyText, audioUrl }]);
+    execWrite(
+        dbFile,
+        "GuestChatMessage",
+        `UPDATE GuestChatMessage SET parts = '${escapeLiteral(parts)}' WHERE id = (${subquery});`,
+    );
+    return storyText;
+}
+
+/**
+ * 删除某次生成对应访客的播放 Anchor（清理 autoplay 建立的预置 Session，
+ * 使 L3 从“无 Session”冷态验证 StoryCard 播放入口）。
+ * @param dbFile 隔离库文件路径
+ * @param prompt 该次生成的唯一提示词
+ */
+export function deleteGuestPlaybackAnchorByPrompt(dbFile: string, prompt: string): void {
+    execWrite(
+        dbFile,
+        "GuestPlaybackProgress",
+        `DELETE FROM GuestPlaybackProgress WHERE guestId = (SELECT guestId FROM GuestGenerationHistory WHERE prompt = '${escapeLiteral(prompt)}' LIMIT 1);`,
+    );
+}
+
+/**
+ * 读取某次生成对应访客的 Anchor 身份（验证正式 Session 已落库）。
+ * @param dbFile 隔离库文件路径
+ * @param prompt 该次生成的唯一提示词
+ * @returns Anchor 身份（无 Anchor 返回 null）
+ */
+export function readGuestPlaybackAnchorByPrompt(
+    dbFile: string,
+    prompt: string,
+): { sourceKind: string; sourceId: string; anchorState: string; sessionId: string } | null {
+    const out: string = queryReadOnly(
+        dbFile,
+        `SELECT COALESCE(sourceType,'') || char(31) || COALESCE(sourceId,'') || char(31) || COALESCE(anchorState,'') || char(31) || COALESCE(sessionId,'') FROM GuestPlaybackProgress WHERE guestId = (SELECT guestId FROM GuestGenerationHistory WHERE prompt = '${escapeLiteral(prompt)}' LIMIT 1);`,
+    );
+    if (out.length === 0) {
+        return null;
+    }
+    const parts: string[] = out.split(String.fromCharCode(31));
+    return {
+        sourceKind: parts[0] ?? "",
+        sourceId: parts[1] ?? "",
+        anchorState: parts[2] ?? "",
+        sessionId: parts[3] ?? "",
+    };
 }

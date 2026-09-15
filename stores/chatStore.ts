@@ -4,11 +4,36 @@ import { devtools } from 'zustand/middleware';
 import type {
   ChatConversationMessage,
   ChatMessage,
-  ChatMessageRole,
   ChatStreamDoneEvent,
   MessagePart,
-  StoryCardPart,
+  StoryArtifactPart,
 } from '@/types/chat';
+import {
+  findLegacyPlayableStoryCard,
+  hasAnyStoryPart,
+  hasLegacyStoryCard,
+  hasStoryContent,
+} from '@/lib/client/chatStoryCompatibility';
+import {
+  createDraftArtifact,
+  appendDraftChunk,
+  completeArtifact,
+  interruptArtifact,
+} from '@/lib/client/chatArtifactState';
+import {
+  isDraftArtifact,
+  isCompleteArtifact,
+  isPromotingArtifact,
+  isPromotionFailedArtifact,
+} from '@/types/chatArtifact';
+import type { CompleteChatArtifact, PromotionFailedChatArtifact } from '@/types/chatArtifact';
+import {
+  beginPromotion,
+  executePromotionCreate,
+  finishPromotionAsFailed,
+  finishPromotionAsReady,
+  type PromotionSourceArtifact,
+} from '@/lib/client/chatPromotionOrchestration';
 import type { AgentType } from '@/types/agent';
 import {
   createAssistantPlaceholder,
@@ -19,6 +44,10 @@ import {
 } from '@/utils/chatUtils';
 import type { ChatMessageInput } from '@/lib/trpc/schemas/chatConversation';
 import { fetchMyConversation, saveMyConversation } from '@/lib/client/chatConversation';
+import {
+  rehydrateServerMessages,
+  serializePartsForHistory,
+} from '@/lib/client/chatArtifactHistory';
 
 /**
  * 聊天 Store 的 Action 定义，统一管理所有对单条目消息状态的变更操作。
@@ -48,14 +77,24 @@ export const isPreloadUserMessage = (message: ChatMessage): boolean => {
 
 export type ChatStoreAction =
   // 用户触发
-  | { type: 'user.submit'; content: string; origin?: ChatMessageOrigin } // 提交新消息
-  | { type: 'user.retry' }                   // 重试上一条失败消息
+  // M4-03 快照冻结：submit 可携带生成开始时的 prompt/voice 快照（chatFlow 显式传入）；
+  // 缺省时 prompt 回退为本次 action.content，voice 回退为 undefined（由 chatFlow 负责传入真实快照）。
+  | { type: 'user.submit'; content: string; origin?: ChatMessageOrigin; promptSnapshot?: string; voiceSnapshot?: string } // 提交新消息
+  // M4-03 快照冻结：retry 必须重建新 assistant/sourceMessageId，且新 attempt 携带本次实际使用的 prompt/voice 快照；
+  // 缺省时 prompt 回退为配对失败 user 内容，voice 回退为 undefined（由 chatFlow 负责传入真实快照）。
+  | { type: 'user.retry'; promptSnapshot?: string; voiceSnapshot?: string }                   // 重试上一条失败消息
   // 流式更新
-  | { type: 'stream.delta'; content: string }          // 追加内容
-  | { type: 'stream.intent'; intent: 'Story' | 'Chat' | 'Guidance' } // 更新意图
-  | { type: 'stream.finish'; payload: ChatStreamDoneEvent } // 普通对话完成
-  | { type: 'stream.story_finish'; storyText: string; audioUrl: string } // 故事生成完成
-  | { type: 'stream.fail'; error?: string }            // 失败
+  | { type: 'stream.delta'; content: string; messageId?: string }          // 追加内容
+  | { type: 'stream.intent'; intent: 'Story' | 'Chat' | 'Guidance'; messageId?: string } // 更新意图
+  | { type: 'stream.story_complete'; messageId: string; storyText?: string; title?: string } // 故事正文终端完成（M4-02）
+  | { type: 'stream.finish'; payload?: ChatStreamDoneEvent; messageId?: string } // 普通对话或流传输完成
+  | { type: 'stream.fail'; error?: string; messageId?: string }            // 失败
+  | { type: 'stream.abort'; messageId?: string; reason?: string }          // 中断
+  // M4-04 promotion 编排回写（仅 orchestration 内部派发；归属校验失败一律 no-op）
+  | { type: 'promotion.resolved'; messageId: string; promotionToken: number; promotionEpoch: number; storyWorkId: number } // promotion 成功回写 ready
+  | { type: 'promotion.rejected'; messageId: string; promotionToken: number; promotionEpoch: number; error?: string } // promotion 失败回写 promotion_failed
+  // M4-04 promotion 幂等重试（仅 promotion_failed 可重试；只重发入库写，不走 generation transport）
+  | { type: 'promotion.retry'; messageId: string }                         // 重试单条 Artifact 的 promotion
   | {
     type: 'summary.update';
     summaryText: string;
@@ -107,7 +146,7 @@ type ChatStoreBaseState = {
   syncEnabled: boolean;
   /** 最近一次快照保存的失败原因（null 表示无失败；失败不静默丢，由调用方/退出 flush 断言）。 */
   saveError: string | null;
-  /** 跨页自动发送的待发提示词（来自 /player 历史记录选择，瞬态、不持久化）。 */
+  /** History UI 选择后的待发送提示词；瞬态、单 slot、不持久化。 */
   pendingAutoSend: string | null;
 };
 
@@ -182,6 +221,65 @@ const mergeConversation = (
   return [...server, ...appended];
 };
 
+/**
+ * M4-02 身份定位辅助：按 assistant message id 精确定位，不再以「最后一条」归属异步回调。
+ * messageId 明确时严格按 id 查找；缺失时（legacy 兼容）才回退到最后一条 sending 助手消息。
+ * @param messages 当前消息列表。
+ * @param messageId 目标助手消息 id（attempt 身份）。
+ * @returns 目标下标，未找到返回 -1。
+ */
+const findAssistantIndexById = (
+  messages: ChatMessage[],
+  messageId: string | undefined,
+): number => {
+  if (messageId) {
+    return messages.findIndex((m) => m.id === messageId && m.role === 'assistant');
+  }
+  return messages.findLastIndex((m) => m.role === 'assistant' && m.status === 'sending');
+};
+
+/**
+ * M4-02 fixup 身份定位辅助：按 assistant attempt 向前找其配对 user。
+ * 从 assistantIndex 向前找最近一条 role==='user' 的 message，即该 assistant attempt 的 paired user。
+ * 三个 terminal handler（finish/fail/abort）共用此唯一实现，只修改 paired user，
+ * 旧 Attempt 的 terminal 事件不得污染其它 Attempt（E2E-08-02 冻结语义）。
+ * @param messages 当前消息列表。
+ * @param assistantIndex 目标助手消息下标（attempt 身份）。
+ * @returns 配对 user 下标，未找到返回 -1。
+ */
+const findUserIndexForAssistant = (
+  messages: ChatMessage[],
+  assistantIndex: number,
+): number => {
+  if (assistantIndex < 0 || assistantIndex >= messages.length) {
+    return -1;
+  }
+  for (let i = assistantIndex - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') {
+      return i;
+    }
+  }
+  return -1;
+};
+
+/**
+ * 取消息内 Modern Artifact 片段（有且仅有一个）。
+ */
+const getStoryArtifactPart = (msg: ChatMessage): StoryArtifactPart | undefined =>
+  msg.parts?.find((p): p is StoryArtifactPart => p.type === 'storyArtifact');
+
+/**
+ * 将 Artifact 写回消息（同步 content 与 parts，保持单源真相）。
+ */
+const withArtifact = (msg: ChatMessage, artifact: StoryArtifactPart['artifact']): ChatMessage => ({
+  ...msg,
+  content: artifact.storyText,
+  parts: [
+    ...(msg.parts?.filter((p) => p.type !== 'storyArtifact') ?? []),
+    { type: 'storyArtifact', artifact } as StoryArtifactPart,
+  ],
+});
+
 const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   /** 防抖保存定时器。 */
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -191,6 +289,142 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   let accountEpoch = 0;
   /** H-15 基线：上次读取/落盘成功的 messageId 序列（内存，不持久化）。 */
   let baselineMessageIds: string[] | undefined = undefined;
+  /**
+   * M4-04 promotion 编排瞬态守卫（客户端 async race guard，不进持久领域模型）：
+   * - promotionSeq：全局单调 promotionToken 计数器，每次 kick 自增；
+   * - promotionEpoch：resetChat/reset/resetActiveSession 自增，旧 promotion resolve/reject 凭此 no-op；
+   * - inflightPromotions：messageId → 在途 promotion 归属（同一 messageId 最多一个 in-flight create）；
+   * - pendingPromotionKicks：set() 内登记、dispatch 尾部统一 drain，避免 updater 内直接做异步副作用。
+   */
+  let promotionSeq = 0;
+  let promotionEpoch = 0;
+  const inflightPromotions = new Map<string, { token: number; epoch: number }>();
+  const pendingPromotionKicks: {
+    messageId: string;
+    token: number;
+    epoch: number;
+    source: PromotionSourceArtifact;
+  }[] = [];
+
+  /**
+   * M4-04：登记一次 promotion kick（调用方已把 Artifact 置为 promoting）。
+   * 同一 messageId 已有在途 promotion 时拒绝登记（调用方不得重复 kick）。
+   */
+  const enqueuePromotionKick = (
+    messageId: string,
+    source: PromotionSourceArtifact,
+  ): { token: number; epoch: number } | null => {
+    if (inflightPromotions.has(messageId)) {
+      return null;
+    }
+    promotionSeq += 1;
+    const kick = { token: promotionSeq, epoch: promotionEpoch, source };
+    inflightPromotions.set(messageId, { token: kick.token, epoch: kick.epoch });
+    pendingPromotionKicks.push({ messageId, ...kick });
+    return { token: kick.token, epoch: kick.epoch };
+  };
+
+  /**
+   * M4-04：drain 本次 dispatch 登记的 promotion kicks（dispatch 尾部调用，set() 之后）。
+   * 异步 create 结算后一律经 promotion.resolved/rejected 回写，由归属校验决定生效或 no-op。
+   */
+  const drainPromotionKicks = () => {
+    if (pendingPromotionKicks.length === 0) {
+      return;
+    }
+    const kicks = pendingPromotionKicks.splice(0, pendingPromotionKicks.length);
+    for (const kick of kicks) {
+      void executePromotionCreate(kick.source).then(
+        (dto) => {
+          get().dispatch({
+            type: 'promotion.resolved',
+            messageId: kick.messageId,
+            promotionToken: kick.token,
+            promotionEpoch: kick.epoch,
+            storyWorkId: dto.id,
+          });
+        },
+        (error) => {
+          get().dispatch({
+            type: 'promotion.rejected',
+            messageId: kick.messageId,
+            promotionToken: kick.token,
+            promotionEpoch: kick.epoch,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+      );
+    }
+  };
+
+  /**
+   * M4-04：promotion 结果归属校验（stale 防线核心）。
+   * 只有「epoch 未变 ＋ slot 仍属该 token ＋ 消息仍存在 ＋ 当前 Artifact 仍是该次
+   * promotion 对应的 promoting generation（status==='promoting' 且 sourceMessageId 一致）」
+   * 四项全过才允许写回；任一失败一律 no-op（拥有 slot 时顺手释放，避免泄漏）。
+   */
+  const claimPromotionSlot = (
+    messages: ChatMessage[],
+    messageId: string,
+    promotionToken: number,
+    epoch: number,
+  ): { msg: ChatMessage; index: number } | null => {
+    if (epoch !== promotionEpoch) {
+      return null;
+    }
+    const inflight = inflightPromotions.get(messageId);
+    if (!inflight || inflight.token !== promotionToken || inflight.epoch !== epoch) {
+      return null;
+    }
+    const index = messages.findIndex((m) => m.id === messageId && m.role === 'assistant');
+    if (index === -1) {
+      inflightPromotions.delete(messageId);
+      return null;
+    }
+    const msg = messages[index];
+    const existing = getStoryArtifactPart(msg);
+    if (
+      !existing ||
+      !isPromotingArtifact(existing.artifact) ||
+      existing.artifact.sourceMessageId !== messageId
+    ) {
+      inflightPromotions.delete(messageId);
+      return null;
+    }
+    inflightPromotions.delete(messageId);
+    return { msg, index };
+  };
+
+  /**
+   * M4-04：作废全部在途 promotion（resetChat/reset/resetActiveSession 调用）。
+   * 旧 resolve/reject 凭 epoch 失配 no-op；在途 slot 同步清空防泄漏。
+   */
+  const invalidateInflightPromotions = () => {
+    promotionEpoch += 1;
+    inflightPromotions.clear();
+  };
+
+  /**
+   * M4-04：将已完成的 Artifact 置为 promoting 并登记 async kick（story_complete 两分支共用）。
+   * beginPromotion 抛错时停留在 complete（不抛、不 kick）；kick 登记走在途去重，
+   * 重复登记直接忽略（Artifact 已是 promoting，后续 duplicate 事件同样忽略）。
+   */
+  const writePromotingAndKick = (
+    messages: ChatMessage[],
+    targetIndex: number,
+    completed: CompleteChatArtifact,
+    messageId: string,
+  ): void => {
+    let promoting;
+    try {
+      promoting = beginPromotion(completed);
+    } catch {
+      messages[targetIndex] = withArtifact(messages[targetIndex], completed);
+      return;
+    }
+    messages[targetIndex] = withArtifact(messages[targetIndex], promoting);
+    enqueuePromotionKick(messageId, completed);
+  };
 
   /**
    * 判断是否为基线冲突错误（服务端 CONFLICT 拒写）。
@@ -249,7 +483,11 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   let flushInFlight: Promise<boolean> | null = null;
 
   /**
-   * 取完成态消息构造保存快照（含 summary 锚点，便于恢复后压缩上下文；storyCard 的音频置空不存）。
+   * 取完成态消息构造保存快照（含 summary 锚点，便于恢复后压缩上下文；历史兼容卡音频置空不存）。
+   * M4-06 History persistence boundary：落盘前经 serializePartsForHistory 做
+   * history canonicalization（draft→interrupted、complete/promoting→promotion_failed，
+   * stable exact；历史兼容卡音频清空保持）。serialize 为纯 clone，绝不 mutate
+   * live store：内存 promoting 仍保持 promoting，直到真实 M4-04 settlement 改它。
    * @param messages 当前消息列表。
    */
   const toSnapshot = (messages: ChatMessage[]): ChatMessageInput[] =>
@@ -259,9 +497,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         (message) => message.status === undefined || message.status === 'delivered',
       )
       .map((message) => {
-        const parts = message.parts?.map((part) =>
-          part.type === 'storyCard' ? { ...part, audioUrl: '' } : part,
-        );
+        const parts = serializePartsForHistory(message.parts) as ChatMessageInput['parts'];
         return {
           messageId: message.id,
           role: message.role,
@@ -433,8 +669,25 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             metadata: { origin: submitOrigin } as ChatMessage['metadata'],
           });
           const assistantBase = createAssistantPlaceholder();
+          // M4-02 冻结语义：assistant message 创建 → message.id = X → createDraftArtifact({ sourceMessageId: X })。
+          // 每个 attempt（assistant 消息）自带独立 draft，后续 chunk/complete 均按此 id 身份定位。
+          // M4-03 快照冻结：同一 draft 内冻结本次生成开始时的 prompt 与 voice 快照；
+          // prompt 缺省回退为本次 action.content；voice 由 chatFlow 传入实际生成请求所用 voice，缺省为 undefined。
+          // promotion 时严禁重读 Settings，只消费此处冻结值；本步不自动触发 promotion。
+          const submitPromptSnapshot =
+            typeof action.promptSnapshot === 'string' ? action.promptSnapshot : action.content;
+          const submitVoiceSnapshot =
+            typeof action.voiceSnapshot === 'string' ? action.voiceSnapshot : undefined;
+          const draft = createDraftArtifact({
+            sourceMessageId: assistantBase.id,
+            prompt: submitPromptSnapshot,
+            voiceId: submitVoiceSnapshot,
+          });
+          const draftPart: StoryArtifactPart = { type: 'storyArtifact', artifact: draft };
           const assistantMsg = withPersona({
             ...assistantBase,
+            content: '',
+            parts: [draftPart],
             metadata: { ...assistantBase.metadata, origin: submitOrigin } as ChatMessage['metadata'],
           });
           if (submitOrigin === CHAT_PRELOAD_ORIGIN) {
@@ -466,7 +719,28 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           // 但如果要保留历史（例如中间夹杂了其他），这里我们假设重试总是针对对话流的末尾
           // 为了安全，我们只处理末尾的情况。如果 lastIndex 不是倒数第一/第二，可能需要更复杂的逻辑。
           // 简化：追加一个新的助手占位
-          const assistantMsg = withPersona(createAssistantPlaceholder());
+          // M4-02：新 Attempt B 拥有全新 assistant id 与全新 draft；stale Attempt A 事件按旧 id 定位，绝不覆盖 B。
+          // M4-03 快照冻结：retry 重建新 assistant/sourceMessageId，但 prompt 与本次实际使用的 voice 快照必须正确进入新 attempt；
+          // prompt 缺省回退为配对失败 user 内容，voice 由 chatFlow 传入本次实际生成所用 voice；绝不等到 promotion 时再读 setting store。
+          // 本步不自动触发 promotion。
+          const retryPairedContent =
+            typeof messages[lastIndex].content === 'string' ? messages[lastIndex].content : '';
+          const retryPromptSnapshot =
+            typeof action.promptSnapshot === 'string' ? action.promptSnapshot : retryPairedContent;
+          const retryVoiceSnapshot =
+            typeof action.voiceSnapshot === 'string' ? action.voiceSnapshot : undefined;
+          const assistantBase = createAssistantPlaceholder();
+          const draft = createDraftArtifact({
+            sourceMessageId: assistantBase.id,
+            prompt: retryPromptSnapshot,
+            voiceId: retryVoiceSnapshot,
+          });
+          const draftPart: StoryArtifactPart = { type: 'storyArtifact', artifact: draft };
+          const assistantMsg = withPersona({
+            ...assistantBase,
+            content: '',
+            parts: [draftPart],
+          });
 
           // 清理 lastIndex 之后的所有消息（假设它们是之前的失败尝试产生的垃圾）
           const newMessages = messages.slice(0, lastIndex + 1);
@@ -477,24 +751,37 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           };
         }
         case 'stream.delta': {
-          // 找到最后一条助手消息（应该处于 sending 状态）
-          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
-          if (lastAssistantIndex === -1) return state;
+          // M4-02：按 attempt 身份定位；messageId 缺失时才回退最后一条 sending（legacy 兼容）。
+          // stale/已清空（id 找不到）一律忽略，绝不复活、不污染其它 attempt。
+          const targetIndex = findAssistantIndexById(messages, action.messageId);
+          if (targetIndex === -1) return state;
 
-          const msg = messages[lastAssistantIndex];
+          const msg = messages[targetIndex];
+          const existingPart = getStoryArtifactPart(msg);
+          if (existingPart) {
+            // Modern 故事流：仅 draft 可追加；complete/interrupted 等终态忽略后续 delta（幂等）。
+            if (!isDraftArtifact(existingPart.artifact)) {
+              return state;
+            }
+            try {
+              const updated = appendDraftChunk(existingPart.artifact, action.content);
+              messages[targetIndex] = withArtifact(msg, updated);
+            } catch {
+              return state;
+            }
+            return { messages };
+          }
+
           const newContent = msg.content + action.content;
-
           let newParts = msg.parts;
           if (newParts && newParts.length > 0) {
             const firstPart = newParts[0];
-            if (firstPart.type === 'storyCard') {
-              newParts = [{ ...firstPart, storyText: newContent }, ...newParts.slice(1)];
-            } else if (firstPart.type === 'guidance') {
+            if (firstPart.type === 'guidance') {
               newParts = [{ ...firstPart, content: newContent }, ...newParts.slice(1)];
             }
           }
 
-          messages[lastAssistantIndex] = {
+          messages[targetIndex] = {
             ...msg,
             content: newContent,
             parts: newParts,
@@ -502,97 +789,207 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           return { messages };
         }
         case 'stream.intent': {
-          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
-          if (lastAssistantIndex === -1) return state;
+          const targetIndex = findAssistantIndexById(messages, action.messageId);
+          if (targetIndex === -1) return state;
 
-          const msg = messages[lastAssistantIndex];
+          const msg = messages[targetIndex];
           const currentContent = msg.content;
-          let newParts = msg.parts;
 
           let agentType: AgentType | undefined;
           switch (action.intent) {
             case 'Story':
               agentType = 'story_agent';
-              // 转换消息片段为 StoryCardPart
-              newParts = [{
-                type: 'storyCard',
-                storyText: currentContent,
-                audioUrl: '', // 初始为空
-              }];
+              // M4-02：Story 意图确保 Modern draft 存在；绝不再创建历史兼容卡。
+              {
+                const existing = getStoryArtifactPart(msg);
+                if (!existing) {
+                  // M4-09 containment：历史兼容卡只读保留，经 compatibility helper 判定，不直读 wire 结构。
+                  const hasLegacyCard = hasLegacyStoryCard(msg.parts);
+                  if (!hasLegacyCard) {
+                    const draft = createDraftArtifact({
+                      sourceMessageId: msg.id,
+                      initialText: currentContent,
+                    });
+                    messages[targetIndex] = {
+                      ...msg,
+                      parts: [{ type: 'storyArtifact', artifact: draft } as StoryArtifactPart],
+                      metadata: { ...msg.metadata, agentType },
+                    };
+                    return { messages };
+                  }
+                }
+              }
               break;
             case 'Chat':
               agentType = 'chat_agent';
               break;
             case 'Guidance':
               agentType = 'guidance_agent';
-              // 转换消息片段为 GuidancePart
-              newParts = [{
-                type: 'guidance',
-                content: currentContent,
-              } as any];
               break;
           }
 
-          if (agentType) {
-            messages[lastAssistantIndex] = {
+          if (agentType === 'story_agent') {
+            messages[targetIndex] = {
               ...msg,
-              parts: newParts,
-              metadata: {
-                ...msg.metadata,
-                agentType,
-              },
+              metadata: { ...msg.metadata, agentType },
             };
+            return { messages };
+          }
+          if (agentType === 'chat_agent') {
+            // 非故事不持有 draft：清理空草稿，避免 Chat 污染 Artifact 视图。
+            const filtered = msg.parts?.filter((p) => p.type !== 'storyArtifact');
+            messages[targetIndex] = {
+              ...msg,
+              parts: filtered && filtered.length > 0 ? filtered : undefined,
+              metadata: { ...msg.metadata, agentType },
+            };
+            return { messages };
+          }
+          if (agentType === 'guidance_agent') {
+            const filtered = msg.parts?.filter((p) => p.type !== 'storyArtifact');
+            const guidanceParts: MessagePart[] = [{
+              type: 'guidance',
+              content: currentContent,
+            } as unknown as MessagePart];
+            messages[targetIndex] = {
+              ...msg,
+              parts: [...guidanceParts, ...(filtered?.filter((p) => p.type !== 'guidance') ?? [])],
+              metadata: { ...msg.metadata, agentType },
+            };
+            return { messages };
           }
           return { messages };
         }
-        case 'stream.finish': {
-          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
-          // 逻辑说明：stream.finish 仅标记流结束。
-          // 若之前处于 sending 状态，则更新为 delivered，并记录结束原因与 Token 用量。
+        case 'stream.story_complete': {
+          // M4-02 冻结语义：story_complete 仅表示故事正文 terminal（draft→complete）。
+          // M4-04 编排：complete 随后同步进入 promoting 并 kick 唯一 async promotion
+          // （complete → startPromotion() → promoteStoryArtifact()）；done 不再隐式 promotion。
+          // 严格按 messageId 身份定位；找不到（stale/已清空）直接忽略，绝不复活。
+          const targetIndex = messages.findIndex(
+            (m) => m.id === action.messageId && m.role === 'assistant',
+          );
+          if (targetIndex === -1) return state;
+          const msg = messages[targetIndex];
+          const authoritativeText = (action.storyText ?? '').trim()
+            ? (action.storyText as string)
+            : (getStoryArtifactPart(msg)?.artifact.storyText ?? msg.content);
+          if (!authoritativeText.trim()) return state;
 
-          if (lastAssistantIndex !== -1) {
-            messages[lastAssistantIndex] = {
-              ...messages[lastAssistantIndex],
-              status: 'delivered',
-              metadata: {
-                ...messages[lastAssistantIndex].metadata,
-                finishReason: action.payload.finishReason,
-                usage: action.payload.usage,
-              },
-            };
+          const existing = getStoryArtifactPart(msg);
+          if (existing) {
+            if (isCompleteArtifact(existing.artifact) || isPromotingArtifact(existing.artifact)) {
+              // duplicate story_complete：同一 attempt 只发生一次 draft→complete→promoting，
+              // 重复到达幂等忽略（绝不产生第二次入库写）。
+              return state;
+            }
+            if (!isDraftArtifact(existing.artifact)) {
+              // interrupted 等终态不接受 complete 覆盖。
+              return state;
+            }
+            try {
+              const completed = completeArtifact(existing.artifact, {
+                finalStoryText: authoritativeText,
+                title: action.title,
+              });
+              // 终态仍保持发送中/已送达原样，不在此标记 delivered（delivery 归 stream.finish）。
+              writePromotingAndKick(messages, targetIndex, completed, action.messageId);
+            } catch {
+              return state;
+            }
+            return { messages };
           }
-
-          // 确保最近的 User 消息也是 delivered
-          const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
-          if (lastUserIndex !== -1) {
-            messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'delivered' };
+          // 无 Artifact 兜底：按同一 sourceMessageId 重建 draft→complete→promoting（仍不触达 audio）。
+          try {
+            const draft = createDraftArtifact({
+              sourceMessageId: msg.id,
+              initialText: msg.content,
+            });
+            const completed = completeArtifact(draft, {
+              finalStoryText: authoritativeText,
+              title: action.title,
+            });
+            writePromotingAndKick(messages, targetIndex, completed, action.messageId);
+          } catch {
+            return state;
           }
-
-          return {
-            messages,
-            hasUnviewedResponse: true,
-          };
+          return { messages };
         }
-        case 'stream.story_finish': {
-          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
-          if (lastAssistantIndex !== -1) {
-            const storyPart: StoryCardPart = {
-              type: 'storyCard',
-              storyText: action.storyText,
-              audioUrl: action.audioUrl,
-            };
-            messages[lastAssistantIndex] = {
-              ...messages[lastAssistantIndex],
-              content: action.storyText,
-              parts: [storyPart],
-              status: 'delivered',
-            };
+        case 'promotion.resolved': {
+          // M4-04：promotion 成功回写 ready（promoting → ready）。
+          // 归属校验失败（stale/epoch 失配/消息已清/Artifact 已非该次 promoting）一律 no-op。
+          const claimed = claimPromotionSlot(messages, action.messageId, action.promotionToken, action.promotionEpoch);
+          if (!claimed) return state;
+          const promoting = getStoryArtifactPart(claimed.msg)?.artifact;
+          if (!promoting || !isPromotingArtifact(promoting)) return state;
+          try {
+            const ready = finishPromotionAsReady(promoting, action.storyWorkId);
+            messages[claimed.index] = withArtifact(claimed.msg, ready);
+          } catch {
+            // 非法 storyWorkId 等：不写回（slot 已释放，不重试、不抛）。
+            return state;
           }
+          return { messages };
+        }
+        case 'promotion.rejected': {
+          // M4-04：promotion 失败回写 promotion_failed（promoting → promotion_failed）。
+          // 完整 storyText / sourceMessageId / prompt / voice 快照全保留；delivery 不动；
+          // 不换 sourceMessageId、不重生成、不自动重试（重试只走 promotion.retry）。
+          const claimed = claimPromotionSlot(messages, action.messageId, action.promotionToken, action.promotionEpoch);
+          if (!claimed) return state;
+          const promoting = getStoryArtifactPart(claimed.msg)?.artifact;
+          if (!promoting || !isPromotingArtifact(promoting)) return state;
+          try {
+            const failed = finishPromotionAsFailed(promoting, action.error ?? 'promotion_failed');
+            messages[claimed.index] = withArtifact(claimed.msg, failed);
+          } catch {
+            return state;
+          }
+          return { messages };
+        }
+        case 'promotion.retry': {
+          // M4-04：promotion_failed 幂等重试（promotion_failed → promoting ＋ 只重发入库写）。
+          // 非 promotion_failed（promoting 在途/ready 终态/interrupted/draft/complete）一律忽略；
+          // 同一 messageId 在途去重（快速双击只发一次）；绝不触达 generation transport。
+          const targetIndex = messages.findIndex(
+            (m) => m.id === action.messageId && m.role === 'assistant',
+          );
+          if (targetIndex === -1) return state;
+          const msg = messages[targetIndex];
+          const existing = getStoryArtifactPart(msg);
+          if (!existing || !isPromotionFailedArtifact(existing.artifact)) return state;
+          if (inflightPromotions.has(action.messageId)) return state;
+          const source: PromotionFailedChatArtifact = existing.artifact;
+          let promoting;
+          try {
+            promoting = beginPromotion(source);
+          } catch {
+            return state;
+          }
+          messages[targetIndex] = withArtifact(msg, promoting);
+          enqueuePromotionKick(action.messageId, source);
+          return { messages };
+        }
+        case 'stream.finish': {
+          // M4-02：done 仅标记传输结束（sending→delivered），绝不隐式 complete/promotion/ready。
+          // story_complete→done 仍是同一个 complete；done→story_complete 仍可随后 complete（不因 done 提前制造 ready）。
+          // M4-02 fixup：只修改 paired user（assistantIndex 向前最近 user），旧 Attempt 不得污染其它 Attempt。
+          const targetIndex = findAssistantIndexById(messages, action.messageId);
+          if (targetIndex === -1) return state;
 
-          // 确保最近的 User 消息也是 delivered
-          const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
-          if (lastUserIndex !== -1) {
-            messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'delivered' };
+          const payload = action.payload as ChatStreamDoneEvent | undefined;
+          messages[targetIndex] = {
+            ...messages[targetIndex],
+            status: messages[targetIndex].status === 'sending' ? 'delivered' : messages[targetIndex].status,
+            metadata: {
+              ...messages[targetIndex].metadata,
+              ...(payload ? { finishReason: payload.finishReason, usage: payload.usage } : {}),
+            },
+          };
+
+          // M4-02 fixup：仅配对 user sending→delivered（共用 findUserIndexForAssistant）。
+          const pairedUserIndex = findUserIndexForAssistant(messages, targetIndex);
+          if (pairedUserIndex !== -1 && messages[pairedUserIndex].status === 'sending') {
+            messages[pairedUserIndex] = { ...messages[pairedUserIndex], status: 'delivered' };
           }
 
           return {
@@ -601,21 +998,67 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           };
         }
         case 'stream.fail': {
-          // 标记最后正在发送的消息为失败
-          // 通常是助手消息和用户消息
-          const lastAssistantIndex = messages.findLastIndex(m => m.role === 'assistant' && m.status === 'sending');
-          if (lastAssistantIndex !== -1) {
-            messages[lastAssistantIndex] = { ...messages[lastAssistantIndex], status: 'failed' }; // 或者直接移除助手占位？通常保留显示失败
-            // 逻辑说明：将最后一条正在发送的 Assistant 消息移除（避免展示空气泡），
-            // 并将最后一条 User 消息标记为 failed，以便用户可以点击重试。
-            messages.splice(lastAssistantIndex, 1);
+          // M4-02：error/abort → draft→interrupted，不出现 complete；按 id 定位，stale 直接忽略。
+          // M4-02 fixup：只修改 paired user（共用 findUserIndexForAssistant），旧 Attempt 不得污染其它 Attempt。
+          const targetIndex = findAssistantIndexById(messages, action.messageId);
+          if (targetIndex !== -1) {
+            const msg = messages[targetIndex];
+            const existing = getStoryArtifactPart(msg);
+            if (existing && isDraftArtifact(existing.artifact)) {
+              try {
+                const interrupted = interruptArtifact(existing.artifact, { reason: action.error ?? 'stream_error' });
+                messages[targetIndex] = {
+                  ...withArtifact(msg, interrupted),
+                  status: 'failed',
+                };
+              } catch {
+                messages[targetIndex] = { ...msg, status: 'failed' };
+              }
+            } else {
+              messages[targetIndex] = { ...msg, status: 'failed' };
+            }
+          } else if (action.messageId) {
+            // 带 id 却找不到：stale/已清空，绝不复活、不误伤其它 attempt。
+            return state;
+          } else {
+            return state;
           }
 
-          const lastUserIndex = messages.findLastIndex(m => m.role === 'user' && m.status === 'sending');
-          if (lastUserIndex !== -1) {
-            messages[lastUserIndex] = { ...messages[lastUserIndex], status: 'failed' };
+          const pairedUserIndex = findUserIndexForAssistant(messages, targetIndex);
+          if (pairedUserIndex !== -1 && messages[pairedUserIndex].status === 'sending') {
+            messages[pairedUserIndex] = { ...messages[pairedUserIndex], status: 'failed' };
           }
 
+          return { messages };
+        }
+        case 'stream.abort': {
+          // M4-02 fixup：只修改 paired user（共用 findUserIndexForAssistant），旧 Attempt 不得污染其它 Attempt。
+          const targetIndex = findAssistantIndexById(messages, action.messageId);
+          if (targetIndex !== -1) {
+            const msg = messages[targetIndex];
+            const existing = getStoryArtifactPart(msg);
+            if (existing && isDraftArtifact(existing.artifact)) {
+              try {
+                const interrupted = interruptArtifact(existing.artifact, { reason: action.reason ?? 'aborted' });
+                messages[targetIndex] = {
+                  ...withArtifact(msg, interrupted),
+                  status: 'failed',
+                };
+              } catch {
+                messages[targetIndex] = { ...msg, status: 'failed' };
+              }
+            } else {
+              messages[targetIndex] = { ...msg, status: 'failed' };
+            }
+          } else if (action.messageId) {
+            return state;
+          } else {
+            return state;
+          }
+          const pairedUserIndex = findUserIndexForAssistant(messages, targetIndex);
+          if (pairedUserIndex !== -1 && messages[pairedUserIndex].status === 'sending') {
+            messages[pairedUserIndex] = { ...messages[pairedUserIndex], status: 'failed' };
+          }
           return { messages };
         }
         case 'summary.update': {
@@ -657,6 +1100,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     });
     // 任一消息变更后调度防抖保存（内部按登录态/在途状态决定是否真正保存）
     scheduleSave();
+    // M4-04：drain 本次 dispatch 登记的 promotion kicks（set() 之后触发 async create）。
+    drainPromotionKicks();
   },
 
   checkAndSummarize: async () => {
@@ -723,12 +1168,16 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   resetActiveSession: () => {
     // 重置会话：移除所有处于 sending 状态的临时消息，
     // 通常在用户主动取消生成，或页面卸载时调用。
+    // M4-04：同步作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op）。
+    invalidateInflightPromotions();
     set((state) => ({
       messages: state.messages.filter(m => m.status !== 'sending'),
     }));
     scheduleSave();
   },
   resetChat: () => {
+    // M4-04：清空作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op，绝不复活）。
+    invalidateInflightPromotions();
     set({
       messages: [],
     });
@@ -749,15 +1198,16 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       if (epoch !== accountEpoch) {
         return; // 账号已切（登出/401）→ 放弃回写（项 4）
       }
-      const serverMessages: ChatMessage[] = dtos.map((dto) => ({
-        id: dto.messageId,
-        role: dto.role as ChatMessageRole,
-        content: dto.content,
-        parts: dto.parts as MessagePart[] | undefined,
-        status: 'delivered',
-        createdAt: dto.createdAt,
-        metadata: dto.agentType ? { agentType: dto.agentType as AgentType } : undefined,
-      }));
+      // M4-06 History rehydration boundary：只 normalize 服务端 fetch 结果。
+      // server DTO 逐条经 rehydrateServerMessages 防御性恢复（transient 降级 +
+      // 非法 storyArtifact part fail-closed + valid Artifact wins 同步 content）；
+      // await 窗口内本地新增（appendedLocally）绝不进 normalization，否则会把真实
+      // 存活的 draft/promoting 误杀为 interrupted/promotion_failed（blocking）。
+      // 恢复纯读零副作用：不 generation、不 promotion、不 Library mutation、不 playback、
+      // 不自动 retry、不 save-back（直接 set，不触发 scheduleSave）。
+      const serverMessages: ChatMessage[] = rehydrateServerMessages(
+        dtos as unknown as Parameters<typeof rehydrateServerMessages>[0],
+      );
       // 中文注释：H-15 读取成功记基线（内存，不持久化），供下次保存透传。
       baselineMessageIds = dtos.map((dto) => dto.messageId);
       // await 窗口内本地新增（非 baseline）的消息，需在恢复后保留（项 3）
@@ -779,6 +1229,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   },
   reset: () => {
     accountEpoch++; // 作废在途 initForUser 的回写
+    // M4-04：登出同步作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op）。
+    invalidateInflightPromotions();
     userInitPromise = null; // 让重新登录能起新请求
     baselineMessageIds = undefined; // 中文注释：H-15 登出清基线，避免跨账号透传。
     if (saveTimer) {
@@ -808,7 +1260,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       const messages = get().messages;
       for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
-        if (msg.role === 'assistant' && msg.parts?.some(p => p.type === 'storyCard')) {
+        // M4-09 containment：故事存在性经 compatibility helper 判定（历史兼容卡或现代 Artifact 均视为故事消息）。
+        if (msg.role === 'assistant' && hasAnyStoryPart(msg.parts)) {
           return msg.id === id;
         }
       }
@@ -822,11 +1275,12 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         return null;
       }
 
-      // 从当前消息的下一条开始查找助手消息（包含故事卡片）
+      // M4-09 containment：经 compatibility helper 查找下一个可播放历史兼容卡；
+      // 现代 Artifact 天然不参加该 selector，行为冻结，不升级为 StoryWork 播放。
       for (let i = currentIndex + 1; i < messages.length; i++) {
         const msg = messages[i];
         if (msg.role === 'assistant' && msg.parts) {
-          const storyPart = msg.parts.find((p) => p.type === 'storyCard') as StoryCardPart | undefined;
+          const storyPart = findLegacyPlayableStoryCard(msg.parts);
           if (storyPart && storyPart.audioUrl && storyPart.storyText) {
             return {
               audioUrl: storyPart.audioUrl,
@@ -882,6 +1336,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     },
     hasStoryMessages: (excludeMessageId) => {
       const messages = get().messages;
+      // M4-09 containment：故事内容存在性经 compatibility helper 判定（历史兼容卡或非空正文现代 Artifact）。
+      const isStoryMsg = (msg: (typeof messages)[number]) =>
+        msg.role === 'assistant' && hasStoryContent(msg.parts);
       const targetIndex = excludeMessageId
         ? messages.findIndex((m) => m.id === excludeMessageId)
         : messages.length;
@@ -889,15 +1346,11 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       if (targetIndex === -1) {
         // 如果没找到排除的消息，说明它可能还没加入列表，或者 ID 传错了。
         // 无妨，搜索整个列表。
-        return messages.some((msg) =>
-          msg.role === 'assistant' && msg.parts?.some((p) => p.type === 'storyCard')
-        );
+        return messages.some(isStoryMsg);
       }
 
       // Search in messages before targetIndex
-      return messages.slice(0, targetIndex).some((msg) =>
-        msg.role === 'assistant' && msg.parts?.some((p) => p.type === 'storyCard')
-      );
+      return messages.slice(0, targetIndex).some(isStoryMsg);
     },
   },
   };

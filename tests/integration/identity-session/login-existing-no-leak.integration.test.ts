@@ -36,7 +36,7 @@ async function runLoginNoLeakTests() {
         data: { username, password: hashed, nickname: 'LoginNoLeakUserA' },
     });
     await prisma.userConfig.create({
-        data: { userId: userA.id, playDurationMinutes: 60, themeMode: 'light' },
+        data: { userId: userA.id, defaultSleepTimerMinutes: 60, themeMode: 'light' },
     });
     await saveConversationForSubject({ type: 'user', id: userA.id }, [
         { messageId: 'ua_1', role: 'user', content: 'USER-A-OWN-CONTENT-独有' },
@@ -48,10 +48,10 @@ async function runLoginNoLeakTests() {
         voiceId: 'alloy',
     });
     await recordPromptHistoryForSubject({ type: 'user', id: userA.id }, 'USER-A-PROMPT-HIST');
-    await prisma.userPlaybackProgress.create({
+    await prisma.userPlaybackAnchor.create({
         data: {
             userId: userA.id,
-            sourceType: 'chat',
+            sourceKind: 'chat',
             sourceId: 'ua_2',
             sessionId: 'ua_2',
             title: 'A',
@@ -64,7 +64,7 @@ async function runLoginNoLeakTests() {
 
     // ---- 2. 活跃访客造数（与 A 完全不同的独有内容）----
     const guestId = `g_login_noleak_${tag}`;
-    await prisma.guestConfig.create({ data: { guestId, playDurationMinutes: 20 } });
+    await prisma.guestConfig.create({ data: { guestId, defaultSleepTimerMinutes: 20 } });
     await saveConversationForSubject({ type: 'guest', id: guestId }, [
         { messageId: 'gq_1', role: 'user', content: 'GUEST-DRAFT-访客草稿独有' },
     ]);
@@ -73,20 +73,20 @@ async function runLoginNoLeakTests() {
         storyText: 'GUEST-STORY',
     });
     await recordPromptHistoryForSubject({ type: 'guest', id: guestId }, 'GUEST-PROMPT-HIST');
-    await prisma.guestPlaybackProgress.create({
-        data: { guestId, sourceType: 'chat', sourceId: 'gq_1', sessionId: 'gq_1', title: 'G' },
+    await prisma.guestPlaybackAnchor.create({
+        data: { guestId, sourceKind: 'chat', sourceId: 'gq_1', sessionId: 'gq_1', title: 'G' },
     });
 
     // 登录前全量快照
     const snap = {
         userChat: await getConversationForSubject({ type: 'user', id: userA.id }),
         guestChat: await getConversationForSubject({ type: 'guest', id: guestId }),
-        userGen: (await prisma.generationHistory.findMany({ where: { userId: userA.id } })).length,
+        userGen: (await prisma.storyWork.findMany({ where: { userId: userA.id } })).length,
         userPrompt: (await prisma.promptHistory.findMany({ where: { userId: userA.id } })).length,
-        userProg: await prisma.userPlaybackProgress.findUnique({ where: { userId: userA.id } }),
-        guestGen: await prisma.guestGenerationHistory.count({ where: { guestId } }),
+        userProg: await prisma.userPlaybackAnchor.findUnique({ where: { userId: userA.id } }),
+        guestGen: await prisma.guestStoryWork.count({ where: { guestId } }),
         guestPrompt: await prisma.guestPromptHistory.count({ where: { guestId } }),
-        guestProg: await prisma.guestPlaybackProgress.findUnique({ where: { guestId } }),
+        guestProg: await prisma.guestPlaybackAnchor.findUnique({ where: { guestId } }),
         guestCfg: await prisma.guestConfig.findUnique({ where: { guestId } }),
         userCount: await prisma.user.count(),
     };
@@ -132,7 +132,7 @@ async function runLoginNoLeakTests() {
     assert.deepStrictEqual(userChatAfter, snap.userChat, '用户聊天应原样不变');
     assert(!JSON.stringify(userChatAfter).includes('GUEST-DRAFT'), '访客独有内容不得出现在用户侧');
     assert.strictEqual(
-        (await prisma.generationHistory.findMany({ where: { userId: userA.id } })).length,
+        (await prisma.storyWork.findMany({ where: { userId: userA.id } })).length,
         snap.userGen,
         '用户生成历史计数不变',
     );
@@ -141,7 +141,7 @@ async function runLoginNoLeakTests() {
         snap.userPrompt,
         '用户提示词历史计数不变',
     );
-    const userProgAfter = await prisma.userPlaybackProgress.findUnique({ where: { userId: userA.id } });
+    const userProgAfter = await prisma.userPlaybackAnchor.findUnique({ where: { userId: userA.id } });
     assert.strictEqual(userProgAfter?.nextParagraphIndex, snap.userProg?.nextParagraphIndex, '用户进度行不变');
     assert.strictEqual(await prisma.user.count(), snap.userCount, '不得产生新用户行');
     console.log('PASS: user side unchanged (no leak into A)');
@@ -150,7 +150,7 @@ async function runLoginNoLeakTests() {
     const guestChatAfter = await getConversationForSubject({ type: 'guest', id: guestId });
     assert.deepStrictEqual(guestChatAfter, snap.guestChat, '访客聊天应原样保留');
     assert.strictEqual(
-        await prisma.guestGenerationHistory.count({ where: { guestId } }),
+        await prisma.guestStoryWork.count({ where: { guestId } }),
         snap.guestGen,
         '访客生成历史计数不变',
     );
@@ -160,7 +160,7 @@ async function runLoginNoLeakTests() {
         '访客提示词历史计数不变',
     );
     assert.deepStrictEqual(
-        await prisma.guestPlaybackProgress.findUnique({ where: { guestId } }),
+        await prisma.guestPlaybackAnchor.findUnique({ where: { guestId } }),
         snap.guestProg,
         '访客进度行原样保留',
     );

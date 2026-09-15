@@ -1,0 +1,146 @@
+/* M6-02 MiniNowPlaying 语义核心样式（spec §2.1/§26/§27）
+ * + M6-03 docked App Chrome（mobile/wide-docked 固定 TabBar 上方）
+ * + M6-04 Wide Floating（spec §18：默认右下 CSS，drag 后 left/top，grip 拖拽，edge snap）。
+ *
+ * 布局三态由 data-layoutmode 区分（JS 三态 hook 派生，CSS 只做 presentation）：
+ * - compact-docked / wide-docked：固定 TabBar 上方，不可拖，无 grip；
+ * - wide-floating：position:fixed、width:var(--size-mini-now-playing-wide)、
+ *   z-index:var(--z-floating)；默认 right:var(--space-4) +
+ *   bottom:calc(tab-bar-safe-bottom + var(--space-4))；data-dragged=true 时
+ *   left/top 内联坐标生效（right/bottom 由属性选择器释放）。
+ */
+
+.miniRoot {
+  position: fixed;
+  left: var(--space-3);
+  right: var(--space-3);
+  /* M6-03 mobile/wide docked：固定 TabBar 上方（复用 tab-bar token，不重复加 safe-area）；不可拖。 */
+  bottom: calc(var(--tab-bar-safe-bottom) + var(--space-2));
+  max-width: var(--size-mini-now-playing-docked-max);
+  margin-left: auto;
+  margin-right: auto;
+  z-index: var(--z-floating);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-full);
+  border: 0.5px solid var(--glass-border);
+  background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+  box-shadow: var(--glass-highlight), var(--shadow-lg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* M6-04 wide-floating 默认态：右下 CSS（无 JS 固定像素；首次 drag 前 pos=null 即此态）。 */
+.miniRoot[data-layoutmode='wide-floating'] {
+  left: auto;
+  right: var(--space-4);
+  bottom: calc(var(--tab-bar-safe-bottom) + var(--space-4));
+  width: var(--size-mini-now-playing-wide);
+  max-width: calc(100vw - var(--space-4) - var(--space-4));
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* M6-04 floating 已拖拽：释放右下锚点，left/top 内联坐标生效。 */
+.miniRoot[data-layoutmode='wide-floating'][data-dragged='true'] {
+  right: auto;
+  bottom: auto;
+}
+
+/* M6-04 拖拽中：关闭过渡（跟手），释放后 snap 可有轻过渡（reduced-motion 下关闭）。 */
+.miniRoot[data-dragging='true'] {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .miniRoot[data-layoutmode='wide-floating'] {
+    transition:
+      left var(--duration-normal, 200ms) var(--ease-default, ease),
+      top var(--duration-normal, 200ms) var(--ease-default, ease),
+      opacity var(--duration-normal, 200ms) var(--ease-default, ease);
+  }
+
+  .miniRoot[data-layoutmode='wide-floating'][data-dragging='true'] {
+    transition: none;
+  }
+}
+
+/* M6-04 DragGrip：克制的拖拽区域（仅 floating 渲染，仅 grip 绑定 useDrag）。
+ * 视觉保持液态玻璃语言：半透明竖点，无边框，不抢占 metadata/播放热区。
+ * Metadata 与 Playback 按钮均不参与 drag（本选择器只作用于 grip）。
+ */
+.dragGrip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-6);
+  min-height: var(--size-touch-target);
+  align-self: stretch;
+  border-radius: var(--radius-full);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  color: var(--text-tertiary);
+}
+
+.dragGrip[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+.dragGripDots {
+  display: inline-block;
+  width: 4px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background:
+    radial-gradient(circle at center, currentcolor 1.4px, transparent 1.5px) 0 0 / 4px 6px repeat-y;
+  opacity: 0.7;
+}
+
+.dragGrip:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.miniRoot button {
+  min-height: var(--size-touch-target);
+}
+
+.miniRoot button:first-child {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+/* floating 下 metadata 为第二个 button（grip 为 div，不占 button 序号）；保持同一表达。 */
+.miniRoot button:last-child {
+  flex-shrink: 0;
+  width: var(--size-touch-target);
+  height: var(--size-touch-target);
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.miniRoot button:last-child:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

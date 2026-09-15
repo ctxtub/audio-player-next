@@ -1,5 +1,3 @@
-import { SEGMENTATION_VERSION } from '../../../utils/segmentation';
-
 /**
  * 段落断点恢复场景的合成故事种子（与 `{{E2E_STORY_4P}}` 同构的 4 段固定文本）。
  *
@@ -52,47 +50,3 @@ export function buildStoryChatMessage(messageId: string, storyText: string): Sto
         parts: [{ type: 'storyCard', storyText, audioUrl: '' }],
     };
 }
-
-/**
- * 段落进度 `saveProgress` 输入种子（停在第 3 段开头，`nextParagraphIndex=2`）。
- */
-export interface ParagraphProgressSeed {
-    sourceType: 'chat';
-    sourceId: string;
-    title: string;
-    contentHash: string;
-    segmentationVersion: string;
-    lastCompletedParagraphIndex: number;
-    nextParagraphIndex: number;
-    totalParagraphs: number;
-    voiceId: string;
-    speed: number;
-}
-
-/**
- * 构造段落进度输入种子（TC-P2-01 范式：完成第 2 段，断点第 3 段）。
- * @param sourceId 合成消息 ID（即 sourceId）
- * @param contentHash 故事正文哈希（调用方经 `computeStoryContentHash` 计算）
- * @returns 进度输入种子
- */
-export function buildParagraphProgressSeed(sourceId: string, contentHash: string): ParagraphProgressSeed {
-    // 中文注释：contentHash 由调用方计算，保持哈希口径单一来源。
-    return {
-        sourceType: 'chat',
-        sourceId,
-        title: SQUIRREL_STORY_TITLE,
-        contentHash,
-        segmentationVersion: SEGMENTATION_VERSION,
-        lastCompletedParagraphIndex: 1,
-        nextParagraphIndex: 2,
-        totalParagraphs: 4,
-        voiceId: 'alloy',
-        speed: 1.0,
-    };
-}
-
-/**
- * 种子故事配套的内容哈希载荷（`buildParagraphProgressSeed` 的 contentHash 入参来源说明）。
- */
-export const PARAGRAPH_PROGRESS_SEED_HASH_NOTE =
-    'contentHash 须由调用方对 buildSquirrelStoryText() 结果执行 computeStoryContentHash 得出，不得硬编码。';

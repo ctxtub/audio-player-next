@@ -40,6 +40,8 @@ export type ChatMessageMetadata = {
 // 采用联合类型实现可扩展的消息内容结构，新增类型只需扩展此联合
 // ============================================================================
 
+import type { ChatArtifact } from './chatArtifact';
+
 /**
  * 文本片段，用于普通对话消息。
  */
@@ -51,7 +53,10 @@ export type TextPart = {
 };
 
 /**
- * 故事卡片片段，用于故事生成消息，包含故事文本与音频地址。
+ * 故事卡片片段（Legacy），用于故事生成消息，包含故事文本与音频地址。
+ * M4-08 cutover：Legacy read compatibility only——作为向后兼容输入保留（decode/render/play/read
+ * 与 extractTextFromParts 上下文），新链路请使用 StoryArtifactPart；任何新的 storyCard 产生
+ * 均被服务端 provenance guard（incoming ⊆ persisted）拒绝，绝不转换、不 promotion、不回填。
  */
 export type StoryCardPart = {
   /** 片段类型标识。 */
@@ -60,6 +65,16 @@ export type StoryCardPart = {
   storyText: string;
   /** 生成的音频地址。 */
   audioUrl: string;
+};
+
+/**
+ * 故事 Artifact 片段（M4-01），接入具备完整生命周期的 Story Artifact。
+ */
+export type StoryArtifactPart = {
+  /** 片段类型标识。 */
+  type: 'storyArtifact';
+  /** 故事 Artifact 实体。 */
+  artifact: ChatArtifact;
 };
 
 /**
@@ -86,7 +101,12 @@ export type SummaryPart = {
  * 消息片段联合类型，支持多种消息内容形态。
  * 扩展时在此添加新的片段类型。
  */
-export type MessagePart = TextPart | StoryCardPart | GuidancePart | SummaryPart;
+export type MessagePart =
+  | TextPart
+  | StoryCardPart
+  | GuidancePart
+  | SummaryPart
+  | StoryArtifactPart;
 
 /**
  * 类型守卫：判断片段是否为文本类型。
@@ -99,6 +119,13 @@ export const isTextPart = (part: MessagePart): part is TextPart =>
  */
 export const isStoryCardPart = (part: MessagePart): part is StoryCardPart =>
   part.type === 'storyCard';
+
+/**
+ * 类型守卫：判断片段是否为故事 Artifact 类型。
+ */
+export const isStoryArtifactPart = (
+  part: MessagePart
+): part is StoryArtifactPart => part.type === 'storyArtifact';
 
 /**
  * 类型守卫：判断片段是否为指导类型。
@@ -122,6 +149,7 @@ export const extractTextFromParts = (parts: MessagePart[]): string =>
     .map((part) => {
       if (isTextPart(part)) return part.content;
       if (isStoryCardPart(part)) return part.storyText;
+      if (isStoryArtifactPart(part)) return part.artifact.storyText;
       if (isGuidancePart(part)) return part.content;
       if (isSummaryPart(part)) return part.content;
       return '';

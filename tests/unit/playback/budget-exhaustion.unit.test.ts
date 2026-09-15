@@ -44,12 +44,12 @@ function resetPlayback(): void {
 async function runH08Tests(): Promise<void> {
   console.log('=== H-08: 预算耗尽声画一致（0 值早退＋耗尽停元素） ===');
 
-  // 用例一：0 预算 start 不放行（E2E-03-02：0 值可入导致 UI 秒回暂停而音频续响）。
+  // 用例一：minutes 模式 0 预算 start 不放行（E2E-03-02：0 值可入导致 UI 秒回暂停而音频续响）。
+  // M7-03：耗尽早退只适用于 minutes 模式（off/story_end 的 null 为合法无限态，必须放行）。
   console.log('--- H-08-01: 0 预算 start 必须早退 ---');
   resetPlayback();
+  usePlaybackStore.getState().setSleepTimerState('minutes', 0, 30 * 60000);
   usePlaybackStore.setState({
-    remainingMs: 0,
-    totalAllowedMs: 30 * 60000,
     isPlaying: false,
     _tickIntervalId: null,
     _lastTickAt: null,
@@ -58,7 +58,7 @@ async function runH08Tests(): Promise<void> {
   assert.strictEqual(
     usePlaybackStore.getState().isPlaying,
     false,
-    '0 预算 start 不得进入播放态（须与 null 同等早退）',
+    '0 预算 start 不得进入播放态（minutes 模式须与 null 同等早退）',
   );
   assert.strictEqual(
     (usePlaybackStore.getState() as unknown as { _tickIntervalId: number | null })._tickIntervalId,
@@ -94,14 +94,17 @@ async function runH08Tests(): Promise<void> {
   };
   try {
     // 中文注释：极小正预算，1s tick 后必耗尽（elapsed >> 50ms）。
+    // M7-03：minutes 模式显式同步（Transport 默认 off；到期归一 off/null，§26）。
+    usePlaybackStore.getState().setSleepTimerState('minutes', 50, 30 * 60000);
     usePlaybackStore.setState({
-      remainingMs: 50,
-      totalAllowedMs: 30 * 60000,
       isPlaying: false,
       _tickIntervalId: null,
       _lastTickAt: null,
     });
     usePlaybackStore.getState().start();
+    // M7-03 fixup（复审 Blocking 1）：countdown 门=audioActive（buffering 不扣），
+    // 此用例驱动真实 tick 耗尽，须模拟 playing 事件使音频处于“实际推进”态。
+    usePlaybackStore.getState().reportAudioActive(true);
     assert.strictEqual(
       usePlaybackStore.getState().isPlaying,
       true,
@@ -109,10 +112,16 @@ async function runH08Tests(): Promise<void> {
     );
     // 中文注释：等待 tick 触发耗尽（间隔 1000ms，留足余量）。
     await new Promise((resolve) => setTimeout(resolve, 1300));
+    // M7-03 到期归一（§26）：remaining 不再以 0 持久化，mode→off。
     assert.strictEqual(
       usePlaybackStore.getState().remainingMs,
-      0,
-      '耗尽后 remainingMs 必须为 0',
+      null,
+      '耗尽后 remainingMs 必须归一 null（不得以 0 持久化，防旧守卫锁死）',
+    );
+    assert.strictEqual(
+      usePlaybackStore.getState().sleepTimerMode,
+      'off',
+      '耗尽后 mode 必须→off',
     );
     assert.strictEqual(
       usePlaybackStore.getState().isPlaying,

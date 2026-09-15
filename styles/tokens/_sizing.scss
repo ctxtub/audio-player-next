@@ -17,4 +17,16 @@
   --size-input-height: 48px;
   --size-disc: 200px;
   --size-play-button: 56px;
+
+  /* M6 Mini Now Playing（spec §28.1）：docked 高度参与 BottomChrome 预留计算；
+   * wide 宽度与 docked 最大宽度仅供 Mini 形态约束，禁止页面各自 hardcode Mini 高度。 */
+  --size-mini-now-playing-height: 68px;
+  --size-mini-now-playing-wide: 360px;
+  --size-mini-now-playing-docked-max: 776px;
+
+  /* M7 Expanded Now Playing（spec §12）：Sheet 最大高度 / Panel 宽度 / Handle 命中尺寸。
+   * 响应式：compact → bottom sheet；wide → side panel（断点 768px 与 Mini 同契约）。 */
+  --size-now-playing-sheet-max-height: 85vh;
+  --size-now-playing-panel-width: 400px;
+  --size-now-playing-handle: 36px;
 }

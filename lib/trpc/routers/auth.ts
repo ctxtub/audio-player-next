@@ -70,8 +70,8 @@ export const authRouter = router({
                 // 访客注册时配置与创作记录迁移：若存在 guestId，将个性化偏好与创作记录拷贝至新用户
                 if (ctx.guestId) {
                     await migrateGuestConfigToUser(ctx.guestId, user.id);
-                    await migrateGuestCreativeRecordsToUser(ctx.guestId, user.id);
-                    await migrateGuestPlaybackProgressToUser(ctx.guestId, user.id);
+                    const migrationRes = await migrateGuestCreativeRecordsToUser(ctx.guestId, user.id);
+                    await migrateGuestPlaybackProgressToUser(ctx.guestId, user.id, migrationRes.storyWorkIdMap);
                 }
 
                 await setAuthCookie(user.id, user.nickname ?? user.username);

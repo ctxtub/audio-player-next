@@ -5,7 +5,7 @@ import type { ThemeMode } from '@/types/theme';
 import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
 import type { VoiceOption } from '@/types/ttsGenerate';
 import { fetchAppConfig } from '@/lib/client/appConfig';
-import { DEFAULT_USER_CONFIG, type UserConfigPatch } from '@/lib/trpc/schemas/config';
+import { DEFAULT_USER_CONFIG, type NormalizedUserConfigPatch } from '@/lib/trpc/schemas/config';
 // H-14：经命名空间调用用户配置客户端，使 require.cache 先占桩在静态导入后仍经属性查找命中
 // （回应 R2“桩可能没拦截”：命名导入快照语义下事后变异可能失效，命名空间属性查找恒 live）。
 import * as userConfigClient from '@/lib/client/userConfig';
@@ -78,10 +78,12 @@ export type ConfigStore = ConfigStoreBaseState & ConfigStoreActions;
  * @returns 默认配置
  */
 const createEmptyConfig = (): APIConfig => ({
+  defaultSleepTimerMinutes: 0,
+  defaultSleepTimerEnabled: true,
   playDuration: 0,
   voiceId: '',
   speed: 1,
-  floatingPlayerEnabled: true,
+  desktopFloatingPlayerEnabled: true,
   themeMode: DEFAULT_USER_CONFIG.themeMode,
 });
 
@@ -89,10 +91,12 @@ const createEmptyConfig = (): APIConfig => ({
  * 构造系统级默认配置对象（用于网络故障时的内存兜底）。
  */
 const createDefaultConfig = (): APIConfig => ({
+  defaultSleepTimerMinutes: DEFAULT_USER_CONFIG.defaultSleepTimerMinutes,
+  defaultSleepTimerEnabled: DEFAULT_USER_CONFIG.defaultSleepTimerEnabled,
   playDuration: DEFAULT_USER_CONFIG.playDuration,
   voiceId: DEFAULT_USER_CONFIG.voiceId,
   speed: DEFAULT_USER_CONFIG.speed,
-  floatingPlayerEnabled: DEFAULT_USER_CONFIG.floatingPlayerEnabled,
+  desktopFloatingPlayerEnabled: DEFAULT_USER_CONFIG.desktopFloatingPlayerEnabled,
   themeMode: DEFAULT_USER_CONFIG.themeMode,
 });
 
@@ -106,7 +110,18 @@ const isValidConfig = (config: Partial<APIConfig> | undefined): config is APICon
     return false;
   }
 
-  if (typeof config.playDuration !== 'number' || config.playDuration <= 0) {
+  // M7-03：新语义 defaultSleepTimerMinutes（10-120）为准；旧 playDuration 只读兼容。
+  const rawMinutes =
+    typeof config.defaultSleepTimerMinutes === 'number' && config.defaultSleepTimerMinutes > 0
+      ? config.defaultSleepTimerMinutes
+      : typeof config.playDuration === 'number' && config.playDuration > 0
+        ? config.playDuration
+        : 0;
+  if (typeof rawMinutes !== 'number' || rawMinutes <= 0) {
+    return false;
+  }
+
+  if (typeof config.defaultSleepTimerEnabled !== 'boolean') {
     return false;
   }
 
@@ -118,7 +133,7 @@ const isValidConfig = (config: Partial<APIConfig> | undefined): config is APICon
     return false;
   }
 
-  if (typeof config.floatingPlayerEnabled !== 'boolean') {
+  if (typeof config.desktopFloatingPlayerEnabled !== 'boolean') {
     return false;
   }
 
@@ -135,6 +150,8 @@ const isValidConfig = (config: Partial<APIConfig> | undefined): config is APICon
 
 /**
  * 合并新旧配置，确保字段合法。
+ * M7-03：defaultSleepTimerMinutes/defaultSleepTimerEnabled 为准；
+ * playDuration 兼容别名写入时同步同值（保留一个发布周期，spec §30）。
  * @param base 当前配置。
  * @param partial 待合并的增量配置。
  */
@@ -144,20 +161,32 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
       ? partial.voiceId.trim()
       : base.voiceId;
 
-  const nextPlayDuration =
-    typeof partial.playDuration === 'number' && partial.playDuration > 0
-      ? partial.playDuration
-      : base.playDuration;
+  // 新字段优先；仅新旧都缺时回退旧别名；三者都缺保持 base。
+  const candidateMinutes =
+    typeof partial.defaultSleepTimerMinutes === 'number' && partial.defaultSleepTimerMinutes > 0
+      ? partial.defaultSleepTimerMinutes
+      : typeof partial.playDuration === 'number' && partial.playDuration > 0
+        ? partial.playDuration
+        : base.defaultSleepTimerMinutes > 0
+          ? base.defaultSleepTimerMinutes
+          : base.playDuration;
+  const nextSleepTimerMinutes =
+    typeof candidateMinutes === 'number' && candidateMinutes > 0 ? candidateMinutes : base.playDuration;
+
+  const nextSleepTimerEnabled =
+    typeof partial.defaultSleepTimerEnabled === 'boolean'
+      ? partial.defaultSleepTimerEnabled
+      : base.defaultSleepTimerEnabled;
 
   const speed =
     typeof partial.speed === 'number' && partial.speed >= 0.25 && partial.speed <= 4.0
       ? partial.speed
       : base.speed ?? 1.0;
 
-  const floatingPlayerEnabled =
-    typeof partial.floatingPlayerEnabled === 'boolean'
-      ? partial.floatingPlayerEnabled
-      : base.floatingPlayerEnabled;
+  const desktopFloatingPlayerEnabled =
+    typeof partial.desktopFloatingPlayerEnabled === 'boolean'
+      ? partial.desktopFloatingPlayerEnabled
+      : base.desktopFloatingPlayerEnabled;
 
   const themeMode: ThemeMode =
     partial.themeMode === 'dark' ||
@@ -167,10 +196,12 @@ const mergeConfig = (base: APIConfig, partial: Partial<APIConfig>): APIConfig =>
       : base.themeMode;
 
   return {
-    playDuration: nextPlayDuration,
+    defaultSleepTimerMinutes: nextSleepTimerMinutes,
+    defaultSleepTimerEnabled: nextSleepTimerEnabled,
+    playDuration: nextSleepTimerMinutes,
     voiceId,
     speed,
-    floatingPlayerEnabled,
+    desktopFloatingPlayerEnabled,
     themeMode,
   };
 };
@@ -184,18 +215,20 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
 
   /** 防抖回写定时器与待写 patch 累积。 */
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
-  let pendingPatch: UserConfigPatch = {};
+  let pendingPatch: NormalizedUserConfigPatch = {};
   /** H-14 单调保存序列：每次 update 新编辑自增，发送时捕获代次，旧回滚按代次丢弃。 */
   let saveSeq = 0;
 
   /**
    * 将完整配置映射为可作为 patch 的形状。
+   * M7-03：只发新语义字段（playDuration 别名不再下行，避免双字段漂移）。
    */
-  const toPatch = (config: APIConfig): UserConfigPatch => ({
-    playDuration: config.playDuration,
+  const toPatch = (config: APIConfig): NormalizedUserConfigPatch => ({
+    defaultSleepTimerMinutes: config.defaultSleepTimerMinutes,
+    defaultSleepTimerEnabled: config.defaultSleepTimerEnabled,
     voiceId: config.voiceId,
     speed: config.speed,
-    floatingPlayerEnabled: config.floatingPlayerEnabled,
+    desktopFloatingPlayerEnabled: config.desktopFloatingPlayerEnabled,
     themeMode: config.themeMode,
   });
 
@@ -204,7 +237,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
    * H-14：单调 saveSeq 守卫——发送捕获 seqAtSend，回滚仅当无新编辑（seq 未变）才应用；
    * 在途/乱序旧回滚一律丢弃，新编辑不被旧回滚覆盖。
    */
-  const scheduleSave = (patch: UserConfigPatch) => {
+  const scheduleSave = (patch: NormalizedUserConfigPatch) => {
     pendingPatch = { ...pendingPatch, ...patch };
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
@@ -231,10 +264,12 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
             }
             set({
               apiConfig: {
+                defaultSleepTimerMinutes: server.defaultSleepTimerMinutes,
+                defaultSleepTimerEnabled: server.defaultSleepTimerEnabled,
                 playDuration: server.playDuration,
                 voiceId: server.voiceId,
                 speed: server.speed,
-                floatingPlayerEnabled: server.floatingPlayerEnabled,
+                desktopFloatingPlayerEnabled: server.desktopFloatingPlayerEnabled,
                 themeMode: server.themeMode,
               },
             });
@@ -283,10 +318,12 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
       }
 
       const nextConfig: APIConfig = {
+        defaultSleepTimerMinutes: mine.defaultSleepTimerMinutes,
+        defaultSleepTimerEnabled: mine.defaultSleepTimerEnabled,
         playDuration: mine.playDuration,
         voiceId: resolvedVoice,
         speed: mine.speed,
-        floatingPlayerEnabled: mine.floatingPlayerEnabled,
+        desktopFloatingPlayerEnabled: mine.desktopFloatingPlayerEnabled,
         themeMode: mine.themeMode,
       };
 

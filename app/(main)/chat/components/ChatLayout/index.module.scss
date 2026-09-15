@@ -45,3 +45,39 @@
   min-width: 0;
   width: 100%;
 }
+
+/* History 触发入口：Composer leftSlot 唯一历史按钮（M4-07） */
+.historyTrigger {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 0.5px solid var(--border-default);
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+  transition: var(--transition-colors);
+}
+
+/* Chat-owned History Surface 容器：bounded overlay，不进 MessageArea、不改路由（M4-07） */
+.historyOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--bg-primary) 45%, transparent);
+}
+
+.historyDialog {
+  width: min(560px, 100%);
+  max-height: min(70vh, 640px);
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}

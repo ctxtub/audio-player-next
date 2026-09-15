@@ -54,7 +54,6 @@ async function runH06W2Tests(): Promise<void> {
         isPlaying: true,
         currentAudioUrl: 'blob:mock-h06w2-audio',
         currentMessageId: 'msg_h06w2',
-        isFloatingVisible: true,
     });
     useChatStore.setState({
         messages: [

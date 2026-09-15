@@ -209,12 +209,13 @@ export const getOpenAIClient = (): OpenAI => {
 };
 
 /**
- * 重置所有缓存（测试用）。
+ * 重置所有缓存（测试用；同时清空 canonical fake 注入，避免跨 suite 泄漏）。
  */
 export const resetCache = (): void => {
     cachedOpenAIConfig = null;
     cachedTtsConfig = null;
     cachedClient = null;
+    injectedCanonicalSynthesizer = null;
 };
 
 // ============================================================================
@@ -224,20 +225,63 @@ export const resetCache = (): void => {
 /** OpenAI TTS 支持的语音类型。 */
 type OpenAIVoice = "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer";
 
+/** Canonical 合成输入（M8-03 spec §9/§16：frozen text + Manifest authoritative profile）。 */
+export type SynthesizeSpeechWithProfileInput = {
+    /** 冻结段文本（Manifest Segment.text，不接受客户端重算） */
+    text: string;
+    /** Manifest 冻结 model（authoritative pin，不跟随部署配置） */
+    model: string;
+    /** Manifest 冻结 voice */
+    voiceId: string;
+    /** Canonical 恒 1.0（用户倍速由播放器 playbackRate 实现，spec §7） */
+    speed: number;
+    /** Canonical 音频格式（恒 mp3） */
+    format: string;
+};
+
+/** Canonical 合成注入缝类型（Fake TTS fixtures/tests 用；真实 OpenAI 禁止进入自动测试） */
+export type CanonicalTtsSynthesizer = (
+    input: SynthesizeSpeechWithProfileInput
+) => Promise<SynthesizeSpeechResult>;
+
+/** 测试注入的 fake 合成器（生产恒 null；仅测试经 setter 注入） */
+let injectedCanonicalSynthesizer: CanonicalTtsSynthesizer | null = null;
+
 /**
- * 使用 OpenAI TTS 执行文本转语音。
- * @param text 已经过业务裁剪的文本内容。
- * @param voiceId 白名单中的语音标识。
- * @returns 音频二进制数据。
- * @throws TRPCError 当请求失败时。
+ * 注入 canonical 合成 fake（测试专用；生产代码严禁调用）。
+ * @param fn fake 合成器（传 null 即清空，等价 reset）
  */
-export const synthesizeSpeech = async (
-    text: string,
-    voiceId: string,
-    speed?: number,
+export const setSynthesizeSpeechWithProfileForTests = (
+    fn: CanonicalTtsSynthesizer | null
+): void => {
+    injectedCanonicalSynthesizer = fn;
+};
+
+/**
+ * 清空 canonical 合成 fake（测试专用）。
+ */
+export const resetSynthesizeSpeechWithProfileForTests = (): void => {
+    injectedCanonicalSynthesizer = null;
+};
+
+/**
+ * Canonical 文本转语音（M8-03 真实合成入口；spec §9/§16）。
+ *
+ * 由 storyAudio 服务以 frozen Segment text + Manifest 冻结 profile 调用：
+ * speed 恒 1.0、format 恒 mp3；用户倍速/title/favorite 永不进入。
+ * 测试注入优先：若已注入 fake 则直接调用 fake，不触 OpenAI 网络。
+ *
+ * @param input frozen 文本 + authoritative profile
+ * @throws TRPCError 当请求失败时（不暴露 Provider 原始报文以外的稳定码由调用方映射）
+ */
+export const synthesizeSpeechWithProfile = async (
+    input: SynthesizeSpeechWithProfileInput
 ): Promise<SynthesizeSpeechResult> => {
+    if (injectedCanonicalSynthesizer) {
+        return injectedCanonicalSynthesizer(input);
+    }
+
     const openAIConfig = getOpenAIConfig();
-    const ttsConfig = getTtsConfig();
 
     const openai = new OpenAI({
         apiKey: openAIConfig.apiKey,
@@ -246,11 +290,11 @@ export const synthesizeSpeech = async (
 
     try {
         const response = await openai.audio.speech.create({
-            model: ttsConfig.model,
-            voice: voiceId as OpenAIVoice,
-            input: text,
-            speed,
-            response_format: "mp3",
+            model: input.model,
+            voice: input.voiceId as OpenAIVoice,
+            input: input.text,
+            speed: input.speed,
+            response_format: input.format as 'mp3',
         });
 
         const audioBuffer = await response.arrayBuffer();
@@ -280,4 +324,31 @@ export const synthesizeSpeech = async (
             cause: error,
         });
     }
+};
+
+/**
+ * 使用 OpenAI TTS 执行文本转语音。
+ *
+ * Draft compatibility wrapper（M8-03 spec §9/§22.3）：Draft 瞬态播放继续经此入口，
+ * 内部委托 synthesizeSpeechWithProfile（model 取当前部署配置；canonical Manifest
+ * 绝不经此 wrapper，始终以冻结 model 直调 WithProfile，保证 old Manifest 未生成段仍用旧 model）。
+ *
+ * @param text 已经过业务裁剪的文本内容。
+ * @param voiceId 白名单中的语音标识。
+ * @returns 音频二进制数据。
+ * @throws TRPCError 当请求失败时。
+ */
+export const synthesizeSpeech = async (
+    text: string,
+    voiceId: string,
+    speed?: number,
+): Promise<SynthesizeSpeechResult> => {
+    const ttsConfig = getTtsConfig();
+    return synthesizeSpeechWithProfile({
+        text,
+        model: ttsConfig.model,
+        voiceId,
+        speed: speed ?? 1.0,
+        format: 'mp3',
+    });
 };

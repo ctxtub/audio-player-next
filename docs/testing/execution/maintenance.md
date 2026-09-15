@@ -74,3 +74,20 @@
 2. **链接有效性**：`docs/e2e/README.md` 中全部引用链接与锚点必须能够正确解析。
 3. **命名规范性**：全量规范文件与属性严格遵循 kebab-case `case_id` 身份口径（`legacy_aliases` 仅回查）。
 4. **工作区整洁性**：执行审计前后确认 Git 状态未受临时产物或私有结果污染。
+
+---
+
+## 6. M10 CLOSED 目录冻结规则（常设收口规则）
+
+自 M10 CLOSED 起，以下规则永久有效，任何后续变更不得违反（由 L1 `m10-browser-debt-closure` 静态锁存）：
+
+1. **`ACTIVE` + `executable` 的 browser case 必须真实 PASS**：完整 Chromium + WebKit 集合全跑，`retries=0`。
+2. **禁止 `KNOWN BASELINE` 永久豁免**：不得存在 `ACTIVE` + 已知长期失败 + 文档写 `KNOWN BASELINE` 的状态；
+   catalog 不得出现任何 `KNOWN BASELINE` 豁免标记；runner / report 不设豁免通道。
+3. **真正未实现的场景保持 `PLANNED` + `executable_ids=[]`**：不得为分母好看把状态改成 `ACTIVE`，
+   亦不得为洗绿降为 `PLANNED`（见 `flaky-policy.md` §4）。
+4. **Deferred 显式登记**：`P3B` 继续 deferred（执行面 markers 归零）；`story-card-double-tap-suppress` /
+   TTS 相关（`tts-voice-fallback-browser-behavior` / `tts-limit-tier-voice-fallback` /
+   `tts-synthesize-fail-no-zombie` / `breakpoint-switch-tts-fail-retry-bound`）继续 `PLANNED`。
+5. **收官不碰可靠性阈值**：不加 retry、不拉长 timeout 掩盖失败、不新增 skip/fixme、不放宽断言、
+   不新增吞核心流程的 `catch`、不靠删/解绑 executable 缩分母；browser 分母变化必须逐条解释。

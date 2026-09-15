@@ -7,8 +7,8 @@ import { useTheme } from '@/components/ThemeProvider';
 import { useConfigStore } from '@/stores/configStore';
 import { useAuthStore } from '@/stores/authStore';
 import styles from './index.module.scss';
-import BasicConfigSection from './components/BasicConfigSection';
-import FloatingPlayerSection from './components/FloatingPlayerSection';
+import DefaultSleepTimerSection from './components/DefaultSleepTimerSection';
+import DesktopFloatingPlayerSection from './components/DesktopFloatingPlayerSection';
 import ThemeModeSection from './components/ThemeModeSection';
 import VoiceServiceSection from './components/VoiceServiceSection';
 import SpeedConfigSection from './components/SpeedConfigSection';
@@ -54,29 +54,53 @@ const ConfigPage: React.FC = () => {
   }, [apiConfig.voiceId, isConfigLoaded, voiceOptions]);
 
   /**
-   * 当前播放时长（分钟）。
+   * M7-03 默认睡眠定时分钟数（新语义字段；旧 playDuration 别名同值保留）。
    */
-  const playDuration = useMemo(() => apiConfig.playDuration, [apiConfig.playDuration]);
-
-  /**
-   * 是否开启浮动播放器。
-   */
-  const isFloatingPlayerEnabled = useMemo(
-    () => apiConfig.floatingPlayerEnabled,
-    [apiConfig.floatingPlayerEnabled]
+  const defaultSleepTimerMinutes = useMemo(
+    () => apiConfig.defaultSleepTimerMinutes,
+    [apiConfig.defaultSleepTimerMinutes]
   );
 
-  const handlePlayDurationChange = useCallback(
+  /**
+   * M7-03 默认睡眠定时开关。
+   */
+  const defaultSleepTimerEnabled = useMemo(
+    () => apiConfig.defaultSleepTimerEnabled,
+    [apiConfig.defaultSleepTimerEnabled]
+  );
+
+  const handleDefaultSleepTimerMinutesChange = useCallback(
     (value: number) => {
       if (!isConfigLoaded) {
         return;
       }
-      if (value === apiConfig.playDuration) {
+      if (value === apiConfig.defaultSleepTimerMinutes) {
         return;
       }
-      updateConfig({ playDuration: value });
+      updateConfig({ defaultSleepTimerMinutes: value });
     },
-    [apiConfig.playDuration, isConfigLoaded, updateConfig]
+    [apiConfig.defaultSleepTimerMinutes, isConfigLoaded, updateConfig]
+  );
+
+  const handleDefaultSleepTimerEnabledChange = useCallback(
+    (value: boolean) => {
+      if (!isConfigLoaded) {
+        return;
+      }
+      if (value === apiConfig.defaultSleepTimerEnabled) {
+        return;
+      }
+      updateConfig({ defaultSleepTimerEnabled: value });
+    },
+    [apiConfig.defaultSleepTimerEnabled, isConfigLoaded, updateConfig]
+  );
+
+  /**
+   * 是否在宽屏启用悬浮迷你播放器（M6 语义；移动端始终 docked）。
+   */
+  const isDesktopFloatingPlayerEnabled = useMemo(
+    () => apiConfig.desktopFloatingPlayerEnabled,
+    [apiConfig.desktopFloatingPlayerEnabled]
   );
 
   const handleVoiceSelect = useCallback(
@@ -107,15 +131,15 @@ const ConfigPage: React.FC = () => {
     [apiConfig.speed, isConfigLoaded, updateConfig]
   );
 
-  const handleFloatingPlayerToggle = useCallback((enabled: boolean) => {
+  const handleDesktopFloatingPlayerToggle = useCallback((enabled: boolean) => {
     if (!isConfigLoaded) {
       return;
     }
-    if (enabled === apiConfig.floatingPlayerEnabled) {
+    if (enabled === apiConfig.desktopFloatingPlayerEnabled) {
       return;
     }
-    updateConfig({ floatingPlayerEnabled: enabled });
-  }, [apiConfig.floatingPlayerEnabled, isConfigLoaded, updateConfig]);
+    updateConfig({ desktopFloatingPlayerEnabled: enabled });
+  }, [apiConfig.desktopFloatingPlayerEnabled, isConfigLoaded, updateConfig]);
 
   /**
    * 主题切换：既更新 ThemeProvider（即时生效），又写回 configStore（登录态下防抖同步服务端）。
@@ -148,17 +172,19 @@ const ConfigPage: React.FC = () => {
       <div className={styles.configForm}>
         <UserSection />
         <ThemeModeSection value={themeMode} onChange={handleThemeModeChange} />
-        <BasicConfigSection
-          playDuration={playDuration}
-          onPlayDurationChange={handlePlayDurationChange}
+        <DefaultSleepTimerSection
+          enabled={defaultSleepTimerEnabled}
+          minutes={defaultSleepTimerMinutes}
+          onEnabledChange={handleDefaultSleepTimerEnabledChange}
+          onMinutesChange={handleDefaultSleepTimerMinutesChange}
         />
         <SpeedConfigSection
           speed={apiConfig.speed}
           onSpeedChange={handleSpeedChange}
         />
-        <FloatingPlayerSection
-          value={isFloatingPlayerEnabled}
-          onChange={handleFloatingPlayerToggle}
+        <DesktopFloatingPlayerSection
+          value={isDesktopFloatingPlayerEnabled}
+          onChange={handleDesktopFloatingPlayerToggle}
         />
         <VoiceServiceSection
           value={selectedVoice}

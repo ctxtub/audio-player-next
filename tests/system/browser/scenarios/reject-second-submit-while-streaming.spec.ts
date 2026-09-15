@@ -7,7 +7,8 @@ import { ensureGuestByApi } from "./helpers/auth";
 /**
  * 流式中第二次提交被拒（旧 H-02）。
  *
- * 断言绑定方案第6节：UI 禁用/拒绝响应 + network 单次 Agent 调用。
+ * 断言绑定方案第6节：UI 禁用/拒绝响应 + network 无第二次提交的请求
+ *（以请求体精确匹配 secondPrompt；流完成后的合法自动续写不计入）。
  * 以路由延迟拉长首个流式窗口，在窗口内尝试第二次提交，验证互斥语义。
  */
 test("流式中第二次提交被拒", async ({ page, harnessEnv, evidence }) => {
@@ -18,10 +19,17 @@ test("流式中第二次提交被拒", async ({ page, harnessEnv, evidence }) =>
     };
     /** Agent 交互请求时间线（network 层单次调用证据）。 */
     const agentUrls: string[] = [];
+    /** Agent 请求体时间线（与 URL 一一对应，用于区分被拒提交与合法自动续写）。 */
+    const agentBodies: string[] = [];
     /** 首个流式请求是否已到达（仅首个延迟拉窗，后续直放）。 */
     let firstSeen = false;
     await page.route("**/api/trpc/agent.interact*", async (route) => {
         agentUrls.push(route.request().url());
+        try {
+            agentBodies.push(route.request().postData() ?? "");
+        } catch {
+            agentBodies.push("");
+        }
         if (!firstSeen) {
             firstSeen = true;
             await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -65,6 +73,11 @@ test("流式中第二次提交被拒", async ({ page, harnessEnv, evidence }) =>
     await expect(composer).toBeEnabled({ timeout: 90000 });
     recorder.step("首流完成", { agentCalls: agentUrls.length });
 
-    // 中文注释：network 断言——全程仅一次 Agent 调用（第二次被互斥，无新流）。
-    expect(agentUrls.length).toBe(1);
+    // 中文注释：network 断言——被拒的第二次提交全程不得开新流（M6-04 hardening：
+    // 自动续写“请继续故事”是流完成后的合法产品行为，可能落在最终断言窗口内，
+    // 故不断言全程调用总数，而精确断言“无携带 secondPrompt 的请求”；
+    // 若互斥失效导致第二次提交漏过，此处必 fail，oracle 意图不变）。
+    const leakedSecond = agentBodies.filter((body) => body.includes(secondPrompt));
+    expect(leakedSecond.length).toBe(0);
+    recorder.step("互斥无泄漏", { totalAgentCalls: agentUrls.length });
 });

@@ -5,19 +5,26 @@
  */
 
 import { prisma } from '@/lib/db';
+import { executeStoryWorkPhysicalDelete } from '@/lib/server/storyWork';
 
-const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+export const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface PurgeResult {
     configsDeleted: number;
     messagesDeleted: number;
     generationsDeleted: number;
+    storyWorksDeleted?: number;
     promptsDeleted: number;
     playbackProgressDeleted: number;
 }
 
 /**
  * 清理指定截止时间前未更新的访客数据（默认 30 天前）。
+ * M5-02：Anchor delegate 逻辑 rename（物理表不变）；Guest Work Progress 以 Work FK cascade 为主，
+ * 随 GuestStoryWork 物理删除级联清理，此处无需额外 deleteMany（保持既有 GC 语义不变）。
+ * M8-05-02：Guest Work 物理删除经 executeStoryWorkPhysicalDelete 统一 seam 自动获得
+ * audio-aware lifecycle（事务内 tombstone + commit 后 best-effort cleanup）；此处严禁复制
+ * Audio GC 实现（不得直调 storage.delete / tombstone 表），回归由 audio-lifecycle-delete 套件锁定。
  */
 export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeResult> {
     const threshold = cutoffDate ?? new Date(Date.now() - THIRTY_DAYS_MS);
@@ -25,15 +32,20 @@ export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeRes
     const [configs, messages, generations, prompts, playback] = await Promise.all([
         prisma.guestConfig.deleteMany({ where: { updatedAt: { lt: threshold } } }),
         prisma.guestChatMessage.deleteMany({ where: { updatedAt: { lt: threshold } } }),
-        prisma.guestGenerationHistory.deleteMany({ where: { updatedAt: { lt: threshold } } }),
+        executeStoryWorkPhysicalDelete({
+            target: 'guest',
+            reason: 'retention',
+            where: { updatedAt: { lt: threshold } },
+        }),
         prisma.guestPromptHistory.deleteMany({ where: { updatedAt: { lt: threshold } } }),
-        prisma.guestPlaybackProgress.deleteMany({ where: { updatedAt: { lt: threshold } } }),
+        prisma.guestPlaybackAnchor.deleteMany({ where: { updatedAt: { lt: threshold } } }),
     ]);
 
     return {
         configsDeleted: configs.count,
         messagesDeleted: messages.count,
         generationsDeleted: generations.count,
+        storyWorksDeleted: generations.count,
         promptsDeleted: prompts.count,
         playbackProgressDeleted: playback.count,
     };

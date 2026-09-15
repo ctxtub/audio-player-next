@@ -53,10 +53,13 @@ async function runGuestCreativeSyncTests() {
 
     // Clean initial state
     await prisma.guestChatMessage.deleteMany({ where: { guestId: guestId1 } });
-    await prisma.guestGenerationHistory.deleteMany({ where: { guestId: guestId1 } });
+    await prisma.guestStoryWork.deleteMany({ where: { guestId: guestId1 } });
     await prisma.guestPromptHistory.deleteMany({ where: { guestId: guestId1 } });
 
     // 1.1 Chat Save and Reload with Audio URL Sanitization
+    // M4-08：经 save 路径新建 storyCard 已被 provenance guard 禁止；旧历史以直写
+    // seeding 模拟 pre-M4-08 持久形态（含历史 temp audioUrl），再经 guard 路径
+    // round-trip（audioUrl='' 续存）验证 sanitize 与续存语义。
     const messagesInput = [
         {
             messageId: 'msg_1',
@@ -79,7 +82,29 @@ async function runGuestCreativeSyncTests() {
         },
     ];
 
-    await saveConversationForSubject({ type: 'guest', id: guestId1 }, messagesInput);
+    // M4-08 seeding：旧历史直写 DB（含历史 temp audioUrl 的持久形态），有意绕过 guard。
+    await prisma.guestChatMessage.createMany({
+        data: messagesInput.map((m, index) => {
+            const parts = (m as { parts?: unknown }).parts;
+            return {
+                guestId: guestId1,
+                position: index,
+                messageId: m.messageId,
+                role: m.role,
+                content: m.content,
+                parts: parts !== undefined ? JSON.stringify(parts) : null,
+                createdAt: (m as { createdAt?: string }).createdAt ?? null,
+            };
+        }),
+    });
+    // 现代客户端续存：同卡 audioUrl='' 经 guard 路径 round-trip（fingerprint 不含 audioUrl）。
+    await saveConversationForSubject({ type: 'guest', id: guestId1 }, messagesInput.map((m) => {
+        const parts = (m as { parts?: Array<Record<string, unknown>> }).parts;
+        return {
+            ...m,
+            parts: parts?.map((p) => (p.type === 'storyCard' ? { ...p, audioUrl: '' } : p)),
+        };
+    }));
 
     const reloadedChat = await getConversationForSubject({ type: 'guest', id: guestId1 });
     assert.strictEqual(reloadedChat.length, 2, 'Should reload exactly 2 chat messages');
@@ -224,17 +249,24 @@ async function runGuestCreativeSyncTests() {
     assert.strictEqual(cappedChat[0].messageId, 'msg_21', 'Oldest messages beyond 100 should be truncated');
     assert.strictEqual(cappedChat[99].messageId, 'msg_120', 'Newest message must be preserved');
 
-    // 4.2 Generation History Cap (100 records)
+    // 4.2 Generation History Cutover (No cap / Permanently retained, M2-07)
     for (let i = 1; i <= 105; i++) {
         await recordGenerationHistoryForSubject(
             { type: 'guest', id: guestCap },
             { prompt: `Prompt ${i}`, storyText: `Story ${i}` }
         );
     }
-    const genCapCount = await prisma.guestGenerationHistory.count({ where: { guestId: guestCap } });
-    assert.strictEqual(genCapCount, 100, 'Guest generation history must be capped at 100 records in DB');
+    const genCount = await prisma.guestStoryWork.count({ where: { guestId: guestCap } });
+    assert.strictEqual(genCount, 105, 'Guest generation history must not be capped; all 105 records retained in DB');
+    const firstGen = await prisma.guestStoryWork.findFirst({
+        where: { guestId: guestCap, prompt: 'Prompt 1' },
+    });
+    assert(firstGen !== null, 'First generation record must still exist after 105 writes');
 
-    console.log('PASS: Hard caps (chat <= 100, generation history <= 100) enforced');
+    const genList50 = await listGenerationHistoryForSubject({ type: 'guest', id: guestCap });
+    assert.strictEqual(genList50.length, 50, 'listGenerationHistoryForSubject must return at most 50 display records');
+
+    console.log('PASS: Chat cap (<= 100) and generation history no-cap cutover (105 retained) verified');
 
     console.log('=== 5. Testing 30-Day GC Selection Predicate ===');
     const guestExpired = `g_expired_${Date.now()}`;
@@ -252,7 +284,7 @@ async function runGuestCreativeSyncTests() {
             updatedAt: thirtyOneDaysAgo,
         },
     });
-    await prisma.guestGenerationHistory.create({
+    await prisma.guestStoryWork.create({
         data: {
             guestId: guestExpired,
             prompt: 'old prompt',
@@ -272,7 +304,7 @@ async function runGuestCreativeSyncTests() {
     await prisma.guestConfig.create({
         data: {
             guestId: guestExpired,
-            playDurationMinutes: 30,
+            defaultSleepTimerMinutes: 30,
             speed: 1.0,
             themeMode: 'system',
             updatedAt: thirtyOneDaysAgo,
@@ -313,7 +345,7 @@ async function runGuestCreativeSyncTests() {
     await prisma.guestConfig.create({
         data: {
             guestId: guestMigrate,
-            playDurationMinutes: 45,
+            defaultSleepTimerMinutes: 45,
             speed: 1.5,
             themeMode: 'dark',
             voiceId: 'onyx',
@@ -321,30 +353,42 @@ async function runGuestCreativeSyncTests() {
     });
     const gmT0 = new Date('2026-08-01T10:00:00.000Z');
     const gmT1 = new Date('2026-08-01T10:01:00.000Z');
-    await saveConversationForSubject({ type: 'guest', id: guestMigrate }, [
-        { messageId: 'gm_1', role: 'user', content: 'Guest message 1', createdAt: gmT0.toISOString() },
-        {
-            messageId: 'gm_2',
-            role: 'assistant',
-            content: 'Guest response 1',
-            parts: [
-                {
-                    type: 'storyCard',
-                    storyText: 'Guest response 1',
-                    audioUrl: 'blob:http://localhost:3000/should-be-excluded-blob-uuid',
-                },
-            ],
-            createdAt: gmT1.toISOString(),
-        },
-        { messageId: 'gm_3', role: 'user', content: 'Guest message 2', createdAt: gmT1.toISOString() },
-        { messageId: 'gm_4', role: 'assistant', content: 'Guest response 2', createdAt: gmT1.toISOString() },
-        { messageId: 'gm_5', role: 'user', content: 'Guest message 3', createdAt: gmT1.toISOString() },
-        { messageId: 'gm_6', role: 'assistant', content: 'Guest response 3', createdAt: gmT1.toISOString() },
-    ]);
-    await prisma.guestPlaybackProgress.create({
+    // M4-08 seeding：6 条旧历史直写 DB（gm_2 为已 sanitize 持久形态 audioUrl=''），有意绕过 guard；
+    // 经 save 路径新建 storyCard 已被禁止，迁移保真基线只能来自既有持久行。
+    await prisma.guestChatMessage.createMany({
+        data: [
+            { messageId: 'gm_1', role: 'user', content: 'Guest message 1', createdAt: gmT0.toISOString() },
+            {
+                messageId: 'gm_2',
+                role: 'assistant',
+                content: 'Guest response 1',
+                parts: JSON.stringify([
+                    {
+                        type: 'storyCard',
+                        storyText: 'Guest response 1',
+                        audioUrl: '',
+                    },
+                ]),
+                createdAt: gmT1.toISOString(),
+            },
+            { messageId: 'gm_3', role: 'user', content: 'Guest message 2', createdAt: gmT1.toISOString() },
+            { messageId: 'gm_4', role: 'assistant', content: 'Guest response 2', createdAt: gmT1.toISOString() },
+            { messageId: 'gm_5', role: 'user', content: 'Guest message 3', createdAt: gmT1.toISOString() },
+            { messageId: 'gm_6', role: 'assistant', content: 'Guest response 3', createdAt: gmT1.toISOString() },
+        ].map((m, index) => ({
+            guestId: guestMigrate,
+            position: index,
+            messageId: m.messageId,
+            role: m.role,
+            content: m.content,
+            parts: (m as { parts?: string }).parts ?? null,
+            createdAt: (m as { createdAt?: string }).createdAt ?? null,
+        })),
+    });
+    await prisma.guestPlaybackAnchor.create({
         data: {
             guestId: guestMigrate,
-            sourceType: 'chat',
+            sourceKind: 'chat',
             sourceId: 'gm_2',
             sessionId: 'gm_2',
             title: '音频故事',
@@ -372,7 +416,7 @@ async function runGuestCreativeSyncTests() {
         orderBy: { position: 'asc' },
     });
     assert.strictEqual(guestChatBefore.length, 6, '前置：访客聊天应为 6 条');
-    const guestGensBefore = await prisma.guestGenerationHistory.findMany({ where: { guestId: guestMigrate } });
+    const guestGensBefore = await prisma.guestStoryWork.findMany({ where: { guestId: guestMigrate } });
     assert.strictEqual(guestGensBefore.length, 1, '前置：访客生成历史应为 1 条');
 
     // 6.1 Successful Registration Migration
@@ -408,14 +452,14 @@ async function runGuestCreativeSyncTests() {
         include: {
             config: true,
             chatMessages: { orderBy: { position: 'asc' } },
-            generationHistory: true,
+            storyWorks: true,
             promptHistory: true,
-            playbackProgress: true,
+            playbackAnchor: true,
         },
     });
     assert(newUser !== null, 'New user must exist');
     assert(newUser.config !== null, 'UserConfig must be migrated');
-    assert.strictEqual(newUser.config.playDurationMinutes, 45);
+    assert.strictEqual(newUser.config.defaultSleepTimerMinutes, 45);
     assert.strictEqual(newUser.config.speed, 1.5, 'speed must be migrated from guest');
     assert.strictEqual(newUser.config.themeMode, 'dark', 'themeMode must be migrated from guest');
     assert.strictEqual(newUser.config.voiceId, 'onyx', 'voiceId must be migrated from guest');
@@ -437,18 +481,18 @@ async function runGuestCreativeSyncTests() {
     assert.strictEqual(migratedCardParts[0].storyText, 'Guest response 1', 'parts.storyText 保真');
     assert.strictEqual(migratedCardParts[0].audioUrl, '', 'parts.audioUrl 保持 sanitize 语义（空串）');
     // 进度行保真（nextParagraphIndex / remainingAllowedMs）
-    assert(newUser.playbackProgress !== null, 'UserPlaybackProgress must be migrated');
-    assert.strictEqual(newUser.playbackProgress.nextParagraphIndex, 2, 'nextParagraphIndex=2 保真');
-    assert.strictEqual(newUser.playbackProgress.remainingAllowedMs, 120000, 'remainingAllowedMs 保真');
-    assert.strictEqual(newUser.playbackProgress.lastCompletedParagraphIndex, 1, 'lastCompletedParagraphIndex 保真');
-    assert.strictEqual(newUser.playbackProgress.totalParagraphs, 4, 'totalParagraphs 保真');
-    assert.strictEqual(newUser.playbackProgress.sourceId, 'gm_2', 'sourceId 保真');
-    assert.strictEqual(newUser.playbackProgress.contentHash, 'migratehash12345', 'contentHash 保真');
-    assert.strictEqual(newUser.generationHistory.length, 1, '1 GenerationHistory must be migrated');
-    assert.strictEqual(newUser.generationHistory[0].prompt, 'Guest story 1');
-    assert.strictEqual(newUser.generationHistory[0].storyText, 'Guest text 1');
+    assert(newUser.playbackAnchor !== null, 'UserPlaybackProgress must be migrated');
+    assert.strictEqual(newUser.playbackAnchor.nextParagraphIndex, 2, 'nextParagraphIndex=2 保真');
+    assert.strictEqual(newUser.playbackAnchor.remainingAllowedMs, 120000, 'remainingAllowedMs 保真');
+    assert.strictEqual(newUser.playbackAnchor.lastCompletedParagraphIndex, 1, 'lastCompletedParagraphIndex 保真');
+    assert.strictEqual(newUser.playbackAnchor.totalParagraphs, 4, 'totalParagraphs 保真');
+    assert.strictEqual(newUser.playbackAnchor.sourceId, 'gm_2', 'sourceId 保真');
+    assert.strictEqual(newUser.playbackAnchor.contentHash, 'migratehash12345', 'contentHash 保真');
+    assert.strictEqual(newUser.storyWorks.length, 1, '1 GenerationHistory must be migrated');
+    assert.strictEqual(newUser.storyWorks[0].prompt, 'Guest story 1');
+    assert.strictEqual(newUser.storyWorks[0].storyText, 'Guest text 1');
     assert.strictEqual(
-        String(newUser.generationHistory[0].createdAt ?? ''),
+        String(newUser.storyWorks[0].createdAt ?? ''),
         String(guestGensBefore[0].createdAt ?? ''),
         'generation createdAt 保真',
     );
@@ -456,9 +500,9 @@ async function runGuestCreativeSyncTests() {
     assert.strictEqual(newUser.promptHistory[0].prompt, 'Guest prompt 1');
     // no-duplicate-rows: 用户侧计数与访客侧计数精确 parity
     assert.strictEqual(newUser.chatMessages.length, guestChatBefore.length, 'no-duplicate-rows: 聊天计数 parity');
-    const guestGenCount = await prisma.guestGenerationHistory.count({ where: { guestId: guestMigrate } });
+    const guestGenCount = await prisma.guestStoryWork.count({ where: { guestId: guestMigrate } });
     const guestPromptCount = await prisma.guestPromptHistory.count({ where: { guestId: guestMigrate } });
-    assert.strictEqual(newUser.generationHistory.length, guestGenCount, 'no-duplicate-rows: 生成计数 parity');
+    assert.strictEqual(newUser.storyWorks.length, guestGenCount, 'no-duplicate-rows: 生成计数 parity');
     assert.strictEqual(newUser.promptHistory.length, guestPromptCount, 'no-duplicate-rows: 提示词计数 parity');
     // 注册即登录（SESSION cookie 签发）
     assert(cookieJar.has('auth'), '注册成功应签发 SESSION(auth) cookie');
@@ -467,7 +511,12 @@ async function runGuestCreativeSyncTests() {
     const preservedGuestChat = await prisma.guestChatMessage.count({ where: { guestId: guestMigrate } });
     assert.strictEqual(preservedGuestChat, 6, 'Guest records must be preserved for audit then GC-expired');
     assert(await prisma.guestConfig.findUnique({ where: { guestId: guestMigrate } }), 'Guest 配置行保留');
-    assert(await prisma.guestPlaybackProgress.findUnique({ where: { guestId: guestMigrate } }), 'Guest 进度行保留');
+    // M5-08 move 语义：成功迁移的 Guest Anchor 随单事务清除（配置/聊天/作品行仍保留审计）。
+    assert.strictEqual(
+        await prisma.guestPlaybackAnchor.findUnique({ where: { guestId: guestMigrate } }),
+        null,
+        'M5-08：已迁移的 Guest 进度行必须清除（move 语义）'
+    );
 
     // 6.2 Registration Rollback Safety
     const guestRollback = `g_rb_${Date.now()}`;

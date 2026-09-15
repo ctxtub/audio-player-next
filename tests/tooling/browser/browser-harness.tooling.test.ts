@@ -17,6 +17,15 @@ import { createConnection } from 'node:net';
  *    预置 ready 快照亦拒绝复用（fast-path 守卫），且未产生/覆盖快照；
  * 6. EXPECTED_TARGET_SHA 绑定：失配抛 BLOCKED（含 expected/actual 短 SHA），短前缀等价放行，未设置不阻断；
  * 7. 干净树放行：干净 fixture 走到守卫通过点（不跑完整 build），untracked 不阻断。
+ * 8. M5-10 fixup-2 probe 开启信号：buildSnapshotEnv 恒注入显式开启值；
+ *    含 probe 令牌的 ready marker 直接复用，旧格式 marker 一律重建（不信任旧构建）。
+ * 9. M8-04 canonical 音频存储：buildSnapshotEnv 恒注入 local 驱动 + 隔离库同目录 audio/ 根。
+ * 10. M8-05-04 closure spec 结构：canonical-closure.spec.ts 含 3 例（replay/Trash+Restore/Guest 注册）
+ *     且 oracle 标记齐全（同资产/零 legacy TTS/字节相等），catalog L3 绑定不断链。
+ * 11. M8-05-04 closure 同一性语义（纯函数模拟，不跑浏览器）：同文本+同 profile → 同 identity key
+ *    （replay 命中同一资产，无再生）；flag 缺省 fail-closed，harness 覆盖仅经 globalThis 显式开启。
+ * 12. M8-05-04 enable gate 接线：harness 合成环境不预置 canonical 开关（生产默认关闭保持）；
+ *     closure spec 经每用例独立 addInitScript 显式开启，不污染其他 spec 构建。
  *
  * 隔离约束：全程仅 localhost；app-server 用 31120-31150 范围空闲端口，
  * mock 用随机空闲端口；禁止触碰 :31111/:9301/:38080、prisma/dev.db、.env*；
@@ -372,7 +381,192 @@ async function caseCleanTreePasses(): Promise<void> {
 }
 
 /**
- * 测试入口：串行执行 7 个用例（端口/快照互斥，避免交叉干扰）。
+ * M5-10 fixup-2 用例 8：probe E2E-only 开启信号由 harness 合成环境承载。
+ * - buildSnapshotEnv 恒注入 NEXT_PUBLIC_E2E_PLAYBACK_PROBE='1'（ambient 亦不得覆盖）；
+ * - 含 probe 令牌的 ready marker 直接复用（不重建）；
+ * - 旧格式 marker（无令牌）不可复用（进入重建路径；fixture 非 next 应用故重建失败，
+ *   但旧 marker 已被回收即证未复用旧构建）。
+ */
+async function caseProbeEnableSignal(): Promise<void> {
+    const mod = await import(path.join(harnessDir, 'app-server.mjs'));
+    assert.strictEqual(typeof mod.buildSnapshotEnv, 'function', 'app-server 必须导出 buildSnapshotEnv（probe 开启信号接线验证用）');
+    assert.strictEqual(typeof mod.PROBE_BUILD_TOKEN, 'string', 'app-server 必须导出 PROBE_BUILD_TOKEN');
+    const prevProbe: string | undefined = process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE;
+    try {
+        const env = mod.buildSnapshotEnv('/tmp/synthetic-harness.db', 'http://localhost:9/v1') as Record<string, unknown>;
+        assert.strictEqual(env['NEXT_PUBLIC_E2E_PLAYBACK_PROBE'], '1', '合成环境必须显式开启 probe');
+        process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE = '0';
+        const forced = mod.buildSnapshotEnv('/tmp/synthetic-harness.db', 'http://localhost:9/v1') as Record<string, unknown>;
+        assert.strictEqual(forced['NEXT_PUBLIC_E2E_PLAYBACK_PROBE'], '1', 'ambient 关闭值不得覆盖 harness 开启信号');
+    } finally {
+        if (prevProbe === undefined) delete process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE;
+        else process.env.NEXT_PUBLIC_E2E_PLAYBACK_PROBE = prevProbe;
+    }
+    // 中文注释：含令牌 marker 复用（干净 fixture，不触发构建）。
+    const { dir, fullSha } = makeTempGitRepo();
+    try {
+        const snapshotBase: string = path.join(dir, '.probe-snapshots');
+        const snapshotDir: string = path.join(snapshotBase, fullSha);
+        mkdirSync(snapshotDir, { recursive: true });
+        const marker: string = path.join(snapshotDir, '.snapshot-ready');
+        const token: string = mod.PROBE_BUILD_TOKEN as string;
+        writeFileSync(marker, `${fullSha}\n${token}\n`);
+        const reused = (await mod.ensureSnapshot(fullSha, {}, { cwd: dir, snapshotBase })) as string;
+        assert.strictEqual(reused, snapshotDir, '含 probe 令牌的快照必须直接复用');
+        assert.strictEqual(readFileSync(marker, 'utf8'), `${fullSha}\n${token}\n`, '复用不得改写 marker');
+        // 中文注释：旧格式 marker（无令牌）不可复用——进入重建路径（fixture 非 next 应用，
+        // 重建在 prisma generate 即失败；旧 marker 已被回收即证未复用旧构建）。
+        writeFileSync(marker, `${fullSha}\n`);
+        await assert.rejects(
+            mod.ensureSnapshot(fullSha, {}, { cwd: dir, snapshotBase }),
+            '无令牌旧快照不得复用（须进入重建）',
+        );
+        assert.ok(!existsSync(marker), '重建路径必须回收旧 marker（不信任旧构建）');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+/**
+ * M8-04 用例 9：canonical 音频本地存储由 harness 合成环境承载。
+ * - buildSnapshotEnv 恒注入 AUDIO_STORAGE_DRIVER='local'（ambient 不得覆盖）；
+ * - AUDIO_LOCAL_ROOT 恒为隔离库同目录下 audio/（与隔离库同生命周期，storageKey 全 UUID 无碰撞）；
+ * - 且不在历史耦合目录 /app/data 下、不使用缺省 /app/audio（开发机/CI 不可写）。
+ */
+async function caseCanonicalAudioStorageEnv(): Promise<void> {
+    const mod = await import(path.join(harnessDir, 'app-server.mjs'));
+    const prevDriver: string | undefined = process.env.AUDIO_STORAGE_DRIVER;
+    const prevRoot: string | undefined = process.env.AUDIO_LOCAL_ROOT;
+    try {
+        const env = mod.buildSnapshotEnv('/tmp/synthetic-harness.db', 'http://localhost:9/v1') as Record<string, unknown>;
+        assert.strictEqual(env['AUDIO_STORAGE_DRIVER'], 'local', '合成环境必须固定 local 驱动');
+        assert.strictEqual(env['AUDIO_LOCAL_ROOT'], '/tmp/audio', '音频根必须为隔离库同目录 audio/');
+        process.env.AUDIO_STORAGE_DRIVER = 's3';
+        process.env.AUDIO_LOCAL_ROOT = '/app/data/audio';
+        const forced = mod.buildSnapshotEnv('/tmp/synthetic-harness.db', 'http://localhost:9/v1') as Record<string, unknown>;
+        assert.strictEqual(forced['AUDIO_STORAGE_DRIVER'], 'local', 'ambient 驱动不得覆盖 harness 合成值');
+        assert.strictEqual(forced['AUDIO_LOCAL_ROOT'], '/tmp/audio', 'ambient 路径不得覆盖 harness 合成值');
+    } finally {
+        if (prevDriver === undefined) delete process.env.AUDIO_STORAGE_DRIVER;
+        else process.env.AUDIO_STORAGE_DRIVER = prevDriver;
+        if (prevRoot === undefined) delete process.env.AUDIO_LOCAL_ROOT;
+        else process.env.AUDIO_LOCAL_ROOT = prevRoot;
+    }
+}
+
+/**
+ * M8-05-04 用例 10：closure spec 结构守卫（静态，不断链）。
+ * - canonical-closure.spec.ts 存在且声明 case_id m8-production-closure；
+ * - 含 3 个目标 test（replay / Trash+Restore / Guest 注册）；
+ * - oracle 标记齐全：同资产（同一 segmentId/playbackUrl）、零 legacy TTS（tts.synthesize 计数恒 0）、
+ *   注册无拷贝（字节相等）；
+ * - catalog L3 executable 指向该 spec 且被 ACTIVE case 引用。
+ */
+async function caseClosureSpecStructure(): Promise<void> {
+    const specRel = 'tests/system/browser/scenarios/canonical-closure.spec.ts';
+    const abs = path.join(repoRoot, specRel);
+    assert.ok(existsSync(abs), `closure spec 必须落盘：${specRel}`);
+    const src = readFileSync(abs, 'utf8');
+    assert.ok(src.includes('case_id: m8-production-closure'), 'spec 必须声明 case_id');
+    for (const marker of [
+        'Work canonical replay',
+        'Trash 当前播放可继续',
+        'Guest 注册后继续同一',
+    ]) {
+        assert.ok(src.includes(marker), `spec 必须含用例：${marker}`);
+    }
+    for (const oracle of [
+        '__CANONICAL_AUDIO_ENABLED',
+        'tts.synthesize',
+        'toEqual(guestBytes)',
+        'toBe(first.segment.id)',
+    ]) {
+        assert.ok(src.includes(oracle), `spec 必须含 oracle 标记：${oracle}`);
+    }
+    // 中文注释：catalog 绑定不断链（L3 executable 路径 + ACTIVE case 引用）。
+    const catalogRaw = readFileSync(path.join(repoRoot, 'tests', 'test-catalog.yaml'), 'utf8');
+    assert.ok(
+        catalogRaw.includes('tests/system/browser/scenarios/canonical-closure.spec.ts'),
+        'catalog 必须注册 closure L3 executable 路径',
+    );
+    assert.ok(catalogRaw.includes('m8-production-closure'), 'catalog 必须含 closure case');
+}
+
+/**
+ * M8-05-04 用例 11：closure 同一性语义（纯函数模拟，不跑浏览器）。
+ * - 同文本 + 同冻结 profile → 同 identity key（replay 命中同一资产，无再生）；
+ * - 任一身份因子变化 → 不同 key（新资产）；
+ * - flag 缺省 fail-closed（双变量缺席即 false）；harness 覆盖仅经显式 globalThis 开启。
+ */
+async function caseClosureIdentitySemantics(): Promise<void> {
+    const manifest = await import(path.join(repoRoot, 'lib', 'audio', 'manifest.ts'));
+    assert.strictEqual(typeof manifest.computeManifestIdentityKey, 'function', 'manifest 必须导出 identity key');
+    assert.strictEqual(typeof manifest.isSameManifestIdentity, 'function', 'manifest 必须导出同一性判定');
+    const base = {
+        contentHash: 'closure-base-hash',
+        segmentationVersion: 'v1',
+        voiceId: 'nova',
+        ttsBackendId: 'openai',
+        ttsModel: 'model-A',
+        synthesisVersion: 'canonical-mp3-v1',
+        audioFormat: 'mp3',
+        synthesisSpeed: 1.0,
+    };
+    const replay = { ...base };
+    assert.strictEqual(
+        manifest.computeManifestIdentityKey(replay),
+        manifest.computeManifestIdentityKey(base),
+        'replay 同输入必须命中同一 identity（无再生）',
+    );
+    assert.strictEqual(manifest.isSameManifestIdentity(base, replay), true, '同一性判定 true');
+    assert.strictEqual(
+        manifest.isSameManifestIdentity(base, { ...base, voiceId: 'alloy' }),
+        false,
+        'voice 变化必须视为不同资产',
+    );
+    const flag = await import(path.join(repoRoot, 'lib', 'audio', 'canonicalFlag.ts'));
+    assert.strictEqual(typeof flag.isCanonicalAudioEnabled, 'function', 'flag 必须导出判定函数');
+    assert.strictEqual(flag.isCanonicalAudioEnabled({}), false, '双变量缺席必须 fail-closed');
+    assert.strictEqual(flag.isCanonicalAudioEnabled({ CANONICAL_AUDIO_ENABLED: '1' }), true, 'server 变量 strict 1 开');
+    assert.strictEqual(
+        flag.isCanonicalAudioEnabled({ NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED: 'yes' }),
+        false,
+        '非 1 值不得开启',
+    );
+}
+
+/**
+ * M8-05-04 用例 12：enable gate 接线（harness 合成环境不预置开关）。
+ * - buildSnapshotEnv 不得注入 CANONICAL_AUDIO_ENABLED / NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED
+ *  （生产默认关闭在 harness 亦保持；开启能力由 Docker plumbing 承载）；
+ * - closure spec 经每用例独立 addInitScript 显式开启（per-context，不污染其他 spec 构建）。
+ */
+async function caseClosureEnableGateWiring(): Promise<void> {
+    const mod = await import(path.join(harnessDir, 'app-server.mjs'));
+    const env = mod.buildSnapshotEnv('/tmp/synthetic-harness.db', 'http://localhost:9/v1') as Record<string, unknown>;
+    assert.strictEqual(
+        env['CANONICAL_AUDIO_ENABLED'],
+        undefined,
+        'harness 合成环境不得预置运行时开关（fail-closed 保持）',
+    );
+    assert.strictEqual(
+        env['NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED'],
+        undefined,
+        'harness 合成环境不得预置构建期开关（fail-closed 保持）',
+    );
+    const src = readFileSync(
+        path.join(repoRoot, 'tests', 'system', 'browser', 'scenarios', 'canonical-closure.spec.ts'),
+        'utf8',
+    );
+    assert.ok(src.includes('addInitScript'), 'closure spec 必须经 addInitScript 独立开启');
+    assert.ok(
+        src.includes('__CANONICAL_AUDIO_ENABLED') && src.includes('"1"'),
+        'closure spec 开启值必须为显式 1（per-context，不改共享构建）',
+    );
+}
+
+/**
+ * 测试入口：串行执行 12 个用例（端口/快照互斥，避免交叉干扰）。
  */
 async function main(): Promise<void> {
     await caseAppServerLifecycle();
@@ -389,6 +583,16 @@ async function main(): Promise<void> {
     console.log('PASS: 用例6 EXPECTED_TARGET_SHA 失配拒绝/前缀等价放行/未设置不阻断');
     await caseCleanTreePasses();
     console.log('PASS: 用例7 干净树守卫通过（untracked 不阻断）');
+    await caseProbeEnableSignal();
+    console.log('PASS: 用例8 probe 开启信号合成环境承载/令牌复用/旧快照重建');
+    await caseCanonicalAudioStorageEnv();
+    console.log('PASS: 用例9 canonical 音频存储合成环境承载（local+隔离库同目录audio）');
+    await caseClosureSpecStructure();
+    console.log('PASS: 用例10 closure spec 结构（3 例 + oracle 标记 + catalog 绑定）');
+    await caseClosureIdentitySemantics();
+    console.log('PASS: 用例11 closure 同一性语义（同 identity 命中/flag 缺省关闭）');
+    await caseClosureEnableGateWiring();
+    console.log('PASS: 用例12 enable gate 接线（harness 不预置开关/spec 独立显式开启）');
     console.log('ALL BROWSER HARNESS TESTS PASSED');
 }
 

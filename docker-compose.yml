@@ -4,6 +4,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # M8-05-04 canonical enable gate（构建期；默认空 = fail-closed 关闭。
+        # 安全开启：NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=1 docker compose build）
+        NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED: "${NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED:-}"
     env_file:
       - .env.local
     ports:
@@ -11,6 +15,14 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: "file:/app/data/app.db"
+      AUDIO_STORAGE_DRIVER: "local"
+      AUDIO_LOCAL_ROOT: "/app/audio"
+      # M8-05-04 canonical enable gate（运行时；默认空 = fail-closed 关闭。
+      # server 兼容可保留 CANONICAL_AUDIO_ENABLED=1，但不能替代 client build flag；
+      # 浏览器 provider 的 production rollout 必须在 build 时设置 NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=1，
+      # 运行时变量单独不足以开启生产播放。语义见 lib/audio/canonicalFlag.ts）
+      CANONICAL_AUDIO_ENABLED: "${CANONICAL_AUDIO_ENABLED:-}"
     volumes:
       - ./data:/app/data
+      - ./audio:/app/audio
     restart: unless-stopped

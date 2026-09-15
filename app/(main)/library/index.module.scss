@@ -1,0 +1,61 @@
+/* 故事库主页路由与列表布局样式 — M3-04 */
+
+.libraryPage {
+  padding: var(--page-padding);
+  /* M6-03：消费统一 BottomChrome 预留（Mini 出现时最后 Card 可滚到 Mini 之上）。 */
+  padding-bottom: calc(var(--bottom-chrome-safe-bottom, var(--tab-bar-safe-bottom, 80px)) + var(--space-6));
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.libraryHero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+
+.heroLabel {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--accent-400);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.heroTitle {
+  font-family: var(--font-display, var(--font-sans));
+  font-style: italic;
+  font-size: var(--text-2xl);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  background: var(--gradient-brand);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0;
+}
+
+.libraryContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.terminalNoMore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6) 0 var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  letter-spacing: 0.08em;
+  user-select: none;
+}

@@ -1,0 +1,81 @@
+.undoToast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background-color: #1f2937;
+  color: #f9fafb;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 14px;
+  max-width: 90vw;
+  animation: slideUp 0.2s ease-out;
+
+  @media (max-width: 640px) {
+    bottom: 72px;
+    width: calc(100vw - 32px);
+    justify-content: space-between;
+  }
+}
+
+.undoMessage {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.undoButton {
+  background: none;
+  border: none;
+  color: #60a5fa;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.15s, color 0.15s;
+
+  &:hover:not(:disabled) {
+    background-color: rgba(96, 165, 250, 0.15);
+    color: #93c5fd;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.undoDismissBtn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+
+  &:hover {
+    color: #f9fafb;
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}

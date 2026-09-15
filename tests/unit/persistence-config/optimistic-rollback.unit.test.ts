@@ -27,10 +27,12 @@ const { useConfigStore } = nodeRequire('../../../stores/configStore') as {
 const userConfigModule = nodeRequire('../../../lib/client/userConfig') as {
     saveMyConfig: (patch: unknown) => Promise<unknown>;
     fetchMyConfig: () => Promise<{
+        defaultSleepTimerMinutes: number;
+        defaultSleepTimerEnabled: boolean;
         playDuration: number;
         voiceId: string;
         speed: number;
-        floatingPlayerEnabled: boolean;
+        desktopFloatingPlayerEnabled: boolean;
         themeMode: 'dark' | 'light' | 'system';
     }>;
 };
@@ -50,10 +52,12 @@ async function runH14Tests(): Promise<void> {
     try {
         // 服务端真值（保存失败时回滚目标）。
         const serverTruth = {
+            defaultSleepTimerMinutes: 30,
+            defaultSleepTimerEnabled: true,
             playDuration: 30,
             voiceId: 'alloy',
             speed: 1.0,
-            floatingPlayerEnabled: true,
+            desktopFloatingPlayerEnabled: true,
             themeMode: 'dark' as const,
         };
 

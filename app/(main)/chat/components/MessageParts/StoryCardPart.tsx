@@ -5,8 +5,8 @@ import { Sparkles, Pause, Headphones } from 'lucide-react';
 import type { StoryCardPart } from '@/types/chat';
 import { useGenerationStore } from '@/stores/generationStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
-import { usePlaybackProgressStore } from '@/stores/playbackProgressStore';
-import { playStoryText } from '@/app/services/storyFlow';
+import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
+import { playStoryCard } from '@/app/services/playbackSessionFlow';
 import StoryViewer from '@/app/(main)/chat/components/StoryViewer';
 import type { PartRendererProps } from './index';
 import styles from './index.module.scss';
@@ -25,7 +25,6 @@ const PREVIEW_MAX_LENGTH = 100;
 const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
     part,
     messageId,
-    onPlayStory,
 }) => {
     const [showFullText, setShowFullText] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -34,17 +33,31 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
     const phase = useGenerationStore((state) => state.phase);
     const streamingText = useGenerationStore((state) => state.streamingText);
 
-    // 订阅播放状态
-    const currentAudioUrl = usePlaybackStore((state) => state.currentAudioUrl);
+    // 订阅播放状态（仅按钮态 presentation：同卡 + Transport 正在播 → 展示暂停。
+    // 存在性判定永不读 Transport，只看 Session；播放决策永不直调 Transport）。
     const isPlaybackPlaying = usePlaybackStore((state) => state.isPlaying);
-    const pauseAudioPlayback = usePlaybackStore((state) => state.pauseAudioPlayback);
 
-    // 订阅断点续播状态
-    const activeProgressSourceId = usePlaybackProgressStore((state) => state.sourceId);
-    const activeNextIndex = usePlaybackProgressStore((state) => state.nextParagraphIndex);
-    const isThisCardResumePoint = Boolean(messageId && activeProgressSourceId === messageId && activeNextIndex > 0);
+    // 订阅断点续播状态（M9-03 fixup：经 M5 Session SSOT；Draft 按 messageId 匹配，
+    // Work 经 library 精确 resolve，不走旧 progress store / generationHistory 最近 N 条）。
+    // 合法未完成断点：next > 0 AND next < total（ended 后 next==total 不得再显示续播；
+    // UI 判定与 action 判定同源共用 isThisCardResumePoint）。
+    const sessionSource = usePlaybackSessionStore((state) => state.source);
+    const sessionNextIndex = usePlaybackSessionStore((state) => state.nextParagraphIndex);
+    const sessionTotalParagraphs = usePlaybackSessionStore((state) => state.totalParagraphs);
+    const isThisCardResumePoint = Boolean(
+        messageId &&
+        sessionSource?.kind === 'draft' &&
+        sessionSource.messageId === messageId &&
+        sessionNextIndex > 0 &&
+        sessionNextIndex < sessionTotalParagraphs,
+    );
 
-    const isThisCardPlaying = isPlaybackPlaying && (currentAudioUrl === part.audioUrl || (activeProgressSourceId === messageId && isPlaybackPlaying));
+    const isThisCardPlaying = Boolean(
+        messageId &&
+        sessionSource?.kind === 'draft' &&
+        sessionSource.messageId === messageId &&
+        isPlaybackPlaying,
+    );
 
     // 判断是否处于生成中状态（需要展示动效）
     // 只有当全局处于生成状态，且当前卡片没有音频地址（说明是正在生成的卡片）时，才展示动效
@@ -84,18 +97,15 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
         return `${currentText.slice(0, PREVIEW_MAX_LENGTH)}...`;
     }, [isGenerating, needsTruncation, currentText]);
 
-    /** 处理播放按钮点击。 */
+    /** 处理播放按钮点击（M9-F01：唯一正式入口 playStoryCard；
+     * 组件只交稳定 identity + 卡片上下文，不再自维护 resume/audioUrl/playStoryText
+     * 播放决策。Legacy part.audioUrl 在此面被有意忽略（无 segment identity，
+     * 不得当 paragraph 0 播放；identity/segmentation 正确 > 复用旧音频缓存）。 */
     const handlePlay = () => {
-        if (isThisCardPlaying) {
-            pauseAudioPlayback();
-            return;
-        }
-        if (part.audioUrl) {
-            onPlayStory?.(part.audioUrl);
-        } else if (part.storyText) {
-            // 恢复态卡片无持久音频，按正文重新合成并一次性播放（传递真实 messageId 建立断点定位）
-            void playStoryText(part.storyText, messageId);
-        }
+        if (!messageId) return;
+        void playStoryCard({ messageId, storyText: part.storyText }).catch(() => {
+            // Flow fail-closed（无正文/server 拒绝等）：保持按钮态，不抛。
+        });
     };
 
     /** 打开全文弹窗。 */
@@ -171,7 +181,7 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
                         {isThisCardPlaying ? (
                             <><Pause size={14} strokeWidth={2} /> 暂停播放</>
                         ) : isThisCardResumePoint ? (
-                            <><Headphones size={14} strokeWidth={2} /> 从第 {activeNextIndex + 1} 段继续收听</>
+                            <><Headphones size={14} strokeWidth={2} /> 从第 {sessionNextIndex + 1} 段继续收听</>
                         ) : (
                             <><Headphones size={14} strokeWidth={2} /> 播放故事</>
                         )}

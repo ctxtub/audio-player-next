@@ -86,16 +86,30 @@ function submitManual(content: string): void {
 }
 
 function submitPreloadStory(instructionContent: string, storyText: string): void {
+    type DispatchArg = Parameters<ReturnType<typeof useChatStore.getState>['dispatch']>[0];
     useChatStore.getState().dispatch({
         type: 'user.submit',
         content: instructionContent,
         origin: 'preload',
-    } as Parameters<ReturnType<typeof useChatStore.getState>['dispatch']>[0]);
+    } as DispatchArg);
+    // M4-02 新链：按 attempt 身份完成正文（draft→complete），再标记 delivered；不再写 StoryCard/audioUrl。
+    const assistantId = useChatStore.getState().selectors.latestAssistantMessage()?.id;
+    assert.ok(assistantId, '预载助手占位必须存在');
     useChatStore.getState().dispatch({
-        type: 'stream.story_finish',
+        type: 'stream.intent',
+        intent: 'Story',
+        messageId: assistantId,
+    } as DispatchArg);
+    useChatStore.getState().dispatch({
+        type: 'stream.story_complete',
+        messageId: assistantId as string,
         storyText,
-        audioUrl: 'blob:h03b-preload',
-    } as Parameters<ReturnType<typeof useChatStore.getState>['dispatch']>[0]);
+    } as DispatchArg);
+    useChatStore.getState().dispatch({
+        type: 'stream.finish',
+        payload: { type: 'done', finishReason: 'stop' },
+        messageId: assistantId,
+    } as DispatchArg);
 }
 
 async function runH03bTests(): Promise<void> {

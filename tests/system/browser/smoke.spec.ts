@@ -1,4 +1,5 @@
 import { test, expect } from "./harness/fixtures";
+import { ensureGuestByApi } from "./scenarios/helpers/auth";
 
 /**
  * 真实浏览器烟雾用例（harness/environment manual diagnostic；不属于产品 coverage；不进入默认 product L3）。
@@ -98,4 +99,37 @@ test("autoplay 与手势策略实测记录", async ({ page, harnessEnv }) => {
     // 中文注释：打印到测试输出，供证据摘录。
     console.log(`[autoplay-probe] ${JSON.stringify(measured)}`);
     expect(typeof measured.isSecureContext).toBe("boolean");
+});
+
+test("/player frozen compatibility boundary 验证 (Legacy Player landmark + 故事库 Tab 选中 + 无 redirect)", async ({ page, harnessEnv }) => {
+    // 中文注释：经真实访客 API 写入会话 cookie，避开未认证拦截
+    await ensureGuestByApi(page, harnessEnv.appUrl);
+
+    // 中文注释：直接访问 /player
+    const response = await page.goto(`${harnessEnv.appUrl}/player`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    expect(response?.status()).toBe(200);
+
+    // 中文注释：三项合一 Contract 1 —— URL 保持 /player，无 redirect（严禁 /player -> /library 自动迁移）
+    expect(new URL(page.url()).pathname).toBe("/player");
+
+    // 中文注释：三项合一 Contract 2 —— 渲染 Legacy Player 页面（AudioPlayer + HistoryPanel 核心稳定 landmark 可见）
+    // 1) AudioPlayer: 播放进度条 slider、倍速按钮、从头重播按钮
+    await expect(page.getByRole("slider", { name: "播放进度" })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("button", { name: "播放速度" })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("button", { name: "从头重播" })).toBeVisible({ timeout: 15000 });
+    // 2) HistoryPanel: 历史类型切换 tablist 及两个 tab（提示词历史、生成历史）
+    await expect(page.getByRole("tablist", { name: "历史类型切换" })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("tab", { name: "提示词历史" })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole("tab", { name: "生成历史" })).toBeVisible({ timeout: 15000 });
+
+    // 中文注释：三项合一 Contract 3 —— /player 时故事库 Tab 保持 selected (aria-selected="true")
+    const libraryTab = page.getByRole("tab", { name: "故事库" });
+    await expect(libraryTab).toBeVisible({ timeout: 15000 });
+    await expect(libraryTab).toHaveAttribute("aria-selected", "true");
+
+    // 其余主导航 Tab 处于未选中态
+    const chatTab = page.getByRole("tab", { name: "创作" });
+    await expect(chatTab).toHaveAttribute("aria-selected", "false");
+    const settingTab = page.getByRole("tab", { name: "设置" });
+    await expect(settingTab).toHaveAttribute("aria-selected", "false");
 });

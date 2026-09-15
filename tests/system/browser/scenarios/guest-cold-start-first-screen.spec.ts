@@ -152,7 +152,7 @@ test("访客冷启动首屏渲染", async ({ page, harnessEnv, evidence }) => {
     await expect(page.getByRole("textbox").first()).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("tablist", { name: "主导航" })).toBeVisible({ timeout: 15000 });
     const tabNames: string[] = await page.getByRole("tab").allInnerTexts();
-    expect(tabNames).toEqual(expect.arrayContaining(["创作", "播放器", "设置"]));
+    expect(tabNames).toEqual(expect.arrayContaining(["创作", "故事库", "设置"]));
     recorder.step("底部TabBar", tabNames);
     for (const name of ["星际冒险", "动物好朋友", "奇幻学徒记", "谜案侦探团", "深海探险家", "森林守护队"]) {
         await expect(page.getByRole("button", { name })).toBeVisible({ timeout: 15000 });

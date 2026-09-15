@@ -1345,6 +1345,66 @@ cases:
     executable_ids: [exec-collection-backfill]
     fixtures: []
     owner: story-collection
+  - case_id: continuous-creation-default-on
+    display_name_zh: 连续创作默认开启与自动下一作品
+    legacy_aliases: []
+    journey_id: story-collection-continuous
+    user_goal: 默认开启且整轨播完自动无缝续播下一作品
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [continuous-creation, lookahead, window, default-on]
+    spec_path: docs/e2e/10-会话与作品集连续创作/05-连续创作默认开启与自动下一作品.md
+    executable_ids: [exec-continuous-creation-state-machine]
+    fixtures: []
+    owner: story-collection
+  - case_id: continuous-creation-budget-stop-matrix
+    display_name_zh: 连续创作预算与停止矩阵
+    legacy_aliases: []
+    journey_id: story-collection-continuous
+    user_goal: 预算耗尽与关闭暂停抢占切换集合登出均停止续作
+    priority: P0
+    lifecycle_status: PLANNED
+    risk_tags: [continuous-creation, budget, preemption, epoch]
+    spec_path: docs/e2e/10-会话与作品集连续创作/06-连续创作预算与停止矩阵.md
+    executable_ids: []
+    fixtures: []
+    owner: story-collection
+  - case_id: new-creation-strong-reset
+    display_name_zh: 新建创作强重置
+    legacy_aliases: []
+    journey_id: story-collection-continuous
+    user_goal: 新建创作停止旧生成音频并回到空会话且旧集合可回访
+    priority: P0
+    lifecycle_status: PLANNED
+    risk_tags: [continuous-creation, new-creation, reset, epoch]
+    spec_path: docs/e2e/10-会话与作品集连续创作/07-新建创作强重置.md
+    executable_ids: []
+    fixtures: []
+    owner: story-collection
+  - case_id: continuous-creation-status-card
+    display_name_zh: 连续创作状态卡开关与剩余预算
+    legacy_aliases: []
+    journey_id: story-collection-continuous
+    user_goal: 创作页展示集合标题开关状态卡与剩余预算且与编排同源
+    priority: P1
+    lifecycle_status: PLANNED
+    risk_tags: [continuous-creation, ui, budget, collection-title]
+    spec_path: docs/e2e/10-会话与作品集连续创作/08-连续创作状态卡与开关.md
+    executable_ids: []
+    fixtures: []
+    owner: story-collection
+  - case_id: legacy-history-retirement
+    display_name_zh: 旧History前后端退役
+    legacy_aliases: []
+    journey_id: story-collection-continuous
+    user_goal: 产品内无Prompt与GenerationHistory入口实现与本地缓存
+    priority: P0
+    lifecycle_status: PLANNED
+    risk_tags: [continuous-creation, history, retirement, static-guard]
+    spec_path: docs/e2e/10-会话与作品集连续创作/09-旧History前后端退役.md
+    executable_ids: []
+    fixtures: []
+    owner: story-collection
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1931,3 +1991,7 @@ executables:
     display_name_zh: 会话作品集旧数据回填守恒（隔离库）
     layer: L2
     path: ./tests/integration/persistence-config/story-collection-backfill.integration.test.ts
+  - executable_id: exec-continuous-creation-state-machine
+    display_name_zh: 连续创作状态机预算窗口lookahead与epoch守卫
+    layer: L1
+    path: ./tests/unit/continuous-creation/continuous-creation-state-machine.unit.test.ts

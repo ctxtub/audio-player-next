@@ -1285,6 +1285,18 @@ cases:
     executable_ids: [exec-m9-player-retirement-closure, exec-l3-m9-player-retirement-closure]
     fixtures: []
     owner: smoke-baseline
+  - case_id: m10-browser-debt-closure
+    display_name_zh: M10历史browser债务清零与目录冻结
+    legacy_aliases: []
+    journey_id: smoke-baseline
+    user_goal: 历史ACTIVE browser债务清零且目录冻结无豁免
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [router, compatibility, playback, session, closure, catalog-freeze]
+    spec_path: docs/e2e/09-旧播放器退役与兼容收口/05-M10历史browser债务清零与目录冻结.md
+    executable_ids: [exec-m10-browser-debt-closure]
+    fixtures: []
+    owner: smoke-baseline
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1855,3 +1867,7 @@ executables:
     display_name_zh: L3死代码终局4例全链路
     layer: L3
     path: ./tests/system/browser/scenarios/m9-player-retirement-closure.spec.ts
+  - executable_id: exec-m10-browser-debt-closure
+    display_name_zh: M10 browser债务清零静态守卫
+    layer: L1
+    path: ./tests/unit/navigation/m10-browser-debt-closure.unit.test.ts

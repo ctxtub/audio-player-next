@@ -287,8 +287,14 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
     // 全部列表中无
     await page.getByTestId("view-tab-active").click();
     await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeHidden();
-    // 收藏列表中无
+    // 收藏列表中无（先等 tab 切换触发的合法客户端导航落定，再断言与后续硬导航；
+    // 否则 WebKit 下 page.goto 会被该尚未完成的客户端导航打断）
     await page.getByTestId("view-tab-favorites").click();
+    await expect(page.getByTestId("view-tab-favorites")).toHaveAttribute("aria-selected", "true");
+    await page.waitForURL(
+        (url) => url.pathname === "/library" && url.searchParams.get("view") === "favorites",
+        { timeout: 15000 },
+    );
     await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeHidden();
     // 直接访问详情无（预期 404 响应，局域临时允许资源 404 日志）
     allowExpected404 = true;

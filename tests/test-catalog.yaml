@@ -1297,6 +1297,54 @@ cases:
     executable_ids: [exec-m10-browser-debt-closure]
     fixtures: []
     owner: smoke-baseline
+  - case_id: collection-first-work-and-title-fallback
+    display_name_zh: 会话首作建集与AI标题回退
+    legacy_aliases: []
+    journey_id: story-collection
+    user_goal: 首作自动建集且标题生成失败超时均不阻断入库
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, promotion, title-fallback, idempotency]
+    spec_path: docs/e2e/10-会话与作品集连续创作/01-首作建集与AI标题回退.md
+    executable_ids: [exec-collection-domain, exec-collection-promotion]
+    fixtures: []
+    owner: story-collection
+  - case_id: collection-append-and-lifecycle
+    display_name_zh: 同会话连续追加与集合生命周期
+    legacy_aliases: []
+    journey_id: story-collection
+    user_goal: 同会话追加顺序稳定且集合改名收藏软删恢复永久删除一致
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, promotion, position, lifecycle, pagination]
+    spec_path: docs/e2e/10-会话与作品集连续创作/02-同会话连续创作追加与集合生命周期.md
+    executable_ids: [exec-collection-promotion]
+    fixtures: []
+    owner: story-collection
+  - case_id: collection-cross-conversation-subject-isolation
+    display_name_zh: 跨会话与跨主体严格隔离
+    legacy_aliases: []
+    journey_id: story-collection
+    user_goal: 不同会话与主体作品集零串读零串写且守恒不变量成立
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, isolation, conversation, idempotency]
+    spec_path: docs/e2e/10-会话与作品集连续创作/03-跨会话与跨主体严格隔离.md
+    executable_ids: [exec-collection-promotion]
+    fixtures: []
+    owner: story-collection
+  - case_id: collection-backfill-conservation
+    display_name_zh: 旧数据回填与迁移守恒
+    legacy_aliases: []
+    journey_id: story-collection
+    user_goal: 回填可重复且凭可靠证据合并无重复无孤儿
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, backfill, migration, conservation]
+    spec_path: docs/e2e/10-会话与作品集连续创作/04-旧数据回填与迁移守恒.md
+    executable_ids: [exec-collection-backfill]
+    fixtures: []
+    owner: story-collection
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1871,3 +1919,15 @@ executables:
     display_name_zh: M10 browser债务清零静态守卫
     layer: L1
     path: ./tests/unit/navigation/m10-browser-debt-closure.unit.test.ts
+  - executable_id: exec-collection-domain
+    display_name_zh: 会话作品集领域契约（标题/游标/DTO/身份）
+    layer: L1
+    path: ./tests/unit/story-collection/collection-domain.unit.test.ts
+  - executable_id: exec-collection-promotion
+    display_name_zh: 会话作品集Promotion与生命周期（隔离库）
+    layer: L2
+    path: ./tests/integration/creation-conversation/story-collection-promotion.integration.test.ts
+  - executable_id: exec-collection-backfill
+    display_name_zh: 会话作品集旧数据回填守恒（隔离库）
+    layer: L2
+    path: ./tests/integration/persistence-config/story-collection-backfill.integration.test.ts

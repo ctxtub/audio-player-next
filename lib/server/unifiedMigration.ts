@@ -10,6 +10,7 @@ import { canonicalizeSourceKind } from '@/lib/playback/legacy';
 import { isValidDraftMessageId } from '@/lib/playback/source';
 import { mergeRemappedWorkProgress } from '@/lib/playback/progress';
 import { transferGuestAudioOwnershipTx } from '@/lib/server/audioOwnershipTransfer';
+import { deriveDeterministicId } from '@/lib/storyCollection/identity';
 
 export interface MigrationResult {
     messagesMigrated: number;
@@ -33,6 +34,48 @@ export async function migrateGuestCreativeRecordsToUser(
     guestId: string,
     userId: number
 ): Promise<MigrationResult> {
+    // 0. M9-C1 会话 / 作品集迁移（确定性 id + upsert，幂等；只搬运归属，Guest 原行保留给 GC）。
+    const guestConversations = await prisma.guestConversation.findMany({ where: { guestId } });
+    const conversationIdMap = new Map<string, string>();
+    for (const gc of guestConversations) {
+        const mappedId = deriveDeterministicId(
+            'guest-migration-conversation',
+            `${guestId}:${gc.id}`
+        );
+        conversationIdMap.set(gc.id, mappedId);
+        await prisma.conversation.upsert({
+            where: { id: mappedId },
+            create: { id: mappedId, userId, state: gc.state, createdAt: gc.createdAt },
+            update: {},
+        });
+    }
+    const guestCollections = await prisma.guestStoryCollection.findMany({ where: { guestId } });
+    const collectionIdMap = new Map<string, string>();
+    for (const gcol of guestCollections) {
+        const mappedId = deriveDeterministicId(
+            'guest-migration-collection',
+            `${guestId}:${gcol.id}`
+        );
+        const mappedConversationId =
+            conversationIdMap.get(gcol.conversationId) ??
+            deriveDeterministicId('guest-migration-conversation', `${guestId}:${gcol.conversationId}`);
+        collectionIdMap.set(gcol.id, mappedId);
+        await prisma.storyCollection.upsert({
+            where: { id: mappedId },
+            create: {
+                id: mappedId,
+                userId,
+                conversationId: mappedConversationId,
+                title: gcol.title,
+                titleSource: gcol.titleSource,
+                favoritedAt: gcol.favoritedAt,
+                deletedAt: gcol.deletedAt,
+                createdAt: gcol.createdAt,
+            },
+            update: {},
+        });
+    }
+
     // 1. 聊天会话快照迁移（按 position 升序，幂等防重）
     const guestMessages = await prisma.guestChatMessage.findMany({
         where: { guestId },
@@ -48,16 +91,23 @@ export async function migrateGuestCreativeRecordsToUser(
 
         if (messagesToInsert.length > 0) {
             await prisma.chatMessage.createMany({
-                data: messagesToInsert.map((m, idx) => ({
-                    userId,
-                    position: existingMessages.length + idx,
-                    messageId: m.messageId,
-                    role: m.role,
-                    content: m.content,
-                    parts: m.parts,
-                    agentType: m.agentType,
-                    createdAt: m.createdAt,
-                })),
+                data: messagesToInsert.map((m, idx) => {
+                    const mappedConversationId = m.conversationId
+                        ? conversationIdMap.get(m.conversationId) ?? null
+                        : null;
+                    return {
+                        userId,
+                        conversationId: mappedConversationId,
+                        // 已归属会话的消息沿用会话内 position；legacy 快照消息走全局递增。
+                        position: mappedConversationId !== null ? m.position : existingMessages.length + idx,
+                        messageId: m.messageId,
+                        role: m.role,
+                        content: m.content,
+                        parts: m.parts,
+                        agentType: m.agentType,
+                        createdAt: m.createdAt,
+                    };
+                }),
             });
         }
     }
@@ -152,6 +202,10 @@ export async function migrateGuestCreativeRecordsToUser(
                         excerpt: g.excerpt ?? '',
                         contentHash: g.contentHash ?? '',
                         sourceMessageId: g.sourceMessageId ?? null,
+                        collectionId: g.collectionId
+                            ? collectionIdMap.get(g.collectionId) ?? null
+                            : null,
+                        position: g.collectionId ? g.position : null,
                         favoritedAt: g.favoritedAt ?? null,
                         deletedAt: g.deletedAt ?? null,
                         createdAt: g.createdAt,

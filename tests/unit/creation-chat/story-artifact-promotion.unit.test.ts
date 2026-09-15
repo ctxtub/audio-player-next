@@ -475,11 +475,21 @@ async function main(): Promise<void> {
       assert.strictEqual(re.test(adapterContent), false, `adapter 违规引用：${re}`);
     }
     // M2 facade frozen：严禁为 M4 新增 promoteArtifact procedure。
+    // M9-C1（2026-09-15-story-collection-continuous-creation）正式把 promoteArtifact 收敛进
+    // collection 域 router；除该授权入口外，其它 router 仍严禁出现 promoteArtifact。
     const routerFiles = fs
       .readdirSync(path.resolve(process.cwd(), 'lib/trpc/routers'))
       .filter((f) => f.endsWith('.ts'));
     for (const f of routerFiles) {
       const content = fs.readFileSync(path.resolve(process.cwd(), 'lib/trpc/routers', f), 'utf8');
+      if (f === 'collection.ts') {
+        assert.strictEqual(
+          content.includes('promoteArtifact'),
+          true,
+          'M9-C1 授权 collection.ts 承载 promoteArtifact',
+        );
+        continue;
+      }
       assert.strictEqual(
         content.includes('promoteArtifact'),
         false,

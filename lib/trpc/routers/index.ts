@@ -12,6 +12,8 @@ import { agentRouter } from './agent';
 import { promptHistoryRouter } from './promptHistory';
 import { generationHistoryRouter } from './generationHistory';
 import { chatConversationRouter } from './chatConversation';
+import { conversationRouter } from './conversation';
+import { collectionRouter } from './collection';
 import { playbackRouter } from './playback';
 import { libraryRouter } from './library';
 import { storyAudioRouter } from './storyAudio';
@@ -27,6 +29,8 @@ export const appRouter = router({
     promptHistory: promptHistoryRouter,
     generationHistory: generationHistoryRouter,
     chat: chatConversationRouter,
+    conversation: conversationRouter,
+    collection: collectionRouter,
     playback: playbackRouter,
     library: libraryRouter,
     storyAudio: storyAudioRouter,

@@ -1287,7 +1287,7 @@ export type PhysicalDeleteStoryWorkOptions =
       target: 'user';
       reason: 'trash';
       where: {
-        id?: number;
+        id?: number | { in: number[] };
         userId?: number;
         deletedAt: {
           not: null;
@@ -1300,7 +1300,7 @@ export type PhysicalDeleteStoryWorkOptions =
       target: 'guest';
       reason: 'trash';
       where: {
-        id?: number;
+        id?: number | { in: number[] };
         guestId?: string;
         deletedAt: {
           not: null;
@@ -1313,7 +1313,7 @@ export type PhysicalDeleteStoryWorkOptions =
       target: 'guest';
       reason: 'retention';
       where: {
-        id?: number;
+        id?: number | { in: number[] };
         guestId?: string;
         updatedAt: {
           lt: Date;

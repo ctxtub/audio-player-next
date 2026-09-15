@@ -28,7 +28,7 @@ export type ConversationSaveOptions = {
  * @param currentIds 库内当前按 position 排序的 messageId 序列。
  * @param expected 调用方读取快照时的基线序列（undefined 表示不校验）。
  */
-const assertFreshBaseline = (currentIds: string[], expected: string[] | undefined): void => {
+export const assertFreshBaseline = (currentIds: string[], expected: string[] | undefined): void => {
     if (expected === undefined) {
         return;
     }
@@ -254,7 +254,7 @@ const GUEST_CHAT_KEEP_LIMIT = 100;
  * M4-08：user / guest 两条保存路径语义收口，共用同一 sanitize（sanitize ≠ create，
  * 绝不据 content 构造新卡，仅对已存在的 Legacy 卡做 audioUrl 归一）。
  */
-const sanitizePartsForWrite = (parts?: Array<Record<string, unknown>>): string | null => {
+export const sanitizePartsForWrite = (parts?: Array<Record<string, unknown>>): string | null => {
     if (!parts) return null;
     const cleaned = parts.map((p) => {
         if (p && typeof p === 'object' && p.type === 'storyCard') {

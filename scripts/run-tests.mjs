@@ -163,6 +163,9 @@ const SUITES = [
     { id: 'catalog-checker', path: './tests/tooling/catalog/catalog-checker.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'evidence-schema', path: './tests/tooling/evidence/evidence-schema.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'auto-delivery', path: './tests/tooling/delivery/auto-delivery.tooling.test.ts', group: 'tooling', needs_db: false },
+    { id: 'collection-domain', path: './tests/unit/story-collection/collection-domain.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'story-collection-promotion', path: './tests/integration/creation-conversation/story-collection-promotion.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'story-collection-backfill', path: './tests/integration/persistence-config/story-collection-backfill.integration.test.ts', group: 'integration', needs_db: true },
 ];
 
 /** 当前拥有的子进程（信号处理用）。 */

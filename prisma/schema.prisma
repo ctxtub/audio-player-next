@@ -22,8 +22,92 @@ model User {
   promptHistory    PromptHistory[]
   storyWorks       StoryWork[]
   chatMessages     ChatMessage[]
+  conversations    Conversation[]
+  storyCollections StoryCollection[]
   playbackAnchor    UserPlaybackAnchor?
   storyWorkMigrations StoryWorkMigration[]
+}
+
+/// 创作会话（User 侧；一会话一作品集，§2 首作建集）。id 为 service 生成的 UUID 文本，无 DB 默认。
+model Conversation {
+  id        String   @id
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 状态：active | closed（一主体至多一个 active，由服务事务 + 部分唯一索引保证）
+  state     String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  collections  StoryCollection[]
+  chatMessages ChatMessage[]
+
+  @@index([userId, state])
+  @@index([updatedAt])
+}
+
+/// 创作作品集（User 侧；会话 1:1）。id 为 service 生成的 UUID 文本。
+model StoryCollection {
+  id             String       @id
+  userId         Int
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversationId String       @unique
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  /// AI / 用户标题（存储上限 80 code points）
+  title          String       @default("")
+  /// 标题来源：ai | fallback | user（user 后自动流程不得覆盖）
+  titleSource    String       @default("fallback")
+  /// 收藏时间（NULL 表示未收藏）
+  favoritedAt    DateTime?
+  /// 软删除时间（NULL 表示未删除）
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  works StoryWork[]
+
+  @@index([userId, deletedAt])
+  @@index([userId, favoritedAt])
+  @@index([userId, createdAt, id])
+  @@index([updatedAt])
+}
+
+/// 访客创作会话（与 Conversation 对称；guestId 索引 + updatedAt GC 索引）。
+model GuestConversation {
+  id        String   @id
+  guestId   String
+  /// 状态：active | closed
+  state     String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  collections  GuestStoryCollection[]
+  chatMessages GuestChatMessage[]
+
+  @@index([guestId, state])
+  @@index([guestId])
+  @@index([updatedAt])
+}
+
+/// 访客创作作品集（与 StoryCollection 对称）。
+model GuestStoryCollection {
+  id             String            @id
+  guestId        String
+  conversationId String            @unique
+  conversation   GuestConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  title          String            @default("")
+  titleSource    String            @default("fallback")
+  favoritedAt    DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  works GuestStoryWork[]
+
+  @@index([guestId, deletedAt])
+  @@index([guestId, favoritedAt])
+  @@index([guestId, createdAt, id])
+  @@index([guestId])
+  @@index([updatedAt])
 }
 
 /// 用户当前聊天会话的消息（单会话快照），与 User 多对一关联。
@@ -31,6 +115,9 @@ model ChatMessage {
   id        Int     @id @default(autoincrement())
   userId    Int
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 所属创作会话（M9-C1 expand：旧行为 NULL，backfill 后归属 legacy Conversation）
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   /// 会话内顺序
   position  Int
   /// 前端消息 id
@@ -44,7 +131,10 @@ model ChatMessage {
   /// 前端 createdAt ISO 字符串（展示用）
   createdAt String?
 
+  @@unique([conversationId, position])
+  @@unique([conversationId, messageId])
   @@index([userId, position])
+  @@index([conversationId, position])
 }
 
 /// 用户作品表（逻辑名 StoryWork，物理表仍为 GenerationHistory），与 User 多对一关联。
@@ -66,6 +156,11 @@ model StoryWork {
   contentHash     String    @default("")
   /// 来源消息 ID（关联 ChatMessage.messageId，NULL 表示 legacy 数据）
   sourceMessageId String?
+  /// 所属作品集（M9-C1 expand：NULL 表示 legacy 未归属，backfill 后一 Work 一 Collection）
+  collectionId    String?
+  collection      StoryCollection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  /// 集合内稳定顺序（M9-C1 expand：NULL 表示 legacy；同集合唯一）
+  position        Int?
   /// 收藏时间（NULL 表示未收藏）
   favoritedAt     DateTime?
   /// 软删除时间（NULL 表示未删除）
@@ -78,9 +173,12 @@ model StoryWork {
   audioManifests  StoryAudioManifest[]
 
   @@unique([userId, sourceMessageId])
+  @@unique([collectionId, position])
+  @@unique([collectionId, sourceMessageId])
   @@index([userId, createdAt, id])
   @@index([userId, deletedAt])
   @@index([userId, favoritedAt])
+  @@index([collectionId, position])
   @@map("GenerationHistory")
 }
 
@@ -153,6 +251,9 @@ model GuestConfig {
 model GuestChatMessage {
   id        Int      @id @default(autoincrement())
   guestId   String
+  /// 所属访客创作会话（M9-C1 expand：旧行为 NULL）
+  conversationId String?
+  conversation   GuestConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   position  Int
   messageId String
   role      String
@@ -162,9 +263,12 @@ model GuestChatMessage {
   createdAt String?
   updatedAt DateTime @updatedAt
 
+  @@unique([conversationId, position])
+  @@unique([conversationId, messageId])
   @@index([guestId, position])
   @@index([guestId])
   @@index([updatedAt])
+  @@index([conversationId, position])
 }
 
 /// 访客作品表（逻辑名 GuestStoryWork，物理表仍为 GuestGenerationHistory）
@@ -182,6 +286,11 @@ model GuestStoryWork {
   contentHash     String    @default("")
   /// 来源消息 ID
   sourceMessageId String?
+  /// 所属访客作品集（M9-C1 expand：NULL 表示 legacy 未归属）
+  collectionId    String?
+  collection      GuestStoryCollection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  /// 集合内稳定顺序（同集合唯一）
+  position        Int?
   /// 收藏时间
   favoritedAt     DateTime?
   /// 软删除时间
@@ -194,11 +303,14 @@ model GuestStoryWork {
   audioManifests  GuestStoryAudioManifest[]
 
   @@unique([guestId, sourceMessageId])
+  @@unique([collectionId, position])
+  @@unique([collectionId, sourceMessageId])
   @@index([guestId, createdAt, id])
   @@index([guestId, deletedAt])
   @@index([guestId, favoritedAt])
   @@index([guestId])
   @@index([updatedAt])
+  @@index([collectionId, position])
   @@map("GuestGenerationHistory")
 }
 

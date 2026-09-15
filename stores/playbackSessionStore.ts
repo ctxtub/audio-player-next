@@ -677,6 +677,12 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
     if (get().hydrationEpoch !== epochAtStart) return false;
 
+    // T3 单轨切曲 seam（真实路径）：覆盖 source 之前，先把「即将离开」的旧作品
+    // positionMs 强制落库。beginPlayback / restart / 自动续写切 Work 均经 hydrateFromAnchor；
+    // force 绕过 client 10s 节流，server clamp/单调/节流二次保证不变；
+    // 初次水合（无旧 source）或 duration 未知时内部早退，幂等无害。
+    void get().persistSingleTrackProgress({ force: true });
+
     // —— §25.5 最终状态：status=ready + transport idle，不 autoplay ——
     set({
       sessionId: anchor.sessionId,

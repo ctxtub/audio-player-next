@@ -16,6 +16,22 @@ import {
     resolveIsolationDbPath,
     seedLegacyStoryCardPartsByPrompt,
 } from "./helpers/db";
+import { createH1Diagnostics, type H1Diagnostics } from "./helpers/h1-diagnostics";
+
+/**
+ * M10-05-H1：生成历史回放偶发 draft/work 诊断句柄（仅该用例）。
+ *
+ * 诊断只做低扰动观测：PASS 时全部丢弃；FAIL 时由 afterEach 落 artifact。
+ * 不改变任何控制流、断言、timeout 或等待条件。
+ */
+const h1DiagnosticsByPage: WeakMap<object, H1Diagnostics> = new WeakMap();
+
+test.afterEach(async ({ page }, testInfo) => {
+    const diag = h1DiagnosticsByPage.get(page);
+    if (!diag) return;
+    await diag.finalize(testInfo);
+    h1DiagnosticsByPage.delete(page);
+});
 
 /** 同帧起播证据：一次 evaluate 原子读取 <audio> 真实播放态 + Mini 可见性/状态。 */
 interface SameFramePlayback {
@@ -191,16 +207,24 @@ test("M9-F01 生成历史回放走正式 Work Session 且全局控制同帧可�
     const dbFile: string = resolveIsolationDbPath(harnessEnv.runId);
 
     await ensureGuestByApi(page, harnessEnv.appUrl);
+    // M10-05-H1：从生成前即开始低扰动采集（网络/Probe/节点），仅失败时落 artifact。
+    const h1: H1Diagnostics = createH1Diagnostics(page, { dbFile, runId: harnessEnv.runId });
+    h1DiagnosticsByPage.set(page, h1);
     const { prompt, workIds } = await generateStory(page, "历史", dbFile);
+    h1.setPrompt(prompt);
     recorder.step("真实创作完成", { prompt, workIds });
+    await h1.mark("generate-complete", { workIds });
 
     // 中文注释：生成完成后的 autoplay 链可能仍在途；先分离客户端再重载，杜绝
     // 后台 Draft autoplay 晚到覆盖用户显式回放的 Work Session（真实产品里用户
     // 不会在 autoplay 进行中立刻点历史回放，这里让前置确定化，oracle 不放宽）。
     await detachClient(page);
+    await h1.mark("client-detached");
     await page.goto(`${harnessEnv.appUrl}/chat`, { waitUntil: "networkidle", timeout: 60000 });
+    await h1.mark("reloaded-chat", { url: page.url() });
     await page.waitForTimeout(2000);
     await dismissOnboarding(page);
+    await h1.attachInPage();
     await page.getByRole("button", { name: "打开历史" }).click({ timeout: 15000 });
     await page.getByRole("tab", { name: "生成历史" }).click({ timeout: 15000 });
     await expect(page.getByText(prompt).first()).toBeVisible({ timeout: 30000 });
@@ -209,7 +233,9 @@ test("M9-F01 生成历史回放走正式 Work Session 且全局控制同帧可�
     const newestWorkId = String(workIds[workIds.length - 1]);
     const historyItem = page.locator('[class*="historyItem"]').filter({ hasText: prompt }).first();
     await expect(historyItem).toBeVisible({ timeout: 30000 });
+    await h1.mark("before-replay-click", { newestWorkId });
     await historyItem.getByRole("button", { name: "回放此故事" }).click({ timeout: 15000 });
+    await h1.mark("replay-click-returned");
 
     // 中文注释：回放必须建立 work Session（真 server Anchor sourceType=work/sourceId=该 Work）。
     await expect.poll(() => safeAnchorKind(dbFile, prompt), { timeout: 30000 }).toBe("work");
@@ -217,6 +243,7 @@ test("M9-F01 生成历史回放走正式 Work Session 且全局控制同帧可�
     expect(workIds.map((id) => String(id))).toContain(anchor?.sourceId);
     expect(anchor?.sourceId).toBe(newestWorkId);
     recorder.step("回放 Anchor 身份", { anchor, newestWorkId });
+    await h1.mark("oracle-settled");
 
     const frame = await waitForPlaybackWithMini(page);
     expect(frame.miniVisible).toBe(true);
@@ -224,4 +251,5 @@ test("M9-F01 生成历史回放走正式 Work Session 且全局控制同帧可�
     expect(frame.paused).toBe(false);
     recorder.step("历史回放同帧快照", { ...frame });
     await page.waitForTimeout(1000);
+    recorder.step("H1 诊断计数", h1.summary());
 });

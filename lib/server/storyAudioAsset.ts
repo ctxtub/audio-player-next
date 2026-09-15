@@ -39,7 +39,7 @@ import {
   enqueueAudioDeletionTombstones,
 } from '@/lib/server/audioStorageCleanup';
 import { isValidPlaybackSessionId } from '@/lib/playback/session';
-import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
+import { isSingleTrackServerEnabled } from '@/lib/audio/singleTrackFlag';
 import {
   getTtsConfig,
   synthesizeSpeechWithProfile,
@@ -387,7 +387,7 @@ async function ensureStoryAudioAssetInternal(
   input: { workId: number; sessionId: string },
   depsInput: StoryAudioAssetDeps,
 ): Promise<EnsureStoryAudioAssetResult> {
-  if (!isSingleTrackAudioEnabled()) {
+  if (!isSingleTrackServerEnabled()) {
     throwDomain('SINGLE_TRACK_AUDIO_DISABLED', 'FORBIDDEN');
   }
   // 生产机会式 GC 触发：过期空闲资产有界清扫，fire-and-forget，绝不影响 ensure 延迟/结果。
@@ -686,7 +686,7 @@ export async function getStoryAudioAssetProjectionForSubject(
   input: { workId: number },
   depsInput: StoryAudioAssetDeps = {},
 ): Promise<StoryAudioAssetProjectionDTO> {
-  if (!isSingleTrackAudioEnabled()) {
+  if (!isSingleTrackServerEnabled()) {
     throwDomain('SINGLE_TRACK_AUDIO_DISABLED', 'FORBIDDEN');
   }
   const deps = resolveDeps(depsInput);
@@ -758,7 +758,7 @@ export async function saveStoryAudioProgressForSubject(
   input: { workId: number; sessionId: string; positionMs: number; durationMs?: number | null; force?: boolean },
   depsInput: StoryAudioAssetDeps = {},
 ): Promise<boolean> {
-  if (!isSingleTrackAudioEnabled()) {
+  if (!isSingleTrackServerEnabled()) {
     throwDomain('SINGLE_TRACK_AUDIO_DISABLED', 'FORBIDDEN');
   }
   const deps = resolveDeps(depsInput);
@@ -910,7 +910,7 @@ export async function sweepExpiredStoryAudioAssets(options: {
   limit?: number;
   storage?: AudioAssetStorage;
 } = {}): Promise<CleanupExpiredStoryAudioAssetsResult> {
-  if (!isSingleTrackAudioEnabled()) {
+  if (!isSingleTrackServerEnabled()) {
     return { scanned: 0, enqueued: 0, deleted: 0 };
   }
   const now = options.now ?? new Date();

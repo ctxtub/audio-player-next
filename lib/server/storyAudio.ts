@@ -64,7 +64,7 @@ import {
   synthesizeSpeechWithProfile,
   type CanonicalTtsSynthesizer,
 } from '@/lib/server/openai';
-import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
+import { isSingleTrackServerEnabled } from '@/lib/audio/singleTrackFlag';
 import { buildAssetPlaybackUrl } from '@/lib/audio/asset';
 import {
   getStoryAudioAssetProjectionForSubject,
@@ -1471,7 +1471,7 @@ export async function getPlaybackManifestForSubject(
   input: GetPlaybackManifestInput
 ): Promise<PlaybackManifestDTO> {
   // T3：开关开启时改走单轨投影（segments 为空 + singleTrack，保证只暴露一条时间轴）。
-  if (isSingleTrackAudioEnabled()) {
+  if (isSingleTrackServerEnabled()) {
     return getSingleTrackPlaybackManifest(subject, input);
   }
   const { workId } = input;

@@ -10,7 +10,7 @@
  */
 
 import { prisma } from '@/lib/db';
-import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
+import { isSingleTrackServerEnabled } from '@/lib/audio/singleTrackFlag';
 import type { Subject } from '@/lib/server/subject';
 import { decodeGuestCookie, decodeSession, SESSION_COOKIE } from '@/lib/session';
 import { GUEST_COOKIE } from '@/lib/trpc/context';
@@ -64,7 +64,7 @@ export async function resolveReadableAudioAssetForSubject(
   assetId: string,
 ): Promise<ReadableAudioAsset> {
   // T3 去耦：服务端单轨 flag 关闭 → 读取路由一律 404（不产生单轨流量，fail closed）。
-  if (!isSingleTrackAudioEnabled()) {
+  if (!isSingleTrackServerEnabled()) {
     throw new AudioAssetAccessError(404, 'ASSET_NOT_FOUND');
   }
   if (!subject) throw new AudioAssetAccessError(401, 'UNAUTHORIZED');

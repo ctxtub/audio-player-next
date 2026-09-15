@@ -345,13 +345,13 @@ async function runAudioCleanupTriggersUnitTests() {
       'User/Guest 必须分域构建 isPlaying（避免 id 碰撞）',
     );
     assert.ok(
-      assetSrc.includes('isSingleTrackAudioEnabled()'),
-      '单轨服务必须受 flag 门禁（flag off ⇒ 无单轨流量）',
+      assetSrc.includes('isSingleTrackServerEnabled()'),
+      '单轨服务必须受服务端 flag 门禁（flag off ⇒ 无单轨流量）',
     );
     const readSrc = stripComments(readRepoFile('lib/server/audioAssetRead.ts'));
     assert.ok(
-      readSrc.includes('isSingleTrackAudioEnabled()'),
-      '读取路由必须受 flag 门禁（flag off ⇒ 404）',
+      readSrc.includes('isSingleTrackServerEnabled()'),
+      '读取路由必须受服务端 flag 门禁（flag off ⇒ 404）',
     );
     const startupSrc = stripComments(readRepoFile('lib/server/audioStorageStartup.ts'));
     assert.ok(

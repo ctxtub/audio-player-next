@@ -22,7 +22,10 @@ import {
   validateChunkAudio,
 } from '../../../lib/audio/asset';
 import { buildAssetIdentity } from '../../../lib/audio/asset';
-import { isSingleTrackAudioEnabled } from '../../../lib/audio/singleTrackFlag';
+import {
+  isSingleTrackAudioEnabled,
+  isSingleTrackServerEnabled,
+} from '../../../lib/audio/singleTrackFlag';
 import { getMp3DurationMs } from '../../../lib/audio/duration';
 import {
   buildFakeCanonicalMp3,
@@ -165,12 +168,36 @@ function runStoryAudioAssetDomainUnitTests(): void {
     console.log('PASS: keys');
   }
 
-  console.log('=== 8. feature flag ===');
+  console.log('=== 8. feature flag（T3-r2 真去耦：server/client 各认一侧）===');
   {
-    assert.ok(isSingleTrackAudioEnabled({ SINGLE_TRACK_AUDIO_ENABLED: '1' }), '主变量 1 → on');
-    assert.ok(isSingleTrackAudioEnabled({ NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED: '1' }), '副变量 1 → on');
-    assert.ok(!isSingleTrackAudioEnabled({ SINGLE_TRACK_AUDIO_ENABLED: 'true' }), '非严格 1 → off');
-    assert.ok(!isSingleTrackAudioEnabled({}), '缺席 → off');
+    // 客户端 provider：只认公开变量（构建期内联）。
+    assert.ok(
+      isSingleTrackAudioEnabled({ NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED: '1' }),
+      'client：公开变量 1 → on',
+    );
+    assert.ok(
+      !isSingleTrackAudioEnabled({ SINGLE_TRACK_AUDIO_ENABLED: '1' } as Record<string, string>),
+      'client：运行时变量不得开启 client provider',
+    );
+    assert.ok(
+      !isSingleTrackAudioEnabled({ NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED: 'true' }),
+      'client：非严格 1 → off',
+    );
+    assert.ok(!isSingleTrackAudioEnabled({}), 'client：缺席 → off');
+    // 服务端授权：只认运行时变量，公开变量不得授权。
+    assert.ok(
+      isSingleTrackServerEnabled({ SINGLE_TRACK_AUDIO_ENABLED: '1' }),
+      'server：运行时变量 1 → on',
+    );
+    assert.ok(
+      !isSingleTrackServerEnabled({ NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED: '1' } as Record<string, string>),
+      'server：仅公开变量 → off（不得授权服务端单轨）',
+    );
+    assert.ok(
+      !isSingleTrackServerEnabled({ SINGLE_TRACK_AUDIO_ENABLED: 'true' }),
+      'server：非严格 1 → off',
+    );
+    assert.ok(!isSingleTrackServerEnabled({}), 'server：缺席 → off');
     console.log('PASS: flag');
   }
 }

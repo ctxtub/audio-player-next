@@ -809,6 +809,11 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
             })(),
           });
 
+    // T3 单轨切曲 seam：覆盖 source 之前，先把「即将离开」的旧作品 positionMs 强制落库
+    //（force 绕过客户端 10s 节流；server clamp/单调/节流二次保证不变）。
+    // 同一作品重水合时幂等无害；无 duration/无旧 source 时内部早退。
+    void get().persistSingleTrackProgress({ force: true });
+
     set({
       sessionId: params.sessionId ?? null,
       source: params.source.kind === 'draft'

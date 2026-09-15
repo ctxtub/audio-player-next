@@ -728,7 +728,7 @@ async function runStorycardSessionFlowTests(): Promise<void> {
       readyAt: new Date().toISOString(),
     },
   };
-  process.env.SINGLE_TRACK_AUDIO_ENABLED = '1';
+  process.env.NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED = '1';
   try {
     const useSession = getSessionStore();
     const useTransport = getTransportStore();
@@ -771,7 +771,84 @@ async function runStorycardSessionFlowTests(): Promise<void> {
     assert.strictEqual(typeof lastPersist.positionMs, 'number', 'I：落库 positionMs');
     console.log('PASS: I single-track positionMs verified');
   } finally {
-    delete process.env.SINGLE_TRACK_AUDIO_ENABLED;
+    delete process.env.NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED;
+    singleTrackEnsureResult = null;
+    singleTrackSaveProgressCalls.length = 0;
+  }
+
+  // —— J：T3 单轨切曲前强制落库即将离开的旧作品进度（真实 store 路径） ——
+  console.log('--- J: single-track switch-track force-save old Work ---');
+  resetPlaybackWorld();
+  const switchOldSession = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+  const switchNewSession = '16fd2706-8baf-433b-82eb-8c7fada847da';
+  const switchSeekCalls: number[] = [];
+  singleTrackEnsureResult = {
+    status: 'ready',
+    asset: {
+      assetId: 'a-old',
+      workId: 11,
+      status: 'ready',
+      version: 1,
+      contentHash: 'h',
+      voiceId: 'alloy',
+      ttsProfileHash: 'p',
+      synthesisVersion: 's',
+      audioFormat: 'mp3',
+      chunkCount: 1,
+      durationMs: 8000,
+      byteLength: 100,
+      checksum: 'c',
+      contentType: 'audio/mpeg',
+      playbackUrl: '/api/audio/assets/a-old',
+      positionMs: 0,
+      readyAt: new Date().toISOString(),
+    },
+  };
+  process.env.NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED = '1';
+  try {
+    const useSession = getSessionStore();
+    const useTransport = getTransportStore();
+    useTransport.getState().registerAudioController({
+      unlock: async () => {},
+      play: async () => {},
+      resume: async () => {},
+      pause: () => {},
+      seek: (time: number) => {
+        switchSeekCalls.push(time);
+      },
+      setPlaybackRate: () => {},
+    });
+    useSession.getState().setActiveStory({
+      source: { kind: 'work', workId: 11 },
+      sessionId: switchOldSession,
+      title: '旧作品',
+      storyText: STORY_TEXT,
+      voiceId: 'alloy',
+      speed: 1,
+    });
+    await useSession.getState().playParagraph(0, { explicit: true });
+    getFlow().reportProgress({ currentTime: 3, duration: 8 });
+    // 清空：切曲动作本身必须产生一次旧作品落库。
+    singleTrackSaveProgressCalls.length = 0;
+    useSession.getState().setActiveStory({
+      source: { kind: 'work', workId: 22 },
+      sessionId: switchNewSession,
+      title: '新作品',
+      storyText: STORY_TEXT,
+      voiceId: 'alloy',
+      speed: 1,
+    });
+    assert.ok(
+      singleTrackSaveProgressCalls.length >= 1,
+      'J：切曲前必须强制落库即将离开的旧作品进度',
+    );
+    const flushed = singleTrackSaveProgressCalls.find((c) => c.workId === 11);
+    assert.ok(flushed, 'J：落库 workId 必须为即将离开的旧作品 11');
+    assert.strictEqual(flushed.sessionId, switchOldSession, 'J：落库旧 sessionId');
+    assert.strictEqual(typeof flushed.positionMs, 'number', 'J：落库 positionMs');
+    console.log('PASS: J switch-track force-save verified');
+  } finally {
+    delete process.env.NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED;
     singleTrackEnsureResult = null;
     singleTrackSaveProgressCalls.length = 0;
   }

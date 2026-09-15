@@ -72,10 +72,17 @@ type Counters = {
     ensureAsset: number;
     segmentBytes: number;
     assetBytes: number;
+    saveProgress: number;
 };
 
 function attachCounters(page: Page): Counters {
-    const counters: Counters = { legacyTts: 0, ensureAsset: 0, segmentBytes: 0, assetBytes: 0 };
+    const counters: Counters = {
+        legacyTts: 0,
+        ensureAsset: 0,
+        segmentBytes: 0,
+        assetBytes: 0,
+        saveProgress: 0,
+    };
     page.on("request", (req) => {
         try {
             const url: string = req.url();
@@ -87,6 +94,7 @@ function attachCounters(page: Page): Counters {
             ) {
                 counters.ensureAsset += 1;
             }
+            if (url.includes("storyAudio.saveProgress")) counters.saveProgress += 1;
             if (url.includes("/api/audio/segments/")) counters.segmentBytes += 1;
             if (url.includes("/api/audio/assets/")) counters.assetBytes += 1;
         } catch {}
@@ -413,4 +421,74 @@ test("StoryAudio 单轨关闭：legacy 逐段推进（对照，不成立单轨�
     const advanced = await readProbe(page);
     expect(advanced.status).not.toBe("ended");
     expect(advanced.nextParagraphIndex).toBeLessThan(advanced.totalParagraphs ?? 0);
+});
+
+test("StoryAudio 单轨：页面隐藏/离开强制落库 positionMs", async ({ page, harnessEnv, evidence }) => {
+    test.setTimeout(240000);
+    const recorder = evidence as unknown as { step: (name: string, detail?: unknown) => void };
+
+    await page.addInitScript(() => {
+        try {
+            (window as unknown as Record<string, unknown>).__SINGLE_TRACK_AUDIO_ENABLED = "1";
+        } catch {}
+        try {
+            window.localStorage.setItem("chat_onboarding_seen_v1", "true");
+        } catch {}
+    });
+
+    const counters = attachCounters(page);
+    await ensureRegisteredByApi(
+        page,
+        harnessEnv.appUrl,
+        `t3hide_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+        "SecurePass123!",
+    );
+    await dismissOnboarding(page);
+    await waitForProbes(page);
+
+    const runKey = `${Date.now()}${Math.floor(Math.random() * 100000)}`;
+    const para = (label: string): string =>
+        `${label}深夜的灯塔下老船长翻开泛黄的航海日志，巨浪与星光交织成未知的航线，勇气与智慧将指引每一次抉择。${"内容".repeat(40)}${label}尾`;
+    const work = await createStoryWorkByPage(page, {
+        title: `单轨隐藏${runKey}`,
+        prompt: `单轨隐藏提示词${runKey}`,
+        storyText: `${para("甲")}\n${para("乙")}`,
+    });
+
+    await page.evaluate((workId: number) => {
+        const w = window as unknown as Record<string, { beginWork: (id: number, mode: string) => Promise<ProbeSnapshot> }>;
+        return w["__M5PlaybackProbe"].beginWork(workId, "resume");
+    }, work.id);
+    await page.evaluate(() => {
+        const w = window as unknown as Record<string, { playParagraph: (i: number) => Promise<ProbeSnapshot> }>;
+        return w["__M5PlaybackProbe"].playParagraph(0);
+    });
+    await expect
+        .poll(async () => (await readProbe(page)).transport?.hasAudioUrl === true, { timeout: 60000 })
+        .toBe(true);
+    await expect
+        .poll(async () => (await readProbe(page)).transport?.duration ?? 0, { timeout: 60000 })
+        .toBeGreaterThan(0);
+
+    // 暂停：排除 timeupdate 非强制落库干扰；随后清空计数。
+    await page.evaluate(() => {
+        const w = window as unknown as Record<string, { pause: () => ProbeSnapshot }>;
+        return w["__M5PlaybackProbe"].pause();
+    });
+    await expect.poll(async () => (await readProbe(page)).status, { timeout: 30000 }).toBe("paused");
+    await page.waitForTimeout(800);
+    counters.saveProgress = 0;
+
+    // 页面隐藏 / 离开：真实 DOM 事件路径，必须触发 force 落库。
+    await page.evaluate(() => {
+        try {
+            Object.defineProperty(document, "hidden", { value: true, configurable: true });
+            document.dispatchEvent(new Event("visibilitychange"));
+            window.dispatchEvent(new Event("pagehide"));
+        } catch {}
+    });
+    await expect
+        .poll(() => counters.saveProgress, { timeout: 15000 })
+        .toBeGreaterThanOrEqual(1);
+    recorder.step("页面隐藏强制落库", { saveProgress: counters.saveProgress });
 });

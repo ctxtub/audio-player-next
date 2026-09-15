@@ -108,6 +108,7 @@ function check(name: string, condition: boolean, detail?: string): void {
 async function main(): Promise<void> {
   const savedEnv = {
     single: process.env.SINGLE_TRACK_AUDIO_ENABLED,
+    publicSingle: process.env.NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED,
     driver: process.env.AUDIO_STORAGE_DRIVER,
     root: process.env.AUDIO_LOCAL_ROOT,
     voiceList: process.env.OPENAI_TTS_VOICE_LIST,
@@ -383,6 +384,73 @@ async function main(): Promise<void> {
       disabledReadStatus = (err as { httpStatus?: number }).httpStatus ?? 0;
     }
     check('9e flag 关闭时资产读取路由 404（无单轨流量）', disabledReadStatus === 404, `status=${disabledReadStatus}`);
+
+    // ---- 9f: 仅公开变量（NEXT_PUBLIC_*=1）不得开启服务端单轨路径 ----
+    // 服务端授权只认运行时 SINGLE_TRACK_AUDIO_ENABLED；公开变量可被构建期内联/
+    // 客户端可见，不能充当服务端授权依据。此处删除运行时变量、只置公开变量。
+    delete process.env.SINGLE_TRACK_AUDIO_ENABLED;
+    process.env.NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED = '1';
+    try {
+      let publicEnsureMessage = '';
+      try {
+        await ensureStoryAudioAssetForSubject(
+          subjectDisabled,
+          { workId: workIdDisabled, sessionId },
+          { storage, synthesize: makeFakeTts({ count: 0, texts: [], failOnCall: null }) },
+        );
+        publicEnsureMessage = 'no-throw';
+      } catch (err) {
+        publicEnsureMessage = err instanceof Error ? err.message : String(err);
+      }
+      check(
+        '9f 仅公开变量时 ensure 仍被拒（服务端只认运行时 flag）',
+        publicEnsureMessage === 'SINGLE_TRACK_AUDIO_DISABLED',
+        publicEnsureMessage,
+      );
+      let publicProjectionMessage = '';
+      try {
+        await getStoryAudioAssetProjectionForSubject(subjectDisabled, { workId: workIdDisabled });
+        publicProjectionMessage = 'no-throw';
+      } catch (err) {
+        publicProjectionMessage = err instanceof Error ? err.message : String(err);
+      }
+      check(
+        '9g 仅公开变量时投影读取仍被拒',
+        publicProjectionMessage === 'SINGLE_TRACK_AUDIO_DISABLED',
+        publicProjectionMessage,
+      );
+      let publicProgressMessage = '';
+      try {
+        await saveStoryAudioProgressForSubject(subjectDisabled, {
+          workId: workIdDisabled,
+          sessionId,
+          positionMs: 1000,
+          durationMs: 5000,
+          force: true,
+        });
+        publicProgressMessage = 'no-throw';
+      } catch (err) {
+        publicProgressMessage = err instanceof Error ? err.message : String(err);
+      }
+      check(
+        '9h 仅公开变量时进度写入仍被拒',
+        publicProgressMessage === 'SINGLE_TRACK_AUDIO_DISABLED',
+        publicProgressMessage,
+      );
+      let publicReadStatus = 0;
+      try {
+        await readModule.resolveReadableAudioAssetForSubject(subject, assetId);
+      } catch (err) {
+        publicReadStatus = (err as { httpStatus?: number }).httpStatus ?? 0;
+      }
+      check('9i 仅公开变量时资产读取路由仍 404', publicReadStatus === 404, `status=${publicReadStatus}`);
+      const publicRows = await prisma.storyAudioAsset.count({
+        where: { storyWorkId: workIdDisabled },
+      });
+      check('9j 仅公开变量时不落任何资产行', publicRows === 0, `rows=${publicRows}`);
+    } finally {
+      delete process.env.NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED;
+    }
     process.env.SINGLE_TRACK_AUDIO_ENABLED = '1';
 
     // ---- 10. ensureSegment 不再是单轨入口（旧多段路径不被单轨 flag 劫持） ----
@@ -447,6 +515,8 @@ async function main(): Promise<void> {
   } finally {
     if (savedEnv.single === undefined) delete process.env.SINGLE_TRACK_AUDIO_ENABLED;
     else process.env.SINGLE_TRACK_AUDIO_ENABLED = savedEnv.single;
+    if (savedEnv.publicSingle === undefined) delete process.env.NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED;
+    else process.env.NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED = savedEnv.publicSingle;
     if (savedEnv.driver === undefined) delete process.env.AUDIO_STORAGE_DRIVER;
     else process.env.AUDIO_STORAGE_DRIVER = savedEnv.driver;
     if (savedEnv.root === undefined) delete process.env.AUDIO_LOCAL_ROOT;

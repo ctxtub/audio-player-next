@@ -65,12 +65,15 @@ import { useChatStore } from '@/stores/chatStore';
 import { useConfigStore } from '@/stores/configStore';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
 import {
+  ensureAsset as ensureCanonicalAsset,
   ensureSegment as ensureCanonicalSegment,
   getPlaybackManifest as fetchPlaybackManifest,
   isCanonicalPlaybackUrl,
+  isSingleTrackPlaybackUrl,
   selectWorkParagraphs,
   shouldUseCanonicalAudio,
 } from '@/lib/client/storyAudio';
+import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
 import {
   resolvePlaybackDraftSnapshot,
   type PlaybackDraftSnapshot,
@@ -272,10 +275,11 @@ const abortPrefetch = () => {
  */
 const CANONICAL_ENSURE_MAX_ATTEMPTS = 20;
 
-/** 仅 blob: 才 revoke（canonical /api/audio/segments/* 永不 revoke，spec §19）。 */
+/** 仅 blob: 才 revoke（canonical segment 与 T3 单轨 /api/audio/assets/* 永不 revoke）。 */
 function revokeAudioUrlIfBlob(url: string | null): void {
   if (typeof url !== 'string' || url.length === 0) return;
   if (isCanonicalPlaybackUrl(url)) return;
+  if (isSingleTrackPlaybackUrl(url)) return;
   if (!url.startsWith('blob:')) return;
   try {
     URL.revokeObjectURL(url);
@@ -315,6 +319,23 @@ async function fetchCanonicalAudioUrlWithRetry(
   sessionId: string,
   options?: { signal?: AbortSignal },
 ): Promise<string> {
+  // T3：单轨开关开启时整篇只物化一个 Asset，任意段落索引都返回同一 URL。
+  if (isSingleTrackAudioEnabled()) {
+    let singleAttempts = 0;
+    for (;;) {
+      singleAttempts += 1;
+      const output = await ensureCanonicalAsset({ workId, sessionId });
+      if (output.status === 'ready') return output.asset.playbackUrl;
+      if (singleAttempts >= CANONICAL_ENSURE_MAX_ATTEMPTS) {
+        throw new Error('canonical single-track preparing timeout');
+      }
+      if (options?.signal?.aborted) throw new Error('canonical prefetch aborted');
+      const retryAfter =
+        typeof output.retryAfterMs === 'number' ? output.retryAfterMs : 500;
+      await sleepMs(Math.max(0, Math.min(retryAfter, 2000)), options?.signal);
+      if (options?.signal?.aborted) throw new Error('canonical prefetch aborted');
+    }
+  }
   let attempts = 0;
   for (;;) {
     attempts += 1;
@@ -873,7 +894,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     try {
       if (
         state.source?.kind === 'work' &&
-        shouldUseCanonicalAudio(state.source) &&
+        (shouldUseCanonicalAudio(state.source) || isSingleTrackAudioEnabled()) &&
         typeof originatingSessionId === 'string' &&
         isValidPlaybackSessionId(originatingSessionId)
       ) {
@@ -949,6 +970,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   prefetchNextParagraph: async (paragraphIndex) => {
     const state = get();
+    // T3 单轨：整篇已是一个 Asset，无“下一段”可预取（同一 URL 已缓存）。
+    if (isSingleTrackAudioEnabled()) return;
     if (paragraphIndex !== state.nextParagraphIndex + 1) return;
     if (paragraphIndex >= state.paragraphs.length) return;
     if (!usePlaybackStore.getState().isPlaying) return;
@@ -974,7 +997,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     try {
       if (
         state.source?.kind === 'work' &&
-        shouldUseCanonicalAudio(state.source) &&
+        (shouldUseCanonicalAudio(state.source) || isSingleTrackAudioEnabled()) &&
         typeof originatingSessionId === 'string' &&
         isValidPlaybackSessionId(originatingSessionId)
       ) {
@@ -1009,6 +1032,26 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   handleParagraphEnded: async (): Promise<boolean> => {
     const state = get();
+    // T3 单轨：整篇是一条时间轴，audio ended 即整 Work 完播；绝不按段落推进导致整轨重放。
+    if (isSingleTrackAudioEnabled()) {
+      set({
+        lastCompletedParagraphIndex: Math.max(0, state.totalParagraphs - 1),
+        nextParagraphIndex: state.totalParagraphs,
+        status: 'ended',
+      });
+      try {
+        if (state.sessionId) await completePlaybackSession({ sessionId: state.sessionId });
+      } catch (err) {
+        console.warn('[playbackSessionStore] completeSession failed', err);
+      }
+      set({ sleepTimerMode: 'off' });
+      try {
+        usePlaybackStore.getState().setSleepTimerState('off', null, null);
+      } catch {
+        // transport 同步失败不阻断完播返回。
+      }
+      return false;
+    }
     // M8-04 FIXUP-4 fail-closed（Manifest unknown → 绝不以 Draft 切分冒充 Work Manifest SSOT）：
     // status=error 时当前 Blob 可自然播完，到 ended 事件时停止：不推进 next、不 checkpoint、
     // 不 fetchAudio、不 ensureSegment、不清 Session；等 hydrate/retry 恢复可信 Manifest SSOT。

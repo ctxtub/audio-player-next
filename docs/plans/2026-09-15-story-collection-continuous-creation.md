@@ -195,3 +195,39 @@ git status --short
 ```
 
 Implementer 只能报告 READY，不得自称最终 APPROVE；Reviewer 从同一 SHA 独立复核范围、测试、进程/端口、数据库隔离和秘密边界。
+
+## 7. Task 3 交接记录（Implementer 自证，待独立 Reviewer）
+
+```text
+change-id: 2026-09-15-story-collection-continuous-creation
+目标完整 SHA: 9d15b2987c4ea87f6de79c7f9f04c4a5f3cfb495
+实际 commit: 见本段提交（本地，未 push）
+修改文件:
+  lib/audio/singleTrackFlag.ts（新）
+  lib/audio/asset.ts（新）
+  lib/server/storyAudioAsset.ts（新）
+  lib/server/audioAssetRead.ts（新）
+  app/api/audio/assets/[assetId]/route.ts（新）
+  lib/server/storyAudio.ts（flag 分支 + DTO 增补，旧路径保留）
+  lib/trpc/schemas/storyAudio.ts / lib/trpc/routers/storyAudio.ts（新契约）
+  lib/client/storyAudio.ts / stores/playbackSessionStore.ts（单轨 provider）
+  prisma/schema.prisma + prisma/migrations/20260915140000_m9_c1_t3_story_audio_asset/
+  tests/unit/audio/story-audio-asset-domain.unit.test.ts（新）
+  tests/integration/audio/single-track-asset.integration.test.ts（新）
+  tests/system/browser/scenarios/story-audio-single-track.spec.ts（新）
+  docs/e2e/07-故事库与作品资产/17-StoryAudio单track与30天缓存.md（新）
+  tests/test-catalog.yaml / scripts/run-tests.mjs（注册）
+  tests/unit/playback/storycard-session-resume.unit.test.ts、
+  tests/integration/{audio/audio-work-playback-reuse,creation-chat/clear-during-generate-no-orphan-audio,playback/storycard-session-flow}.integration.test.ts（stub 补齐）
+case/executable ids:
+  case story-audio-single-track
+  exec-single-track-asset (L2)
+  exec-story-audio-asset-domain (L1)
+  exec-l3-story-audio-single-track (L3)
+实际命令与 exit code: 见 .e2e-results/…/T3/post/GATES.log 与 RED/GREEN 日志
+迁移计数证据: 新增 4 表，0 回填、0 旧表删除（expand-only）
+feature flag: SINGLE_TRACK_AUDIO_ENABLED / NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED（严格 '1'，默认关）
+回滚方法: 关闭上述 flag → 旧 Segment 读/写路径即时恢复
+git status --short: 见 .e2e-results/…/T3/post/git-status.txt
+限制: 见 T3/post/CLOSEOUT-T3.md §5（客户端 positionMs seek、AudioControllerHost/Now Playing 改造、GC playing 信号等为后续）
+```

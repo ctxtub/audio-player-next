@@ -961,6 +961,18 @@ cases:
     executable_ids: [exec-audio-work-playback-read, exec-audio-work-playback-reuse, exec-l3-canonical-work-playback]
     fixtures: []
     owner: story-library
+  - case_id: story-audio-single-track
+    display_name_zh: StoryAudio 单 track 与 30 天滑动缓存
+    legacy_aliases: []
+    journey_id: story-library
+    user_goal: 任意正文只暴露一个授权 Asset/总时长/时间轴；长文内部合成拼接后原子发布；暂停恢复 30 天内复用不重复 TTS、过期重建；chunk 不可读取、失败整资产失败并清理
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-work, single-track-audio, ttl-cache, lease-fencing, chunk-concat]
+    spec_path: docs/e2e/07-故事库与作品资产/17-StoryAudio单track与30天缓存.md
+    executable_ids: [exec-single-track-asset, exec-story-audio-asset-domain, exec-l3-story-audio-single-track]
+    fixtures: []
+    owner: story-library
   - case_id: m8-production-closure
     display_name_zh: M8生产收官与清理触发及启用门
     legacy_aliases: []
@@ -1631,6 +1643,18 @@ executables:
     display_name_zh: M8 ensureSegment写入集成
     layer: L2
     path: ./tests/integration/audio/audio-ensure-segment.integration.test.ts
+  - executable_id: exec-single-track-asset
+    display_name_zh: StoryAudio单轨资产与30天缓存集成
+    layer: L2
+    path: ./tests/integration/audio/single-track-asset.integration.test.ts
+  - executable_id: exec-story-audio-asset-domain
+    display_name_zh: StoryAudio单轨资产纯领域单元
+    layer: L1
+    path: ./tests/unit/audio/story-audio-asset-domain.unit.test.ts
+  - executable_id: exec-l3-story-audio-single-track
+    display_name_zh: StoryAudio单轨资产浏览器闭环
+    layer: L3
+    path: ./tests/system/browser/scenarios/story-audio-single-track.spec.ts
   - executable_id: exec-audio-storage-cleanup
     display_name_zh: M8 deletion tombstone与清理引擎单元
     layer: L1

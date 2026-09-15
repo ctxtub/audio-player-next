@@ -117,6 +117,7 @@ nodeRequire.cache[storyAudioPath] = {
     },
     shouldUseCanonicalAudio: () => false,
     isCanonicalPlaybackUrl: () => false,
+    isSingleTrackPlaybackUrl: () => false,
     selectWorkParagraphs: (
       localParagraphs: string[],
       manifest: { segments?: Array<{ text: string }> } | null,

@@ -169,10 +169,19 @@ nodeRequire.cache[storyAudioPath] = {
     ensureSegment: async () => {
       throw new Error('canonical provider closed in M9-F01 L1');
     },
+    ensureAsset: async () => {
+      throw new Error('single-track provider closed in M9-F01 L1');
+    },
+    getProjection: async () => {
+      throw new Error('single-track projection closed in M9-F01 L1');
+    },
+    saveProgress: async () => ({ written: false }),
     getPlaybackManifest: async () => null,
     isCanonicalPlaybackUrl: () => false,
+    isSingleTrackPlaybackUrl: () => false,
     selectWorkParagraphs: (local: string[]) => local,
     shouldUseCanonicalAudio: () => false,
+    shouldUseSingleTrackAudio: () => false,
   },
 } as unknown as NodeModule;
 

@@ -171,6 +171,10 @@ model StoryWork {
   progress        StoryPlaybackProgress?
   /// M8 Canonical Audio Manifests（按 version 共存；旧 Work 无 Manifest = audio.status missing，不回填）
   audioManifests  StoryAudioManifest[]
+  /// M9-C1 T3 单轨资产（一 Work 一 canonical track；expand-only，旧 Segment 保留）
+  audioAssets     StoryAudioAsset[]
+  /// M9-C1 T3 秒级播放进度（per-Work 0/1）
+  audioProgress   StoryAudioProgress?
 
   @@unique([userId, sourceMessageId])
   @@unique([collectionId, position])
@@ -301,6 +305,10 @@ model GuestStoryWork {
   progress        GuestStoryPlaybackProgress?
   /// M8 Canonical Audio Manifests（Guest 侧，与 User 对称；旧 Work 无 Manifest = audio.status missing，不回填）
   audioManifests  GuestStoryAudioManifest[]
+  /// M9-C1 T3 单轨资产（Guest 侧，与 User 对称）
+  audioAssets     GuestStoryAudioAsset[]
+  /// M9-C1 T3 秒级播放进度（Guest 侧）
+  audioProgress   GuestStoryAudioProgress?
 
   @@unique([guestId, sourceMessageId])
   @@unique([collectionId, position])
@@ -685,4 +693,145 @@ model AudioStorageDeletion {
   updatedAt DateTime @updatedAt
 
   @@index([nextAttemptAt])
+}
+
+/// M9-C1 T3 StoryAudio 单轨资产（User 侧，spec §2/§4；expand-only：只加表，零历史回填）。
+/// 一 Work 一 canonical track：内部 chunk 合成后拼接为一个 storageKey 对象；identity =
+/// contentHash + voiceId + ttsProfileHash（provider/model/synthesisVersion/format 汇总）+ version。
+/// chunk 为内部临时对象（story-audio/chunks/<assetId>/<i>.mp3），无读取路由、不写进度、不刷新 TTL。
+model StoryAudioAsset {
+  /// Server 生成的不透明公开 ID（UUID v4 文本；DB 无默认，强制 service 显式生成）
+  id String @id
+
+  storyWorkId Int
+  storyWork   StoryWork @relation(fields: [storyWorkId], references: [id], onDelete: Cascade)
+
+  /// 资产世代（正常恒 1；为未来 Revoice/重建预留，旧版以 supersededAt 标记）
+  version Int @default(1)
+
+  /// 四态：missing | preparing | ready | failed
+  status String @default("missing")
+
+  contentHash     String
+  voiceId         String
+  ttsProfileHash  String
+  synthesisVersion String
+  audioFormat     String @default("mp3")
+
+  /// 内部 chunk 数（合成计划长度；全成功后拼接为单对象）
+  chunkCount Int
+
+  /// Opaque 发布对象 key（story-audio/<uuid>.mp3），全局唯一；浏览器永不直接获取
+  storageKey  String @unique
+  contentType String @default("audio/mpeg")
+  byteLength  Int?
+  durationMs  Int?
+  checksum    String?
+
+  /// 并发合成租约（claim 后事务外调用 TTS/拼装，严禁持 SQLite 写锁做网络/IO）
+  leaseId        String?
+  leaseExpiresAt DateTime?
+
+  /// 30 天滑动 TTL 锚点（授权读取限频刷新；spec §4）
+  lastAccessedAt DateTime?
+
+  attemptCount  Int @default(0)
+  lastErrorCode String?
+
+  readyAt      DateTime?
+  supersededAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storyWorkId, version])
+  @@index([storyWorkId, status])
+  @@index([status, lastAccessedAt])
+  @@index([leaseExpiresAt])
+}
+
+/// M9-C1 T3 StoryAudio 单轨资产（Guest 侧，与 StoryAudioAsset 结构对称）。
+model GuestStoryAudioAsset {
+  id String @id
+
+  storyWorkId Int
+  storyWork   GuestStoryWork @relation(fields: [storyWorkId], references: [id], onDelete: Cascade)
+
+  version Int @default(1)
+
+  status String @default("missing")
+
+  contentHash      String
+  voiceId          String
+  ttsProfileHash   String
+  synthesisVersion String
+  audioFormat      String @default("mp3")
+
+  chunkCount Int
+
+  storageKey  String @unique
+  contentType String @default("audio/mpeg")
+  byteLength  Int?
+  durationMs  Int?
+  checksum    String?
+
+  leaseId        String?
+  leaseExpiresAt DateTime?
+
+  lastAccessedAt DateTime?
+
+  attemptCount  Int @default(0)
+  lastErrorCode String?
+
+  readyAt      DateTime?
+  supersededAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storyWorkId, version])
+  @@index([storyWorkId, status])
+  @@index([status, lastAccessedAt])
+  @@index([leaseExpiresAt])
+}
+
+/// M9-C1 T3 每 Work 秒级播放进度（User 侧，spec §4；positionMs 节流落库，服务端 sessionId + 单调守卫）。
+model StoryAudioProgress {
+  id Int @id @default(autoincrement())
+
+  storyWorkId Int @unique
+  storyWork   StoryWork @relation(fields: [storyWorkId], references: [id], onDelete: Cascade)
+
+  positionMs Int @default(0)
+  durationMs Int?
+  sessionId  String @default("")
+
+  completedAt  DateTime?
+  lastPlayedAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lastPlayedAt])
+}
+
+/// M9-C1 T3 每 Work 秒级播放进度（Guest 侧，与 StoryAudioProgress 对称）。
+model GuestStoryAudioProgress {
+  id Int @id @default(autoincrement())
+
+  storyWorkId Int @unique
+  storyWork   GuestStoryWork @relation(fields: [storyWorkId], references: [id], onDelete: Cascade)
+
+  positionMs Int @default(0)
+  durationMs Int?
+  sessionId  String @default("")
+
+  completedAt  DateTime?
+  lastPlayedAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lastPlayedAt])
+  @@index([updatedAt])
 }

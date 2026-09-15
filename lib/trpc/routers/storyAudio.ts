@@ -12,12 +12,19 @@
 import { router, guardedProcedure } from '../init';
 import {
   ensureStoryAudioSegmentInputSchema,
+  ensureStoryAudioInputSchema,
   getPlaybackManifestInputSchema,
+  saveStoryAudioProgressInputSchema,
 } from '../schemas/storyAudio';
 import {
   ensureStoryAudioSegmentForSubject,
   getPlaybackManifestForSubject,
 } from '@/lib/server/storyAudio';
+import {
+  ensureStoryAudioAssetForSubject,
+  getStoryAudioAssetProjectionForSubject,
+  saveStoryAudioProgressForSubject,
+} from '@/lib/server/storyAudioAsset';
 import { resolveSubject } from '@/lib/server/subject';
 import { enforceProcedureRateLimit } from '@/lib/server/rateLimit';
 
@@ -67,11 +74,62 @@ export const storyAudioRouter = router({
             segmentCount: result.manifest.segmentCount,
             totalDurationMs: result.manifest.totalDurationMs,
           },
+          ...(result.asset ? { asset: result.asset } : {}),
         };
       }
       return {
         status: 'preparing' as const,
         retryAfterMs: 500 as const,
       };
+    }),
+
+  /**
+   * T3 单轨 ensure（`{ workId, sessionId }`，无 segmentIndex）。
+   * 整篇长文内部 chunk 合成后拼接为一个 canonical 对象。
+   */
+  ensure: guardedProcedure
+    .input(ensureStoryAudioInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit('storyAudio:ensure', ctx, {
+        guestLimit: 30,
+        authedLimit: 90,
+      });
+      const subject = resolveSubject(ctx);
+      const result = await ensureStoryAudioAssetForSubject(subject, input);
+      if (result.status === 'ready') {
+        return {
+          status: 'ready' as const,
+          asset: result.asset,
+          manifest: {
+            status: 'ready' as const,
+            segmentCount: 1 as const,
+            readySegmentCount: 1 as const,
+            totalDurationMs: result.asset.durationMs,
+            totalByteLength: result.asset.byteLength,
+          },
+        };
+      }
+      return { status: 'preparing' as const, retryAfterMs: result.retryAfterMs };
+    }),
+
+  /**
+   * T3 单轨投影（只读；无资产 → missing 空投影）。
+   */
+  getProjection: guardedProcedure
+    .input(getPlaybackManifestInputSchema)
+    .query(async ({ ctx, input }) => {
+      const subject = resolveSubject(ctx);
+      return getStoryAudioAssetProjectionForSubject(subject, input);
+    }),
+
+  /**
+   * T3 秒级进度的写入口（服务端 clamp + 单调守卫 + 节流决策）。
+   */
+  saveProgress: guardedProcedure
+    .input(saveStoryAudioProgressInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const subject = resolveSubject(ctx);
+      const written = await saveStoryAudioProgressForSubject(subject, input);
+      return { written };
     }),
 });

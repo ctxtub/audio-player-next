@@ -20,6 +20,7 @@
 
 import { trpc } from '@/lib/trpc/client';
 import { isCanonicalAudioEnabled } from '@/lib/audio/canonicalFlag';
+import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
 
 export type {
@@ -31,6 +32,11 @@ export type {
   EnsureSegmentOutput,
   EnsureSegmentReady,
   EnsureSegmentPreparing,
+  EnsureStoryAudioInput,
+  EnsureStoryAudioOutput,
+  StoryAudioAsset,
+  StoryAudioAssetProjection,
+  SaveStoryAudioProgressInput,
 } from '@/lib/trpc/schemas/storyAudio';
 
 /**
@@ -55,10 +61,51 @@ export const ensureSegment = async (input: {
   return trpc.storyAudio.ensureSegment.mutate(input);
 };
 
-export const storyAudioClient = {
-  getPlaybackManifest,
-  ensureSegment,
+/**
+ * T3 单轨 ensure（`{ workId, sessionId }`，无 segmentIndex）。
+ * 一个 Work 返回一个授权 Asset URL，供卡片/Mini/Expanded 共用同一时间轴。
+ */
+export const ensureAsset = async (input: {
+  workId: number;
+  sessionId: string;
+}): Promise<import('@/lib/trpc/schemas/storyAudio').EnsureStoryAudioOutput> => {
+  return trpc.storyAudio.ensure.mutate(input);
 };
+
+/** T3 单轨投影读取（只读）。 */
+export const getProjection = async (input: {
+  workId: number;
+}): Promise<import('@/lib/trpc/schemas/storyAudio').StoryAudioAssetProjection> => {
+  return trpc.storyAudio.getProjection.query(input);
+};
+
+/** T3 秒级进度写入口。 */
+export const saveProgress = async (input: {
+  workId: number;
+  sessionId: string;
+  positionMs: number;
+  durationMs?: number | null;
+  force?: boolean;
+}): Promise<{ written: boolean }> => {
+  return trpc.storyAudio.saveProgress.mutate(input);
+};
+
+/**
+ * T3 单轨读路径选择（纯函数）：Work + 单轨开关开启 → true。
+ */
+export function shouldUseSingleTrackAudio(source: PlaybackSourceRef | null): boolean {
+  if (!source || source.kind !== 'work') return false;
+  try {
+    return isSingleTrackAudioEnabled();
+  } catch {
+    return false;
+  }
+}
+
+/** T3 单资产 URL 形态守卫（/api/audio/assets/<opaque-id>）。 */
+export function isSingleTrackPlaybackUrl(url: string): boolean {
+  return typeof url === 'string' && url.startsWith('/api/audio/assets/');
+}
 
 /**
  * M8-04 Work Segment audio provider 选择（只替换 provider，不动 M5 identity）。
@@ -108,3 +155,12 @@ export function selectWorkParagraphs(
 export function isCanonicalPlaybackUrl(url: string): boolean {
   return typeof url === 'string' && url.startsWith('/api/audio/segments/');
 }
+
+/** 客户端门面（声明置于所有 procedure 包装函数之后，避免 TDZ）。 */
+export const storyAudioClient = {
+  getPlaybackManifest,
+  ensureSegment,
+  ensureAsset,
+  getProjection,
+  saveProgress,
+};

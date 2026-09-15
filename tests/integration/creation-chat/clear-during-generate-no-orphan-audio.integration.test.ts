@@ -133,6 +133,7 @@ nodeRequire.cache[storyAudioClientPath] = {
         },
         shouldUseCanonicalAudio: () => false,
         isCanonicalPlaybackUrl: () => false,
+        isSingleTrackPlaybackUrl: () => false,
         selectWorkParagraphs: (localParagraphs: string[]) => localParagraphs,
     },
 } as unknown as NodeModule;

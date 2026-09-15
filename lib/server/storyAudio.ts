@@ -64,6 +64,14 @@ import {
   synthesizeSpeechWithProfile,
   type CanonicalTtsSynthesizer,
 } from '@/lib/server/openai';
+import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
+import { buildAssetPlaybackUrl } from '@/lib/audio/asset';
+import {
+  ensureStoryAudioAssetForSubject,
+  getStoryAudioAssetProjectionForSubject,
+  STORY_AUDIO_ASSET_VERSION,
+  type StoryAudioAssetDTO,
+} from '@/lib/server/storyAudioAsset';
 
 /** Canonical Manifest 世代（V1 StoryWork 内容不可改，正常恒 1；M8-03 只建 v1） */
 export const STORY_AUDIO_MANIFEST_VERSION = 1;
@@ -763,6 +771,8 @@ export type EnsureSegmentReadyResult = {
     totalDurationMs: number | null;
     totalByteLength: number | null;
   };
+  /** T3 单轨资产投影（仅 `SINGLE_TRACK_AUDIO_ENABLED=1` 时存在；旧调用方忽略此字段）。 */
+  asset?: StoryAudioAssetDTO;
 };
 
 export type EnsureSegmentPreparingResult = {
@@ -792,6 +802,53 @@ async function readGuestManifestSnapshot(manifestId: number) {
   });
 }
 
+/** T3：单轨 ensure → 旧 EnsureSegmentResult 形状（segment/manifest 恒为单元素，附 asset）。 */
+async function ensureSingleTrackSegmentResult(
+  subject: Subject,
+  input: EnsureStoryAudioSegmentInput,
+  depsInput: StoryAudioDeps
+): Promise<EnsureSegmentResult> {
+  const result = await ensureStoryAudioAssetForSubject(
+    subject,
+    { workId: input.workId, sessionId: input.sessionId },
+    depsInput
+  );
+  if (result.status === 'preparing') {
+    return {
+      status: 'preparing',
+      retryAfterMs: result.retryAfterMs,
+      segment: { id: `asset:${input.workId}`, index: 0 },
+      manifest: {
+        status: 'preparing',
+        segmentCount: 1,
+        readySegmentCount: 0,
+        totalDurationMs: null,
+        totalByteLength: null,
+      },
+    };
+  }
+  const asset = result.asset;
+  return {
+    status: 'ready',
+    segment: {
+      id: asset.assetId,
+      index: 0,
+      text: '',
+      durationMs: asset.durationMs,
+      byteLength: asset.byteLength,
+      playbackUrl: asset.playbackUrl,
+    },
+    manifest: {
+      status: 'ready',
+      segmentCount: 1,
+      readySegmentCount: 1,
+      totalDurationMs: asset.durationMs,
+      totalByteLength: asset.byteLength,
+    },
+    asset,
+  };
+}
+
 /**
  * ensureSegment（M8-03 canonical 写入唯一入口）。
  *
@@ -804,6 +861,10 @@ export async function ensureStoryAudioSegmentForSubject(
   input: EnsureStoryAudioSegmentInput,
   depsInput: StoryAudioDeps = {}
 ): Promise<EnsureSegmentResult> {
+  // T3：开关开启时改走单轨资产写入口（同一输入契约，输出增补 asset 投影）。
+  if (isSingleTrackAudioEnabled()) {
+    return ensureSingleTrackSegmentResult(subject, input, depsInput);
+  }
   const deps = resolveDeps(depsInput);
   const now = deps.now();
   const { workId, segmentIndex, sessionId } = input;
@@ -1398,7 +1459,57 @@ export type PlaybackManifestDTO = {
   totalDurationMs: number | null;
   totalByteLength: number | null;
   segments: PlaybackManifestSegmentDTO[];
+  /** T3 单轨投影（仅开关开启时存在/非 null；`segments` 同时为空，保证只暴露一条时间轴）。 */
+  singleTrack?: StoryAudioAssetDTO | null;
 };
+
+/** T3：单轨投影 → 旧 PlaybackManifestDTO 形状（segments 空 + singleTrack）。 */
+async function getSingleTrackPlaybackManifest(
+  subject: Subject,
+  input: GetPlaybackManifestInput
+): Promise<PlaybackManifestDTO> {
+  const projection = await getStoryAudioAssetProjectionForSubject(subject, {
+    workId: input.workId,
+  });
+  const singleTrack: StoryAudioAssetDTO | null =
+    projection.status === 'ready' && projection.assetId && projection.durationMs !== null && projection.byteLength !== null
+      ? {
+          assetId: projection.assetId,
+          workId: projection.workId,
+          status: 'ready',
+          version: projection.version || STORY_AUDIO_ASSET_VERSION,
+          contentHash: projection.contentHash,
+          voiceId: projection.voiceId,
+          ttsProfileHash: projection.ttsProfileHash,
+          synthesisVersion: projection.synthesisVersion,
+          audioFormat: projection.audioFormat,
+          chunkCount: projection.chunkCount,
+          durationMs: projection.durationMs,
+          byteLength: projection.byteLength,
+          checksum: projection.checksum ?? '',
+          contentType: 'audio/mpeg',
+          playbackUrl: projection.playbackUrl ?? buildAssetPlaybackUrl(projection.assetId),
+          positionMs: projection.positionMs,
+          readyAt: projection.readyAt ?? '',
+        }
+      : null;
+  return {
+    workId: projection.workId,
+    status:
+      projection.status === 'ready'
+        ? 'ready'
+        : (projection.status as PlaybackManifestDTO['status']),
+    contentHash: projection.contentHash,
+    segmentationVersion: SEGMENTATION_VERSION,
+    voiceId: projection.voiceId,
+    segmentCount: singleTrack ? 1 : 0,
+    readySegmentCount: singleTrack ? 1 : 0,
+    totalDurationMs: projection.durationMs,
+    totalByteLength: projection.byteLength,
+    segments: [],
+    singleTrack,
+  };
+}
 
 /**
  * 读取播放用 Manifest 投影（只读；无 Manifest → missing 空投影，不回填、不合成）。
@@ -1408,6 +1519,10 @@ export async function getPlaybackManifestForSubject(
   subject: Subject,
   input: GetPlaybackManifestInput
 ): Promise<PlaybackManifestDTO> {
+  // T3：开关开启时改走单轨投影（segments 为空 + singleTrack，保证只暴露一条时间轴）。
+  if (isSingleTrackAudioEnabled()) {
+    return getSingleTrackPlaybackManifest(subject, input);
+  }
   const { workId } = input;
   if (!Number.isInteger(workId) || workId <= 0) {
     throwDomain('WORK_NOT_FOUND', 'NOT_FOUND');

@@ -8,8 +8,6 @@ import { encodeSession, encodeGuestId } from '../../../lib/session';
 
 import { configRouter } from '../../../lib/trpc/routers/config';
 import { chatConversationRouter } from '../../../lib/trpc/routers/chatConversation';
-import { generationHistoryRouter } from '../../../lib/trpc/routers/generationHistory';
-import { promptHistoryRouter } from '../../../lib/trpc/routers/promptHistory';
 import { prisma } from '../../../lib/db';
 
 process.env.SESSION_SECRET = 'test-secret-matrix-1234567890';
@@ -172,17 +170,7 @@ async function runMatrixTests() {
     assert(chatContent.includes('saveConversation: guardedProcedure'), 'chat.saveConversation must be guardedProcedure');
     assert(!chatContent.includes('authedProcedure'), 'chat must not use authedProcedure');
 
-    const genContent = fs.readFileSync('lib/trpc/routers/generationHistory.ts', 'utf-8');
-    assert(genContent.includes('list: guardedProcedure'), 'generationHistory.list must be guardedProcedure');
-    assert(genContent.includes('record: guardedProcedure'), 'generationHistory.record must be guardedProcedure');
-    assert(genContent.includes('remove: guardedProcedure'), 'generationHistory.remove must be guardedProcedure');
-    assert(!genContent.includes('authedProcedure'), 'generationHistory must not use authedProcedure');
-
-    const promptContent = fs.readFileSync('lib/trpc/routers/promptHistory.ts', 'utf-8');
-    assert(promptContent.includes('list: guardedProcedure'), 'promptHistory.list must be guardedProcedure');
-    assert(promptContent.includes('record: guardedProcedure'), 'promptHistory.record must be guardedProcedure');
-    assert(promptContent.includes('remove: guardedProcedure'), 'promptHistory.remove must be guardedProcedure');
-    assert(!promptContent.includes('authedProcedure'), 'promptHistory must not use authedProcedure');
+    // M9-C1 T2：Prompt/Generation History 已前后端退役，其 router 静态审计随之移除。
 
     const configContent = fs.readFileSync('lib/trpc/routers/config.ts', 'utf-8');
     assert(configContent.includes('updateMine: guardedProcedure'), 'config.updateMine must be guardedProcedure');
@@ -261,15 +249,7 @@ async function runMatrixTests() {
     const chatCallerGuest = chatConversationRouter.createCaller(guestCtx);
     const chatCallerAuthed = chatConversationRouter.createCaller(authedCtx);
 
-    const genCallerAnon = generationHistoryRouter.createCaller(anonCtx);
-    const genCallerGuest = generationHistoryRouter.createCaller(guestCtx);
-    const genCallerAuthed = generationHistoryRouter.createCaller(authedCtx);
-
-    const promptCallerAnon = promptHistoryRouter.createCaller(anonCtx);
-    const promptCallerGuest = promptHistoryRouter.createCaller(guestCtx);
-    const promptCallerAuthed = promptHistoryRouter.createCaller(authedCtx);
-
-    // 6.1 Anonymous: 401 on chat, gen, prompt
+    // 6.1 Anonymous: 401 on chat
     await assert.rejects(
         async () => { await chatCallerAnon.getConversation(); },
         (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
@@ -280,28 +260,7 @@ async function runMatrixTests() {
         (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
         'Anonymous must receive UNAUTHORIZED on chat.saveConversation'
     );
-    await assert.rejects(
-        async () => { await genCallerAnon.list(); },
-        (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
-        'Anonymous must receive UNAUTHORIZED on generationHistory.list'
-    );
-    await assert.rejects(
-        async () => { await genCallerAnon.record({ prompt: 'test', storyText: 'story' }); },
-        (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
-        'Anonymous must receive UNAUTHORIZED on generationHistory.record'
-    );
-    await assert.rejects(
-        async () => { await promptCallerAnon.list(); },
-        (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
-        'Anonymous must receive UNAUTHORIZED on promptHistory.list'
-    );
-    await assert.rejects(
-        async () => { await promptCallerAnon.record({ prompt: 'test' }); },
-        (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED',
-        'Anonymous must receive UNAUTHORIZED on promptHistory.record'
-    );
-
-    // 6.2 Guest: 200 on chat, gen, prompt
+    // 6.2 Guest: 200 on chat
     const guestChat = await chatCallerGuest.getConversation();
     assert(Array.isArray(guestChat), 'Guest getConversation should return array');
 
@@ -310,22 +269,7 @@ async function runMatrixTests() {
     });
     assert.strictEqual(guestSaveResult.success, true, 'Guest saveConversation should succeed');
 
-    const guestGenList = await genCallerGuest.list();
-    assert(Array.isArray(guestGenList), 'Guest gen list should return array');
-
-    const guestGenRecord = await genCallerGuest.record({
-        prompt: 'test prompt',
-        storyText: 'test story',
-    });
-    assert.strictEqual(guestGenRecord.prompt, 'test prompt', 'Guest gen record should succeed');
-
-    const guestPromptList = await promptCallerGuest.list();
-    assert(Array.isArray(guestPromptList), 'Guest prompt list should return array');
-
-    const guestPromptRecord = await promptCallerGuest.record({ prompt: 'test prompt' });
-    assert.strictEqual(guestPromptRecord.prompt, 'test prompt', 'Guest prompt record should succeed');
-
-    // 6.3 Authed: 200 on chat, gen, prompt
+    // 6.3 Authed: 200 on chat
     const authedChat = await chatCallerAuthed.getConversation();
     assert(Array.isArray(authedChat), 'Authed getConversation should return array');
 
@@ -334,22 +278,7 @@ async function runMatrixTests() {
     });
     assert.strictEqual(authedSaveResult.success, true, 'Authed saveConversation should succeed');
 
-    const authedGenList = await genCallerAuthed.list();
-    assert(Array.isArray(authedGenList), 'Authed gen list should return array');
-
-    const authedGenRecord = await genCallerAuthed.record({
-        prompt: 'authed prompt',
-        storyText: 'authed story',
-    });
-    assert.strictEqual(authedGenRecord.prompt, 'authed prompt', 'Authed gen record should succeed');
-
-    const authedPromptList = await promptCallerAuthed.list();
-    assert(Array.isArray(authedPromptList), 'Authed prompt list should return array');
-
-    const authedPromptRecord = await promptCallerAuthed.record({ prompt: 'authed prompt' });
-    assert.strictEqual(authedPromptRecord.prompt, 'authed prompt', 'Authed prompt record should succeed');
-
-    console.log('PASS: Creative routers guardedProcedure matrix verified (Anonymous: 401, Guest: 200, Authed: 200)');
+    console.log('PASS: Chat guardedProcedure matrix verified (Anonymous: 401, Guest: 200, Authed: 200)');
 
 }
 

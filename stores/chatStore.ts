@@ -44,6 +44,7 @@ import {
 } from '@/utils/chatUtils';
 import type { ChatMessageInput } from '@/lib/trpc/schemas/chatConversation';
 import { fetchMyConversation, saveMyConversation } from '@/lib/client/chatConversation';
+import { getActiveConversation } from '@/lib/client/conversation';
 import {
   rehydrateServerMessages,
   serializePartsForHistory,
@@ -148,6 +149,17 @@ type ChatStoreBaseState = {
   saveError: string | null;
   /** History UI 选择后的待发送提示词；瞬态、单 slot、不持久化。 */
   pendingAutoSend: string | null;
+  /**
+   * 当前 active Conversation id（Conversation SSOT，M9-C1 T2）；
+   * null = 尚未建立会话（访客未登录首屏等）。
+   */
+  conversationId: string | null;
+  /** 当前 Conversation 对应集合 id；null = 首作晋升前。 */
+  collectionId: string | null;
+  /** 当前集合标题（创作页展示）；null = 未知/无集合。 */
+  collectionTitle: string | null;
+  /** 会话代次：resetChat/reset/身份切换自增，作废旧身份回写。 */
+  epoch: number;
 };
 
 /**
@@ -162,6 +174,15 @@ type ChatStoreActions = {
   resetActiveSession: () => void;
   /** 清空所有历史消息（同时清空服务端会话） */
   resetChat: () => void;
+  /**
+   * 应用 active Conversation 身份（创作页围绕当前集合运行的唯一读取入口）。
+   * conversationId 变化即递增 epoch，作废旧身份异步回写。
+   */
+  applyConversationIdentity: (identity: {
+    conversationId: string | null;
+    collectionId: string | null;
+    collectionTitle?: string | null;
+  }) => void;
   /** 登录后：拉取服务端会话并恢复，开启持久化。 */
   initForUser: () => Promise<void>;
   /** 登出：仅清本地并关闭持久化，不动服务端。 */
@@ -652,6 +673,10 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   syncEnabled: false,
   saveError: null,
   pendingAutoSend: null,
+  conversationId: null,
+  collectionId: null,
+  collectionTitle: null,
+  epoch: 0,
   dispatch: (action: ChatStoreAction) => {
     set((state) => {
       const messages = [...state.messages];
@@ -1178,11 +1203,32 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   resetChat: () => {
     // M4-04：清空作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op，绝不复活）。
     invalidateInflightPromotions();
-    set({
+    set((state) => ({
       messages: [],
-    });
+      // M9-C1 T2：清空消息同时丢弃当前会话身份并递增代次。
+      conversationId: null,
+      collectionId: null,
+      collectionTitle: null,
+      epoch: state.epoch + 1,
+    }));
     // 清空后保存空快照即清空服务端会话
     scheduleSave();
+  },
+  applyConversationIdentity: ({ conversationId, collectionId, collectionTitle }) => {
+    set((state) => {
+      const changed = state.conversationId !== conversationId;
+      return {
+        conversationId,
+        collectionId,
+        collectionTitle:
+          collectionTitle !== undefined
+            ? collectionTitle
+            : changed
+              ? null
+              : state.collectionTitle,
+        epoch: changed ? state.epoch + 1 : state.epoch,
+      };
+    });
   },
   initForUser: () => {
     if (get().syncEnabled) {
@@ -1194,7 +1240,11 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     const epoch = accountEpoch; // 捕获进入代次
     const baselineIds = new Set(get().messages.map((message) => message.id)); // 进入时已有（访客/旧态）
     userInitPromise = (async () => {
-      const dtos = await fetchMyConversation();
+      // M9-C1 T2：创作页围绕当前集合运行——并行读取 active Conversation 身份与消息。
+      const [conversation, dtos] = await Promise.all([
+        getActiveConversation().catch(() => null),
+        fetchMyConversation(),
+      ]);
       if (epoch !== accountEpoch) {
         return; // 账号已切（登出/401）→ 放弃回写（项 4）
       }
@@ -1214,8 +1264,20 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       const appendedLocally = get().messages.filter(
         (message) => !baselineIds.has(message.id),
       );
-      // 直接 set，不触发 scheduleSave，避免把恢复结果回写
-      set({ messages: mergeConversation(serverMessages, appendedLocally), syncEnabled: true });
+      // 直接 set，不触发 scheduleSave，避免把恢复结果回写。
+      // M9-C1 T2：同步 active Conversation 身份（conversationId 变化即递增代次）。
+      set((state) => {
+        const nextConversationId = conversation?.id ?? null;
+        const changed = state.conversationId !== nextConversationId;
+        return {
+          messages: mergeConversation(serverMessages, appendedLocally),
+          syncEnabled: true,
+          conversationId: nextConversationId,
+          collectionId: conversation?.collectionId ?? null,
+          collectionTitle: changed ? null : state.collectionTitle,
+          epoch: changed ? state.epoch + 1 : state.epoch,
+        };
+      });
     })()
       .catch((error) => {
         console.warn('[chatStore] initForUser failed', error);
@@ -1237,13 +1299,17 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    set({
+    set((state) => ({
       messages: [],
       inputValue: '',
       hasUnviewedResponse: false,
       syncEnabled: false,
       saveError: null,
-    });
+      conversationId: null,
+      collectionId: null,
+      collectionTitle: null,
+      epoch: state.epoch + 1,
+    }));
   },
   setInputValue: (nextValue) => {
     set({ inputValue: nextValue });

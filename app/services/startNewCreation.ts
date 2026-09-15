@@ -20,6 +20,7 @@ import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 
 import { abortActiveChatStream } from './chatFlow';
+import { resetContinuousCreationRuntime } from './continuousCreationFlow';
 
 /** `startNewCreation` 入参。 */
 export type StartNewCreationOptions = {
@@ -93,7 +94,10 @@ export async function startNewCreation(
   // 3) abort 在途 generation
   abortActiveChatStream();
 
-  // 4) 停声：pause + reset transport，清 Playback Session/Anchor（blob 由 generation 侧吊销）
+  // 4) 清空连续创作编排运行时（准备中的下一作品、调度在途、audio 采样点）
+  resetContinuousCreationRuntime();
+
+  // 5) 停声：pause + reset transport，清 Playback Session/Anchor（blob 由 generation 侧吊销）
   try {
     usePlaybackSessionStore.getState().stop();
   } catch {
@@ -102,10 +106,10 @@ export async function startNewCreation(
   usePlaybackStore.getState().reset();
   useGenerationStore.getState().reset();
 
-  // 5) reset message runtime
+  // 6) reset message runtime
   useChatStore.getState().resetChat();
 
-  // 6) createNew(expectedOldId)
+  // 7) createNew(expectedOldId)
   const budgetMinutes = resolveContinuousCreationBudgetMinutes();
   const createNew = options.createNew ?? createNewConversation;
   let conversationId: string | null = null;
@@ -119,7 +123,15 @@ export async function startNewCreation(
     reason = 'remote-failed';
   }
 
-  // 7) 连续创作默认开启 + 预算快照（epoch 已递增，旧回调不会写回）
+  // 8) 连续创作默认开启 + 预算快照（epoch 已递增，旧回调不会写回）
+  if (conversationId !== null) {
+    // M9-C1 T2：创作页围绕新 active Conversation 运行（identity 读路径）。
+    useChatStore.getState().applyConversationIdentity({
+      conversationId,
+      collectionId,
+      collectionTitle: null,
+    });
+  }
   useContinuousCreationStore.getState().resetForNewCreation({
     collectionId,
     budgetMinutes,

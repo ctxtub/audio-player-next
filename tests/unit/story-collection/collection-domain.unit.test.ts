@@ -240,8 +240,8 @@ async function runCollectionDomainUnitTests() {
   {
     assert.deepStrictEqual(resolveStoryCollectionRollout({}), {
       storyCollectionReads: true,
-      legacyHistoryReads: true,
-      legacyHistoryWrites: true,
+      legacyHistoryReads: false,
+      legacyHistoryWrites: false,
     });
     assert.strictEqual(
       isStoryCollectionReadsEnabled({ [STORY_COLLECTION_READS_ENABLED_ENV]: 'false' }),

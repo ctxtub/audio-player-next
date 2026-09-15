@@ -579,11 +579,11 @@ async function main(): Promise<void> {
     console.log('PASS: M4-10-06 crash-window reconciliation');
   }
 
-  console.log('=== M4-10-07: History prompt while live attempt（排队 + exactly-once） ===');
+  console.log('=== M4-10-07: Pending auto-send while live attempt（排队 + exactly-once） ===');
   {
     resetAll();
     const idA = submitStory('A-故事-4107', { promptSnapshot: 'A-prompt-07' });
-    // A live（sending/draft）时选择历史 prompt B：只写 pending，不碰 A。
+    // A live（sending/draft）时选择建议 prompt B：只写 pending，不碰 A。
     useChatStore.getState().setPendingAutoSend('B-历史提示词');
     const liveA = getArtifact(idA);
     assert.strictEqual(liveA.artifact.status, 'draft', 'A 不 abort');
@@ -626,19 +626,12 @@ async function main(): Promise<void> {
     pendingCreates[1].resolve(makeDto(101, pendingCreates[1].input));
     await flush();
     assert.strictEqual(getArtifact(idB).artifact.storyWorkId, 101);
-    // History 开关数据纯洁（store 级）：pending 的置空往返不改变 messages/artifact。
+    // pending 数据纯洁（store 级）：pending 的置空往返不改变 messages/artifact。
     const before = JSON.stringify(useChatStore.getState().messages);
     useChatStore.getState().setPendingAutoSend('X-探测');
     useChatStore.getState().setPendingAutoSend(null);
     assert.strictEqual(JSON.stringify(useChatStore.getState().messages), before, 'pending 往返不改变 Artifact lifecycle');
-    // HistoryPanel 开关是 React 纯 UI state（静态）：只经 onSelectPrompt/onClose 与 ChatLayout 协作。
-    const layoutSource = readSource('app/(main)/chat/components/ChatLayout/index.tsx');
-    assert.ok(layoutSource.includes('const [historyOpen, setHistoryOpen] = useState(false)'), 'History 开关必须是纯 UI state');
-    const panelSource = readSource('app/(main)/chat/components/HistoryPanel/index.tsx');
-    assert.ok(!panelSource.includes('chatArtifactHistory'), 'HistoryPanel 不得 import codec');
-    assert.ok(!panelSource.includes('fetchMyConversation'), 'HistoryPanel 不得直读服务端历史');
-    assert.ok(!panelSource.includes('useRouter') && !panelSource.includes('next/navigation'), 'HistoryPanel 不得跨页导航');
-    console.log('PASS: M4-10-07 history queue + exactly-once');
+    console.log('PASS: M4-10-07 pending queue + exactly-once');
   }
 
   console.log('=== M4-10-08: Modern + Legacy coexistence final seal ===');
@@ -681,8 +674,9 @@ async function main(): Promise<void> {
       { type: 'storyCard', storyText: 'legacy-正文-4108', audioUrl: 'https://audio/old-4108.mp3' },
     ] as MessagePart[]);
     assert.ok(playable && playable.storyText === 'legacy-正文-4108', 'compatibility playback 查找可用');
-    const storyFlowSource = readSource('app/services/storyFlow.ts');
-    assert.ok(storyFlowSource.includes('playStoryText'), 'compatibility playback 入口保留');
+    // M9-03 起 Legacy 卡兼容播放入口收敛到 PlaybackSessionFlow.playStoryCard（storyFlow.playStoryText 已删除）。
+    const playbackFlowSource = readSource('app/services/playbackSessionFlow.ts');
+    assert.ok(playbackFlowSource.includes('export async function playStoryCard'), 'compatibility playback 入口保留（正式 Flow）');
     // 同一恢复 conversation：mixed snapshot → reload，两者共存且互不转换。
     const rows = snapshotToDtoRows();
     await reloadFromRows(rows);
@@ -803,20 +797,7 @@ async function main(): Promise<void> {
     assert.strictEqual(isAllowedTransition('ready', 'promoting'), false, 'ready 终态冻结');
     assert.strictEqual(isAllowedTransition('interrupted', 'promoting'), false, 'interrupted 终态冻结');
     assert.throws(() => interruptArtifact(completedOnly as never), /非法状态转移/);
-    // ⑤ History UI 无 raw history parsing。
-    for (const rel of [
-      'app/(main)/chat/components/HistoryPanel/index.tsx',
-      'app/(main)/chat/components/HistoryRecords/index.tsx',
-      'app/(main)/chat/components/GenerationHistory/index.tsx',
-      'app/(main)/chat/components/HistoryList/index.tsx',
-    ]) {
-      const content = readSource(rel);
-      assert.ok(!content.includes('chatArtifactHistory'), `${rel} 不得 import codec`);
-      assert.ok(!content.includes('rehydrateServerMessages') && !content.includes('serializePartsForHistory'), `${rel} 不得 raw parse 历史`);
-      assert.ok(!content.includes('fetchMyConversation') && !content.includes('saveMyConversation'), `${rel} 不得直调会话落库`);
-      assert.ok(!content.includes('libraryClient'), `${rel} 不得直调 Library`);
-      assert.ok(!content.includes('storyArtifactPromotion'), `${rel} 不得直引 promotion adapter`);
-    }
+    // ⑤ History UI 已随 M9-C1 T2 物理退役（目录删除由 navigation 守卫覆盖），此处不再读取源码。
     // ⑥ Legacy 新构造点仅 decoder（扫描整个 lib，含 lib/server；types/ 除外，见下）。
     const constructorRe = /type\s*:\s*['"]storyCard['"]/;
     const constructorViolations: string[] = [];
@@ -893,10 +874,6 @@ async function main(): Promise<void> {
       'lib/client/chatPromotionOrchestration.ts',
       'app/(main)/chat/components/MessageParts/StoryArtifactPart.tsx',
       'app/(main)/chat/components/ChatLayout/index.tsx',
-      'app/(main)/chat/components/HistoryPanel/index.tsx',
-      'app/(main)/chat/components/HistoryRecords/index.tsx',
-      'app/(main)/chat/components/GenerationHistory/index.tsx',
-      'app/(main)/chat/components/HistoryList/index.tsx',
       'lib/client/library.ts',
     ]) {
       const full = path.resolve(process.cwd(), rel);
@@ -942,7 +919,8 @@ async function main(): Promise<void> {
     assert.ok(Array.isArray(catalog.cases) && catalog.cases.length > 0, 'catalog cases 非空');
     assert.ok(Array.isArray(catalog.executables) && catalog.executables.length > 0, 'catalog executables 非空');
     const execById = new Map((catalog.executables ?? []).map((e) => [e.executable_id, e]));
-    // E2E-08-01～10 逐条存在：creation-artifact / P0 / ACTIVE / spec 落盘 / executable 落盘。
+    // E2E-08-01～10 逐条存在：creation-artifact / P0 / spec 落盘。
+    // M9-C1 T2：E2E-08-07（History UI Relocation）随 History surface 退役转为 RETIRED + 无 executable。
     for (let n = 1; n <= 10; n += 1) {
       const alias = `E2E-08-${String(n).padStart(2, '0')}`;
       const found: CatalogCase[] = (catalog.cases ?? []).filter((c) => (c.legacy_aliases ?? []).includes(alias));
@@ -950,6 +928,14 @@ async function main(): Promise<void> {
       const c: CatalogCase = found[0];
       assert.strictEqual(c.journey_id, 'creation-artifact', `${alias} journey 必须为 creation-artifact`);
       assert.strictEqual(c.priority, 'P0', `${alias} 必须为 P0`);
+      if (alias === 'E2E-08-07') {
+        assert.strictEqual(c.lifecycle_status, 'RETIRED', `${alias} 必须为 RETIRED（History surface 已退役）`);
+        assert.deepStrictEqual(c.executable_ids ?? [], [], `${alias} 退役后不得绑定 executable`);
+        assert.ok(c.spec_path && c.spec_path.startsWith('docs/e2e/08-创作Artifact/'), `${alias} spec 必须在 08 目录`);
+        const retiredSpecFile = String(c.spec_path).split('#')[0];
+        assert.ok(fs.existsSync(path.resolve(process.cwd(), retiredSpecFile)), `${alias} spec_path 必须落盘：${retiredSpecFile}`);
+        continue;
+      }
       assert.strictEqual(c.lifecycle_status, 'ACTIVE', `${alias} 必须为 ACTIVE`);
       assert.ok(c.spec_path && c.spec_path.startsWith('docs/e2e/08-创作Artifact/'), `${alias} spec 必须在 08 目录`);
       const specFile = String(c.spec_path).split('#')[0];
@@ -983,18 +969,7 @@ async function main(): Promise<void> {
     ]) {
       assert.ok(closureDoc.includes(anchor), `closure doc 必须冻结锚点：${anchor}`);
     }
-    // ACTIVE current-state 无已知过时的 Player-owned History 描述。
-    const historyDoc = readSource('docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md');
-    assert.ok(!historyDoc.includes('从播放器'), '02-11 现役文档不得再写“从播放器”');
-    assert.ok(!historyDoc.includes('播放器页'), '02-11 现役文档不得再写“播放器页”');
-    assert.ok(!historyDoc.includes('播放器选历史'), '02-11 现役文档不得再写“播放器选历史”');
-    assert.ok(
-      historyDoc.includes('Chat-owned') || historyDoc.includes('回迁'),
-      '02-11 现役文档必须说明 History 归 Chat',
-    );
-    const historyCase = (catalog.cases ?? []).find((c) => c.case_id === 'history-prompt-start-new-creation');
-    assert.ok(historyCase, 'history-prompt case 必须存在');
-    assert.ok(!String(historyCase.user_goal ?? '').includes('播放器'), 'history-prompt user_goal 不得带 Player ownership');
+    // M9-C1 T2：History surface 与 history-prompt case 已退役，原 02-11 现役文档/用例一致性断言移除。
     console.log('PASS: M4-10-11 catalog/docs consistency');
   }
 

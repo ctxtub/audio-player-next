@@ -3,15 +3,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 // 中文注释：M10-05 历史 browser 债务清零与目录冻结静态守卫（L1，纯静态，不触库/网络）。
-// 锁 M10 收官 6 条 browser oracle 迁移 + 目录冻结规则（M10 CLOSED 时）：
+// 锁 M10 收官 browser oracle 迁移 + 目录冻结规则（M10 CLOSED 时）：
 // M10-01) main-navigation-route-journey 不再期待 Legacy /player UI（compat redirect 形态）；
 // M10-02) main-chrome-mobile-docked 不再期待 Mini 导航 /player（openExpanded + URL 不变）；
 // M10-03) cold-start 不再断言旧主导航名「播放器」（现 IA = 创作 / 故事库 / 设置）；
-// M10-04) Generation History browser oracle 不再把 replay 定义成 Transport-only oneShot（正式 Work Session）；
-// M10-05) History Prompt autoplay 要求正式 Session / Mini（正式 Draft Session）；
 // M10-06) /player compatibility 仅允许既有白名单形态（产品三件套 + browser compat spec 白名单）；
 // M10-07) 目录冻结：catalog 无 KNOWN BASELINE 豁免态；deferred 项保持 PLANNED + executable_ids=[]；
 //         browser runner retries=0；本 closure 自身绑定不被静默解绑。
+// 注：原 M10-04/05（generation-history / history-prompt browser oracle）随 M9-C1 T2
+// History surface 退役，对应 spec 已删除，故本守卫不再文本读取。
 // 审计口径：被测 spec / 产品文件原文读取，注释剥离后做“旧语义归零”判定，冻结标记做“存在性”判定。
 
 const readRepoText = (rel: string): string =>
@@ -25,8 +25,6 @@ const stripComments = (src: string): string =>
 const MAIN_NAV_SPEC = 'tests/system/browser/scenarios/main-navigation-route-journey.spec.ts';
 const DOCKED_SPEC = 'tests/system/browser/scenarios/main-chrome-mobile-docked.spec.ts';
 const COLD_START_SPEC = 'tests/system/browser/scenarios/guest-cold-start-first-screen.spec.ts';
-const GEN_HISTORY_SPEC = 'tests/system/browser/scenarios/generation-history-play-once.spec.ts';
-const HISTORY_PROMPT_SPEC = 'tests/system/browser/scenarios/history-prompt-start-new-creation.spec.ts';
 const SCENARIO_DIR = 'tests/system/browser/scenarios';
 
 /** 允许以“导航进入 /player”形态（goto / waitForURL / client transition）覆盖兼容入口的 spec 白名单。 */
@@ -92,41 +90,6 @@ async function runM10ClosureUnit(): Promise<void> {
       '必须断言冻结 IA 三 Tab：创作 / 故事库 / 设置'
     );
     console.log('PASS: M10-03 cold-start-frozen-ia');
-  }
-
-  console.log('=== M10-04: Generation History 不再是 Transport-only oneShot ===');
-  {
-    const raw = readRepoText(GEN_HISTORY_SPEC);
-    const code = stripComments(raw);
-    // 旧语义归零：可执行面不得再有 oneShot / isOneShot（退役说明只允许留在注释）。
-    assert.ok(!code.includes('oneShot'), '可执行面不得再定义 oneShot 回放');
-    assert.ok(!code.includes('isOneShot'), '可执行面不得再断言 isOneShot');
-    // 冻结形态存在性：正式 Work Session（kind=work + workId=点击项 + finite + 真 Anchor work 身份）。
-    assert.ok(raw.includes('source?.kind).toBe("work")'), '必须断言 source.kind=work');
-    assert.ok(raw.includes('continuationMode).toBe("finite")'), '必须断言 finite（非 Draft、无 replay-text 身份）');
-    assert.ok(raw.includes('toBe("work")'), '必须断言真 server Anchor 身份为 work');
-    assert.ok(raw.includes('startsWith("replay-text-")).toBe(false)'), '必须否定 replay-text 伪身份');
-    // 正式 Session / Mini 可达：Mini 同帧可见 + Expanded 可开（URL/会话不变）。
-    assert.ok(raw.includes('mini-now-playing'), '回放必须 Mini 可见');
-    assert.ok(raw.includes('expanded-now-playing'), '回放必须 Expanded 可达');
-    console.log('PASS: M10-04 generation-history-work-session');
-  }
-
-  console.log('=== M10-05: History Prompt autoplay 要求正式 Session / Mini ===');
-  {
-    const raw = readRepoText(HISTORY_PROMPT_SPEC);
-    // 旧语义归零：全文件不得再有 oneShot（Transport-only 语义已退役）。
-    assert.ok(!raw.includes('oneShot'), 'History Prompt 链路不得再有 oneShot 语义');
-    const code = stripComments(raw);
-    assert.ok(!code.includes('isOneShot'), '可执行面不得再断言 isOneShot');
-    // 冻结形态存在性：正式 Draft Session（kind=draft + 新 messageId + 新 sessionId + 非 idle + finite）。
-    assert.ok(raw.includes('autoplayDraftStory'), '必须为 autoplayDraftStory 正式 Draft 链路');
-    assert.ok(raw.includes('source?.kind).toBe("draft")'), '必须断言 source.kind=draft');
-    assert.ok(raw.includes('continuationMode).toBe("finite")'), '必须断言 finite');
-    assert.ok(raw.includes('status).not.toBe("idle")'), '必须断言 Session 非 idle（先有 Session 后有播放）');
-    assert.ok(raw.includes('mini-now-playing'), 'autoplay 必须 Mini 可见（只派生自 Session）');
-    assert.ok(raw.includes('startsWith("replay-text-")).toBe(false)'), '必须否定 replay-text 伪身份');
-    console.log('PASS: M10-05 history-prompt-draft-session');
   }
 
   console.log('=== M10-06: /player compatibility 仅允许既有白名单形态 ===');

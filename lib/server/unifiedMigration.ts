@@ -1,7 +1,8 @@
 /**
  * 访客创作数据迁移服务
  *
- * 仅在注册时，将具名访客的聊天记录、生成历史与提示词历史原子级迁移至新用户。
+ * 仅在注册时，将具名访客的聊天记录与生成历史原子级迁移至新用户。
+ * M9-C1 T2：Prompt History 已前后端退役，不再迁移（见下方步骤 3）。
  */
 
 import { TRPCError } from '@trpc/server';
@@ -15,12 +16,14 @@ import { deriveDeterministicId } from '@/lib/storyCollection/identity';
 export interface MigrationResult {
     messagesMigrated: number;
     generationsMigrated: number;
+    /** @deprecated M9-C1 T2：Prompt History 已退役，恒为 0（字段保留兼容观测）。 */
     promptsMigrated: number;
     storyWorkIdMap: Map<number, number>;
 }
 
 /**
- * 将指定 guestId 的全部创作记录（聊天、作品历史、提示词历史）拷贝至指定用户。
+ * 将指定 guestId 的全部创作记录（聊天、作品历史）拷贝至指定用户。
+ * M9-C1 T2：提示词历史不再迁移（退役）。
  * 保留访客原表记录供回滚/审计，由 30 天 GC 自然清理。
  *
  * 关键约束：
@@ -239,40 +242,14 @@ export async function migrateGuestCreativeRecordsToUser(
         }, { timeout: 30000 });
     }
 
-    // 3. 提示词历史迁移（30 天内活跃，最多 100 条，upsert 保证幂等）
-    const threshold = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const guestPrompts = await prisma.guestPromptHistory.findMany({
-        where: { guestId, lastUsed: { gte: threshold } },
-        orderBy: { lastUsed: 'desc' },
-        take: 100,
-    });
-    if (guestPrompts.length > 0) {
-        for (const p of guestPrompts) {
-            await prisma.promptHistory.upsert({
-                where: {
-                    userId_prompt: {
-                        userId,
-                        prompt: p.prompt,
-                    },
-                },
-                create: {
-                    userId,
-                    prompt: p.prompt,
-                    lastUsed: p.lastUsed,
-                    useCount: p.useCount,
-                },
-                update: {
-                    lastUsed: p.lastUsed,
-                    useCount: p.useCount,
-                },
-            });
-        }
-    }
+    // 3. M9-C1 T2：Prompt History 前后端退役，注册迁移不再复制访客提示词历史。
+    //    Guest 原行保留给 30 天 GC 自然清理；promptsMigrated 恒为 0（字段保留以兼容调用方与观测）。
+    const promptsMigrated = 0;
 
     return {
         messagesMigrated: guestMessages.length,
         generationsMigrated: guestStoryWorks.length,
-        promptsMigrated: guestPrompts.length,
+        promptsMigrated,
         storyWorkIdMap,
     };
 }

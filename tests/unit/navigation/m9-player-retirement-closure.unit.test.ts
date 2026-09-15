@@ -6,7 +6,7 @@ import path from 'node:path';
 // 锁 10 条静态不变量（M9 收官）：
 // 1) page.tsx 为 redirect('/library') 且不 import legacy Player UI；
 // 2) player 目录仅 compatibility route（仅 page.tsx）；
-// 3) PlaybackStatusBoard/GenerationPreview/旧 AudioPlayer/HistoryPanel legacy ownership 归零；
+// 3) PlaybackStatusBoard/GenerationPreview/旧 AudioPlayer/HistoryPanel legacy ownership 归零，且 Chat History surface 亦退役；
 // 4) FloatingPlayer/useFloatingPlayer 归零；
 // 5) playbackProgressStore/lib/client/playbackProgress 归零；
 // 6) 产品 navigation 到 /player 归零（单文件 allowlist 口径）；
@@ -105,7 +105,7 @@ async function runM9ClosureUnit(): Promise<void> {
     console.log('PASS: M9-04-02 player-dir-only-page');
   }
 
-  console.log('=== M9-04-03: 旧三件套 + HistoryPanel legacy ownership 归零 ===');
+  console.log('=== M9-04-03: 旧三件套 + HistoryPanel legacy ownership 归零（含 Chat surface 退役） ===');
   {
     const files = walkAuditFiles();
     assert.ok(files.length > 50, `审计文件过少（实际 ${files.length}）`);
@@ -120,7 +120,7 @@ async function runM9ClosureUnit(): Promise<void> {
     }
     assert.deepStrictEqual(importViolations, [], `不得再 import player/components/**：${importViolations.join('；')}`);
     assert.deepStrictEqual(defViolations, [], `旧三件套定义必须为 0：${defViolations.join('；')}`);
-    // HistoryPanel：player 侧零 ownership，Chat 正式实现保留（M4 所有，不机械删除别处同名）。
+    // HistoryPanel：player 侧零 ownership。
     const playerDir = path.resolve(process.cwd(), 'app/(main)/player');
     const walkPlayer: string[] = [];
     const walk = (dir: string): void => {
@@ -143,10 +143,28 @@ async function runM9ClosureUnit(): Promise<void> {
         assert.ok(!code.includes('HistoryPanel'), `${abs} 不得引用 HistoryPanel`);
       }
     }
-    assert.ok(
-      fs.existsSync(path.resolve(process.cwd(), 'app/(main)/chat/components/HistoryPanel/index.tsx')),
-      'Chat HistoryPanel 正式实现必须保留'
-    );
+    // M9-C1 T2：Chat History Surface 同样物理退役——四个目录不得回流。
+    for (const comp of ['HistoryPanel', 'HistoryRecords', 'GenerationHistory', 'HistoryList']) {
+      assert.strictEqual(
+        fs.existsSync(path.resolve(process.cwd(), `app/(main)/chat/components/${comp}`)),
+        false,
+        `Chat components/${comp} 不得回流`
+      );
+    }
+    // Chat 目录内不得再出现「打开历史」入口文案。
+    const chatDir = path.resolve(process.cwd(), 'app/(main)/chat');
+    const chatFiles: string[] = [];
+    const walkChat = (dir: string): void => {
+      if (!fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const abs = path.join(dir, entry.name);
+        if (entry.isDirectory()) walkChat(abs);
+        else if (abs.endsWith('.ts') || abs.endsWith('.tsx')) chatFiles.push(abs);
+      }
+    };
+    walkChat(chatDir);
+    const openHistoryHits = chatFiles.filter((abs) => fs.readFileSync(abs, 'utf8').includes('打开历史'));
+    assert.deepStrictEqual(openHistoryHits, [], `Chat 不得再有「打开历史」入口：${openHistoryHits.join('；')}`);
     console.log(`PASS: M9-04-03 zero-legacy-ownership files=${files.length}`);
   }
 

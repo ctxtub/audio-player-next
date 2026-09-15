@@ -717,10 +717,6 @@ async function runStorycardSessionFlowTests(): Promise<void> {
   assert.ok(!cardCode.includes('services/storyFlow'), 'H：StoryCard 不得再 import storyFlow');
   assert.ok(cardCode.includes('playStoryCard'), 'H：StoryCard 经 Flow 正式入口播放');
 
-  const historyCode = readCode('app/(main)/chat/components/GenerationHistory/index.tsx');
-  assert.ok(historyCode.includes('playWorkFromHistory(record.id)'), 'H：History 经 Flow Work 入口回放');
-  assert.ok(!historyCode.includes('replayGeneration('), 'H：History 不得再走 Transport-only 回放');
-
   const chatFlowCode = readCode('app/services/chatFlow.ts');
   assert.ok(!chatFlowCode.includes('startStoryPlayback('), 'H：autoplay 不得再走无 Session 起播');
   assert.ok(chatFlowCode.includes('autoplayDraftStory('), 'H：autoplay 经 Flow 正式入口');

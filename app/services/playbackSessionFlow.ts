@@ -551,6 +551,10 @@ export function reportPlaybackPause(): void {
  */
 export function reportAudioActive(active: boolean): void {
   usePlaybackStore.getState().reportAudioActive(active);
+  // M9-C1 T2：同一 audio-active 信号驱动连续创作预算；动态 import 避免模块环。
+  void import('./continuousCreationFlow')
+    .then((flow) => flow.reportContinuousAudioActive(active))
+    .catch(() => undefined);
 }
 
 /** 播放进度推进（供 timeupdate/loadedmetadata 复用）。 */

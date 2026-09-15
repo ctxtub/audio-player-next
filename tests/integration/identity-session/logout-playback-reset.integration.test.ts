@@ -81,12 +81,14 @@ async function runH06Tests(): Promise<void> {
     assert.strictEqual(samples.length, 1, '一次 resetAccountData 应恰好产生一条探针采样');
     const sample = samples[0];
     assert.ok(
-        Array.isArray(sample.participants) && sample.participants.length >= 5,
-        '探针应记录参与块序列（含 config/chat/playbackSession 等）',
+        Array.isArray(sample.participants) && sample.participants.length >= 3,
+        '探针应记录参与块序列（config/chat/playbackSession）',
     );
     assert.ok(
-        sample.participants.includes('config') && sample.participants.includes('playbackSession'),
-        '参与序列应包含 config 与 playbackSession（M9-03 旧 playbackProgress 已删）',
+        sample.participants.includes('config') &&
+            sample.participants.includes('chat') &&
+            sample.participants.includes('playbackSession'),
+        '参与序列应包含 config/chat/playbackSession（M9-C1 T2 起 Prompt/Generation History 参与项已退役）',
     );
     assert.ok(
         !sample.participants.includes('playbackProgress'),

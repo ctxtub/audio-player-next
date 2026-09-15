@@ -9,8 +9,6 @@ import { authRouter } from './auth';
 import { configRouter } from './config';
 import { ttsRouter } from './tts';
 import { agentRouter } from './agent';
-import { promptHistoryRouter } from './promptHistory';
-import { generationHistoryRouter } from './generationHistory';
 import { chatConversationRouter } from './chatConversation';
 import { conversationRouter } from './conversation';
 import { collectionRouter } from './collection';
@@ -26,8 +24,6 @@ export const appRouter = router({
     config: configRouter,
     tts: ttsRouter,
     agent: agentRouter,
-    promptHistory: promptHistoryRouter,
-    generationHistory: generationHistoryRouter,
     chat: chatConversationRouter,
     conversation: conversationRouter,
     collection: collectionRouter,

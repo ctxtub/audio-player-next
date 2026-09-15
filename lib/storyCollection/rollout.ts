@@ -4,9 +4,10 @@
  * expand 阶段不收缩、不物理删除旧表；通过环境变量提供一键回退读与旧 History 停写能力：
  * - `STORY_COLLECTION_READS_ENABLED`（默认 true）：新会话/作品集读路径总开关；置 `'false'` 回退到旧单快照读，
  *   旧 `ChatMessage`（conversationId NULL）与旧 `GenerationHistory` 行仍在，可平滑回退。
- * - `LEGACY_HISTORY_READS_ENABLED`（默认 true）：旧 Prompt/Generation History 读路径开关，T2 退役时默认关闭。
- * - `LEGACY_HISTORY_WRITE_ENABLED`（默认 true 兼容）：旧 History 新写开关；T2 将其默认改为 false 并移除
- *   UI/store/router，T1 仅冻结开关名与默认值。
+ * - `LEGACY_HISTORY_READS_ENABLED`（M9-C1 T2 起默认 false）：旧 Prompt/Generation History 读路径开关；
+ *   仅在显式 `'true'`/`'1'` 时打开，用于 T2 后短期回退观测。
+ * - `LEGACY_HISTORY_WRITE_ENABLED`（M9-C1 T2 起默认 false）：旧 History 新写开关；
+ *   T2 已移除 UI/store/router，本开关仅保留结构对称性，生产代码无消费者。
  *
  * 注意：T1 的新 Conversation/Collection/promotion 路径**结构性零 History 写入**（见 collection-domain 静态守卫），
  * 不依赖本开关；开关只服务于后续里程碑的物理停写与回退。
@@ -21,6 +22,11 @@ function enabledUnlessExplicitlyFalse(value: string | undefined): boolean {
   return value !== 'false' && value !== '0';
 }
 
+/** M9-C1 T2：缺省关闭；仅显式 `'true'`/`'1'` 才开启（迁移期默认停用旧 History）。 */
+function disabledUnlessExplicitlyTrue(value: string | undefined): boolean {
+  return value === 'true' || value === '1';
+}
+
 export function isStoryCollectionReadsEnabled(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
@@ -30,13 +36,13 @@ export function isStoryCollectionReadsEnabled(
 export function isLegacyHistoryReadsEnabled(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
-  return enabledUnlessExplicitlyFalse(env[LEGACY_HISTORY_READS_ENABLED_ENV]);
+  return disabledUnlessExplicitlyTrue(env[LEGACY_HISTORY_READS_ENABLED_ENV]);
 }
 
 export function isLegacyHistoryWriteEnabled(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
-  return enabledUnlessExplicitlyFalse(env[LEGACY_HISTORY_WRITE_ENABLED_ENV]);
+  return disabledUnlessExplicitlyTrue(env[LEGACY_HISTORY_WRITE_ENABLED_ENV]);
 }
 
 export type StoryCollectionRollout = {

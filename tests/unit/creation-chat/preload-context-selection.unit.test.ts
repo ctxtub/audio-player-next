@@ -2,7 +2,9 @@ import assert from 'node:assert';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
-// 中文注释：H-03-b 回归——历史预载指令泡不得污染 LLM 上下文与摘要输入，本轮保留供续写触发。
+// 中文注释：H-03-b 回归——预载/续写指令泡不得污染 LLM 上下文与摘要输入，本轮保留供续写触发。
+// M9-C1 T2：旧 `stores/preloadStore` + chatFlow 的 `AUTO_CONTINUE_PROMPT` 续写链已删除；
+// 预载 origin 隔离语义由连续创作流 `CONTINUOUS_CREATION_PROMPT` 承接，本 suite 改读该现役常量。
 // 全程内存打桩，不建 socket、不绑端口，不碰 prisma/dev.db。
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
@@ -49,14 +51,14 @@ const { useChatStore } = nodeRequire('../../../stores/chatStore') as {
     useChatStore: typeof import('../../../stores/chatStore').useChatStore;
 };
 const chatStoreModule = nodeRequire('../../../stores/chatStore') as Record<string, unknown>;
-const { AUTO_CONTINUE_PROMPT } = nodeRequire('../../../app/services/chatFlow') as {
-    AUTO_CONTINUE_PROMPT: string;
+const { CONTINUOUS_CREATION_PROMPT } = nodeRequire('../../../app/services/continuousCreationFlow') as {
+    CONTINUOUS_CREATION_PROMPT: string;
 };
 
 // 中文注释：自证桩有效——agentFlow 桩必须真实拦截 checkAndSummarize 的动态导入，否则后续断言无意义。
 function assertStubEffective(): void {
     assert.strictEqual(
-        AUTO_CONTINUE_PROMPT,
+        CONTINUOUS_CREATION_PROMPT,
         '请继续故事',
         '续写指令常量不得漂移',
     );
@@ -118,7 +120,7 @@ async function runH03bTests(): Promise<void> {
     console.log('=== H-03-b-01: conversationMessages 排除历史预载指令泡 ===');
     resetBaseline();
     submitManual('手动问题-1');
-    submitPreloadStory(AUTO_CONTINUE_PROMPT, '预载故事-H03b-01');
+    submitPreloadStory(CONTINUOUS_CREATION_PROMPT, '预载故事-H03b-01');
     // 中文注释：本轮为人工提问（dispatch 后 sending 未 finish，复刻 beginChatStream 取上下文时机）。
     useChatStore.getState().dispatch({ type: 'user.submit', content: '手动问题-2' } as Parameters<
         ReturnType<typeof useChatStore.getState>['dispatch']
@@ -129,7 +131,7 @@ async function runH03bTests(): Promise<void> {
     assert.ok(contents1.includes('手动问题-2'), '本轮人工触发应保留');
     assert.ok(contents1.includes('预载故事-H03b-01'), '预载故事助手卡应保留（仅排指令泡）');
     assert.ok(
-        !contents1.includes(AUTO_CONTINUE_PROMPT),
+        !contents1.includes(CONTINUOUS_CREATION_PROMPT),
         'RED: 历史预载指令泡“请继续故事”不得进入 conversationMessages',
     );
     console.log('PASS: H-03-b-01 history preload excluded');
@@ -140,13 +142,13 @@ async function runH03bTests(): Promise<void> {
     // 中文注释：本轮即预载续写（sending 未完结），最后一条 user 为 preload 指令，必须保留供 LLM 见到续写触发。
     useChatStore.getState().dispatch({
         type: 'user.submit',
-        content: AUTO_CONTINUE_PROMPT,
+        content: CONTINUOUS_CREATION_PROMPT,
         origin: 'preload',
     } as Parameters<ReturnType<typeof useChatStore.getState>['dispatch']>[0]);
     const ctx2 = useChatStore.getState().selectors.conversationMessages();
     const contents2 = ctx2.map((m) => String(m.content));
     assert.ok(
-        contents2.includes(AUTO_CONTINUE_PROMPT),
+        contents2.includes(CONTINUOUS_CREATION_PROMPT),
         '本轮预载触发必须保留（否则续写无指令可依）',
     );
     console.log('PASS: H-03-b-02 current preload retained');
@@ -165,7 +167,7 @@ async function runH03bTests(): Promise<void> {
             {
                 id: 'b-pre-u',
                 role: 'user',
-                content: AUTO_CONTINUE_PROMPT,
+                content: CONTINUOUS_CREATION_PROMPT,
                 status: 'delivered',
                 createdAt: nowIso,
                 metadata: { origin: 'preload' } as unknown as import('../../../types/chat').ChatMessage['metadata'],
@@ -184,7 +186,7 @@ async function runH03bTests(): Promise<void> {
     console.log('=== H-03-b-04: checkAndSummarize 摘要输入排除指令泡 ===');
     resetBaseline();
     // 中文注释：预载 story 置于归档窗（前部），确保其正文进摘要输入；指令泡全程不得进输入。
-    submitPreloadStory(AUTO_CONTINUE_PROMPT, '摘要预载故事');
+    submitPreloadStory(CONTINUOUS_CREATION_PROMPT, '摘要预载故事');
     submitManual('摘要-u1');
     submitManual('摘要-u2');
     submitManual('摘要-u3');
@@ -198,7 +200,7 @@ async function runH03bTests(): Promise<void> {
         content: string;
     }>;
     assert.ok(
-        !capturedInput.some((m: { role: string; content: string }) => m.content === AUTO_CONTINUE_PROMPT),
+        !capturedInput.some((m: { role: string; content: string }) => m.content === CONTINUOUS_CREATION_PROMPT),
         'RED: 摘要输入不得含“请继续故事”指令泡',
     );
     assert.ok(

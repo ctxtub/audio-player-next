@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import GlassToast from '@/components/ui/GlassToast';
 
 import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
-import { resetStoryFlow } from '@/app/services/storyFlow';
+import { preemptContinuousCreationForUserInput } from '@/app/services/continuousCreationFlow';
+import { startNewCreation } from '@/app/services/startNewCreation';
+import { getCollection } from '@/lib/client/collection';
 import { useChatStore } from '@/stores/chatStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 
@@ -12,7 +14,6 @@ import HeaderArea from './HeaderArea';
 import OnboardingModal from '../OnboardingModal';
 import InputArea from './InputArea';
 import MessageArea from './MessageArea';
-import HistoryPanel from '../HistoryPanel';
 import ContinuousCreationBar from '../ContinuousCreationBar';
 import styles from './index.module.scss';
 import type { ChatLayoutProps } from './types';
@@ -42,40 +43,49 @@ const defaultSuggestions: HeaderSuggestion[] = [
 ];
 
 /**
- * 聊天页面布局组件，组织消息区与输入区，并持有 Chat-owned History Surface 纯 UI 开关。
- * @param props.initialMessages 初始消息列表。
+ * 聊天页面布局组件，组织连续创作状态卡、消息区与输入区。
+ *
+ * M9-C1 T2：History Surface 已退役；「清空」升级为唯一「新建创作」强重置入口。
  * @returns 布局结构 JSX。
  */
 const ChatLayout: React.FC<ChatLayoutProps> = () => {
-
-
   const messages = useChatStore((state) => state.messages);
   const inputValue = useChatStore((state) => state.inputValue);
   const setInputValue = useChatStore((state) => state.setInputValue);
-  /** 同页 History 选择的唯一 pending 消费订阅（M4-07：显式订阅，当前已在 /chat，无需 router 再挂载）。 */
+  /** 单槽位待发送提示词（推荐提问在生成中排队用；M9-C1 T2 起不再服务 History）。 */
   const pendingAutoSend = useChatStore((state) => state.pendingAutoSend);
-  /** History Surface 纯 UI 开关（M4-07）：不进 Zustand，不触数据。 */
-  const [historyOpen, setHistoryOpen] = useState(false);
-
-  /** M9-F01：StoryCard 播放 ownership 已收口至 PlaybackSessionFlow.playStoryCard；
-   * ChatLayout 不再持有任何 Transport 播放决策（此前 handlePlayStory 经
-   * usePlaybackStore.playAudio(url, id) 的用户播放 ownership 已删除）。
-   * 这里仅保留发送前的音频解锁（ensureUnlocked，非故事播放入口，不选音源）。 */
+  /** 当前 active Conversation 对应的集合标题（创作页围绕当前集合运行）。 */
+  const collectionTitle = useChatStore((state) => state.collectionTitle);
+  /** 当前 active Conversation 对应的集合 id。 */
+  const collectionId = useChatStore((state) => state.collectionId);
   /** 是否存在发送中的消息，用于控制输入区禁用状态 */
   const isSending = useMemo(
     () => messages.some((m) => m.status === 'sending'),
     [messages],
   );
 
-  /** 将 store 与初始消息融合，避免首屏出现空白。 */
-  // const resolvedMessages = useMemo(() => {
-  //   if (!hasHydrated && messages.length === 0) {
-  //     return initialMessages;
-  //   }
-  //   return messages;
-  // }, [initialMessages, messages, hasHydrated]);
-
-
+  // M9-C1 T2：有集合但标题未知时补拉集合标题（创作页围绕当前集合运行）。
+  useEffect(() => {
+    if (!collectionId || collectionTitle) {
+      return;
+    }
+    let cancelled = false;
+    getCollection(collectionId)
+      .then((collection) => {
+        if (cancelled) {
+          return;
+        }
+        useChatStore.getState().applyConversationIdentity({
+          conversationId: useChatStore.getState().conversationId,
+          collectionId,
+          collectionTitle: collection.title,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [collectionId, collectionTitle]);
 
   useEffect(() => {
     // 当存在未读响应时，立即标记为已读（已阅）
@@ -97,14 +107,14 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     };
   }, []);
 
-
-
   /**
    * 输入区提交回调，根据意图选择普通聊天流或故事生成流。
    * @param content 用户输入的文本内容。
    */
   const handleSubmit = useCallback(async (content: string) => {
     try {
+      // 用户主动输入即抢占连续创作：丢弃在途/就绪的下一作品并作废旧回调。
+      preemptContinuousCreationForUserInput();
       await usePlaybackStore.getState().ensureUnlocked();
       await beginChatStream(content);
     } catch (error) {
@@ -113,7 +123,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     }
   }, []);
 
-  // Chat-owned History 同页自动发送：History 选择只写 pendingAutoSend，本 effect 为唯一消费路径。
+  // 推荐提问同页自动发送：只写 pendingAutoSend，本 effect 为唯一消费路径。
   // 02-02 UX：发送中到达的 pending 不丢（保留待发），生成结束（isSending 翻转）重触发消费补发。
   useEffect(() => {
     if (!pendingAutoSend) {
@@ -125,9 +135,6 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     }
 
     const prompt = pendingAutoSend;
-
-    // 中文注释：H-21方案A——从提示词历史开始新创作为干净会话，发送前先重置故事链路（清空旧会话/播放/预载/生成态），再消费 pending 自动发送；此时 messages 已空，新请求不含旧上下文。发送中到达的 pending 仍由上文守卫保留待发，语义不变。
-    resetStoryFlow();
     useChatStore.getState().setPendingAutoSend(null);
 
     setInputValue(prompt);
@@ -138,26 +145,6 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     handleSubmit,
     setInputValue,
   ]);
-
-  /**
-   * History 提示词「重新创作」适配器（M4-07）：只写 pending + 关面板，不直接提交/重置/导航。
-   * 消费由上文唯一 pending consumer 承担 exactly-once；发送中选择沿单 slot 覆盖语义排队，不抢当前 attempt。
-   * @param prompt 选择的历史提示词。
-   */
-  const handleHistorySelectPrompt = useCallback((prompt: string) => {
-    useChatStore.getState().setPendingAutoSend(prompt);
-    setHistoryOpen(false);
-  }, []);
-
-  /** 打开 Chat-owned History Surface（纯 UI，不触数据）。 */
-  const handleOpenHistory = useCallback(() => {
-    setHistoryOpen(true);
-  }, []);
-
-  /** 关闭 Chat-owned History Surface（纯 UI，不触数据）。 */
-  const handleCloseHistory = useCallback(() => {
-    setHistoryOpen(false);
-  }, []);
 
   /**
    * 输入框内容变化时同步到 store，便于外部组件访问。 
@@ -215,10 +202,22 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
   }, []);
 
   /**
-   * 清空输入框并重置整个故事流（包含聊天记录与音频状态）。
+   * 唯一「新建创作」入口：强重置当前集合运行态。
+   * 仅当存在草稿/在途内容时确认；确认后由 startNewCreation 承担全部副作用。
    */
-  const handleClear = useCallback(() => {
-    resetStoryFlow();
+  const handleNewCreation = useCallback(() => {
+    const needsConfirm = useChatStore.getState().messages.length > 0;
+    void startNewCreation({
+      confirm: () => {
+        if (!needsConfirm) {
+          return true;
+        }
+        if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
+          return true;
+        }
+        return window.confirm('开始新建创作？当前会话内容将被清空。');
+      },
+    });
   }, []);
 
   return (
@@ -230,7 +229,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         suggestions={defaultSuggestions}
         onSuggestionSelect={handleSuggestionSelect}
       />
-      <ContinuousCreationBar collectionTitle={null} />
+      <ContinuousCreationBar collectionTitle={collectionTitle} />
       <MessageArea
         messages={messages}
         isLoading={false}
@@ -242,26 +241,9 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         isSending={isSending}
         value={inputValue}
         onChange={handleInputChange}
-        onClear={handleClear}
-        leftSlot={(
-          <button
-            type="button"
-            className={styles.historyTrigger}
-            onClick={handleOpenHistory}
-            aria-label="打开历史"
-            aria-expanded={historyOpen}
-          >
-            历史
-          </button>
-        )}
+        onClear={handleNewCreation}
+        clearText="新建创作"
       />
-      {historyOpen ? (
-        <div className={styles.historyOverlay} role="dialog" aria-modal="false" aria-label="历史">
-          <div className={styles.historyDialog}>
-            <HistoryPanel onSelectPrompt={handleHistorySelectPrompt} onClose={handleCloseHistory} />
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 };

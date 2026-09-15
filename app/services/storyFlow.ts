@@ -19,8 +19,8 @@ import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 
 import {
+  endContinuousCreationRun,
   handleTrackEnded,
-  resetContinuousCreationRuntime,
   scheduleNextWork,
 } from './continuousCreationFlow';
 
@@ -109,13 +109,13 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
 
   if (playbackStore.isOneShot) {
     playbackStore.reset();
-    resetContinuousCreationRuntime();
+    endContinuousCreationRun();
     return null;
   }
 
   if (remainingMs <= 0) {
     playbackStore.reset();
-    resetContinuousCreationRuntime();
+    endContinuousCreationRun();
     return null;
   }
 
@@ -184,5 +184,5 @@ export const resetStoryFlow = () => {
   usePlaybackStore.getState().reset();
   useGenerationStore.getState().reset();
   useChatStore.getState().resetChat();
-  resetContinuousCreationRuntime();
+  endContinuousCreationRun();
 };

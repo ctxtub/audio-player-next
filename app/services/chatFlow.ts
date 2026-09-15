@@ -25,6 +25,14 @@ const normalizeError = (error: unknown): Error => {
 let globalAbortController: AbortController | null = null;
 
 /**
+ * M9-C1 T2 评审闭合：聊天流运行代次。
+ *
+ * 每次新开流或显式中止自增。`onComplete` 的异步 autoplay IIFE 在落盘 await 后会
+ * 复核代次：若期间发生 abort/新建创作/登出，则放弃起播，旧故事绝不复活。
+ */
+let streamSeq = 0;
+
+/**
  * 执行一次聊天流式调用，根据流事件更新 store。
  * M4-02：全链路按 assistantMessageId（attempt 身份）定位 Artifact；
  * story_complete 仅完成正文（draft→complete），done 仅标记 delivered，音频仅瞬态播放不写入消息。
@@ -44,6 +52,7 @@ const executeChatStream = async (
     globalAbortController.abort();
   }
   globalAbortController = new AbortController();
+  const myStreamSeq = ++streamSeq;
 
   let streamErrored = false;
   let lastErrorMessage: string | undefined;
@@ -138,17 +147,30 @@ const executeChatStream = async (
                   } catch {
                     // 落盘失败不阻断 begin 尝试（行可能已存在）；begin 侧自行 fail-closed。
                   }
+                  // M9-C1 T2 评审闭合：落盘 await 期间若发生 abort/新流/强重置（代次变化）
+                  // 或消息已被清空，则绝不复活旧故事起播，仅吊销 Blob。
+                  const revoked = () => {
+                    try {
+                      if (typeof pendingAudioBlob === 'string' && pendingAudioBlob.startsWith('blob:')) {
+                        URL.revokeObjectURL(pendingAudioBlob);
+                      }
+                    } catch {
+                      // 吊销失败不影响播放链。
+                    }
+                  };
+                  if (myStreamSeq !== streamSeq) {
+                    revoked();
+                    return;
+                  }
+                  if (!useChatStore.getState().messages.some((m) => m.id === assistantMessageId)) {
+                    revoked();
+                    return;
+                  }
                   autoplayDraftStory({
                     messageId: assistantMessageId,
                     storyText: generatedContent,
                   }).catch(console.error);
-                  try {
-                    if (typeof pendingAudioBlob === 'string' && pendingAudioBlob.startsWith('blob:')) {
-                      URL.revokeObjectURL(pendingAudioBlob);
-                    }
-                  } catch {
-                    // 吊销失败不影响播放链。
-                  }
+                  revoked();
                 })();
               }
             } else if (stillExists) {
@@ -240,6 +262,7 @@ export const beginChatStream = async (
  * 因此本函数不额外处理 stale 回写。
  */
 export const abortActiveChatStream = (): void => {
+  streamSeq += 1;
   if (globalAbortController) {
     globalAbortController.abort();
     globalAbortController = null;

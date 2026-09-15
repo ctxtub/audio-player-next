@@ -185,6 +185,28 @@ async function runTests() {
   }
   console.log('PASS: 3');
 
+  console.log('=== 3b. 未显式传 expectedOldId：必须自动捕获重置前的当前会话 id ===');
+  {
+    setSettings(true, 30);
+    seedOldSession(5);
+    let capturedExpectedOldId: string | undefined | null = null;
+    const result = await startNewCreation({
+      createNew: async (expectedOldId?: string) => {
+        capturedExpectedOldId = expectedOldId ?? null;
+        return { id: 'conv-auto', collectionId: 'col-auto' };
+      },
+    });
+    assert.strictEqual(result.started, true);
+    // 行为 RED：基线在 reset 前不捕获会话 id，createNew 收到 undefined。
+    assert.strictEqual(
+      capturedExpectedOldId,
+      'old-conv',
+      '未显式传 expectedOldId 时必须把重置前捕获的当前 conversationId 传给 createNew（防旧会话静默覆盖）',
+    );
+    assert.strictEqual(result.conversationId, 'conv-auto');
+  }
+  console.log('PASS: 3b');
+
   console.log('=== 4. createNew 远端失败：保持安全态且不恢复旧播放 ===');
   {
     setSettings(true, 30);

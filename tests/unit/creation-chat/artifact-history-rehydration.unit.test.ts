@@ -2,7 +2,8 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import type { LibraryCreateInput, StoryWorkDetailDTO } from '../../../lib/trpc/schemas/library';
+import type { StoryWorkDetailDTO } from '../../../lib/trpc/schemas/library';
+import type { CollectionPromoteInput } from '../../../lib/trpc/schemas/collection';
 
 // 中文注释：M4-06 Artifact History Round-trip / Rehydration 回归（E2E-08-06）。
 // 建立 History persistence boundary：transient 跨进程安全降级、stable 精确 round-trip、
@@ -54,6 +55,53 @@ nodeRequire.cache[chatConversationPath] = {
       }));
     },
     saveMyConversation: async (messages: DtoLike[], baseMessageIds?: string[]) => {
+      saveCalls.push({
+        messages: JSON.parse(JSON.stringify(messages)) as DtoLike[],
+        baseMessageIds: baseMessageIds ? [...baseMessageIds] : undefined,
+      });
+      if (saveImpl) {
+        return saveImpl(messages, baseMessageIds);
+      }
+      return { ok: true };
+    },
+  },
+} as unknown as NodeModule;
+
+// M9-C1 T2：chatStore 读/写路径已切到会话级 client（conversation.ts）。同一组可变桩
+// 同时挂到新 client，保证 fetch/save 计数断言继续成立（conversationId 为首参）。
+const conversationClientPath = path.resolve(process.cwd(), 'lib/client/conversation.ts');
+const ACTIVE_CONVERSATION = {
+  id: 'conv-unit-test',
+  state: 'active',
+  collectionId: null,
+  createdAt: '2026-09-12T10:00:00.000Z',
+  updatedAt: '2026-09-12T10:00:00.000Z',
+};
+nodeRequire.cache[conversationClientPath] = {
+  id: conversationClientPath,
+  filename: conversationClientPath,
+  loaded: true,
+  exports: {
+    getActiveConversation: async () => ACTIVE_CONVERSATION,
+    ensureActiveConversation: async () => ACTIVE_CONVERSATION,
+    getConversation: async () => ACTIVE_CONVERSATION,
+    createNewConversation: async () => ACTIVE_CONVERSATION,
+    closeConversation: async () => ACTIVE_CONVERSATION,
+    fetchConversationMessages: async () => {
+      fetchCount += 1;
+      if (fetchImpl) {
+        return fetchImpl();
+      }
+      return stubFetchRows.map((r) => ({
+        ...r,
+        parts: r.parts ? r.parts.map((p) => JSON.parse(JSON.stringify(p))) : undefined,
+      }));
+    },
+    saveConversationSnapshot: async (
+      _conversationId: string,
+      messages: DtoLike[],
+      baseMessageIds?: string[],
+    ) => {
       saveCalls.push({
         messages: JSON.parse(JSON.stringify(messages)) as DtoLike[],
         baseMessageIds: baseMessageIds ? [...baseMessageIds] : undefined,
@@ -122,13 +170,13 @@ interface ArtifactView {
 const NOW = '2026-09-12T10:00:00.000Z';
 
 // 中文注释：可控 deferred promotion 桩——kick 同步记录，结算由测试显式 resolve/reject。
-let createCalls: LibraryCreateInput[] = [];
+let createCalls: CollectionPromoteInput[] = [];
 let pendingCreates: {
-  input: LibraryCreateInput;
+  input: CollectionPromoteInput;
   resolve: (dto: StoryWorkDetailDTO) => void;
   reject: (err: unknown) => void;
 }[] = [];
-setPromotionCreateOverride((input: LibraryCreateInput) => {
+setPromotionCreateOverride((input: CollectionPromoteInput) => {
   createCalls.push(input);
   return new Promise<StoryWorkDetailDTO>((resolve, reject) => {
     pendingCreates.push({ input, resolve, reject });
@@ -137,7 +185,7 @@ setPromotionCreateOverride((input: LibraryCreateInput) => {
 
 function resetAll(): void {
   useChatStore.getState().reset();
-  useChatStore.setState({ syncEnabled: false });
+  useChatStore.setState({ syncEnabled: false, conversationId: 'conv-unit-test', collectionId: null, collectionTitle: null });
   stubFetchRows = [];
   fetchImpl = null;
   fetchCount = 0;
@@ -148,10 +196,10 @@ function resetAll(): void {
   agentInteractCalls = 0;
 }
 
-function makeDto(id: number, input: LibraryCreateInput): StoryWorkDetailDTO {
+function makeDto(id: number, input: CollectionPromoteInput): StoryWorkDetailDTO {
   return {
     id,
-    title: input.title ?? '测试标题',
+    title: '测试标题',
     excerpt: input.storyText.slice(0, 20),
     voiceId: input.voiceId ?? '',
     contentHash: `hash-${id}`,

@@ -15,12 +15,13 @@ import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/db';
 import { TRPCError } from '@trpc/server';
 import type { Subject } from './subject';
-import type { ChatMessageInput } from '@/lib/trpc/schemas/chatConversation';
+import type { ChatMessageInput, ChatMessageDTO } from '@/lib/trpc/schemas/chatConversation';
 import type { ConversationDTO } from '@/lib/trpc/schemas/conversation';
 import {
   assertFreshBaseline,
   assertNoNewLegacyStoryCardWrites,
   sanitizePartsForWrite,
+  toChatMessageDto,
 } from './chatConversation';
 
 /** 访客单会话快照保留上限（与 legacy chat 一致） */
@@ -78,6 +79,35 @@ export async function getConversationForSubject(
     throw new TRPCError({ code: 'NOT_FOUND', message: '会话不存在' });
   }
   return toConversationDto(row);
+}
+
+/**
+ * 读取指定会话的消息（仅本会话，按 position 升序）。
+ *
+ * M9-C1 T2：Chat 读路径的会话级实现——先断言会话归属（跨主体 NOT_FOUND，fail closed），
+ * 再按 `conversationId` 过滤，绝不返回其它会话的消息。
+ *
+ * @param subject 身份主体
+ * @param conversationId 目标会话 id
+ * @returns 该会话的 ChatMessageDTO 列表
+ */
+export async function getConversationMessagesForSubject(
+  subject: Subject,
+  conversationId: string,
+): Promise<ChatMessageDTO[]> {
+  await assertConversationOwned(subject, conversationId);
+  if (subject.type === 'user') {
+    const rows = await prisma.chatMessage.findMany({
+      where: { conversationId },
+      orderBy: { position: 'asc' },
+    });
+    return rows.map(toChatMessageDto);
+  }
+  const rows = await prisma.guestChatMessage.findMany({
+    where: { conversationId },
+    orderBy: { position: 'asc' },
+  });
+  return rows.map(toChatMessageDto);
 }
 
 /**

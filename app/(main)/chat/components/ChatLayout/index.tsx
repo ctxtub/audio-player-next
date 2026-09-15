@@ -193,6 +193,9 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
       return;
     }
     try {
+      // M9-C1 T2 评审闭合：重试前抢占在途/就绪的下一作品，避免 abort 后旧预载
+      // 的失败被误记为连续创作 error，且旧结果不得复活。
+      preemptContinuousCreationForUserInput();
       await retryChatStream();
     } catch (error) {
       const message =

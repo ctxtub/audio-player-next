@@ -1,18 +1,22 @@
 /**
  * StoryWork Promotion Adapter（M4-03）。
  *
- * 唯一的 promotion 通道：CompleteChatArtifact → Promotion Adapter → libraryClient.create(...) → StoryWorkDetailDTO。
+ * 唯一的 promotion 通道：CompleteChatArtifact → Promotion Adapter → collection.promoteArtifact(...) → StoryWorkDetailDTO。
  * 本步仍然不要自动触发 promotion（orchestration 留 M4-04）；adapter 只负责 I/O。
+ *
+ * M9-C1 T2：写路径切到 `collection.promoteArtifact`（Artifact → Collection/Work 唯一
+ * router 写入口），必须携带当前 `conversationId`；不再走 `library.create`（后者不建集合）。
  *
  * 薄层契约：
  * 1. 只接受 complete / promotion_failed（retry source）且携带非空 prompt 快照；
  *    draft / interrupted / promoting / ready / legacy，以及缺失 mandatory
  *    prompt snapshot 的 complete / promotion_failed，一律 fail-fast。
- * 2. 构造 frozen LibraryCreateInput { title, prompt, storyText, voiceId, sourceMessageId } → libraryClient.create。
- * 3. 不自行造 client-side idempotency key；幂等完全由 M2 [sourceMessageId + storyText hash] 保障。
+ * 2. 构造 frozen CollectionPromoteInput { conversationId, prompt, storyText, voiceId, sourceMessageId }
+ *    → collection.promoteArtifact；缺 conversationId 一律 fail-fast。
+ * 3. 不自行造 client-side idempotency key；幂等完全由 [sourceMessageId + storyText hash] 保障。
  * 4. 同 sourceMessageId + 不同 storyText 的 CONFLICT 原样向上暴露；不吞错、不自动换 sourceMessageId。
  * 5. promotion 时严禁重新读取当前 Settings；只消费 Artifact 生成开始时冻结的 prompt/voiceId 快照。
- * 6. 只能消费 frozen libraryClient.create；严禁 import server/Prisma/raw trpc。
+ * 6. 只能消费 frozen collection client；严禁 import server/Prisma/raw trpc。
  * 7. 不负责把 Artifact 改成 promoting/ready/failed——那是 M4-04 orchestration 的职责。
  */
 
@@ -21,17 +25,15 @@ import type {
   CompleteChatArtifact,
   PromotionFailedChatArtifact,
 } from '@/types/chatArtifact';
-import type {
-  LibraryCreateInput,
-  StoryWorkDetailDTO,
-} from '@/lib/trpc/schemas/library';
-import { libraryClient } from '@/lib/client/library';
+import type { StoryWorkDetailDTO } from '@/lib/trpc/schemas/library';
+import type { CollectionPromoteInput } from '@/lib/trpc/schemas/collection';
+import { promoteArtifact } from '@/lib/client/collection';
 
 /**
  * 可 promotion 的 Artifact 狭窄类型：仅 complete 与 promotion_failed，
  * 且必须携带生成开始时冻结的 mandatory prompt snapshot（非空字符串）。
  * M4-01 Artifact contract 里 prompt 是 optional，缺 snapshot 的合法状态机
- * 对象必须在此 fail-fast，绝不触达 library.create。
+ * 对象必须在此 fail-fast，绝不触达 collection.promoteArtifact。
  */
 export type PromotableChatArtifact = (
   | CompleteChatArtifact
@@ -41,15 +43,18 @@ export type PromotableChatArtifact = (
 };
 
 /**
- * library.create 函数签名（与 frozen facade 一致，便于测试注入）。
+ * collection.promoteArtifact 函数签名（与 frozen facade 一致，便于测试注入）。
  */
-export type PromotionCreateFn = (input: LibraryCreateInput) => Promise<StoryWorkDetailDTO>;
+export type PromotionCreateFn = (input: CollectionPromoteInput) => Promise<StoryWorkDetailDTO>;
+
 
 /**
- * promotion 依赖注入（测试用隔离桩；生产默认走 frozen libraryClient.create）。
+ * promotion 依赖注入（测试用隔离桩；生产默认走 frozen collection.promoteArtifact）。
+ * M9-C1 T2：`conversationId` 为会话级 promotion 归属证据，缺失即 fail-fast。
  */
 export interface PromotionAdapterDeps {
   readonly create?: PromotionCreateFn;
+  readonly conversationId?: string;
 }
 
 /**
@@ -109,19 +114,18 @@ export function assertPromotableArtifact(
   }
   // status 合法但缺 mandatory promotion snapshot：fail-fast，禁止自动补 prompt。
   throw new Error(
-    'Promotion adapter 拒绝：缺失 mandatory promotion snapshot（prompt 为空），不可 promotion（fail-fast，未触达 library.create；禁止自动补 prompt）',
+    'Promotion adapter 拒绝：缺失 mandatory promotion snapshot（prompt 为空），不可 promotion（fail-fast，未触达 collection.promoteArtifact；禁止自动补 prompt）',
   );
 }
 
 /**
- * 由冻结快照构造 LibraryCreateInput（精确映射五字段，不增不减）。
+ * 由冻结快照构造 collection.promoteArtifact 入参（不含 conversationId，由调用方注入）。
  * prompt / voiceId 恒取 Artifact 生成开始时冻结值，严禁回读当前 Settings。
  */
 export function buildPromotionInput(
   artifact: PromotableChatArtifact,
-): LibraryCreateInput {
+): Omit<CollectionPromoteInput, 'conversationId'> {
   return {
-    title: artifact.title,
     prompt: artifact.prompt,
     storyText: artifact.storyText,
     voiceId: artifact.voiceId,
@@ -131,10 +135,11 @@ export function buildPromotionInput(
 
 /**
  * 将 Complete / PromotionFailed Artifact 提升为 StoryWork。
- * 薄 I/O：门控 → 构造 frozen input → 透传 libraryClient.create；错误原样上抛。
+ * 薄 I/O：门控 → 构造 frozen input（含会话归属）→ 透传 collection.promoteArtifact；
+ * 错误原样上抛。M9-C1 T2：这是 Artifact → Collection/Work 的唯一写路径。
  *
  * @param artifact 必须为 complete（初次）或 promotion_failed（幂等重试源）。
- * @param deps 可选注入的 create 实现；缺省为 frozen libraryClient.create。
+ * @param deps 可选注入的 create 实现与当前 conversationId。
  * @returns 服务端返回的 StoryWorkDetailDTO。
  */
 export async function promoteStoryArtifact(
@@ -142,7 +147,16 @@ export async function promoteStoryArtifact(
   deps?: PromotionAdapterDeps,
 ): Promise<StoryWorkDetailDTO> {
   assertPromotableArtifact(artifact);
-  const input = buildPromotionInput(artifact);
-  const create = deps?.create ?? libraryClient.create;
+  const conversationId = deps?.conversationId;
+  if (typeof conversationId !== 'string' || conversationId.trim().length === 0) {
+    throw new Error(
+      'Promotion adapter 拒绝：缺失 conversationId（会话级 promotion 必须携带归属会话，fail-fast）',
+    );
+  }
+  const input: CollectionPromoteInput = {
+    ...buildPromotionInput(artifact),
+    conversationId,
+  };
+  const create = deps?.create ?? promoteArtifact;
   return create(input);
 }

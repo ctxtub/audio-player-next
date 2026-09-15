@@ -5,16 +5,21 @@
  * - 调度门：enabled、预算有效、当前 track 正在播放、epoch 匹配、无 next job、进入调度窗；
  * - 严格 work lookahead=1：同一时刻至多一个在途/就绪的 next work；
  * - 生成经正式 `beginChatStream`（origin='preload' 隔离续写气泡，不写 History）；
- * - 所有异步回写携带 epoch，`isStale` 为真一律 no-op；
- * - 预算只在 audio 实际推进时递减，耗尽立即停声。
+ * - 所有异步回写携带 epoch + 运行代次，`isStale` / 代次失配一律 no-op；
+ * - 预算只在 audio 实际推进时递减，耗尽立即停声并作废在途 next job。
+ *
+ * T2 评审闭合（item 4，最严解读）：停止矩阵（关闭开关 / 预算耗尽 / 新建创作 /
+ * 切换集合 / 登出 / 用户输入抢占）必须真正作废所有在途 next job——
+ * 旧结果绝不写回、等待中的结果不得复活自动续播、新会话可立即重新调度。
  *
  * 契约：tech-design §5；docs/e2e/10-会话与作品集连续创作/05..08。
  */
 
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
+import { usePlaybackStore } from '@/stores/playbackStore';
 import { isWithinScheduleWindow } from '@/lib/continuous-creation/stateMachine';
 
-import { beginChatStream } from './chatFlow';
+import { abortActiveChatStream, beginChatStream } from './chatFlow';
 
 /** 连续创作续写指令（用户可见文案；预载 origin 隔离气泡）。 */
 export const CONTINUOUS_CREATION_PROMPT = '请继续故事';
@@ -32,6 +37,11 @@ let prepared: { epoch: number; work: PreparedNextWork } | null = null;
 let scheduling = false;
 /** 上次 audioActive 采样时间（null = 未在推进）。 */
 let lastActiveAt: number | null = null;
+/**
+ * 运行代次：每次强重置/取消自增。异步生成结算时若代次已变，结果一律丢弃
+ * （即使 store epoch 因 reset() 回落也绝不误判为“新鲜”），且旧 finally 不得释放新生成的锁。
+ */
+let runToken = 0;
 
 /** 下一作品生成器签名。 */
 type ContinuousCreationGenerator = (
@@ -60,11 +70,52 @@ export function hasPreparedNextWork(): boolean {
   return prepared !== null;
 }
 
-/** 清空编排运行时（新建创作/切换集合/登出）。 */
+/** 释放 prepared 持有的对象 URL（仅 blob:；远程 http(s) 不吊销）。 */
+function revokePreparedBlob(): void {
+  const url = prepared?.work.audioUrl;
+  if (url && url.startsWith('blob:')) {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // 无 URL 环境（Node 测试）忽略。
+    }
+  }
+}
+
+/**
+ * 清空编排运行时（新建创作/切换集合/登出）。
+ *
+ * 注意：本函数只清编排模块状态，不 abort 传输、不改 store status/epoch。
+ * 需要「真取消在途生成」的调用方请用 {@link cancelPendingNextWork}。
+ */
 export function resetContinuousCreationRuntime(): void {
+  runToken += 1;
+  revokePreparedBlob();
   prepared = null;
   scheduling = false;
   lastActiveAt = null;
+}
+
+/**
+ * 真正取消在途 next job：abort 传输 + 清编排运行时。
+ *
+ * store 侧 status/epoch 由调用方按各自语义处理（disable 保持 disabled；
+ * 预算耗尽保持 ended_budget；新建创作 advanceEpoch + resetForNewCreation）。
+ * 任一情况在途生成恢复后都会因 runToken 失配或 store 不再持有 next job 而被丢弃。
+ */
+export function cancelPendingNextWork(): void {
+  abortActiveChatStream();
+  resetContinuousCreationRuntime();
+}
+
+/**
+ * 终止当前 track 的连续创作编排：真取消在途 next job 并递增 store epoch，
+ * 使 next job 槽位清空（enabled_idle）、旧回调一律 stale。
+ * 用于 one-shot / 预算外自然收尾等「本轮不再自动续播」的场景。
+ */
+export function endContinuousCreationRun(): void {
+  cancelPendingNextWork();
+  useContinuousCreationStore.getState().advanceEpoch();
 }
 
 /**
@@ -93,11 +144,15 @@ export async function scheduleNextWork(input: {
     return false;
   }
   const epoch = store.epoch;
+  const token = runToken;
   scheduling = true;
   const startedAt = Date.now();
   try {
     const result = await generateNextWork(CONTINUOUS_CREATION_PROMPT);
-    if (useContinuousCreationStore.getState().isStale(epoch)) {
+    // 三重守卫：编排代次未变 + store epoch 未变 + 仍持有 next job 槽位。
+    // 任一失配（关闭开关 / 预算耗尽 / 登出 / 新建创作 / 切换集合）结果一律丢弃。
+    const current = useContinuousCreationStore.getState();
+    if (token !== runToken || current.isStale(epoch) || !current.hasNextJob()) {
       return false;
     }
     prepared = {
@@ -111,15 +166,34 @@ export async function scheduleNextWork(input: {
     useContinuousCreationStore.getState().audioReady(Date.now() - startedAt);
     return true;
   } catch (error) {
-    if (!useContinuousCreationStore.getState().isStale(epoch)) {
-      useContinuousCreationStore
-        .getState()
-        .generationFailed(error instanceof Error ? error.message : '连续创作生成下一作品失败');
+    const current = useContinuousCreationStore.getState();
+    if (token === runToken && !current.isStale(epoch) && current.hasNextJob()) {
+      current.generationFailed(
+        error instanceof Error ? error.message : '连续创作生成下一作品失败',
+      );
     }
     return false;
   } finally {
-    scheduling = false;
+    // 只有仍持有本代次锁时才释放；旧 finally 绝不释放新生成的锁。
+    if (token === runToken) {
+      scheduling = false;
+    }
   }
+}
+
+/**
+ * 由当前 transport 状态发起一次调度（finite 会话尾段/整轨结束的真实调用入口）。
+ * @returns 是否接受并完成调度。
+ */
+export async function scheduleContinuousNextWork(): Promise<boolean> {
+  const playback = usePlaybackStore.getState();
+  const { currentTime, duration } = playback;
+  const remainingTrackMs = duration > 0 ? Math.max(0, (duration - currentTime) * 1000) : 0;
+  return scheduleNextWork({
+    epoch: useContinuousCreationStore.getState().epoch,
+    nowPlaying: playback.isPlaying,
+    remainingTrackMs,
+  });
 }
 
 /**
@@ -151,10 +225,17 @@ export function reportContinuousAudioActive(active: boolean): void {
     lastActiveAt = null;
     return;
   }
+  const store = useContinuousCreationStore.getState();
+  // 关闭/预算耗尽后到达的迟到 active 采样不得重新开账。
+  if (store.status === 'disabled' || store.status === 'ended_budget') {
+    lastActiveAt = null;
+    return;
+  }
   if (lastActiveAt !== null) {
-    useContinuousCreationStore.getState().audioActiveTick(now - lastActiveAt);
+    store.audioActiveTick(now - lastActiveAt);
     if (useContinuousCreationStore.getState().status === 'ended_budget') {
-      lastActiveAt = null;
+      // 预算耗尽：真取消在途 next job（abort + 清运行时），再停声。
+      cancelPendingNextWork();
       void import('./playbackSessionFlow')
         .then((flow) => flow.stopPlayback())
         .catch(() => undefined);
@@ -180,14 +261,17 @@ export function handleTrackEnded(epoch: number): PreparedNextWork | null {
 }
 
 /**
- * 用户主动输入抢占：丢弃在途/就绪的下一作品并递增 epoch，使旧回调失效。
+ * 用户主动输入抢占：丢弃在途/就绪的下一作品、abort 在途预载并递增 epoch，使旧回调失效。
  *
- * 由创作页 UI 提交路径调用；连续创作自身的生成不走此路径，避免自我抢占。
+ * 由创作页 UI 提交/重试路径调用；连续创作自身的生成不走此路径，避免自我抢占。
+ * @returns 是否发生了抢占（有在途/就绪任务）。
  */
-export function preemptContinuousCreationForUserInput(): void {
+export function preemptContinuousCreationForUserInput(): boolean {
   const store = useContinuousCreationStore.getState();
   if (store.hasNextJob() || hasPreparedNextWork()) {
-    resetContinuousCreationRuntime();
+    cancelPendingNextWork();
     store.advanceEpoch();
+    return true;
   }
+  return false;
 }

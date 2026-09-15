@@ -161,8 +161,11 @@ export const assertNoNewLegacyStoryCardWrites = (
 
 /**
  * DB 行 → 前端 DTO（parts JSON 解析，失败则忽略）。
+ *
+ * M9-C1 T2：导出供会话级读取（`lib/server/conversation.ts`）复用同一 DTO 映射，
+ * 保证 legacy / conversation 两条读路径返回结构完全一致。
  */
-const toDto = (row: ChatMessageRow): ChatMessageDTO => {
+export const toChatMessageDto = (row: ChatMessageRow): ChatMessageDTO => {
     let parts: Array<Record<string, unknown>> | undefined;
     if (row.parts) {
         try {
@@ -193,7 +196,7 @@ export const getConversation = async (userId: number): Promise<ChatMessageDTO[]>
         where: { userId },
         orderBy: { position: 'asc' },
     });
-    return rows.map(toDto);
+    return rows.map(toChatMessageDto);
 };
 
 /**
@@ -278,7 +281,7 @@ export const getConversationForSubject = async (
         where: { guestId: subject.id },
         orderBy: { position: 'asc' },
     });
-    return rows.map(toDto);
+    return rows.map(toChatMessageDto);
 };
 
 /**

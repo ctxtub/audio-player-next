@@ -168,6 +168,43 @@ async function runH15WiringTests(): Promise<void> {
             },
         },
     } as unknown as NodeModule;
+    // M9-C1 T2：chatStore 读/写路径已切到会话级 client（conversation.ts）；
+    // 同一可变桩挂到新 client，基线与 CONFLICT 刷新断言继续成立。
+    const conversationClientPath = path.resolve(process.cwd(), 'lib/client/conversation.ts');
+    const ACTIVE_CONVERSATION = {
+        id: 'conv-unit-test',
+        state: 'active',
+        collectionId: null,
+        createdAt: '2026-09-12T10:00:00.000Z',
+        updatedAt: '2026-09-12T10:00:00.000Z',
+    };
+    nodeRequire.cache[conversationClientPath] = {
+        id: conversationClientPath,
+        filename: conversationClientPath,
+        loaded: true,
+        exports: {
+            getActiveConversation: async () => ACTIVE_CONVERSATION,
+            ensureActiveConversation: async () => ACTIVE_CONVERSATION,
+            getConversation: async () => ACTIVE_CONVERSATION,
+            createNewConversation: async () => ACTIVE_CONVERSATION,
+            closeConversation: async () => ACTIVE_CONVERSATION,
+            fetchConversationMessages: async () => {
+                fetchCount += 1;
+                return stubFetchRows.map((r) => ({ ...r }));
+            },
+            saveConversationSnapshot: async (
+                _conversationId: string,
+                messages: DtoLike[],
+                baseMessageIds?: string[],
+            ) => {
+                saveCalls.push({ messages, baseMessageIds });
+                if (saveMode === 'conflict') {
+                    throw new TRPCError({ code: 'CONFLICT', message: '会话已被其它标签页更新，本次写入已拒绝，请刷新后重试' });
+                }
+                return { success: true };
+            },
+        },
+    } as unknown as NodeModule;
     const chatStoreModule = nodeRequire('../../../stores/chatStore') as Record<string, unknown>;
     const { useChatStore } = chatStoreModule as {
         useChatStore: typeof import('../../../stores/chatStore').useChatStore;

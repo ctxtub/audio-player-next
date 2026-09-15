@@ -2,10 +2,8 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import type {
-  LibraryCreateInput,
-  StoryWorkDetailDTO,
-} from '../../../lib/trpc/schemas/library';
+import type { StoryWorkDetailDTO } from '../../../lib/trpc/schemas/library';
+import type { CollectionPromoteInput } from '../../../lib/trpc/schemas/collection';
 
 // 中文注释：M4-04 编排回归——complete → startPromotion() → promoteStoryArtifact() → ready / promotion_failed
 // 真正接进 Chat orchestration，锁定 stale / interrupt / failure / retry 语义（E2E-08-04）。
@@ -67,13 +65,13 @@ interface ArtifactView {
 }
 
 // 中文注释：可控 deferred create 桩——kick 同步记录，结算由测试显式 resolve/reject。
-let createCalls: LibraryCreateInput[] = [];
+let createCalls: CollectionPromoteInput[] = [];
 let pendingCreates: {
-  input: LibraryCreateInput;
+  input: CollectionPromoteInput;
   resolve: (dto: StoryWorkDetailDTO) => void;
   reject: (err: unknown) => void;
 }[] = [];
-setPromotionCreateOverride((input: LibraryCreateInput) => {
+setPromotionCreateOverride((input: CollectionPromoteInput) => {
   createCalls.push(input);
   return new Promise<StoryWorkDetailDTO>((resolve, reject) => {
     pendingCreates.push({ input, resolve, reject });
@@ -82,15 +80,15 @@ setPromotionCreateOverride((input: LibraryCreateInput) => {
 
 function resetBaseline(): void {
   useChatStore.getState().reset();
-  useChatStore.setState({ syncEnabled: false });
+  useChatStore.setState({ syncEnabled: false, conversationId: 'conv-unit-test', collectionId: null, collectionTitle: null });
   createCalls = [];
   pendingCreates = [];
 }
 
-function makeDto(id: number, input: LibraryCreateInput): StoryWorkDetailDTO {
+function makeDto(id: number, input: CollectionPromoteInput): StoryWorkDetailDTO {
   return {
     id,
-    title: input.title ?? '测试标题',
+    title: '测试标题',
     excerpt: input.storyText.slice(0, 20),
     voiceId: input.voiceId ?? '',
     contentHash: `hash-${id}`,
@@ -198,7 +196,7 @@ async function main(): Promise<void> {
     assert.deepStrictEqual(
       createCalls[0],
       {
-        title: undefined,
+        conversationId: 'conv-unit-test',
         prompt: '写个小狐狸故事',
         storyText: '完整正文-01',
         voiceId: 'voice-frozen-01',
@@ -397,7 +395,7 @@ async function main(): Promise<void> {
     resetBaseline();
     completeAndPromote('旧正文-08C');
     useChatStore.getState().reset();
-    useChatStore.setState({ syncEnabled: false });
+    useChatStore.setState({ syncEnabled: false, conversationId: 'conv-unit-test', collectionId: null, collectionTitle: null });
     pendingCreates[0].resolve(makeDto(803, pendingCreates[0].input));
     await flush();
     assert.strictEqual(useChatStore.getState().messages.length, 0, 'reset 后旧 resolve 必须 no-op');
@@ -476,11 +474,11 @@ async function main(): Promise<void> {
     const orchPath = path.resolve(process.cwd(), 'lib/client/chatPromotionOrchestration.ts');
     const orchContent = fs.readFileSync(orchPath, 'utf8');
     assert.ok(orchContent.includes('promoteStoryArtifact'), '编排必须经唯一 adapter 通道');
+    assert.strictEqual(orchContent.includes('lib/client/collection'), false, '编排不得直调 collection 门面（经唯一 adapter 通道）');
     assert.strictEqual(orchContent.includes('libraryClient'), false, '编排不得直调 libraryClient');
     assert.strictEqual(orchContent.includes('library.create'), false, '编排不得直调 library.create');
     assert.strictEqual(orchContent.includes('lib/server'), false, '编排不得 import server');
     assert.strictEqual(orchContent.includes('prisma'), false, '编排不得 import prisma');
-    assert.strictEqual(orchContent.includes('promoteArtifact'), false, '不得新增 promoteArtifact procedure 消费');
     assert.strictEqual(orchContent.includes('promotionToken'), false, 'token 不得进入编排持久语义（归调用方瞬态守卫）');
 
     const storePath = path.resolve(process.cwd(), 'stores/chatStore.ts');

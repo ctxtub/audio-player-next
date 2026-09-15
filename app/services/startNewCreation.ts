@@ -73,6 +73,9 @@ export async function startNewCreation(
   options: StartNewCreationOptions = {},
 ): Promise<StartNewCreationResult> {
   const currentEpoch = useContinuousCreationStore.getState().epoch;
+  // M9-C1 T2（评审闭合项 3）：在重置前捕获当前会话 id，作为旧会话校验值传给 createNew。
+  // 多标签页/竞态下服务端凭它与真实 active 比对，不匹配即 CONFLICT，绝不静默覆盖。
+  const capturedOldConversationId = useChatStore.getState().conversationId ?? undefined;
 
   // 1) 确认（拒绝时不产生任何副作用）
   if (options.confirm) {
@@ -89,7 +92,7 @@ export async function startNewCreation(
   }
 
   // 2) 先 epoch++ 使旧回调失效（generation/promotion/audio/continuation 一律 no-op）
-  const epoch = useContinuousCreationStore.getState().advanceEpoch();
+  useContinuousCreationStore.getState().advanceEpoch();
 
   // 3) abort 在途 generation
   abortActiveChatStream();
@@ -97,26 +100,28 @@ export async function startNewCreation(
   // 4) 清空连续创作编排运行时（准备中的下一作品、调度在途、audio 采样点）
   resetContinuousCreationRuntime();
 
-  // 5) 停声：pause + reset transport，清 Playback Session/Anchor（blob 由 generation 侧吊销）
+  // 5) 停声并清空 Playback Session（reset 会换掉 sessionId，旧会话迟到的 TTS/段落
+  //    回调凭 sessionId 失配 no-op，绝不复活播放；reset transport 清 <audio> 与 Blob）。
   try {
-    usePlaybackSessionStore.getState().stop();
+    usePlaybackSessionStore.getState().reset();
   } catch {
     // session 不可用时仅清 transport，不阻断强重置。
   }
   usePlaybackStore.getState().reset();
   useGenerationStore.getState().reset();
 
-  // 6) reset message runtime
+  // 6) reset message runtime（保留服务端旧会话，仅本地清空身份）
   useChatStore.getState().resetChat();
 
-  // 7) createNew(expectedOldId)
+  // 7) createNew(expectedOldId)；优先显式入参，否则用步骤 1 捕获的旧会话 id。
   const budgetMinutes = resolveContinuousCreationBudgetMinutes();
   const createNew = options.createNew ?? createNewConversation;
+  const expectedOldId = options.expectedOldId ?? capturedOldConversationId;
   let conversationId: string | null = null;
   let collectionId: string | null = null;
   let reason: 'remote-failed' | undefined;
   try {
-    const created = await createNew(options.expectedOldId);
+    const created = await createNew(expectedOldId);
     conversationId = created.id;
     collectionId = created.collectionId ?? null;
   } catch {
@@ -132,6 +137,8 @@ export async function startNewCreation(
       collectionTitle: null,
     });
   }
+  // applyConversationIdentity 经 switchCollection 推进连续创作 epoch；以其后快照为准。
+  const epoch = useContinuousCreationStore.getState().epoch;
   useContinuousCreationStore.getState().resetForNewCreation({
     collectionId,
     budgetMinutes,

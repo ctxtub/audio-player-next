@@ -42,9 +42,13 @@ import {
   mapMessagesToContext,
   withPersona,
 } from '@/utils/chatUtils';
-import type { ChatMessageInput } from '@/lib/trpc/schemas/chatConversation';
-import { fetchMyConversation, saveMyConversation } from '@/lib/client/chatConversation';
-import { getActiveConversation } from '@/lib/client/conversation';
+import type { ChatMessageInput, ChatMessageDTO } from '@/lib/trpc/schemas/chatConversation';
+import {
+  ensureActiveConversation,
+  fetchConversationMessages,
+  saveConversationSnapshot,
+} from '@/lib/client/conversation';
+import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 import {
   rehydrateServerMessages,
   serializePartsForHistory,
@@ -311,6 +315,12 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   /** H-15 基线：上次读取/落盘成功的 messageId 序列（内存，不持久化）。 */
   let baselineMessageIds: string[] | undefined = undefined;
   /**
+   * M9-C1 T2 会话级保存代次：resetChat/reset 自增。
+   * 防抖定时器捕获进入值，结算前若代次变化（会话已被强重置/登出）则丢弃该次快照，
+   * 绝不把旧会话消息写入新会话。
+   */
+  let conversationSaveEpoch = 0;
+  /**
    * M4-04 promotion 编排瞬态守卫（客户端 async race guard，不进持久领域模型）：
    * - promotionSeq：全局单调 promotionToken 计数器，每次 kick 自增；
    * - promotionEpoch：resetChat/reset/resetActiveSession 自增，旧 promotion resolve/reject 凭此 no-op；
@@ -325,21 +335,25 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     token: number;
     epoch: number;
     source: PromotionSourceArtifact;
+    conversationId: string | null;
   }[] = [];
 
   /**
    * M4-04：登记一次 promotion kick（调用方已把 Artifact 置为 promoting）。
    * 同一 messageId 已有在途 promotion 时拒绝登记（调用方不得重复 kick）。
+   * M9-C1 T2：kick 尽量冻结当前 conversationId；若此刻尚未就绪（init 在途/读失败），
+   * drain 时会 `ensureActiveConversation()` 补齐，保证会话级写路径不会静默不落库。
    */
   const enqueuePromotionKick = (
     messageId: string,
     source: PromotionSourceArtifact,
+    conversationId: string | null,
   ): { token: number; epoch: number } | null => {
     if (inflightPromotions.has(messageId)) {
       return null;
     }
     promotionSeq += 1;
-    const kick = { token: promotionSeq, epoch: promotionEpoch, source };
+    const kick = { token: promotionSeq, epoch: promotionEpoch, source, conversationId };
     inflightPromotions.set(messageId, { token: kick.token, epoch: kick.epoch });
     pendingPromotionKicks.push({ messageId, ...kick });
     return { token: kick.token, epoch: kick.epoch };
@@ -348,6 +362,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   /**
    * M4-04：drain 本次 dispatch 登记的 promotion kicks（dispatch 尾部调用，set() 之后）。
    * 异步 create 结算后一律经 promotion.resolved/rejected 回写，由归属校验决定生效或 no-op。
+   * M9-C1 T2：conversationId 缺失时先 ensureActiveConversation 补齐，再走唯一写入口。
    */
   const drainPromotionKicks = () => {
     if (pendingPromotionKicks.length === 0) {
@@ -355,8 +370,11 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     }
     const kicks = pendingPromotionKicks.splice(0, pendingPromotionKicks.length);
     for (const kick of kicks) {
-      void executePromotionCreate(kick.source).then(
-        (dto) => {
+      void (async () => {
+        try {
+          const conversationId =
+            kick.conversationId ?? (await ensureActiveConversation()).id;
+          const dto = await executePromotionCreate(kick.source, conversationId);
           get().dispatch({
             type: 'promotion.resolved',
             messageId: kick.messageId,
@@ -364,8 +382,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             promotionEpoch: kick.epoch,
             storyWorkId: dto.id,
           });
-        },
-        (error) => {
+        } catch (error) {
           get().dispatch({
             type: 'promotion.rejected',
             messageId: kick.messageId,
@@ -373,8 +390,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             promotionEpoch: kick.epoch,
             error: error instanceof Error ? error.message : String(error),
           });
-        },
-      );
+        }
+      })();
     }
   };
 
@@ -444,7 +461,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       return;
     }
     messages[targetIndex] = withArtifact(messages[targetIndex], promoting);
-    enqueuePromotionKick(messageId, completed);
+    enqueuePromotionKick(messageId, completed, get().conversationId);
   };
 
   /**
@@ -530,16 +547,44 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       });
 
   /**
-   * 防抖保存当前会话快照：登录态且无在途消息时整条替换服务端。
+   * M9-C1 T2：把快照写入「当前会话」（会话级持久化唯一写路径）。
+   *
+   * 身份缺失时先确保 active Conversation（首访/竞态兜底），保证写入总带 conversationId；
+   * 不再存在按 Subject 全量替换的第二写路径。
+   */
+  const persistConversationSnapshot = async (
+    snapshot: ChatMessageInput[],
+    baselineAtSend: string[] | undefined,
+  ): Promise<void> => {
+    let conversationId = get().conversationId;
+    if (!conversationId) {
+      const conversation = await ensureActiveConversation();
+      conversationId = conversation.id;
+      set((state) => ({
+        conversationId,
+        collectionId: conversation.collectionId ?? null,
+        epoch: state.conversationId === conversationId ? state.epoch : state.epoch + 1,
+      }));
+    }
+    await saveConversationSnapshot(conversationId, snapshot, baselineAtSend);
+  };
+
+  /**
+   * 防抖保存当前会话快照：登录态且无在途消息时整条替换服务端（仅当前会话）。
    */
   const scheduleSave = () => {
     if (saveTimer) {
       clearTimeout(saveTimer);
     }
+    const saveEpochAtSchedule = conversationSaveEpoch;
     saveTimer = setTimeout(() => {
       saveTimer = null;
       const state = get();
       if (!state.syncEnabled) {
+        return;
+      }
+      // M9-C1 T2：强重置/登出已推进保存代次——旧快照不得写入新会话。
+      if (saveEpochAtSchedule !== conversationSaveEpoch) {
         return;
       }
       // 有在途消息则跳过，待其完成后再次触发
@@ -549,7 +594,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       // 中文注释：H-15 基线透传——保存时带上读取/落盘基线，成功后更新基线。
       const snapshot = toSnapshot(state.messages);
       const baselineAtSend = baselineMessageIds;
-      saveMyConversation(snapshot, baselineAtSend).then(() => {
+      persistConversationSnapshot(snapshot, baselineAtSend).then(() => {
         baselineMessageIds = snapshot.map((message) => message.messageId);
         set({ saveError: null });
       }).catch((error) => {
@@ -558,13 +603,13 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           const reason = error instanceof Error ? error.message : String(error);
           set({ saveError: reason });
           showConflictToast();
-          console.warn('[chatStore] saveMyConversation conflict', error);
+          console.warn('[chatStore] conversation.saveSnapshot conflict', error);
           void refreshAfterConflict();
           return;
         }
         const reason = error instanceof Error ? error.message : String(error);
         set({ saveError: reason });
-        console.warn('[chatStore] saveMyConversation failed', error);
+        console.warn('[chatStore] conversation.saveSnapshot failed', error);
       });
     }, SAVE_DEBOUNCE_MS);
   };
@@ -620,7 +665,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         // 中文注释：H-15 基线透传——保存时带上读取/落盘基线，成功后更新基线。
         const snapshot = toSnapshot(state.messages);
         const baselineAtSend = baselineMessageIds;
-        await saveMyConversation(snapshot, baselineAtSend);
+        await persistConversationSnapshot(snapshot, baselineAtSend);
         baselineMessageIds = snapshot.map((message) => message.messageId);
         set({ saveError: null });
         return true;
@@ -991,7 +1036,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             return state;
           }
           messages[targetIndex] = withArtifact(msg, promoting);
-          enqueuePromotionKick(action.messageId, source);
+          enqueuePromotionKick(action.messageId, source, get().conversationId);
           return { messages };
         }
         case 'stream.finish': {
@@ -1203,6 +1248,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   resetChat: () => {
     // M4-04：清空作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op，绝不复活）。
     invalidateInflightPromotions();
+    // M9-C1 T2：强重置推进保存代次——任何在途防抖保存不得把旧会话快照写入新会话。
+    // 服务端旧会话消息保留（旧集合仍可回访），新会话由 startNewCreation 的 createNew 明确创建。
+    conversationSaveEpoch += 1;
     set((state) => ({
       messages: [],
       // M9-C1 T2：清空消息同时丢弃当前会话身份并递增代次。
@@ -1211,12 +1259,15 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       collectionTitle: null,
       epoch: state.epoch + 1,
     }));
-    // 清空后保存空快照即清空服务端会话
-    scheduleSave();
   },
   applyConversationIdentity: ({ conversationId, collectionId, collectionTitle }) => {
     set((state) => {
       const changed = state.conversationId !== conversationId;
+      if (changed) {
+        // M9-C1 T2：会话切换同时推进连续创作 epoch 并绑定新集合身份，
+        // 旧会话在途的下一作品回调凭 epoch 失配一律 no-op（绝不污染新会话）。
+        useContinuousCreationStore.getState().switchCollection(collectionId);
+      }
       return {
         conversationId,
         collectionId,
@@ -1240,13 +1291,32 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     const epoch = accountEpoch; // 捕获进入代次
     const baselineIds = new Set(get().messages.map((message) => message.id)); // 进入时已有（访客/旧态）
     userInitPromise = (async () => {
-      // M9-C1 T2：创作页围绕当前集合运行——并行读取 active Conversation 身份与消息。
-      const [conversation, dtos] = await Promise.all([
-        getActiveConversation().catch(() => null),
-        fetchMyConversation(),
-      ]);
+      // M9-C1 T2：创作页围绕当前集合运行——先确保 active Conversation，再按会话级读取消息。
+      // 读路径不再走 subject 全量（legacy chat.getConversation），只返回当前会话的消息。
+      const conversation = await ensureActiveConversation().catch(() => null);
+      let dtos: ChatMessageDTO[] | null = null;
+      if (conversation) {
+        // 读失败与「读取成功但为空」必须区分：失败时 fail-open 保留本地消息，
+        // 绝不因一次网络失败清空本地会话（读取成功才以服务端为准覆盖）。
+        dtos = await fetchConversationMessages(conversation.id).catch(() => null);
+      }
       if (epoch !== accountEpoch) {
         return; // 账号已切（登出/401）→ 放弃回写（项 4）
+      }
+      if (dtos === null) {
+        // 无会话或读取失败：仅同步已知身份与同步开关，保留现有本地消息。
+        set((state) => {
+          const nextConversationId = conversation?.id ?? state.conversationId;
+          const changed = state.conversationId !== nextConversationId;
+          return {
+            syncEnabled: true,
+            conversationId: nextConversationId,
+            collectionId: conversation?.collectionId ?? state.collectionId,
+            collectionTitle: changed ? null : state.collectionTitle,
+            epoch: changed ? state.epoch + 1 : state.epoch,
+          };
+        });
+        return;
       }
       // M4-06 History rehydration boundary：只 normalize 服务端 fetch 结果。
       // server DTO 逐条经 rehydrateServerMessages 防御性恢复（transient 降级 +
@@ -1293,6 +1363,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     accountEpoch++; // 作废在途 initForUser 的回写
     // M4-04：登出同步作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op）。
     invalidateInflightPromotions();
+    conversationSaveEpoch += 1; // M9-C1 T2：登出后旧快照不得写入任何新会话
     userInitPromise = null; // 让重新登录能起新请求
     baselineMessageIds = undefined; // 中文注释：H-15 登出清基线，避免跨账号透传。
     if (saveTimer) {

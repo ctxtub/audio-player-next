@@ -2,6 +2,7 @@ import React from 'react';
 import MainChrome from '@/components/MainChrome';
 import AudioControllerHost from '@/components/AudioControllerHost';
 import PlaybackSessionProbe from '@/components/PlaybackSessionProbe';
+import ContinuousCreationProbe from '@/components/ContinuousCreationProbe';
 import { isBrowserTestRuntime } from '@/components/PlaybackSessionProbe/probeFlag';
 import AccountSyncProvider from '@/components/AccountSyncProvider';
 import ServerStateProvider from '@/components/ServerStateProvider';
@@ -29,6 +30,7 @@ export default function MainLayout({
         <AudioControllerHost />
         {/* M5-10 fixup-2 双保险之一：普通 runtime 不挂载 Probe（组件执行路径不进）；仅显式开启的 browser test runtime 挂载。 */}
         {isBrowserTestRuntime() ? <PlaybackSessionProbe /> : null}
+        {isBrowserTestRuntime() ? <ContinuousCreationProbe /> : null}
       </ServerStateProvider>
     </AccountSyncProvider>
   );

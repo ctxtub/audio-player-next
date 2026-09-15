@@ -283,6 +283,89 @@ async function runTests() {
   }
   console.log('PASS: 9');
 
+  console.log('=== 10. 停止矩阵：关闭开关后在途结算不得写回/残留 ===');
+  {
+    const epoch = resetAll(30, 1);
+    let resolveLate!: (v: { messageId: string; audioUrl: string; content: string }) => void;
+    __setContinuousCreationGeneratorForTests(
+      () => new Promise((resolve) => { resolveLate = resolve; }),
+    );
+    const inflight = scheduleNextWork({ epoch, nowPlaying: true, remainingTrackMs: 1_000 });
+    assert.strictEqual(useContinuousCreationStore.getState().status, 'generating_next');
+    useContinuousCreationStore.getState().disable();
+    resolveLate({ messageId: 'm-late-disable', audioUrl: 'blob:late-disable', content: '关闭后晚到' });
+    assert.strictEqual(await inflight, false, '关闭后晚到结算必须被丢弃');
+    assert.strictEqual(hasPreparedNextWork(), false, '关闭后不得残留 prepared');
+    assert.strictEqual(consumePreparedNextWork(epoch), null);
+    assert.strictEqual(handleTrackEnded(epoch), null, '等待中的结果不得复活自动续播');
+    assert.strictEqual(useContinuousCreationStore.getState().status, 'disabled');
+  }
+  console.log('PASS: 10');
+
+  console.log('=== 11. 停止矩阵：预算耗尽后在途结算丢弃且新会话可立即重调度 ===');
+  {
+    const epoch = resetAll(30, 1);
+    useContinuousCreationStore.getState().setBudget(20);
+    let resolveLate!: (v: { messageId: string; audioUrl: string; content: string }) => void;
+    __setContinuousCreationGeneratorForTests(
+      () => new Promise((resolve) => { resolveLate = resolve; }),
+    );
+    const inflight = scheduleNextWork({ epoch, nowPlaying: true, remainingTrackMs: 1_000 });
+    assert.strictEqual(useContinuousCreationStore.getState().status, 'generating_next');
+    // 真实推进耗尽预算（生产唯一扣减入口）。
+    reportContinuousAudioActive(true);
+    await sleep(30);
+    reportContinuousAudioActive(true);
+    assert.strictEqual(useContinuousCreationStore.getState().status, 'ended_budget');
+    resolveLate({ messageId: 'm-late-budget', audioUrl: 'blob:late-budget', content: '耗尽后晚到' });
+    assert.strictEqual(await inflight, false, '预算耗尽后晚到结算必须丢弃');
+    assert.strictEqual(hasPreparedNextWork(), false, '预算耗尽不得残留 prepared');
+    assert.strictEqual(consumePreparedNextWork(epoch), null);
+    assert.strictEqual(handleTrackEnded(epoch), null, '等待中的结果不得复活自动续播');
+    // 新会话（新建创作重置预算）可立即重新调度（单槽位已释放、无旧锁残留）。
+    const nextEpoch = useContinuousCreationStore.getState().epoch + 1;
+    useContinuousCreationStore.getState().resetForNewCreation({
+      collectionId: 'col-2',
+      budgetMinutes: 30,
+      epoch: nextEpoch,
+    });
+    __setContinuousCreationGeneratorForTests(async () => ({
+      messageId: 'm-after-budget',
+      audioUrl: 'blob:after-budget',
+      content: '新会话段落',
+    }));
+    assert.strictEqual(
+      await scheduleNextWork({ epoch: nextEpoch, nowPlaying: true, remainingTrackMs: 1_000 }),
+      true,
+      '预算耗尽后新会话必须能立即重新调度',
+    );
+    assert.deepStrictEqual(consumePreparedNextWork(nextEpoch), {
+      audioUrl: 'blob:after-budget',
+      segment: '新会话段落',
+      messageId: 'm-after-budget',
+    });
+  }
+  console.log('PASS: 11');
+
+  console.log('=== 12. 停止矩阵：登出 reset 后旧回调不得复活（epoch 单调）===');
+  {
+    const epoch = resetAll(30, 0);
+    let resolveLate!: (v: { messageId: string; audioUrl: string; content: string }) => void;
+    __setContinuousCreationGeneratorForTests(
+      () => new Promise((resolve) => { resolveLate = resolve; }),
+    );
+    const inflight = scheduleNextWork({ epoch, nowPlaying: true, remainingTrackMs: 1_000 });
+    // 登出/全局重置：epoch 必须单调递增，绝不回落到旧值。
+    useContinuousCreationStore.getState().reset();
+    const afterLogoutEpoch = useContinuousCreationStore.getState().epoch;
+    assert.notStrictEqual(afterLogoutEpoch, epoch, '登出 reset 后 epoch 不得回落到旧值');
+    resolveLate({ messageId: 'm-late-logout', audioUrl: 'blob:late-logout', content: '登出后晚到' });
+    assert.strictEqual(await inflight, false, '登出后晚到结算必须被丢弃');
+    assert.strictEqual(hasPreparedNextWork(), false, '登出后不得残留 prepared');
+    assert.strictEqual(consumePreparedNextWork(afterLogoutEpoch), null, '旧状态不得复活');
+  }
+  console.log('PASS: 12');
+
   __setContinuousCreationGeneratorForTests(null);
   resetContinuousCreationRuntime();
   console.log('ALL CONTINUOUS CREATION BUDGET TESTS PASSED SUCCESSFULLY');

@@ -138,7 +138,12 @@ const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (s
   canSchedule: (context) => canScheduleNext(machineStateOf(get()), context),
   isStale: (epoch) => isStaleCallback(machineStateOf(get()), epoch),
   hasNextJob: () => hasNextJob(machineStateOf(get())),
-  reset: () => set({ ...INITIAL_STATE }),
+  reset: () => {
+    // M9-C1 T2 评审闭合：登出/全局重置必须推进 epoch（绝不回落到 0），
+    // 否则旧会话在途回调可能因 epoch 恰好相等而误判“新鲜”。
+    const nextEpoch = get().epoch + 1;
+    set({ ...INITIAL_STATE, epoch: nextEpoch });
+  },
 });
 
 /** 连续创作 store Hook。 */

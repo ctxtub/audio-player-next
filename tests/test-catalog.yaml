@@ -1306,7 +1306,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-collection, promotion, title-fallback, idempotency]
     spec_path: docs/e2e/10-会话与作品集连续创作/01-首作建集与AI标题回退.md
-    executable_ids: [exec-collection-domain, exec-collection-promotion]
+    executable_ids: [exec-collection-domain, exec-collection-promotion, exec-conversation-scoped-persistence]
     fixtures: []
     owner: story-collection
   - case_id: collection-append-and-lifecycle
@@ -1330,7 +1330,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-collection, isolation, conversation, idempotency]
     spec_path: docs/e2e/10-会话与作品集连续创作/03-跨会话与跨主体严格隔离.md
-    executable_ids: [exec-collection-promotion]
+    executable_ids: [exec-collection-promotion, exec-conversation-scoped-persistence]
     fixtures: []
     owner: story-collection
   - case_id: collection-backfill-conservation
@@ -1354,7 +1354,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [continuous-creation, lookahead, window, default-on]
     spec_path: docs/e2e/10-会话与作品集连续创作/05-连续创作默认开启与自动下一作品.md
-    executable_ids: [exec-continuous-creation-state-machine, exec-l3-continuous-creation]
+    executable_ids: [exec-continuous-creation-state-machine, exec-l3-continuous-creation, exec-l3-continuous-creation-auto-next]
     fixtures: []
     owner: story-collection
   - case_id: continuous-creation-budget-stop-matrix
@@ -1366,7 +1366,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [continuous-creation, budget, preemption, epoch]
     spec_path: docs/e2e/10-会话与作品集连续创作/06-连续创作预算与停止矩阵.md
-    executable_ids: [exec-continuous-creation-budget]
+    executable_ids: [exec-continuous-creation-budget, exec-l3-continuous-creation-auto-next]
     fixtures: []
     owner: story-collection
   - case_id: new-creation-strong-reset
@@ -1378,7 +1378,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [continuous-creation, new-creation, reset, epoch]
     spec_path: docs/e2e/10-会话与作品集连续创作/07-新建创作强重置.md
-    executable_ids: [exec-new-creation-reset, exec-l3-new-creation-reset]
+    executable_ids: [exec-new-creation-reset, exec-l3-new-creation-reset, exec-l3-continuous-creation-auto-next]
     fixtures: []
     owner: story-collection
   - case_id: continuous-creation-status-card
@@ -1967,6 +1967,10 @@ executables:
     display_name_zh: 会话作品集Promotion与生命周期（隔离库）
     layer: L2
     path: ./tests/integration/creation-conversation/story-collection-promotion.integration.test.ts
+  - executable_id: exec-conversation-scoped-persistence
+    display_name_zh: 会话级读写与promotion唯一写路径（行为）
+    layer: L2
+    path: ./tests/integration/creation-conversation/conversation-scoped-persistence.integration.test.ts
   - executable_id: exec-collection-backfill
     display_name_zh: 会话作品集旧数据回填守恒（隔离库）
     layer: L2
@@ -2004,6 +2008,10 @@ executables:
     display_name_zh: 浏览器：连续创作默认开启与状态卡
     layer: L3
     path: ./tests/system/browser/scenarios/continuous-creation.spec.ts
+  - executable_id: exec-l3-continuous-creation-auto-next
+    display_name_zh: 浏览器：连续创作自动下一任务→预算耗尽停止与新建创作静默
+    layer: L3
+    path: ./tests/system/browser/scenarios/continuous-creation-auto-next.spec.ts
   - executable_id: exec-l3-new-creation-reset
     display_name_zh: 浏览器：新建创作强重置
     layer: L3

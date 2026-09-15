@@ -14,6 +14,7 @@ import {
 import {
   getActiveConversationForSubject,
   getConversationForSubject,
+  getConversationMessagesForSubject,
   createNewConversationForSubject,
   saveConversationSnapshotForSubject,
   closeConversationForSubject,
@@ -36,6 +37,17 @@ export const conversationRouter = router({
   get: guardedProcedure.input(conversationIdInputSchema).query(async ({ ctx, input }) => {
     try {
       return await getConversationForSubject(resolveSubject(ctx), input.id);
+    } catch (error) {
+      handleLibraryError(error);
+    }
+  }),
+
+  /**
+   * 读取指定会话的消息（会话级读路径，仅本会话）。
+   */
+  getMessages: guardedProcedure.input(conversationIdInputSchema).query(async ({ ctx, input }) => {
+    try {
+      return await getConversationMessagesForSubject(resolveSubject(ctx), input.id);
     } catch (error) {
       handleLibraryError(error);
     }

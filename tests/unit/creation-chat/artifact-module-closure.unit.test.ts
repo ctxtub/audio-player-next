@@ -2,7 +2,8 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import type { LibraryCreateInput, StoryWorkDetailDTO } from '../../../lib/trpc/schemas/library';
+import type { StoryWorkDetailDTO } from '../../../lib/trpc/schemas/library';
+import type { CollectionPromoteInput } from '../../../lib/trpc/schemas/collection';
 import { parseYamlSubset } from '../../../scripts/check-test-catalog.mjs';
 import {
   extractTextFromParts,
@@ -81,6 +82,40 @@ nodeRequire.cache[chatConversationPath] = {
   },
 } as unknown as NodeModule;
 
+// M9-C1 T2：chatStore 读/写路径已切到会话级 client（conversation.ts）；同一组可变桩
+// 挂到新 client，保证 fetch/save 计数断言继续成立。
+const conversationClientPath = path.resolve(process.cwd(), 'lib/client/conversation.ts');
+const ACTIVE_CONVERSATION = {
+  id: 'conv-unit-test',
+  state: 'active',
+  collectionId: null,
+  createdAt: '2026-09-12T10:00:00.000Z',
+  updatedAt: '2026-09-12T10:00:00.000Z',
+};
+nodeRequire.cache[conversationClientPath] = {
+  id: conversationClientPath,
+  filename: conversationClientPath,
+  loaded: true,
+  exports: {
+    getActiveConversation: async () => ACTIVE_CONVERSATION,
+    ensureActiveConversation: async () => ACTIVE_CONVERSATION,
+    getConversation: async () => ACTIVE_CONVERSATION,
+    createNewConversation: async () => ACTIVE_CONVERSATION,
+    closeConversation: async () => ACTIVE_CONVERSATION,
+    fetchConversationMessages: async () => {
+      fetchCount += 1;
+      return stubFetchRows.map((r) => ({
+        ...r,
+        parts: r.parts ? JSON.parse(JSON.stringify(r.parts)) : undefined,
+      }));
+    },
+    saveConversationSnapshot: async (_conversationId: string, messages: DtoLike[]) => {
+      saveCalls.push(JSON.parse(JSON.stringify(messages)) as DtoLike[]);
+      return { ok: true };
+    },
+  },
+} as unknown as NodeModule;
+
 let agentInteractCalls = 0;
 const agentFlowPath = path.resolve(process.cwd(), 'app/services/agentFlow.ts');
 nodeRequire.cache[agentFlowPath] = {
@@ -134,13 +169,13 @@ interface ArtifactView {
 const NOW = '2026-09-12T10:00:00.000Z';
 
 // 中文注释：可控 deferred promotion 桩——kick 同步记录，结算由测试显式 resolve/reject。
-let createCalls: LibraryCreateInput[] = [];
+let createCalls: CollectionPromoteInput[] = [];
 let pendingCreates: {
-  input: LibraryCreateInput;
+  input: CollectionPromoteInput;
   resolve: (dto: StoryWorkDetailDTO) => void;
   reject: (err: unknown) => void;
 }[] = [];
-setPromotionCreateOverride((input: LibraryCreateInput) => {
+setPromotionCreateOverride((input: CollectionPromoteInput) => {
   createCalls.push(input);
   return new Promise<StoryWorkDetailDTO>((resolve, reject) => {
     pendingCreates.push({ input, resolve, reject });
@@ -149,7 +184,7 @@ setPromotionCreateOverride((input: LibraryCreateInput) => {
 
 function resetAll(): void {
   useChatStore.getState().reset();
-  useChatStore.setState({ syncEnabled: false });
+  useChatStore.setState({ syncEnabled: false, conversationId: 'conv-unit-test', collectionId: null, collectionTitle: null });
   stubFetchRows = [];
   fetchCount = 0;
   saveCalls = [];
@@ -158,10 +193,10 @@ function resetAll(): void {
   agentInteractCalls = 0;
 }
 
-function makeDto(id: number, input: LibraryCreateInput): StoryWorkDetailDTO {
+function makeDto(id: number, input: CollectionPromoteInput): StoryWorkDetailDTO {
   return {
     id,
-    title: input.title ?? '测试标题',
+    title: '测试标题',
     excerpt: input.storyText.slice(0, 20),
     voiceId: input.voiceId ?? '',
     contentHash: `hash-${id}`,
@@ -256,7 +291,7 @@ function snapshotToDtoRows(): DtoLike[] {
  */
 async function reloadFromRows(rows: DtoLike[]): Promise<void> {
   useChatStore.getState().reset();
-  useChatStore.setState({ syncEnabled: false });
+  useChatStore.setState({ syncEnabled: false, conversationId: 'conv-unit-test', collectionId: null, collectionTitle: null });
   createCalls = [];
   pendingCreates = [];
   stubFetchRows = JSON.parse(JSON.stringify(rows)) as DtoLike[];
@@ -295,7 +330,7 @@ async function main(): Promise<void> {
     assert.strictEqual(promoting.artifact.status, 'promoting');
     assert.strictEqual(createCalls.length, 1, 'story_complete 必须恰好 kick 一次 create');
     assert.deepStrictEqual(createCalls[0], {
-      title: undefined,
+      conversationId: 'conv-unit-test',
       prompt: PROMPT,
       storyText: FULL,
       voiceId: VOICE,
@@ -348,7 +383,7 @@ async function main(): Promise<void> {
     delta(assistantId, '草稿-02');
     storyComplete(assistantId, FULL);
     assert.strictEqual(createCalls.length, 1);
-    // 中文注释：浅拷贝保留 title: undefined（JSON 往返会丢 undefined 键，导致与 retry input 不可比）。
+    // 中文注释：浅拷贝冻结首次 kick 的完整 input（含会话归属），与 retry input 可比。
     const firstInput = { ...createCalls[0] };
     pendingCreates[0].reject(new Error('NETWORK_BOOM-4102'));
     await flush();
@@ -465,6 +500,8 @@ async function main(): Promise<void> {
     intentStory(idB);
     delta(idB, 'B-草稿');
     storyComplete(idB, 'B-完整正文-4105');
+    // resetChat 清空会话身份后，promotion 需先 ensureActiveConversation 补齐会话再写；等一拍。
+    await flush();
     assert.strictEqual(createCalls.length, 2, 'B 独立 kick 自己的 promotion');
     assert.strictEqual(createCalls[1].sourceMessageId, idB, 'B 的幂等身份属于 B');
     pendingCreates[1].resolve(makeDto(222, pendingCreates[1].input));
@@ -565,7 +602,7 @@ async function main(): Promise<void> {
     assert.strictEqual(getArtifact('crash-complete-06').artifact.status, 'promoting');
     assert.strictEqual(createCalls.length, 1, '显式 retry 恰好一次 create');
     assert.deepStrictEqual(createCalls[0], {
-      title: undefined,
+      conversationId: 'conv-unit-test',
       prompt: 'prompt-快照-06',
       storyText: '完整正文-06',
       voiceId: 'voice-06',
@@ -622,6 +659,7 @@ async function main(): Promise<void> {
     intentStory(idB);
     delta(idB, 'B-草稿');
     storyComplete(idB, 'B-完整正文-4107');
+    await flush();
     assert.strictEqual(createCalls.length, 2, 'B 独立 promotion exactly once');
     pendingCreates[1].resolve(makeDto(101, pendingCreates[1].input));
     await flush();
@@ -779,7 +817,12 @@ async function main(): Promise<void> {
     assert.ok(storeSource.includes('promotionEpoch'), 'store 持有 epoch 守卫');
     assert.ok(storeSource.includes('inflightPromotions'), 'store 持有在途去重守卫');
     const adapterSource = readSource('lib/client/storyArtifactPromotion.ts');
-    assert.ok(adapterSource.includes("from '@/lib/client/library'"), 'adapter 只消费 frozen facade');
+    assert.ok(
+      adapterSource.includes("from '@/lib/client/collection'") &&
+        adapterSource.includes('promoteArtifact'),
+      'adapter 只消费 frozen collection.promoteArtifact（唯一写路径）',
+    );
+    assert.ok(!adapterSource.includes('libraryClient'), 'adapter 不再直调 library 门面');
     assert.ok(!adapterSource.includes('routers/'), 'adapter 不直引 server router');
     const flowSource = readSource('app/services/chatFlow.ts');
     assert.ok(!flowSource.includes('library.create'), 'chatFlow 不直调 library.create');

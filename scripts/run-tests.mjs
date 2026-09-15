@@ -169,6 +169,7 @@ const SUITES = [
     { id: 'continuous-creation-budget', path: './tests/integration/creation-conversation/continuous-creation-budget.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'new-creation-reset', path: './tests/integration/creation-conversation/new-creation-reset.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-collection-promotion', path: './tests/integration/creation-conversation/story-collection-promotion.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'conversation-scoped-persistence', path: './tests/integration/creation-conversation/conversation-scoped-persistence.integration.test.ts', group: 'integration', needs_db: false },
     { id: 'story-collection-backfill', path: './tests/integration/persistence-config/story-collection-backfill.integration.test.ts', group: 'integration', needs_db: true },
 ];
 

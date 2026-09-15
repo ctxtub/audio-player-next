@@ -231,3 +231,34 @@ feature flag: SINGLE_TRACK_AUDIO_ENABLED / NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLE
 git status --short: 见 .e2e-results/…/T3/post/git-status.txt
 限制: 见 T3/post/CLOSEOUT-T3.md §5（客户端 positionMs seek、AudioControllerHost/Now Playing 改造、GC playing 信号等为后续）
 ```
+
+### 7.1 Task 3 r1 修复记录（Reviewer CHANGES REQUESTED 收口，Implementer 自证）
+
+```text
+change-id: 2026-09-15-story-collection-continuous-creation
+角色: Implementer（自跑门；不自批、未 push/merge/deploy/Actions）
+目标基线完整 SHA: 9d15b2987c4ea87f6de79c7f9f04c4a5f3cfb495（T2 修复轮 3）
+上一实现 commit: 29ab12d27c8284ea7042c81b234624d5c244f4d3（T3 原始实现）
+r1 RED commit: ae582223558d7b92c4e742495f1d9ce4b834fb14（仅测试先行，clean tracked tree）
+r1 实现 commit: 42444aae84b8ea2c38a0717bdb14fea2607eeb48（本地提交，未 push）
+修改文件（r1）:
+  tests/integration/audio/single-track-asset.integration.test.ts（9a–9e flag 门禁零流量、10a ensureSegment 不暴露 asset、11a/11b GC 空闲清理 + 播放保留）
+  tests/integration/audio/audio-lifecycle-delete-integration.integration.test.ts（3b Asset 对象 tombstone）
+  tests/unit/playback/storycard-session-resume.unit.test.ts（case I positionMs→seek + 暂停落库）
+  tests/system/browser/scenarios/story-audio-single-track.spec.ts（整轨 ended 前不切、ended 后切下一 Work；flag 关闭对照；卡片/Mini/Expanded 同一条时间轴）
+  tests/system/browser/harness/app-server.mjs（browser 套件内 SINGLE_TRACK_AUDIO_ENABLED=1）
+  tests/unit/audio/audio-cleanup-triggers.unit.test.ts（case 8：单轨 GC 触发 + isPlaying + 双 flag plumbing 静态）
+  app/services/playbackSessionFlow.ts（handleEnded 单轨 atTail 恒真；reportProgress 应用恢复位/机会落库）
+  stores/playbackSessionStore.ts（pendingResumePositionMs + applyPendingSingleTrackResume + persistSingleTrackProgress）
+  lib/server/storyAudioAsset.ts（flag 门禁 + GC sweep/节流/isPlaying/startup + ensure 机会式触发）
+  lib/server/storyAudio.ts（移除 ensureSegment 单轨劫持；删除 ensureSingleTrackSegmentResult）
+  lib/server/audioAssetRead.ts（flag off → 404）
+  lib/server/storyWork.ts（User/Guest + retention 内联分支 Asset 对象 tombstone）
+  lib/server/audioStorageStartup.ts + instrumentation.ts（startup 单轨 GC 触发）
+  lib/audio/singleTrackFlag.ts + .env.sample + Dockerfile + docker-compose.yml（最终双 flag 契约与生产登记）
+必收项 1（L3 ended 切轨）: 见 CLOSEOUT-T3.md §1/§2；RED l3-ended.red.log（2 failed/4 passed）→ GREEN 6 passed
+必收项 2（§5 四项缺口）: 2.1 positionMs（unit I）、2.2 GC 触发+isPlaying（L2 11a/11b + case 8）、2.3 Asset tombstone（L2 3b）、2.4 flag 去耦（L2 9a–9e/10a + 双 flag 文档/plumbing）
+完成门（tree 42444aa, clean）: catalog EXIT=0；unit 70/70；integration 59/59；tooling 10/10；tsc EXIT=0；lint EXIT=0；prisma validate valid；build EXIT=0；yarn test:browser 74 passed EXIT=0（run1/run2 webkit 时序 flake 已如实登记于 CLOSEOUT §3.1）
+限制: 见 T3/post/CLOSEOUT-T3.md §5（r1 收口后仅保留有意的旧路径保留、L1 无独立 RED、双 flag 需同置等诚实声明）
+```
+

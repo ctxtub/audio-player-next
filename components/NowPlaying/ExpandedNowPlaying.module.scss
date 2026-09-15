@@ -70,7 +70,9 @@
 }
 
 .dialog {
-  background: var(--bg-elevated);
+  background:
+    radial-gradient(circle at 50% 10%, var(--accent-primary-subtle), transparent 34%),
+    color-mix(in srgb, var(--bg-elevated) 94%, var(--bg-primary));
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 0.5px solid var(--glass-border);
@@ -104,7 +106,9 @@
   position: sticky;
   top: 0;
   z-index: var(--z-raised);
-  background: var(--bg-elevated);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-bottom: 0.5px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
@@ -152,7 +156,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-4) var(--space-3);
+  padding: var(--space-3) var(--space-5) var(--space-4);
 }
 
 .titleBlock {
@@ -160,12 +164,12 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .title {
-  font-size: var(--text-md);
-  line-height: 24px;
+  font-size: var(--text-lg);
+  line-height: 28px;
   font-weight: var(--weight-semibold);
   color: var(--text-primary);
   overflow: hidden;
@@ -189,7 +193,7 @@
   justify-content: center;
   border-radius: var(--radius-full);
   border: 0.5px solid var(--border-default);
-  background: var(--bg-tertiary);
+  background: color-mix(in srgb, var(--bg-tertiary) 80%, transparent);
   color: var(--text-secondary);
   cursor: pointer;
   min-width: var(--size-touch-target);
@@ -219,22 +223,76 @@
   -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5) calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
   touch-action: pan-y;
 }
 
 .statusLine {
-  font-size: var(--text-sm);
-  line-height: 18px;
-  color: var(--text-secondary);
+  display: none;
 }
 
 .paragraphLine {
-  font-size: var(--text-base);
-  line-height: 22px;
-  color: var(--text-primary);
-  font-weight: var(--weight-medium);
+  display: none;
+}
+
+.artworkStage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-now-playing-artwork);
+  margin-block: var(--space-2);
+}
+
+.artworkGlow {
+  position: absolute;
+  width: var(--size-now-playing-artwork);
+  height: var(--size-now-playing-artwork);
+  border-radius: var(--radius-full);
+  background: var(--gradient-brand);
+  filter: blur(var(--blur-lg));
+  opacity: 0.32;
+}
+
+.artworkDisc {
+  position: relative;
+  width: var(--size-now-playing-artwork);
+  height: var(--size-now-playing-artwork);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-2xl);
+  color: var(--text-on-primary);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--color-white) 24%, transparent), transparent 42%),
+    var(--gradient-brand);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--shadow-accent), var(--shadow-xl);
+  transform: rotate(-3deg);
+}
+
+.body [data-testid='expanded-paragraph-status'] {
+  align-self: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--accent-primary-subtle);
+  color: var(--accent-primary);
+  font-size: var(--text-xs);
+  line-height: 16px;
+  font-weight: var(--weight-semibold);
+}
+
+.body [data-testid='expanded-timeline'] {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-1) var(--space-3);
+}
+
+.body [data-testid='expanded-timeline-label'] {
+  font-size: var(--text-xs);
+  line-height: 16px;
+  color: var(--text-secondary);
 }
 
 .endedBadge {
@@ -259,42 +317,160 @@
  * 新组件经 data-testid 兜底布局（触控热区 >=44px，与 Mini 同口径），
  * 视觉延续 glass/typography，不引入大型唱片（spec §13）。 */
 .body [data-testid='expanded-timeline-track'] {
+  grid-column: 1 / -1;
   min-height: var(--size-touch-target);
   display: flex;
   align-items: center;
   cursor: pointer;
+  position: relative;
+}
+
+.body [data-testid='expanded-timeline-track']::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  height: var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--border-default);
 }
 
 .body [data-testid='expanded-timeline-fill'] {
-  height: 4px;
+  position: relative;
+  z-index: var(--z-raised);
+  height: var(--space-1);
   border-radius: var(--radius-full);
-  background: var(--accent-primary);
+  background: var(--gradient-brand);
+  box-shadow: var(--shadow-accent);
+}
+
+.body [data-testid='expanded-timeline-times'] {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 16px;
+  color: var(--text-secondary);
 }
 
 .body [data-testid='expanded-playback-controls'] {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .body [data-testid='expanded-playback-controls'] button {
-  min-width: var(--size-touch-target);
-  min-height: var(--size-touch-target);
+  width: var(--size-now-playing-control);
+  height: var(--size-now-playing-control);
+  min-width: var(--size-now-playing-control);
+  min-height: var(--size-now-playing-control);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  border: 0.5px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--bg-tertiary) 84%, transparent);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-spring), opacity var(--duration-fast) var(--ease-default);
 }
 
-.body [data-testid='expanded-rate-control'] button {
+.body [data-testid='expanded-playback-controls'] [data-testid='expanded-play-button'] {
+  width: var(--size-now-playing-primary-control);
+  height: var(--size-now-playing-primary-control);
+  min-width: var(--size-now-playing-primary-control);
+  min-height: var(--size-now-playing-primary-control);
+  border: none;
+  background: var(--gradient-brand);
+  color: var(--text-on-primary);
+  box-shadow: var(--shadow-accent);
+}
+
+.body [data-testid='expanded-playback-controls'] button:hover:not(:disabled) {
+  transform: scale(1.06);
+}
+
+.body [data-testid='expanded-playback-controls'] button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.body [data-testid='expanded-playback-controls'] button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.body [data-testid='expanded-playback-controls'] button:focus-visible,
+.body [data-testid='expanded-timeline-track']:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.body [data-testid='expanded-rate-control'],
+.body [data-testid='expanded-sleep-timer-control'] {
+  position: relative;
+}
+
+.body [data-testid='expanded-rate-pill'],
+.body [data-testid='expanded-sleep-timer-pill'] {
   min-height: var(--size-touch-target);
+  width: 100%;
+  padding-inline: var(--space-4);
+  border: 0.5px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--bg-tertiary) 80%, transparent);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.body [data-testid='expanded-rate-menu'],
+.body [data-testid='expanded-sleep-timer-menu'] {
+  position: absolute;
+  z-index: var(--z-popover);
+  left: 0;
+  right: 0;
+  bottom: calc(100% + var(--space-2));
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--glass-highlight), var(--shadow-xl);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.body [data-testid='expanded-rate-menu'] button,
+.body [data-testid='expanded-sleep-timer-menu'] button,
+.body [data-testid='expanded-sleep-timer-menu'] input {
+  min-height: var(--size-touch-target);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+.body [data-testid='expanded-rate-menu'] button:hover,
+.body [data-testid='expanded-sleep-timer-menu'] button:hover {
+  background: var(--accent-primary-subtle);
+}
+
+.body [data-testid='expanded-sleep-timer-custom'] {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-2);
 }
 
 /* M7-04-01 Work 查看正文动作区（additive，不改既有 Surface 布局/断点）。
  * 内容导航按钮延续 glass/typography，触控热区 >=44px，与既有控制同口径。 */
 .body [data-testid='expanded-actions'] {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-2);
 }
 
@@ -312,6 +488,42 @@
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   cursor: pointer;
+}
+
+.body [data-testid='expanded-actions'] > :only-child {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 767px) {
+  .overlay {
+    background: color-mix(in srgb, var(--bg-overlay) 88%, var(--bg-primary));
+  }
+
+  .sheet {
+    max-height: calc(100dvh - var(--space-6));
+  }
+
+  .dialog {
+    background:
+      radial-gradient(circle at 50% 12%, var(--accent-primary-subtle), transparent 30%),
+      var(--bg-secondary);
+  }
+
+  .body {
+    gap: var(--space-4);
+    padding-top: var(--space-4);
+  }
+
+  .artworkStage {
+    min-height: var(--size-now-playing-artwork-mobile);
+    margin-block: var(--space-1);
+  }
+
+  .artworkGlow,
+  .artworkDisc {
+    width: var(--size-now-playing-artwork-mobile);
+    height: var(--size-now-playing-artwork-mobile);
+  }
 }
 
 .body [data-testid='expanded-view-story-button']:disabled {

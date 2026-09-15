@@ -58,6 +58,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, Modal as AriaModal, ModalOverlay } from 'react-aria-components';
 import { useDrag } from '@use-gesture/react';
 import { usePathname, useRouter } from 'next/navigation';
+import { Headphones } from 'lucide-react';
 
 import { useNowPlayingUiStore } from '@/stores/nowPlayingUiStore';
 
@@ -357,6 +358,12 @@ export const ExpandedNowPlaying: React.FC = () => {
                                 />
                             ) : (
                                 <>
+                            <div className={styles.artworkStage} aria-hidden="true">
+                                <div className={styles.artworkGlow} />
+                                <div className={styles.artworkDisc}>
+                                    <Headphones size={40} strokeWidth={1.5} />
+                                </div>
+                            </div>
                             <div className={styles.statusLine} data-testid="expanded-status">
                                 {viewModel.isEnded ? '播放完成' : subtitle}
                             </div>

@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { Loader2, Pause, Play, RotateCcw, RotateCw } from 'lucide-react';
+import { Headphones, Loader2, Pause, Play, RotateCcw, RotateCw } from 'lucide-react';
 
 import type { MiniPlaybackAction } from './types';
 import styles from './MiniNowPlaying.module.scss';
@@ -90,11 +90,16 @@ export const MiniMetadataButton: React.FC<MiniMetadataButtonProps> = ({
         onClick={(e) => onOpenDetails(e.currentTarget as unknown as HTMLElement)}
         data-testid="mini-metadata-button"
     >
+        <span className={styles.miniArtwork} aria-hidden="true">
+            <Headphones size={18} strokeWidth={1.8} />
+        </span>
+        <span className={styles.metadataText}>
         <span data-testid="mini-title">{title}</span>
         {secondaryLabel !== null ? (
             <span data-testid="mini-secondary-label">{secondaryLabel}</span>
         ) : null}
         <MiniProgressRail coarseProgress={coarseProgress} />
+        </span>
     </button>
 );
 

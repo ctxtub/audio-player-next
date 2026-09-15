@@ -5,7 +5,7 @@
 **change-id**：`2026-09-15-story-collection-continuous-creation`
 **角色**：Planner
 **工作目录**：`/Users/tensho/Developments/audio-player-next`
-**规划目标 SHA**：`e6def28a649494b5db8fec58bfe92c7c05f8c3c2`（实施开始前若基线变化必须重记并复核计划）
+**规划目标 SHA**：`007157cb3c26234c56208a9a5f2e6496c583b0b1`（2026-09-15 实施开工前按仓库现状重记；原规划 SHA 为 `e6def28`）
 **技术方案**：`docs/specs/2026-09-15-story-collection-continuous-creation-technical-design.md`
 **授权边界**：不含 push、merge、deploy、Actions 或生产数据操作
 
@@ -24,6 +24,8 @@ T4 故事库 UI 与全链收口
 ```
 
 默认串行。若后续明确授权多写者，T2/T3 只在 API 冻结且声明不相交路径后并行；共享 store、schema、Catalog 和重套件仍串行。
+
+命令约定：`scripts/run-tests.mjs` 只接受 `--list` / `--group <unit|integration|tooling>` / `--suite <精确 suite id>`，没有名称匹配参数；新增套件登记进 runner 注册表后再用 `--suite` 单跑。L3 场景文件名以仓库现状为准。
 
 ## 2. Task 1 — Conversation / Collection 数据底座
 
@@ -50,9 +52,9 @@ T4 故事库 UI 与全链收口
 
 ```bash
 yarn test:catalog
-node scripts/run-tests.mjs --suite unit --match story-collection
-node scripts/run-tests.mjs --suite integration --match story-collection
-node scripts/run-tests.mjs --suite integration --match migration
+node scripts/run-tests.mjs --group unit
+node scripts/run-tests.mjs --group integration
+node scripts/run-tests.mjs --suite <新增套件的精确 id>
 yarn test:tooling
 npx prisma validate
 git diff --check
@@ -87,8 +89,9 @@ git diff --check
 
 ```bash
 yarn test:catalog
-node scripts/run-tests.mjs --suite unit --match continuous-creation
-node scripts/run-tests.mjs --suite integration --match chat-creation
+node scripts/run-tests.mjs --group unit
+node scripts/run-tests.mjs --group integration
+node scripts/run-tests.mjs --suite <新增套件的精确 id>
 npx playwright test --config tests/system/browser/playwright.config.ts tests/system/browser/scenarios/continuous-creation.spec.ts
 npx playwright test --config tests/system/browser/playwright.config.ts tests/system/browser/scenarios/new-creation-reset.spec.ts
 yarn lint
@@ -125,9 +128,9 @@ git diff --check
 
 ```bash
 yarn test:catalog
-node scripts/run-tests.mjs --suite unit --match story-audio-track
-node scripts/run-tests.mjs --suite integration --match story-audio-track
-node scripts/run-tests.mjs --suite integration --match audio-cleanup
+node scripts/run-tests.mjs --group unit
+node scripts/run-tests.mjs --group integration
+node scripts/run-tests.mjs --suite <新增套件的精确 id>
 npx playwright test --config tests/system/browser/playwright.config.ts tests/system/browser/scenarios/story-audio-single-track.spec.ts
 yarn test:tooling
 yarn lint

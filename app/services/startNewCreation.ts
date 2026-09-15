@@ -12,8 +12,8 @@
  */
 
 import { createNewConversation } from '@/lib/client/conversation';
+import { resolveContinuousCreationBudgetMinutes } from '@/lib/continuous-creation/budget';
 import { useChatStore } from '@/stores/chatStore';
-import { useConfigStore } from '@/stores/configStore';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 import { useGenerationStore } from '@/stores/generationStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
@@ -21,6 +21,9 @@ import { usePlaybackStore } from '@/stores/playbackStore';
 
 import { abortActiveChatStream } from './chatFlow';
 import { resetContinuousCreationRuntime } from './continuousCreationFlow';
+
+/** 预算快照解析（保持既有公共出口，供测试/调用方复用）。 */
+export { resolveContinuousCreationBudgetMinutes };
 
 /** `startNewCreation` 入参。 */
 export type StartNewCreationOptions = {
@@ -47,20 +50,6 @@ export type StartNewCreationResult = {
   /** 新会话对应集合 id；尚未晋升首作时为 null。 */
   collectionId: string | null;
 };
-
-/**
- * 解析本次会话预算快照（分钟）：设置页播放时长；定时关闭视为不限（0 → null）。
- * @returns 预算分钟数；0 表示不限。
- */
-export function resolveContinuousCreationBudgetMinutes(): number {
-  const { defaultSleepTimerEnabled, defaultSleepTimerMinutes } = useConfigStore.getState().apiConfig;
-  if (!defaultSleepTimerEnabled) {
-    return 0;
-  }
-  return typeof defaultSleepTimerMinutes === 'number' && defaultSleepTimerMinutes > 0
-    ? defaultSleepTimerMinutes
-    : 0;
-}
 
 /**
  * 唯一「新建创作」强重置入口。

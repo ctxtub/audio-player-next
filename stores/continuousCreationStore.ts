@@ -91,6 +91,30 @@ function applyEvent(
   return { ...reduce(machineStateOf(state), event), collectionId: state.collectionId };
 }
 
+/**
+ * 会话/集合切换的「真取消 + 重新初始化」钩子（由 `continuousCreationFlow` 注册）。
+ *
+ * 分层原因：store 不得直接 import app service——service → chatFlow → chatStore 会成环。
+ * 仅当编排服务已被加载（即可能已经产生在途/就绪 next）时钩子非空；否则无任务可取消，
+ * `switchCollection` 退化为纯 epoch 推进 + 绑定新集合。
+ *
+ * 钩子语义（M9-C1 T2 修复轮 2）：abort 在途传输、清空 prepared/调度锁/采样点，
+ * 再以新 collection identity 重新初始化并重新快照预算，返回新 epoch。
+ */
+export type ContinuousCreationSwitchHandler = (collectionId: string | null) => number;
+
+let switchHandler: ContinuousCreationSwitchHandler | null = null;
+
+/**
+ * 注册/注销会话切换钩子（`continuousCreationFlow` 模块加载时注册）。
+ * @param handler 钩子；null 表示注销（测试清理用）。
+ */
+export function registerContinuousCreationSwitchHandler(
+  handler: ContinuousCreationSwitchHandler | null,
+): void {
+  switchHandler = handler;
+}
+
 const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (set, get) => ({
   ...INITIAL_STATE,
 
@@ -128,6 +152,13 @@ const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (s
   },
 
   switchCollection: (collectionId) => {
+    // M9-C1 T2 修复轮 2：切换会话/集合必须「真取消」在途 next 并清 prepared，
+    // 不能只靠 epoch 失配做逻辑 no-op（否则 prepared/调度锁会占住 lookahead=1 槽位，
+    // 导致新会话无法立即重新调度）。真实取消 + 重新初始化由编排服务钩子完成。
+    if (switchHandler !== null) {
+      return switchHandler(collectionId);
+    }
+    // 编排服务未加载（不存在在途/就绪任务可取消）：退化为纯 epoch 推进 + 绑定新集合。
     set((state) => ({
       ...applyEvent(state, { type: 'advanceEpoch' }),
       collectionId,

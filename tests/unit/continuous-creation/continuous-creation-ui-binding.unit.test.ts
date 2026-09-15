@@ -137,6 +137,45 @@ async function runContinuousCreationUiBindingUnitTests(): Promise<void> {
     console.log('PASS: 8');
   }
 
+  console.log('=== 9. 切换集合真取消 seam 结构守卫（静态，第二层） ===');
+  {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const repoRoot = process.cwd();
+    const storePath = path.join(repoRoot, 'stores/continuousCreationStore.ts');
+    const flowPath = path.join(repoRoot, 'app/services/continuousCreationFlow.ts');
+    const budgetPath = path.join(repoRoot, 'lib/continuous-creation/budget.ts');
+
+    const storeSource = fs.readFileSync(storePath, 'utf8');
+    // switchCollection 必须委托给已注册的「真取消 + 重新初始化」钩子，不得只做 advanceEpoch。
+    assert.ok(
+      storeSource.includes('registerContinuousCreationSwitchHandler'),
+      'store 必须提供会话切换钩子注册点',
+    );
+    assert.ok(
+      storeSource.includes('switchHandler(collectionId)'),
+      'switchCollection 必须调用注册的真取消钩子',
+    );
+
+    const flowSource = fs.readFileSync(flowPath, 'utf8');
+    assert.ok(
+      flowSource.includes('registerContinuousCreationSwitchHandler'),
+      'continuousCreationFlow 必须在模块加载时注册切换钩子',
+    );
+    assert.ok(
+      flowSource.includes('cancelPendingNextWork()'),
+      '切换钩子必须调用 cancelPendingNextWork（真 abort + 清 prepared）',
+    );
+
+    assert.ok(fs.existsSync(budgetPath), '预算快照解析必须位于中性模块（避免 store↔service 成环）');
+    const budgetSource = fs.readFileSync(budgetPath, 'utf8');
+    assert.ok(
+      budgetSource.includes('resolveContinuousCreationBudgetMinutes'),
+      '切换钩子必须重新快照预算',
+    );
+    console.log('PASS: 9');
+  }
+
   console.log('ALL CONTINUOUS CREATION UI BINDING UNIT TESTS PASSED SUCCESSFULLY');
 }
 

@@ -29,6 +29,21 @@ nodeRequire.cache[glassToastPath] = {
   exports: { default: { show: () => {}, clear: () => {} } },
 } as unknown as NodeModule;
 
+// ---- chatFlow 桩：记录真实 abort 调用（切换集合必须走到传输 abort seam）----
+const abortCalls: string[] = [];
+const chatFlowPath = path.resolve(cwd, 'app/services/chatFlow.ts');
+nodeRequire.cache[chatFlowPath] = {
+  id: chatFlowPath,
+  filename: chatFlowPath,
+  loaded: true,
+  exports: {
+    beginChatStream: async () => ({ messageId: 'stub', audioUrl: 'blob:stub', content: 'stub' }),
+    abortActiveChatStream: () => {
+      abortCalls.push('abort');
+    },
+  },
+} as unknown as NodeModule;
+
 const { CONTINUOUS_WINDOW_COLD_START_MS, resolveBudgetMs } = nodeRequire(
   path.resolve(cwd, 'lib/continuous-creation/stateMachine'),
 ) as typeof import('../../../lib/continuous-creation/stateMachine');
@@ -365,6 +380,99 @@ async function runTests() {
     assert.strictEqual(consumePreparedNextWork(afterLogoutEpoch), null, '旧状态不得复活');
   }
   console.log('PASS: 12');
+
+  console.log('=== 13. 停止矩阵：切换集合真取消在途/就绪 next 且新会话可立即重调度 ===');
+  {
+    // 13a：旧会话已有 ready next → 切换集合必须真 abort、清 prepared，新会话立即可调度。
+    const epoch = resetAll(30, 1); // col-1
+    __setContinuousCreationGeneratorForTests(async () => ({
+      messageId: 'm-old-ready',
+      audioUrl: 'blob:old-ready',
+      content: '旧就绪',
+    }));
+    assert.strictEqual(
+      await scheduleNextWork({ epoch, nowPlaying: true, remainingTrackMs: 1_000 }),
+      true,
+    );
+    assert.strictEqual(hasPreparedNextWork(), true, '前置：旧会话已有 ready next');
+    abortCalls.length = 0;
+
+    const switchEpoch = useContinuousCreationStore.getState().switchCollection('col-2');
+    assert.notStrictEqual(switchEpoch, epoch, '切换集合必须递增 epoch');
+    assert.strictEqual(useContinuousCreationStore.getState().collectionId, 'col-2', '集合身份切换');
+    assert(abortCalls.length >= 1, '切换集合必须真实 abort 在途传输');
+    assert.strictEqual(hasPreparedNextWork(), false, '切换集合必须清空 prepared 残留');
+    assert.strictEqual(useContinuousCreationStore.getState().hasNextJob(), false, '新会话不得继承 next job 槽位');
+    assert.strictEqual(consumePreparedNextWork(epoch), null, '旧 epoch 的 ready next 不得复活');
+
+    __setContinuousCreationGeneratorForTests(async () => ({
+      messageId: 'm-new-ready',
+      audioUrl: 'blob:new-ready',
+      content: '新就绪',
+    }));
+    assert.strictEqual(
+      await scheduleNextWork({ epoch: switchEpoch, nowPlaying: true, remainingTrackMs: 1_000 }),
+      true,
+      '切换集合后新会话必须能立即重新调度',
+    );
+    assert.deepStrictEqual(consumePreparedNextWork(switchEpoch), {
+      audioUrl: 'blob:new-ready',
+      segment: '新就绪',
+      messageId: 'm-new-ready',
+    });
+
+    // 13b：旧会话生成在途（generating_next）时切换 → 真 abort + 释放调度锁 + 晚到丢弃。
+    abortCalls.length = 0;
+    const epoch2 = resetAll(30, 1);
+    let resolveLate!: (v: { messageId: string; audioUrl: string; content: string }) => void;
+    __setContinuousCreationGeneratorForTests(
+      () => new Promise((resolve) => { resolveLate = resolve; }),
+    );
+    const inflight = scheduleNextWork({ epoch: epoch2, nowPlaying: true, remainingTrackMs: 1_000 });
+    assert.strictEqual(useContinuousCreationStore.getState().status, 'generating_next');
+    const switchEpoch2 = useContinuousCreationStore.getState().switchCollection('col-2');
+    assert(abortCalls.length >= 1, '切换集合必须 abort 在途生成');
+    __setContinuousCreationGeneratorForTests(async () => ({
+      messageId: 'm-new-inflight',
+      audioUrl: 'blob:new-inflight',
+      content: '新在途',
+    }));
+    assert.strictEqual(
+      await scheduleNextWork({ epoch: switchEpoch2, nowPlaying: true, remainingTrackMs: 1_000 }),
+      true,
+      '在途切换后新会话必须能立即重新调度（旧调度锁不得残留）',
+    );
+    assert.strictEqual(consumePreparedNextWork(switchEpoch2)?.messageId, 'm-new-inflight');
+    resolveLate({ messageId: 'm-late-switch', audioUrl: 'blob:late-switch', content: '切换后晚到' });
+    assert.strictEqual(await inflight, false, '切换集合后晚到结算必须被丢弃');
+    assert.strictEqual(hasPreparedNextWork(), false, '晚到结果不得写回 prepared');
+    assert.strictEqual(consumePreparedNextWork(epoch2), null, '旧结果不得污染新会话');
+
+    // 13c：预算耗尽后切换会话 → 以新 collection identity 重新初始化（预算重新快照），新会话可立即重调度。
+    const epoch3 = resetAll(null, 1);
+    useContinuousCreationStore.getState().setBudget(20);
+    useContinuousCreationStore.getState().audioActiveTick(20);
+    assert.strictEqual(useContinuousCreationStore.getState().status, 'ended_budget');
+    const switchEpoch3 = useContinuousCreationStore.getState().switchCollection('col-2');
+    assert.strictEqual(
+      useContinuousCreationStore.getState().status,
+      'enabled_idle',
+      '切换集合必须以新 identity 重新初始化（不得停在 ended_budget）',
+    );
+    assert.notStrictEqual(switchEpoch3, epoch3, '切换集合必须递增 epoch');
+    __setContinuousCreationGeneratorForTests(async () => ({
+      messageId: 'm-after-switch-budget',
+      audioUrl: 'blob:after-switch-budget',
+      content: '切后新段落',
+    }));
+    assert.strictEqual(
+      await scheduleNextWork({ epoch: switchEpoch3, nowPlaying: true, remainingTrackMs: 1_000 }),
+      true,
+      '预算耗尽后切换会话，新会话必须能立即重新调度（预算重新快照）',
+    );
+    assert.strictEqual(consumePreparedNextWork(switchEpoch3)?.messageId, 'm-after-switch-budget');
+  }
+  console.log('PASS: 13');
 
   __setContinuousCreationGeneratorForTests(null);
   resetContinuousCreationRuntime();

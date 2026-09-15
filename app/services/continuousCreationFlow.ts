@@ -15,9 +15,10 @@
  * 契约：tech-design §5；docs/e2e/10-会话与作品集连续创作/05..08。
  */
 
-import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
+import { useContinuousCreationStore, registerContinuousCreationSwitchHandler } from '@/stores/continuousCreationStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { isWithinScheduleWindow } from '@/lib/continuous-creation/stateMachine';
+import { resolveContinuousCreationBudgetMinutes } from '@/lib/continuous-creation/budget';
 
 import { abortActiveChatStream, beginChatStream } from './chatFlow';
 
@@ -117,6 +118,32 @@ export function endContinuousCreationRun(): void {
   cancelPendingNextWork();
   useContinuousCreationStore.getState().advanceEpoch();
 }
+
+/**
+ * M9-C1 T2 修复轮 2：会话/集合切换的真实取消 + 重新初始化。
+ *
+ * 停止矩阵要求「切换集合 → abort 且以新 collection identity 重新初始化」：
+ * 1) 真 abort 在途生成传输，释放单槽 lookahead、清空 prepared（含 blob 释放）与采样点；
+ * 2) 以新 collectionId 重新快照预算并递增 epoch——新会话可立即重新调度，
+ *    旧会话迟到结果凭 runToken + epoch 双重失配一律丢弃。
+ *
+ * 注册到 `continuousCreationStore.switchCollection`（store 不得反向 import service）。
+ * @param collectionId 新集合 id（可为 null：首作晋升前）。
+ * @returns 新 epoch。
+ */
+function reinitializeForCollectionSwitch(collectionId: string | null): number {
+  cancelPendingNextWork();
+  const store = useContinuousCreationStore.getState();
+  store.resetForNewCreation({
+    collectionId,
+    budgetMinutes: resolveContinuousCreationBudgetMinutes(),
+    epoch: store.epoch + 1,
+  });
+  return useContinuousCreationStore.getState().epoch;
+}
+
+// 模块加载即注册切换钩子：此后任何 switchCollection 都走到真取消 seam。
+registerContinuousCreationSwitchHandler(reinitializeForCollectionSwitch);
 
 /**
  * 在调度窗内请求生成下一作品（lookahead=1）。

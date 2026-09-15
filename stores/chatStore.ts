@@ -1261,25 +1261,24 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     }));
   },
   applyConversationIdentity: ({ conversationId, collectionId, collectionTitle }) => {
-    set((state) => {
-      const changed = state.conversationId !== conversationId;
-      if (changed) {
-        // M9-C1 T2：会话切换同时推进连续创作 epoch 并绑定新集合身份，
-        // 旧会话在途的下一作品回调凭 epoch 失配一律 no-op（绝不污染新会话）。
-        useContinuousCreationStore.getState().switchCollection(collectionId);
-      }
-      return {
-        conversationId,
-        collectionId,
-        collectionTitle:
-          collectionTitle !== undefined
-            ? collectionTitle
-            : changed
-              ? null
-              : state.collectionTitle,
-        epoch: changed ? state.epoch + 1 : state.epoch,
-      };
-    });
+    const changed = get().conversationId !== conversationId;
+    if (changed) {
+      // M9-C1 T2 修复轮 2：会话切换走 store 注册的切换钩子——真 abort 在途 next、
+      // 清空 prepared/调度锁，并以新 collection identity 重新初始化预算；
+      // 旧会话迟到回调凭 runToken + epoch 双重失配一律丢弃（绝不污染新会话）。
+      useContinuousCreationStore.getState().switchCollection(collectionId);
+    }
+    set((state) => ({
+      conversationId,
+      collectionId,
+      collectionTitle:
+        collectionTitle !== undefined
+          ? collectionTitle
+          : changed
+            ? null
+            : state.collectionTitle,
+      epoch: changed ? state.epoch + 1 : state.epoch,
+    }));
   },
   initForUser: () => {
     if (get().syncEnabled) {

@@ -132,6 +132,17 @@ export function isStaleCallback(state: ContinuousCreationState, epoch: number): 
   return epoch !== state.epoch;
 }
 
+/**
+ * 是否为「锁死的终态」：开关关闭 / 预算耗尽。
+ *
+ * 终态一旦进入，任何迟到事件（trackEnded / nextConsumed / generationFailed /
+ * schedule / audioPreparing / audioReady）都不得复活它；仅显式恢复路径
+ * （enable / reset / setBudget）可离开终态。
+ */
+export function isTerminalStatus(status: ContinuousCreationStatus): boolean {
+  return status === 'disabled' || status === 'ended_budget';
+}
+
 /** 预算是否仍可继续（不限或未耗尽）。 */
 export function hasBudgetRemaining(state: ContinuousCreationState): boolean {
   return state.remainingMs === null || state.remainingMs > 0;
@@ -209,6 +220,22 @@ export function reduce(
   state: ContinuousCreationState,
   event: ContinuousCreationEvent,
 ): ContinuousCreationState {
+  // M9-C1 T2 修复轮 3：终态锁死守卫——disabled / ended_budget 一旦进入，迟到事件
+  //（trackEnded / nextConsumed / generationFailed / schedule / audioPreparing / audioReady）
+  // 一律 no-op，不得把终态复活成 waiting_next / enabled_idle / error。
+  // 仅显式恢复路径（enable / reset / setBudget / advanceEpoch）可离开终态。
+  if (isTerminalStatus(state.status)) {
+    switch (event.type) {
+      case 'enable':
+      case 'reset':
+      case 'setBudget':
+      case 'advanceEpoch':
+      case 'audioActiveTick':
+        break;
+      default:
+        return state;
+    }
+  }
   switch (event.type) {
     case 'enable': {
       const enabled = true;

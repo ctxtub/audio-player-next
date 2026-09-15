@@ -15,9 +15,13 @@
  * 契约：tech-design §5；docs/e2e/10-会话与作品集连续创作/05..08。
  */
 
-import { useContinuousCreationStore, registerContinuousCreationSwitchHandler } from '@/stores/continuousCreationStore';
+import {
+  useContinuousCreationStore,
+  registerContinuousCreationSwitchHandler,
+  registerContinuousCreationCancelHandler,
+} from '@/stores/continuousCreationStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
-import { isWithinScheduleWindow } from '@/lib/continuous-creation/stateMachine';
+import { isTerminalStatus, isWithinScheduleWindow } from '@/lib/continuous-creation/stateMachine';
 import { resolveContinuousCreationBudgetMinutes } from '@/lib/continuous-creation/budget';
 
 import { abortActiveChatStream, beginChatStream } from './chatFlow';
@@ -144,6 +148,10 @@ function reinitializeForCollectionSwitch(collectionId: string | null): number {
 
 // 模块加载即注册切换钩子：此后任何 switchCollection 都走到真取消 seam。
 registerContinuousCreationSwitchHandler(reinitializeForCollectionSwitch);
+
+// M9-C1 T2 修复轮 3：注册 disable 的真取消 seam——关闭开关必须 abort 在途传输并清
+// prepared/调度锁，而不是只改 store status（否则 prepared 残留会被迟到轨道结束取出）。
+registerContinuousCreationCancelHandler(cancelPendingNextWork);
 
 /**
  * 在调度窗内请求生成下一作品（lookahead=1）。
@@ -276,6 +284,11 @@ export function reportContinuousAudioActive(active: boolean): void {
 export function handleTrackEnded(epoch: number): PreparedNextWork | null {
   const store = useContinuousCreationStore.getState();
   if (store.isStale(epoch)) {
+    return null;
+  }
+  // M9-C1 T2 修复轮 3：终态锁死——disabled / ended_budget 后，迟到的轨道结束
+  // 不得取出旧 next，也不得把终态复活成 waiting_next / enabled_idle。
+  if (isTerminalStatus(store.status)) {
     return null;
   }
   const work = consumePreparedNextWork(epoch);

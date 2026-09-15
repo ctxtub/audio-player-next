@@ -474,6 +474,92 @@ async function runTests() {
   }
   console.log('PASS: 13');
 
+  console.log('=== 14. 停止矩阵：disable 真 abort、清 prepared、终态锁死 ===');
+  {
+    // 14a：已有 ready next 时关闭 → 真 abort + 清 prepared + 迟到轨道结束不得取出旧 next。
+    const epoch = resetAll(30, 1);
+    __setContinuousCreationGeneratorForTests(async () => ({
+      messageId: 'm-ready-disable',
+      audioUrl: 'blob:ready-disable',
+      content: '关闭前就绪',
+    }));
+    assert.strictEqual(
+      await scheduleNextWork({ epoch, nowPlaying: true, remainingTrackMs: 1_000 }),
+      true,
+    );
+    assert.strictEqual(hasPreparedNextWork(), true, '前置：关闭前已有 ready next');
+    abortCalls.length = 0;
+
+    useContinuousCreationStore.getState().disable();
+    assert(abortCalls.length >= 1, 'disable 必须真实 abort 在途/就绪 next 传输');
+    assert.strictEqual(hasPreparedNextWork(), false, 'disable 必须清空 prepared 残留');
+    assert.strictEqual(useContinuousCreationStore.getState().status, 'disabled');
+    assert.strictEqual(handleTrackEnded(epoch), null, 'disable 后迟到轨道结束不得取出旧 next');
+    assert.strictEqual(
+      useContinuousCreationStore.getState().status,
+      'disabled',
+      'disable 终态不得被迟到轨道结束复活',
+    );
+    assert.strictEqual(consumePreparedNextWork(epoch), null, 'disable 后旧 next 不得复活');
+
+    // 14b：在途生成时关闭 → 真 abort + 晚到丢弃 + 终态锁死。
+    abortCalls.length = 0;
+    const epoch2 = resetAll(30, 1);
+    let resolveLate!: (v: { messageId: string; audioUrl: string; content: string }) => void;
+    __setContinuousCreationGeneratorForTests(
+      () => new Promise((resolve) => { resolveLate = resolve; }),
+    );
+    const inflight = scheduleNextWork({ epoch: epoch2, nowPlaying: true, remainingTrackMs: 1_000 });
+    assert.strictEqual(useContinuousCreationStore.getState().status, 'generating_next');
+    useContinuousCreationStore.getState().disable();
+    assert(abortCalls.length >= 1, 'disable 必须 abort 在途生成');
+    assert.strictEqual(hasPreparedNextWork(), false);
+    resolveLate({ messageId: 'm-late-disable', audioUrl: 'blob:late-disable', content: '关闭后晚到' });
+    assert.strictEqual(await inflight, false, 'disable 后晚到结算必须丢弃');
+    assert.strictEqual(handleTrackEnded(epoch2), null, 'disable 后迟到结束不得复活');
+    assert.strictEqual(
+      useContinuousCreationStore.getState().status,
+      'disabled',
+      'disable 终态必须锁死',
+    );
+  }
+  console.log('PASS: 14');
+
+  console.log('=== 15. 停止矩阵：预算耗尽终态守卫（迟到事件不得复活）===');
+  {
+    const epoch = resetAll(30, 1);
+    useContinuousCreationStore.getState().setBudget(20);
+    useContinuousCreationStore.getState().audioActiveTick(20);
+    assert.strictEqual(useContinuousCreationStore.getState().status, 'ended_budget');
+    // 迟到轨道结束：不得把 ended_budget 翻成 waiting_next / enabled_idle。
+    assert.strictEqual(handleTrackEnded(epoch), null);
+    assert.strictEqual(
+      useContinuousCreationStore.getState().status,
+      'ended_budget',
+      'ended_budget 终态不得被迟到轨道结束复活',
+    );
+    // 迟到 audio active：不得重新开账。
+    reportContinuousAudioActive(true);
+    assert.strictEqual(useContinuousCreationStore.getState().status, 'ended_budget');
+    // 迟到 nextConsumed / generationFailed：不得复活。
+    useContinuousCreationStore.getState().nextConsumed();
+    assert.strictEqual(
+      useContinuousCreationStore.getState().status,
+      'ended_budget',
+      'ended_budget 终态不得被迟到 nextConsumed 复活',
+    );
+    useContinuousCreationStore.getState().generationFailed('迟到失败');
+    assert.strictEqual(
+      useContinuousCreationStore.getState().status,
+      'ended_budget',
+      'ended_budget 终态不得被迟到 generationFailed 复活',
+    );
+    // 显式 enable 仍是唯一合法恢复路径（用户重新开启）。
+    useContinuousCreationStore.getState().enable();
+    assert.strictEqual(useContinuousCreationStore.getState().status, 'enabled_idle');
+  }
+  console.log('PASS: 15');
+
   __setContinuousCreationGeneratorForTests(null);
   resetContinuousCreationRuntime();
   console.log('ALL CONTINUOUS CREATION BUDGET TESTS PASSED SUCCESSFULLY');

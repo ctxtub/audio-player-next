@@ -115,11 +115,37 @@ export function registerContinuousCreationSwitchHandler(
   switchHandler = handler;
 }
 
+/**
+ * 关闭开关（disable）的「真取消」钩子（由 `continuousCreationFlow` 注册）。
+ *
+ * M9-C1 T2 修复轮 3：`disable` 不能只改 store status——必须 abort 在途生成传输并清空
+ * 模块级 prepared/调度锁，否则关闭前就绪的 next 会被迟到 `handleTrackEnded` 取出续播。
+ * 与 switch 钩子同理，store 不得反向 import service。
+ */
+export type ContinuousCreationCancelHandler = () => void;
+
+let cancelHandler: ContinuousCreationCancelHandler | null = null;
+
+/**
+ * 注册/注销 disable 真取消钩子（`continuousCreationFlow` 模块加载时注册）。
+ * @param handler 钩子；null 表示注销（测试清理用）。
+ */
+export function registerContinuousCreationCancelHandler(
+  handler: ContinuousCreationCancelHandler | null,
+): void {
+  cancelHandler = handler;
+}
+
 const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (set, get) => ({
   ...INITIAL_STATE,
 
   enable: () => set((state) => applyEvent(state, { type: 'enable' })),
-  disable: () => set((state) => applyEvent(state, { type: 'disable' })),
+  disable: () => {
+    // M9-C1 T2 修复轮 3：关闭开关必须先走真取消 seam（abort 在途传输 + 清 prepared/
+    // 调度锁），再落 disabled 终态；否则关闭前的就绪 next 会被迟到轨道结束续播。
+    cancelHandler?.();
+    set((state) => applyEvent(state, { type: 'disable' }));
+  },
 
   resetForNewCreation: ({ collectionId, budgetMinutes, epoch }) =>
     set((state) => ({

@@ -244,7 +244,7 @@ cases:
     display_name_zh: 从提示词历史开始新创作
     legacy_aliases: [E2E-02-11-01, H-21]
     journey_id: history-reuse-create
-    user_goal: 从聊天历史提示词选条目后在干净新会话自动重创作且旧作可返
+    user_goal: 从聊天历史提示词经Draft Session干净重创作自动起播且旧作可返重载不续播
     priority: P0
     lifecycle_status: ACTIVE
     risk_tags: [history, isolation]

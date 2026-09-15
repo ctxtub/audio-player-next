@@ -259,6 +259,19 @@ export const beginChatStream = async (
 };
 
 /**
+ * M9-C1 T2：新建创作强重置时中止在途聊天流。
+ *
+ * 仅中止当前 transport；epoch 递增由调用方先行完成，旧回调凭 epoch no-op，
+ * 因此本函数不额外处理 stale 回写。
+ */
+export const abortActiveChatStream = (): void => {
+  if (globalAbortController) {
+    globalAbortController.abort();
+    globalAbortController = null;
+  }
+};
+
+/**
  * 重试最近一条失败的消息，再次触发流式流程。
  */
 export const retryChatStream = async (): Promise<void> => {

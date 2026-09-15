@@ -13,6 +13,7 @@ import OnboardingModal from '../OnboardingModal';
 import InputArea from './InputArea';
 import MessageArea from './MessageArea';
 import HistoryPanel from '../HistoryPanel';
+import ContinuousCreationBar from '../ContinuousCreationBar';
 import styles from './index.module.scss';
 import type { ChatLayoutProps } from './types';
 
@@ -229,6 +230,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         suggestions={defaultSuggestions}
         onSuggestionSelect={handleSuggestionSelect}
       />
+      <ContinuousCreationBar collectionTitle={null} />
       <MessageArea
         messages={messages}
         isLoading={false}

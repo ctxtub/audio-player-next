@@ -1387,10 +1387,10 @@ cases:
     journey_id: story-collection-continuous
     user_goal: 创作页展示集合标题开关状态卡与剩余预算且与编排同源
     priority: P1
-    lifecycle_status: PLANNED
+    lifecycle_status: ACTIVE
     risk_tags: [continuous-creation, ui, budget, collection-title]
     spec_path: docs/e2e/10-会话与作品集连续创作/08-连续创作状态卡与开关.md
-    executable_ids: []
+    executable_ids: [exec-continuous-creation-ui-binding]
     fixtures: []
     owner: story-collection
   - case_id: legacy-history-retirement
@@ -1995,3 +1995,7 @@ executables:
     display_name_zh: 连续创作状态机预算窗口lookahead与epoch守卫
     layer: L1
     path: ./tests/unit/continuous-creation/continuous-creation-state-machine.unit.test.ts
+  - executable_id: exec-continuous-creation-ui-binding
+    display_name_zh: 连续创作状态卡开关剩余预算与store同源
+    layer: L1
+    path: ./tests/unit/continuous-creation/continuous-creation-ui-binding.unit.test.ts

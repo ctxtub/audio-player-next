@@ -165,6 +165,7 @@ const SUITES = [
     { id: 'auto-delivery', path: './tests/tooling/delivery/auto-delivery.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'collection-domain', path: './tests/unit/story-collection/collection-domain.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'continuous-creation-state-machine', path: './tests/unit/continuous-creation/continuous-creation-state-machine.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'continuous-creation-ui-binding', path: './tests/unit/continuous-creation/continuous-creation-ui-binding.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'story-collection-promotion', path: './tests/integration/creation-conversation/story-collection-promotion.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-collection-backfill', path: './tests/integration/persistence-config/story-collection-backfill.integration.test.ts', group: 'integration', needs_db: true },
 ];

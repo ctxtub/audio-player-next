@@ -256,7 +256,7 @@ cases:
     display_name_zh: 生成历史本页单次回放
     legacy_aliases: [E2E-02-11-02, H-21]
     journey_id: history-reuse-playback
-    user_goal: 从聊天历史生成条目单次回放且不续写新历史
+    user_goal: 从聊天历史生成条目经Work Session有限回放且不续写不新增历史
     priority: P0
     lifecycle_status: ACTIVE
     risk_tags: [history, replay]

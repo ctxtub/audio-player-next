@@ -18,13 +18,13 @@
 
 本计划定稿前已对当前分支执行现有 `yarn test:delivery-journeys`，得到以下事实：
 
-- 标准命令最初在 global setup 阶段失败，因为 runner 依赖的 `tests/support/fixtures/spike-fixed.mp3` 已被清理，但引用仍然存在；外层只报告等待端口文件超时，真实缺文件错误被 detached 子进程吞掉。
-- 临时补入隔离音频后，production 快照又在 Prisma 初始化阶段以无详细信息的 `Schema engine error` 失败；使用诊断日志环境完成初始化后，套件才真正进入浏览器。
-- 最终 Chromium 与 WebKit 共执行二十次场景实例并全部通过，用时约四分钟；通过内容主要是空页面、入口消失、路由、开关和旧兼容播放。
-- 当前场景仍使用直接 API 登录与造数、隔离数据库读写、隐藏 `<audio>` 属性、测试 id、生产 Probe 和浏览器全局开关作为重要依据。测试全绿不等于用户旅程完成。
+- 标准命令最初在 global setup 阶段失败：固定音频夹具在清理时被误删；宿主 `RUST_LOG` 又会导致 Prisma 只返回空白 `Schema engine error`；detached 子进程同时吞掉了真实缺文件错误。
+- 浏览器 runner 已在提交 `6d78600` 修复：恢复唯一最小音频夹具、隔离宿主 Rust 日志变量、移除 production Probe 和功能开关注入，并让 mock、Prisma 与 production build 失败直接输出具体步骤和 stderr。
+- 修复后使用无额外环境参数的标准 `yarn test:delivery-journeys`，Chromium 与 WebKit 共执行二十次场景实例并全部通过，用时约四分钟，服务和隔离数据库正常回收。
+- 当前历史场景仍使用直接 API 登录与造数、隔离数据库读写、隐藏 `<audio>` 属性和测试 id 作为重要依据；生产代码也仍保留可被浏览器覆盖的单轨全局开关。测试全绿不等于用户旅程完成。
 - 当前视觉证据主要是连续创作开关开启的空创作页，桌面截图内容重复；没有覆盖作品卡 preparing / playing、下一篇 waiting、作品集内播放和故事库 Mini Player 安全区。
 
-因此本轮不能把现有二十次通过作为产品基线，也不能在旧 runner 上继续叠加用例。第四段必须先修复并瘦身交付入口，再以本计划定义的少量完整旅程重新验收。
+因此 runner 已经可以作为稳定执行入口，但现有二十次通过不能作为产品完成基线。第四段必须瘦身并重写交付场景，再以本计划定义的少量完整旅程重新验收。
 
 ## 当前事实与本轮裁决
 
@@ -350,12 +350,12 @@ current ended + next not ready
 
 只在本段、production build 完成后执行。必须通过可见 UI 操作，不得调用 Store、内部函数、状态机、测试 Probe 或功能开关。隔离环境可以通过 fixture 建立登录和本地 mock 等前置条件，但不得通过数据库写入、直接 API 调用或页面脚本预先制造本轮要验收的作品、播放或连续创作状态。
 
-先恢复一个可解释、可维护的 runner：
+浏览器 runner 已在实施前修复，后续必须保持以下基线，不重复改造基础设施：
 
-- 为本地 TTS mock 保留一个确定性的最小音频夹具或等价生成器，二者只留一种；启动前主动校验依赖，不再用端口文件超时代替真实错误。
-- 子进程启动、Prisma 迁移和 production build 失败时必须输出原始 stderr 与失败步骤，不新增 runner 自测套件。
-- 删除 `NEXT_PUBLIC_E2E_PLAYBACK_PROBE`、快照 Probe token、`globalThis.__SINGLE_TRACK_AUDIO_ENABLED` 及依赖这些入口的场景；默认发布配置本身必须可完成验收。
-- `test:delivery-journeys` 默认只在 Chromium 执行一次完整旅程；只有本轮出现明确的 WebKit 兼容风险时，才针对受影响旅程补跑 WebKit，不把所有场景机械复制一遍。
+- 本地 TTS mock 只保留一个确定性的最小音频夹具；启动依赖缺失必须直接报出，不得退化为端口超时。
+- 子进程启动、Prisma 迁移和 production build 失败时继续输出原始 stderr 与失败步骤，不新增 runner 自测套件。
+- 不重新引入 `NEXT_PUBLIC_E2E_PLAYBACK_PROBE`、快照 Probe token 或单轨功能开关注入；`globalThis.__SINGLE_TRACK_AUDIO_ENABLED` 随第二段正式路径一起删除。
+- `test:delivery-journeys` 继续按标准配置完整执行 Chromium 与 WebKit，不因旧场景改造困难而降低浏览器覆盖。
 
 先审计 `tests/system/browser/scenarios` 中会被 `test:delivery-journeys` 执行的现有文件：
 

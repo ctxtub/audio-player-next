@@ -28,7 +28,7 @@ export type ConversationSaveOptions = {
  * @param currentIds 库内当前按 position 排序的 messageId 序列。
  * @param expected 调用方读取快照时的基线序列（undefined 表示不校验）。
  */
-const assertFreshBaseline = (currentIds: string[], expected: string[] | undefined): void => {
+export const assertFreshBaseline = (currentIds: string[], expected: string[] | undefined): void => {
     if (expected === undefined) {
         return;
     }
@@ -161,8 +161,11 @@ export const assertNoNewLegacyStoryCardWrites = (
 
 /**
  * DB 行 → 前端 DTO（parts JSON 解析，失败则忽略）。
+ *
+ * M9-C1 T2：导出供会话级读取（`lib/server/conversation.ts`）复用同一 DTO 映射，
+ * 保证 legacy / conversation 两条读路径返回结构完全一致。
  */
-const toDto = (row: ChatMessageRow): ChatMessageDTO => {
+export const toChatMessageDto = (row: ChatMessageRow): ChatMessageDTO => {
     let parts: Array<Record<string, unknown>> | undefined;
     if (row.parts) {
         try {
@@ -193,7 +196,7 @@ export const getConversation = async (userId: number): Promise<ChatMessageDTO[]>
         where: { userId },
         orderBy: { position: 'asc' },
     });
-    return rows.map(toDto);
+    return rows.map(toChatMessageDto);
 };
 
 /**
@@ -254,7 +257,7 @@ const GUEST_CHAT_KEEP_LIMIT = 100;
  * M4-08：user / guest 两条保存路径语义收口，共用同一 sanitize（sanitize ≠ create，
  * 绝不据 content 构造新卡，仅对已存在的 Legacy 卡做 audioUrl 归一）。
  */
-const sanitizePartsForWrite = (parts?: Array<Record<string, unknown>>): string | null => {
+export const sanitizePartsForWrite = (parts?: Array<Record<string, unknown>>): string | null => {
     if (!parts) return null;
     const cleaned = parts.map((p) => {
         if (p && typeof p === 'object' && p.type === 'storyCard') {
@@ -278,7 +281,7 @@ export const getConversationForSubject = async (
         where: { guestId: subject.id },
         orderBy: { position: 'asc' },
     });
-    return rows.map(toDto);
+    return rows.map(toChatMessageDto);
 };
 
 /**

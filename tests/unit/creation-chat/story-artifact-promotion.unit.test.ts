@@ -19,14 +19,15 @@ import type {
   CompleteChatArtifact,
   PromotionFailedChatArtifact,
 } from '../../../types/chatArtifact';
-import type {
-  LibraryCreateInput,
-  StoryWorkDetailDTO,
-} from '../../../lib/trpc/schemas/library';
+import type { StoryWorkDetailDTO } from '../../../lib/trpc/schemas/library';
+import type { CollectionPromoteInput } from '../../../lib/trpc/schemas/collection';
 
-// 中文注释：M4-03 唯一 promotion 通道回归——CompleteChatArtifact → Promotion Adapter → libraryClient.create → StoryWorkDetailDTO。
+// 中文注释：M4-03 唯一 promotion 通道回归——CompleteChatArtifact → Promotion Adapter →
+// collection.promoteArtifact → StoryWorkDetailDTO（M9-C1 T2 会话级写路径）。
 // 本步仍然不要自动触发 promotion；adapter 只负责 I/O；快照在生成开始时冻结，promotion 严禁重读 Settings。
 // 全程内存打桩，不建 socket、不绑端口，不碰 prisma/dev.db。
+
+const TEST_CONVERSATION_ID = 'conv-promotion-ut-001';
 
 const nodeRequire = typeof require !== 'undefined' ? require : createRequire(import.meta.url);
 
@@ -92,11 +93,15 @@ function makeCompleteFixture(overrides?: {
   });
 }
 
-function makeDetailFixture(id: number, input: LibraryCreateInput): StoryWorkDetailDTO {
+function makeDetailFixture(
+  id: number,
+  input: CollectionPromoteInput,
+  title = '冻结标题',
+): StoryWorkDetailDTO {
   const now = '2026-09-12T10:00:00.000Z';
   return {
     id,
-    title: typeof input.title === 'string' && input.title ? input.title : '冻结标题',
+    title,
     excerpt: input.storyText.slice(0, 20),
     voiceId: typeof input.voiceId === 'string' ? input.voiceId : '',
     contentHash: `hash-${id}`,
@@ -131,7 +136,7 @@ function conflictError(): Error & { code?: string; data?: { code?: string } } {
 }
 
 async function main(): Promise<void> {
-  console.log('=== M4-03-01: Complete 精确映射 title/prompt/storyText/voiceId/sourceMessageId ===');
+  console.log('=== M4-03-01: Complete 精确映射 conversationId/prompt/storyText/voiceId/sourceMessageId ===');
   {
     const complete = makeCompleteFixture({
       sourceMessageId: 'msg-map-001',
@@ -140,15 +145,16 @@ async function main(): Promise<void> {
       voiceId: 'voice-frozen-01',
       title: '精确映射标题',
     });
-    const seen: LibraryCreateInput[] = [];
+    const seen: CollectionPromoteInput[] = [];
     const dto = makeDetailFixture(101, {
-      title: complete.title,
+      conversationId: TEST_CONVERSATION_ID,
       prompt: complete.prompt as string,
       storyText: complete.storyText,
       voiceId: complete.voiceId,
       sourceMessageId: complete.sourceMessageId,
-    });
+    }, complete.title);
     const result = await promoteStoryArtifact(complete, {
+      conversationId: TEST_CONVERSATION_ID,
       create: async (input) => {
         seen.push(input);
         return dto;
@@ -159,13 +165,13 @@ async function main(): Promise<void> {
     assert.deepStrictEqual(
       seen[0],
       {
-        title: '精确映射标题',
+        conversationId: TEST_CONVERSATION_ID,
         prompt: '精确映射 prompt-01',
         storyText: '精确映射正文-01',
         voiceId: 'voice-frozen-01',
         sourceMessageId: 'msg-map-001',
       },
-      '必须精确映射五字段，不增不减',
+      '必须精确映射五字段（含会话归属），不增不减',
     );
     // buildPromotionInput 同样精确（无 idempotencyKey 等自造字段）。
     // 直接调用前必须先过门控：类型本身要求 prompt snapshot 非空。
@@ -175,7 +181,6 @@ async function main(): Promise<void> {
       'prompt',
       'sourceMessageId',
       'storyText',
-      'title',
       'voiceId',
     ]);
     console.log('PASS: M4-03-01 exact mapping');
@@ -193,15 +198,16 @@ async function main(): Promise<void> {
     // 模拟 promotion 时 Settings 已被改为 voice-changed-late。
     let currentSettingsVoice = 'voice-changed-late';
     void currentSettingsVoice;
-    const seen: LibraryCreateInput[] = [];
+    const seen: CollectionPromoteInput[] = [];
     const dto = makeDetailFixture(102, {
-      title: complete.title,
+      conversationId: TEST_CONVERSATION_ID,
       prompt: complete.prompt as string,
       storyText: complete.storyText,
       voiceId: complete.voiceId,
       sourceMessageId: complete.sourceMessageId,
-    });
+    }, complete.title);
     const result = await promoteStoryArtifact(complete, {
+      conversationId: TEST_CONVERSATION_ID,
       // 桩 create 故意无视外部 currentSettingsVoice，只透传 adapter 给的 input。
       create: async (input) => {
         seen.push(input);
@@ -257,16 +263,16 @@ async function main(): Promise<void> {
     assert.strictEqual(failed.sourceMessageId, 'msg-idem-003');
     assert.strictEqual(failed.storyText, '幂等正文-同文');
 
-    const seen: LibraryCreateInput[] = [];
+    const seen: CollectionPromoteInput[] = [];
     // 模拟 M2 facade：同源同 hash 返回同一 Work（同一 id），不新增。
     const canonical = makeDetailFixture(303, {
-      title: first.title,
+      conversationId: TEST_CONVERSATION_ID,
       prompt: first.prompt as string,
       storyText: first.storyText,
       voiceId: first.voiceId,
       sourceMessageId: first.sourceMessageId,
-    });
-    const fakeCreate = async (input: LibraryCreateInput): Promise<StoryWorkDetailDTO> => {
+    }, first.title);
+    const fakeCreate = async (input: CollectionPromoteInput): Promise<StoryWorkDetailDTO> => {
       seen.push(input);
       // 断言 adapter 未自造任何 client-side idempotency key。
       assert.strictEqual(
@@ -277,8 +283,8 @@ async function main(): Promise<void> {
       assert.strictEqual((input as Record<string, unknown>).idempotency_key, undefined);
       return canonical;
     };
-    const r1 = await promoteStoryArtifact(first, { create: fakeCreate });
-    const r2 = await promoteStoryArtifact(failed, { create: fakeCreate });
+    const r1 = await promoteStoryArtifact(first, { conversationId: TEST_CONVERSATION_ID, create: fakeCreate });
+    const r2 = await promoteStoryArtifact(failed, { conversationId: TEST_CONVERSATION_ID, create: fakeCreate });
     assert.strictEqual(r1.id, 303);
     assert.strictEqual(r2.id, 303, '同源同文重试必须返回同一 StoryWork id');
     assert.strictEqual(seen.length, 2);
@@ -307,6 +313,7 @@ async function main(): Promise<void> {
     let caught: unknown = null;
     try {
       await promoteStoryArtifact(complete, {
+        conversationId: TEST_CONVERSATION_ID,
         create: async () => {
           calls += 1;
           throw expected;
@@ -328,6 +335,7 @@ async function main(): Promise<void> {
     let calls2 = 0;
     await assert.rejects(
       promoteStoryArtifact(different, {
+        conversationId: TEST_CONVERSATION_ID,
         create: async () => {
           calls2 += 1;
           throw conflictError();
@@ -342,33 +350,33 @@ async function main(): Promise<void> {
   console.log('=== M4-03-05: draft/interrupted/legacy fail-fast 且 create=0 ===');
   {
     let calls = 0;
-    const countingCreate = async (input: LibraryCreateInput): Promise<StoryWorkDetailDTO> => {
+    const countingCreate = async (input: CollectionPromoteInput): Promise<StoryWorkDetailDTO> => {
       calls += 1;
       return makeDetailFixture(999, input);
     };
 
     const draft = createDraftArtifact({ sourceMessageId: 'msg-reject-draft', initialText: '草稿' });
-    await assert.rejects(promoteStoryArtifact(draft, { create: countingCreate }), /不可 promotion/);
+    await assert.rejects(promoteStoryArtifact(draft, { conversationId: TEST_CONVERSATION_ID, create: countingCreate }), /不可 promotion/);
 
     const interrupted = interruptArtifact(
       createDraftArtifact({ sourceMessageId: 'msg-reject-int', initialText: '草稿-int' }),
     );
-    await assert.rejects(promoteStoryArtifact(interrupted, { create: countingCreate }), /不可 promotion/);
+    await assert.rejects(promoteStoryArtifact(interrupted, { conversationId: TEST_CONVERSATION_ID, create: countingCreate }), /不可 promotion/);
 
     // ready / promoting 同样拒绝（仅 complete / promotion_failed 可入库）。
     const readyBase = makeCompleteFixture({ sourceMessageId: 'msg-reject-ready' });
     const ready = markPromotionSuccess(startPromotion(readyBase), { storyWorkId: 555 });
-    await assert.rejects(promoteStoryArtifact(ready, { create: countingCreate }), /不可 promotion/);
+    await assert.rejects(promoteStoryArtifact(ready, { conversationId: TEST_CONVERSATION_ID, create: countingCreate }), /不可 promotion/);
     const promoting = startPromotion(makeCompleteFixture({ sourceMessageId: 'msg-reject-promoting' }));
-    await assert.rejects(promoteStoryArtifact(promoting, { create: countingCreate }), /不可 promotion/);
+    await assert.rejects(promoteStoryArtifact(promoting, { conversationId: TEST_CONVERSATION_ID, create: countingCreate }), /不可 promotion/);
 
     // legacy StoryCard 绝非 Artifact，必须拒绝。
     const legacyCard = { type: 'storyCard', storyText: '历史正文', audioUrl: 'blob:mock' };
     await assert.rejects(
-      promoteStoryArtifact(legacyCard, { create: countingCreate }),
+      promoteStoryArtifact(legacyCard, { conversationId: TEST_CONVERSATION_ID, create: countingCreate }),
       /Legacy|不可 promotion/,
     );
-    await assert.rejects(promoteStoryArtifact(null, { create: countingCreate }), /必须为 complete/);
+    await assert.rejects(promoteStoryArtifact(null, { conversationId: TEST_CONVERSATION_ID, create: countingCreate }), /必须为 complete/);
     assert.throws(
       () => assertPromotableArtifact(draft),
       /不可 promotion/,
@@ -381,7 +389,7 @@ async function main(): Promise<void> {
   console.log('=== M4-03-08: 缺 mandatory prompt snapshot 必须 fail-fast 且 create=0 ===');
   {
     let calls = 0;
-    const countingCreate = async (input: LibraryCreateInput): Promise<StoryWorkDetailDTO> => {
+    const countingCreate = async (input: CollectionPromoteInput): Promise<StoryWorkDetailDTO> => {
       calls += 1;
       return makeDetailFixture(888, input);
     };
@@ -399,7 +407,7 @@ async function main(): Promise<void> {
     assert.strictEqual(noPromptComplete.status, 'complete');
     assert.strictEqual(noPromptComplete.prompt, undefined);
     await assert.rejects(
-      promoteStoryArtifact(noPromptComplete, { create: countingCreate }),
+      promoteStoryArtifact(noPromptComplete, { conversationId: TEST_CONVERSATION_ID, create: countingCreate }),
       /mandatory promotion snapshot/,
     );
     assert.throws(
@@ -413,7 +421,7 @@ async function main(): Promise<void> {
       { error: 'timeout-once' },
     );
     await assert.rejects(
-      promoteStoryArtifact(noPromptFailed, { create: countingCreate }),
+      promoteStoryArtifact(noPromptFailed, { conversationId: TEST_CONVERSATION_ID, create: countingCreate }),
       /mandatory promotion snapshot/,
     );
 
@@ -421,20 +429,20 @@ async function main(): Promise<void> {
     const blankComplete = makeCompleteFixture({ sourceMessageId: 'msg-blank-008' });
     for (const blank of ['', '   ']) {
       await assert.rejects(
-        promoteStoryArtifact({ ...blankComplete, prompt: blank }, { create: countingCreate }),
+        promoteStoryArtifact({ ...blankComplete, prompt: blank }, { conversationId: TEST_CONVERSATION_ID, create: countingCreate }),
         /mandatory promotion snapshot/,
       );
     }
 
     // 08-2 forged unknown：裸 { artifactType: 'story', status: 'complete' } 无 prompt，必须拒绝。
     await assert.rejects(
-      promoteStoryArtifact({ artifactType: 'story', status: 'complete' }, { create: countingCreate }),
+      promoteStoryArtifact({ artifactType: 'story', status: 'complete' }, { conversationId: TEST_CONVERSATION_ID, create: countingCreate }),
       /mandatory promotion snapshot/,
     );
     await assert.rejects(
       promoteStoryArtifact(
         { artifactType: 'story', status: 'promotion_failed' },
-        { create: countingCreate },
+        { conversationId: TEST_CONVERSATION_ID, create: countingCreate },
       ),
       /mandatory promotion snapshot/,
     );
@@ -452,14 +460,25 @@ async function main(): Promise<void> {
     console.log('PASS: M4-03-08 missing prompt snapshot fail-fast with zero create');
   }
 
-  console.log('=== M4-03-06: adapter 仅消费 frozen libraryClient.create（静态） ===');
+  console.log('=== M4-03-06: adapter 仅消费 frozen collection.promoteArtifact（静态） ===');
   {
     const adapterPath = path.resolve(process.cwd(), 'lib/client/storyArtifactPromotion.ts');
     const adapterContent = fs.readFileSync(adapterPath, 'utf8');
-    // 必须消费冻结门面。
+    // M9-C1 T2：唯一写路径切到 collection.promoteArtifact；不得再消费 library.create。
     assert.ok(
-      adapterContent.includes('libraryClient.create') || adapterContent.includes('from @/lib/client/library'),
-      '必须消费 frozen libraryClient.create',
+      adapterContent.includes('promoteArtifact') &&
+        adapterContent.includes("from '@/lib/client/collection'"),
+      '必须消费 frozen collection.promoteArtifact',
+    );
+    assert.strictEqual(
+      adapterContent.includes('libraryClient'),
+      false,
+      'adapter 不得再消费 libraryClient（唯一写路径已切到 collection.promoteArtifact）',
+    );
+    assert.strictEqual(
+      adapterContent.includes("from '@/lib/client/library'"),
+      false,
+      'adapter 不得再 import library 门面',
     );
     const forbidden: RegExp[] = [
       /from\s+['"].*lib\/db['"]/,
@@ -469,17 +488,26 @@ async function main(): Promise<void> {
       /from\s+['"].*server\/storyWork['"]/,
       /from\s+['"].*lib\/trpc\/client['"]/,
       /from\s+['"]@trpc\/client['"]/,
-      /promoteArtifact/,
     ];
     for (const re of forbidden) {
       assert.strictEqual(re.test(adapterContent), false, `adapter 违规引用：${re}`);
     }
     // M2 facade frozen：严禁为 M4 新增 promoteArtifact procedure。
+    // M9-C1（2026-09-15-story-collection-continuous-creation）正式把 promoteArtifact 收敛进
+    // collection 域 router；除该授权入口外，其它 router 仍严禁出现 promoteArtifact。
     const routerFiles = fs
       .readdirSync(path.resolve(process.cwd(), 'lib/trpc/routers'))
       .filter((f) => f.endsWith('.ts'));
     for (const f of routerFiles) {
       const content = fs.readFileSync(path.resolve(process.cwd(), 'lib/trpc/routers', f), 'utf8');
+      if (f === 'collection.ts') {
+        assert.strictEqual(
+          content.includes('promoteArtifact'),
+          true,
+          'M9-C1 授权 collection.ts 承载 promoteArtifact',
+        );
+        continue;
+      }
       assert.strictEqual(
         content.includes('promoteArtifact'),
         false,

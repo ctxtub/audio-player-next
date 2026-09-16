@@ -40,6 +40,40 @@ nodeRequire.cache[chatConversationPath] = {
     },
 } as unknown as NodeModule;
 
+// M9-C1 T2：chatStore 写路径已切到会话级 client（conversation.ts）；
+// 同一可变桩挂到新 client，flush 断言继续成立。
+const conversationClientPath = path.resolve(process.cwd(), 'lib/client/conversation.ts');
+const ACTIVE_CONVERSATION = {
+    id: 'conv-unit-test',
+    state: 'active',
+    collectionId: null,
+    createdAt: '2026-09-12T10:00:00.000Z',
+    updatedAt: '2026-09-12T10:00:00.000Z',
+};
+nodeRequire.cache[conversationClientPath] = {
+    id: conversationClientPath,
+    filename: conversationClientPath,
+    loaded: true,
+    exports: {
+        getActiveConversation: async () => ACTIVE_CONVERSATION,
+        ensureActiveConversation: async () => ACTIVE_CONVERSATION,
+        getConversation: async () => ACTIVE_CONVERSATION,
+        createNewConversation: async () => ACTIVE_CONVERSATION,
+        closeConversation: async () => ACTIVE_CONVERSATION,
+        fetchConversationMessages: async () => [],
+        saveConversationSnapshot: async (
+            _conversationId: string,
+            messages: ChatMessageInputLike[],
+        ) => {
+            if (saveMode === 'fail') {
+                throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: '探针保存失败' });
+            }
+            savedSnapshots.push(messages);
+            return { ok: true };
+        },
+    },
+} as unknown as NodeModule;
+
 const chatStoreModule = nodeRequire('../../../stores/chatStore') as Record<string, unknown>;
 const { useChatStore } = chatStoreModule as {
     useChatStore: typeof import('../../../stores/chatStore').useChatStore;

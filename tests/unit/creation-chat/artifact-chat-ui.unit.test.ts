@@ -302,7 +302,7 @@ async function runArtifactChatUiTests(): Promise<void> {
 
   function resetBaseline(): void {
     useChatStore.getState().reset();
-    useChatStore.setState({ syncEnabled: false });
+    useChatStore.setState({ syncEnabled: false, conversationId: 'conv-unit-test', collectionId: null, collectionTitle: null });
   }
 
   /**

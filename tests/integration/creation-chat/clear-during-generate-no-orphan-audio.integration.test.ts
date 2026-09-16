@@ -133,6 +133,7 @@ nodeRequire.cache[storyAudioClientPath] = {
         },
         shouldUseCanonicalAudio: () => false,
         isCanonicalPlaybackUrl: () => false,
+        isSingleTrackPlaybackUrl: () => false,
         selectWorkParagraphs: (localParagraphs: string[]) => localParagraphs,
     },
 } as unknown as NodeModule;
@@ -152,9 +153,6 @@ const { useChatStore } = nodeRequire(path.resolve(cwd, 'stores/chatStore')) as {
 };
 const { usePlaybackStore } = nodeRequire(path.resolve(cwd, 'stores/playbackStore')) as {
     usePlaybackStore: typeof import('../../../stores/playbackStore').usePlaybackStore;
-};
-const { useGenerationHistoryStore } = nodeRequire(path.resolve(cwd, 'stores/generationHistoryStore')) as {
-    useGenerationHistoryStore: typeof import('../../../stores/generationHistoryStore').useGenerationHistoryStore;
 };
 const { useConfigStore } = nodeRequire(path.resolve(cwd, 'stores/configStore')) as {
     useConfigStore: typeof import('../../../stores/configStore').useConfigStore;
@@ -193,7 +191,6 @@ function resetAll() {
     useChatStore.setState({ syncEnabled: true });
     usePlaybackStore.getState().reset();
     usePlaybackStore.getState().registerAudioController(null);
-    useGenerationHistoryStore.getState().reset?.();
     beginCount = 0;
     // 真实会话中配置早已水合（默认 30 分钟）：node 默认 playDuration=0 会误触 H-08 预算守卫，
     // 此处按浏览器真实态水合，避免假阴性。

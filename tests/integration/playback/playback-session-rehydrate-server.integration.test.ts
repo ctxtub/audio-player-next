@@ -25,10 +25,6 @@ const getTransportStore = () => {
     const mod = nodeRequire('../../../stores/playbackStore') as typeof import('../../../stores/playbackStore');
     return mod.usePlaybackStore;
 };
-const getHistoryStore = () => {
-    const mod = nodeRequire('../../../stores/generationHistoryStore') as typeof import('../../../stores/generationHistoryStore');
-    return mod.useGenerationHistoryStore;
-};
 
 process.env.SESSION_SECRET = 'test-secret-m509-rehydrate-12345';
 
@@ -110,21 +106,8 @@ async function runPlaybackSessionRehydrateIntegrationTests(): Promise<void> {
     assert(savedAnchor !== null);
     assert.strictEqual(savedAnchor.nextParagraphIndex, 2);
 
-    // legacy 残留：history store 仅有第一页无关记录，Anchor 指向远页 work.id。
-    // 用远离自增序列的大 ID 模拟“第一页”，避免与真实 work.id 碰撞导致预置失败。
-    const useHistory = getHistoryStore();
-    useHistory.setState({
-        records: [
-            { id: 99991, prompt: 'p1', storyText: 't1', voiceId: '', title: 't1', excerpt: '', contentHash: '', sourceMessageId: null, favoritedAt: null, deletedAt: null, createdAt: '', updatedAt: '' },
-            { id: 99992, prompt: 'p2', storyText: 't2', voiceId: '', title: 't2', excerpt: '', contentHash: '', sourceMessageId: null, favoritedAt: null, deletedAt: null, createdAt: '', updatedAt: '' },
-        ] as never,
-        syncEnabled: true,
-    });
-    assert(
-        !useHistory.getState().records.some((r) => r.id === work.id),
-        '预置条件：history store 不含目标 work（模拟分页远页）',
-    );
-
+    // M9-C1 T2：legacy GenerationHistory store 已退役；本用例直接以真实 Anchor 驱动
+    // Session 水合，证明新 SSOT 不依赖任何 History 分页残留（静态守卫在 L1 套件）。
     const useSession = getSessionStore();
     const useTransport = getTransportStore();
     const ok = await useSession.getState().hydrateFromAnchor(savedAnchor, {

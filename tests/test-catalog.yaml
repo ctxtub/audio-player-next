@@ -246,10 +246,10 @@ cases:
     journey_id: history-reuse-create
     user_goal: 从聊天历史提示词经Draft Session干净重创作自动起播且旧作可返重载不续播
     priority: P0
-    lifecycle_status: ACTIVE
+    lifecycle_status: RETIRED
     risk_tags: [history, isolation]
     spec_path: docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md#e2e-02-11-01
-    executable_ids: [exec-l3-history-prompt-start-new-creation]
+    executable_ids: []
     fixtures: []
     owner: history-reuse-create
   - case_id: generation-history-play-once
@@ -258,10 +258,10 @@ cases:
     journey_id: history-reuse-playback
     user_goal: 从聊天历史生成条目经Work Session有限回放且不续写不新增历史
     priority: P0
-    lifecycle_status: ACTIVE
+    lifecycle_status: RETIRED
     risk_tags: [history, replay]
     spec_path: docs/e2e/02-交互并发与竞态防御/11-播放器选历史切换当前创作.md#e2e-02-11-02
-    executable_ids: [exec-l3-generation-history-play-once]
+    executable_ids: []
     fixtures: []
     owner: history-reuse-playback
   - case_id: tts-voice-fallback-browser-behavior
@@ -402,10 +402,10 @@ cases:
     journey_id: playback-kernel
     user_goal: 旧卡回放不吃掉新卡预载
     priority: P2
-    lifecycle_status: ACTIVE
+    lifecycle_status: RETIRED
     risk_tags: [history, preload]
     spec_path: docs/e2e/03-播放状态与内核一致性/11-旧卡回放不消费新预载.md
-    executable_ids: [exec-preload-isolation]
+    executable_ids: []
     fixtures: []
     owner: playback-kernel
   - case_id: story-playback-global-controls-reachable
@@ -835,10 +835,10 @@ cases:
     journey_id: story-library
     user_goal: /player 既有生成历史接口在底层切换到 StoryWork 后保持原 DTO 与交互兼容，同时取消 100 条数据裁剪，旧删除行为映射为可恢复的软删除
     priority: P0
-    lifecycle_status: ACTIVE
+    lifecycle_status: RETIRED
     risk_tags: [story-work, library, legacy, cutover, trash]
     spec_path: docs/e2e/07-故事库与作品资产/06-Legacy-GenerationHistory兼容切换.md
-    executable_ids: [exec-legacy-generation-history-cutover]
+    executable_ids: []
     fixtures: []
     owner: story-library
   - case_id: story-work-retention-gc
@@ -941,12 +941,48 @@ cases:
     display_name_zh: 故事库完整生命周期旅程
     legacy_aliases: [E2E-07-15]
     journey_id: story-library
-    user_goal: 用户在真实浏览器中完整经历故事库全生命周期：海量作品分页滚动加载、关键词搜索过滤、进入详情页、标题重命名跨缓存同步、收藏状态切换与列表呈现、详情软删除离开与撤销恢复、回收站安全隔离与无详情入口、从回收站恢复、二次软删除与永久删除二次确认流、跨视图彻底消失。
+    user_goal: 用户在真实浏览器中完整经历故事库集合级全生命周期：海量集合分页滚动加载、关键词搜索按集合去重过滤、进入集合详情页、标题重命名跨缓存同步、收藏状态切换与列表呈现、详情软删除离开与撤销恢复、回收站安全隔离与无详情入口、从回收站恢复、二次软删除与永久删除二次确认流、跨视图彻底消失。
     priority: P0
     lifecycle_status: ACTIVE
     risk_tags: [story-work, library, l3-journey, pagination, search, rename, favorite, trash, undo, restore, permanent-delete]
     spec_path: docs/e2e/07-故事库与作品资产/15-故事库完整生命周期旅程.md
     executable_ids: [exec-l3-library-lifecycle-journey]
+    fixtures: []
+    owner: story-library
+  - case_id: collection-library-ui
+    display_name_zh: Collection两层列表与集合生命周期
+    legacy_aliases: [E2E-07-18]
+    journey_id: story-library
+    user_goal: 故事库顶层恒为作品集卡片，集合详情成员按position升序并可逐Work播放，集合级重命名/收藏/删除/Undo/恢复/永久删除全链路可用
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, library, collection-ui, lifecycle, undo, per-work-play]
+    spec_path: docs/e2e/07-故事库与作品资产/18-Collection-Library两层列表与生命周期.md
+    executable_ids: [exec-l3-collection-library, exec-collection-library-viewmodel]
+    fixtures: []
+    owner: story-library
+  - case_id: library-mini-safe-area
+    display_name_zh: Library Mini底部安全区
+    legacy_aliases: [E2E-07-19]
+    journey_id: story-library
+    user_goal: Mini出现与否滚动容器末尾内容均不被底部Chrome遮挡且无幽灵空白，占位变量由MainChrome单源输出
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, library, mini, safe-area, responsive]
+    spec_path: docs/e2e/07-故事库与作品资产/19-Library-Mini底部安全区.md
+    executable_ids: [exec-l3-collection-library]
+    fixtures: []
+    owner: story-library
+  - case_id: prompt-history-contract
+    display_name_zh: PromptHistory表contract删除
+    legacy_aliases: []
+    journey_id: story-library
+    user_goal: 用户PromptHistory物理表被contract迁移删除，其余表（访客历史/风险转移/作品/旧Segment/集合）一律保留零误删
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, library, contract, migration, retention]
+    spec_path: docs/e2e/10-会话与作品集连续创作/09-旧History前后端退役.md
+    executable_ids: [exec-prompt-history-contract]
     fixtures: []
     owner: story-library
   - case_id: canonical-work-playback-read
@@ -959,6 +995,18 @@ cases:
     risk_tags: [story-work, canonical-audio, playback, lazy, stale-guard]
     spec_path: docs/e2e/07-故事库与作品资产/16-Canonical-Work-Playback-Read-Path.md
     executable_ids: [exec-audio-work-playback-read, exec-audio-work-playback-reuse, exec-l3-canonical-work-playback]
+    fixtures: []
+    owner: story-library
+  - case_id: story-audio-single-track
+    display_name_zh: StoryAudio 单 track 与 30 天滑动缓存
+    legacy_aliases: []
+    journey_id: story-library
+    user_goal: 任意正文只暴露一个授权 Asset/总时长/时间轴；长文内部合成拼接后原子发布；暂停恢复 30 天内复用不重复 TTS、过期重建；chunk 不可读取、失败整资产失败并清理
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-work, single-track-audio, ttl-cache, lease-fencing, chunk-concat]
+    spec_path: docs/e2e/07-故事库与作品资产/17-StoryAudio单track与30天缓存.md
+    executable_ids: [exec-single-track-asset, exec-story-audio-asset-domain, exec-l3-story-audio-single-track]
     fixtures: []
     owner: story-library
   - case_id: m8-production-closure
@@ -1051,10 +1099,10 @@ cases:
     journey_id: creation-artifact
     user_goal: 提示词历史与生成历史从 Player 搬回 Chat 创作 surface，保留原 store 与操作语义，同页选择 exactly-once 新创作且 Player 不再拥有 History
     priority: P0
-    lifecycle_status: ACTIVE
+    lifecycle_status: RETIRED
     risk_tags: [chat, history, relocation, ownership, pending-consumer]
     spec_path: docs/e2e/08-创作Artifact/07-HistoryUIRelocation.md
-    executable_ids: [exec-history-ui-relocation]
+    executable_ids: []
     fixtures: []
     owner: creation-artifact
   - case_id: legacy-storycard-cutover
@@ -1297,6 +1345,114 @@ cases:
     executable_ids: [exec-m10-browser-debt-closure]
     fixtures: []
     owner: smoke-baseline
+  - case_id: collection-first-work-and-title-fallback
+    display_name_zh: 会话首作建集与AI标题回退
+    legacy_aliases: []
+    journey_id: story-collection
+    user_goal: 首作自动建集且标题生成失败超时均不阻断入库
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, promotion, title-fallback, idempotency]
+    spec_path: docs/e2e/10-会话与作品集连续创作/01-首作建集与AI标题回退.md
+    executable_ids: [exec-collection-domain, exec-collection-promotion, exec-conversation-scoped-persistence]
+    fixtures: []
+    owner: story-collection
+  - case_id: collection-append-and-lifecycle
+    display_name_zh: 同会话连续追加与集合生命周期
+    legacy_aliases: []
+    journey_id: story-collection
+    user_goal: 同会话追加顺序稳定且集合改名收藏软删恢复永久删除一致
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, promotion, position, lifecycle, pagination]
+    spec_path: docs/e2e/10-会话与作品集连续创作/02-同会话连续创作追加与集合生命周期.md
+    executable_ids: [exec-collection-promotion]
+    fixtures: []
+    owner: story-collection
+  - case_id: collection-cross-conversation-subject-isolation
+    display_name_zh: 跨会话与跨主体严格隔离
+    legacy_aliases: []
+    journey_id: story-collection
+    user_goal: 不同会话与主体作品集零串读零串写且守恒不变量成立
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, isolation, conversation, idempotency]
+    spec_path: docs/e2e/10-会话与作品集连续创作/03-跨会话与跨主体严格隔离.md
+    executable_ids: [exec-collection-promotion, exec-conversation-scoped-persistence]
+    fixtures: []
+    owner: story-collection
+  - case_id: collection-backfill-conservation
+    display_name_zh: 旧数据回填与迁移守恒
+    legacy_aliases: []
+    journey_id: story-collection
+    user_goal: 回填可重复且凭可靠证据合并无重复无孤儿
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, backfill, migration, conservation]
+    spec_path: docs/e2e/10-会话与作品集连续创作/04-旧数据回填与迁移守恒.md
+    executable_ids: [exec-collection-backfill]
+    fixtures: []
+    owner: story-collection
+  - case_id: continuous-creation-default-on
+    display_name_zh: 连续创作默认开启与自动下一作品
+    legacy_aliases: []
+    journey_id: story-collection-continuous
+    user_goal: 默认开启且整轨播完自动无缝续播下一作品
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [continuous-creation, lookahead, window, default-on]
+    spec_path: docs/e2e/10-会话与作品集连续创作/05-连续创作默认开启与自动下一作品.md
+    executable_ids: [exec-continuous-creation-state-machine, exec-l3-continuous-creation, exec-l3-continuous-creation-auto-next]
+    fixtures: []
+    owner: story-collection
+  - case_id: continuous-creation-budget-stop-matrix
+    display_name_zh: 连续创作预算与停止矩阵
+    legacy_aliases: []
+    journey_id: story-collection-continuous
+    user_goal: 预算耗尽与关闭暂停抢占切换集合登出均停止续作
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [continuous-creation, budget, preemption, epoch]
+    spec_path: docs/e2e/10-会话与作品集连续创作/06-连续创作预算与停止矩阵.md
+    executable_ids: [exec-continuous-creation-budget, exec-l3-continuous-creation-auto-next]
+    fixtures: []
+    owner: story-collection
+  - case_id: new-creation-strong-reset
+    display_name_zh: 新建创作强重置
+    legacy_aliases: []
+    journey_id: story-collection-continuous
+    user_goal: 新建创作停止旧生成音频并回到空会话且旧集合可回访
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [continuous-creation, new-creation, reset, epoch]
+    spec_path: docs/e2e/10-会话与作品集连续创作/07-新建创作强重置.md
+    executable_ids: [exec-new-creation-reset, exec-l3-new-creation-reset, exec-l3-continuous-creation-auto-next]
+    fixtures: []
+    owner: story-collection
+  - case_id: continuous-creation-status-card
+    display_name_zh: 连续创作状态卡开关与剩余预算
+    legacy_aliases: []
+    journey_id: story-collection-continuous
+    user_goal: 创作页展示集合标题开关状态卡与剩余预算且与编排同源
+    priority: P1
+    lifecycle_status: ACTIVE
+    risk_tags: [continuous-creation, ui, budget, collection-title]
+    spec_path: docs/e2e/10-会话与作品集连续创作/08-连续创作状态卡与开关.md
+    executable_ids: [exec-continuous-creation-ui-binding, exec-l3-continuous-creation]
+    fixtures: []
+    owner: story-collection
+  - case_id: legacy-history-retirement
+    display_name_zh: 旧History前后端退役
+    legacy_aliases: []
+    journey_id: story-collection-continuous
+    user_goal: 产品内无Prompt与GenerationHistory入口实现与本地缓存
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [continuous-creation, history, retirement, static-guard]
+    spec_path: docs/e2e/10-会话与作品集连续创作/09-旧History前后端退役.md
+    executable_ids: [exec-history-stop-migrate, exec-history-router-retired, exec-legacy-history-retirement, exec-l3-history-retired]
+    fixtures: []
+    owner: story-collection
 executables:
   - executable_id: exec-session-roundtrip
     display_name_zh: 会话往返编解码
@@ -1373,10 +1529,6 @@ executables:
   # M9-03：旧 playbackProgressStore 第二 SSOT 删除，下列 6 个 legacy L2 已删（dead tests）。
   # 其用户目标由 M5 Session 链承载：countdown→sleep-timer/budget，切换窗口→runtime-orchestration，
   # null预算→budget-exhaustion，播完收尾→session-lifecycle，单调→checkpoint-guards，历史恢复卡→既有 Session 组合。
-  - executable_id: exec-preload-isolation
-    display_name_zh: 预载隔离
-    layer: L2
-    path: ./tests/integration/creation-chat/preload-isolation.integration.test.ts
   - executable_id: exec-pending-save-flush
     display_name_zh: 待保存落盘
     layer: L2
@@ -1527,6 +1679,18 @@ executables:
     display_name_zh: M8 ensureSegment写入集成
     layer: L2
     path: ./tests/integration/audio/audio-ensure-segment.integration.test.ts
+  - executable_id: exec-single-track-asset
+    display_name_zh: StoryAudio单轨资产与30天缓存集成
+    layer: L2
+    path: ./tests/integration/audio/single-track-asset.integration.test.ts
+  - executable_id: exec-story-audio-asset-domain
+    display_name_zh: StoryAudio单轨资产纯领域单元
+    layer: L1
+    path: ./tests/unit/audio/story-audio-asset-domain.unit.test.ts
+  - executable_id: exec-l3-story-audio-single-track
+    display_name_zh: StoryAudio单轨资产浏览器闭环
+    layer: L3
+    path: ./tests/system/browser/scenarios/story-audio-single-track.spec.ts
   - executable_id: exec-audio-storage-cleanup
     display_name_zh: M8 deletion tombstone与清理引擎单元
     layer: L1
@@ -1587,10 +1751,6 @@ executables:
     display_name_zh: StoryWork tRPC路由与客户端门面
     layer: L2
     path: ./tests/integration/persistence-config/story-work-router-facade.integration.test.ts
-  - executable_id: exec-legacy-generation-history-cutover
-    display_name_zh: Legacy生成历史兼容切换
-    layer: L2
-    path: ./tests/integration/persistence-config/legacy-generation-history-cutover.integration.test.ts
   - executable_id: exec-story-work-guest-registration
     display_name_zh: StoryWork访客注册迁移与ID映射
     layer: L2
@@ -1651,10 +1811,6 @@ executables:
     display_name_zh: Artifact History 持久化与恢复
     layer: L1
     path: ./tests/unit/creation-chat/artifact-history-rehydration.unit.test.ts
-  - executable_id: exec-history-ui-relocation
-    display_name_zh: History UI 回迁 Chat-owned Surface
-    layer: L1
-    path: ./tests/unit/creation-chat/history-ui-relocation.unit.test.ts
   - executable_id: exec-legacy-cutover
     display_name_zh: Legacy StoryCard 只读切换与新写封禁
     layer: L1
@@ -1799,14 +1955,6 @@ executables:
     display_name_zh: L3流式中再次提交互斥
     layer: L3
     path: ./tests/system/browser/scenarios/reject-second-submit-while-streaming.spec.ts
-  - executable_id: exec-l3-history-prompt-start-new-creation
-    display_name_zh: L3从提示词历史开始新创作
-    layer: L3
-    path: ./tests/system/browser/scenarios/history-prompt-start-new-creation.spec.ts
-  - executable_id: exec-l3-generation-history-play-once
-    display_name_zh: L3生成历史本页单次回放
-    layer: L3
-    path: ./tests/system/browser/scenarios/generation-history-play-once.spec.ts
   - executable_id: exec-l3-guest-cold-start-first-screen
     display_name_zh: L3访客冷启动首屏渲染
     layer: L3
@@ -1819,6 +1967,18 @@ executables:
     display_name_zh: L3故事库完整生命周期旅程
     layer: L3
     path: ./tests/system/browser/scenarios/library-lifecycle-journey.spec.ts
+  - executable_id: exec-l3-collection-library
+    display_name_zh: L3 Collection两层列表与Mini安全区
+    layer: L3
+    path: ./tests/system/browser/scenarios/library-collection.spec.ts
+  - executable_id: exec-collection-library-viewmodel
+    display_name_zh: Collection ViewModel与占位变量单元
+    layer: L1
+    path: ./tests/unit/story-collection/collection-library-viewmodel.unit.test.ts
+  - executable_id: exec-prompt-history-contract
+    display_name_zh: PromptHistory表contract删除（隔离库）
+    layer: L2
+    path: ./tests/integration/persistence-config/prompt-history-contract.integration.test.ts
   - executable_id: exec-l3-playback-session-survives-navigation
     display_name_zh: L3播放会话跨路由导航存活
     layer: L3
@@ -1871,3 +2031,64 @@ executables:
     display_name_zh: M10 browser债务清零静态守卫
     layer: L1
     path: ./tests/unit/navigation/m10-browser-debt-closure.unit.test.ts
+  - executable_id: exec-collection-domain
+    display_name_zh: 会话作品集领域契约（标题/游标/DTO/身份）
+    layer: L1
+    path: ./tests/unit/story-collection/collection-domain.unit.test.ts
+  - executable_id: exec-collection-promotion
+    display_name_zh: 会话作品集Promotion与生命周期（隔离库）
+    layer: L2
+    path: ./tests/integration/creation-conversation/story-collection-promotion.integration.test.ts
+  - executable_id: exec-conversation-scoped-persistence
+    display_name_zh: 会话级读写与promotion唯一写路径（行为）
+    layer: L2
+    path: ./tests/integration/creation-conversation/conversation-scoped-persistence.integration.test.ts
+  - executable_id: exec-collection-backfill
+    display_name_zh: 会话作品集旧数据回填守恒（隔离库）
+    layer: L2
+    path: ./tests/integration/persistence-config/story-collection-backfill.integration.test.ts
+  - executable_id: exec-continuous-creation-state-machine
+    display_name_zh: 连续创作状态机预算窗口lookahead与epoch守卫
+    layer: L1
+    path: ./tests/unit/continuous-creation/continuous-creation-state-machine.unit.test.ts
+  - executable_id: exec-continuous-creation-ui-binding
+    display_name_zh: 连续创作状态卡开关剩余预算与store同源
+    layer: L1
+    path: ./tests/unit/continuous-creation/continuous-creation-ui-binding.unit.test.ts
+
+  - executable_id: exec-history-stop-migrate
+    display_name_zh: 注册迁移停止复制Prompt History（隔离库）
+    layer: L2
+    path: ./tests/integration/persistence-config/history-stop-migrate.integration.test.ts
+  - executable_id: exec-history-router-retired
+    display_name_zh: 根Router不再暴露History过程
+    layer: L2
+    path: ./tests/integration/identity-session/history-router-retired.integration.test.ts
+  - executable_id: exec-legacy-history-retirement
+    display_name_zh: 旧History前后端文件与标识符零残留
+    layer: L1
+    path: ./tests/unit/story-collection/legacy-history-retirement.unit.test.ts
+  - executable_id: exec-continuous-creation-budget
+    display_name_zh: 连续创作预算停止矩阵与lookahead=1（L2）
+    layer: L2
+    path: ./tests/integration/creation-conversation/continuous-creation-budget.integration.test.ts
+  - executable_id: exec-new-creation-reset
+    display_name_zh: 新建创作强重置与预算继承（L2）
+    layer: L2
+    path: ./tests/integration/creation-conversation/new-creation-reset.integration.test.ts
+  - executable_id: exec-l3-continuous-creation
+    display_name_zh: 浏览器：连续创作默认开启与状态卡
+    layer: L3
+    path: ./tests/system/browser/scenarios/continuous-creation.spec.ts
+  - executable_id: exec-l3-continuous-creation-auto-next
+    display_name_zh: 浏览器：连续创作自动下一任务→预算耗尽停止与新建创作静默
+    layer: L3
+    path: ./tests/system/browser/scenarios/continuous-creation-auto-next.spec.ts
+  - executable_id: exec-l3-new-creation-reset
+    display_name_zh: 浏览器：新建创作强重置
+    layer: L3
+    path: ./tests/system/browser/scenarios/new-creation-reset.spec.ts
+  - executable_id: exec-l3-history-retired
+    display_name_zh: 浏览器：旧History入口退役
+    layer: L3
+    path: ./tests/system/browser/scenarios/history-retired.spec.ts

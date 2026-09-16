@@ -519,10 +519,6 @@ async function main(): Promise<void> {
       'lib/client/chatPromotionOrchestration.ts',
       'app/(main)/chat/components/MessageParts/StoryArtifactPart.tsx',
       'app/(main)/chat/components/ChatLayout/index.tsx',
-      'app/(main)/chat/components/HistoryPanel/index.tsx',
-      'app/(main)/chat/components/HistoryRecords/index.tsx',
-      'app/(main)/chat/components/GenerationHistory/index.tsx',
-      'app/(main)/chat/components/HistoryList/index.tsx',
       'lib/client/library.ts',
     ];
     for (const rel of mustBeClean) {

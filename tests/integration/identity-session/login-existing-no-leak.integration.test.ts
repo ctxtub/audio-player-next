@@ -6,8 +6,7 @@ import {
     getConversationForSubject,
     saveConversationForSubject,
 } from '../../../lib/server/chatConversation';
-import { recordGenerationHistoryForSubject } from '../../../lib/server/generationHistory';
-import { recordPromptHistoryForSubject } from '../../../lib/server/promptHistory';
+import { createStoryWorkForSubject } from '../../../lib/server/storyWork';
 import { authRouter } from '../../../lib/trpc/routers/auth';
 import { encodeGuestId } from '../../../lib/session';
 
@@ -42,12 +41,13 @@ async function runLoginNoLeakTests() {
         { messageId: 'ua_1', role: 'user', content: 'USER-A-OWN-CONTENT-独有' },
         { messageId: 'ua_2', role: 'assistant', content: 'USER-A-REPLY-独有' },
     ]);
-    await recordGenerationHistoryForSubject({ type: 'user', id: userA.id }, {
+    await createStoryWorkForSubject({ type: 'user', id: userA.id }, {
         prompt: 'USER-A-PROMPT',
         storyText: 'USER-A-STORY',
         voiceId: 'alloy',
     });
-    await recordPromptHistoryForSubject({ type: 'user', id: userA.id }, 'USER-A-PROMPT-HIST');
+    // M9-C1 T4：user PromptHistory 表已 contract 删除（GuestPromptHistory 保留），
+    // 登录 no-leak 改由聊天/作品/进度快照覆盖，本表无行可漏。
     await prisma.userPlaybackAnchor.create({
         data: {
             userId: userA.id,
@@ -68,11 +68,13 @@ async function runLoginNoLeakTests() {
     await saveConversationForSubject({ type: 'guest', id: guestId }, [
         { messageId: 'gq_1', role: 'user', content: 'GUEST-DRAFT-访客草稿独有' },
     ]);
-    await recordGenerationHistoryForSubject({ type: 'guest', id: guestId }, {
+    await createStoryWorkForSubject({ type: 'guest', id: guestId }, {
         prompt: 'GUEST-PROMPT',
         storyText: 'GUEST-STORY',
     });
-    await recordPromptHistoryForSubject({ type: 'guest', id: guestId }, 'GUEST-PROMPT-HIST');
+    await prisma.guestPromptHistory.create({
+        data: { guestId, prompt: 'GUEST-PROMPT-HIST', lastUsed: new Date(), useCount: 1 },
+    });
     await prisma.guestPlaybackAnchor.create({
         data: { guestId, sourceKind: 'chat', sourceId: 'gq_1', sessionId: 'gq_1', title: 'G' },
     });
@@ -82,7 +84,6 @@ async function runLoginNoLeakTests() {
         userChat: await getConversationForSubject({ type: 'user', id: userA.id }),
         guestChat: await getConversationForSubject({ type: 'guest', id: guestId }),
         userGen: (await prisma.storyWork.findMany({ where: { userId: userA.id } })).length,
-        userPrompt: (await prisma.promptHistory.findMany({ where: { userId: userA.id } })).length,
         userProg: await prisma.userPlaybackAnchor.findUnique({ where: { userId: userA.id } }),
         guestGen: await prisma.guestStoryWork.count({ where: { guestId } }),
         guestPrompt: await prisma.guestPromptHistory.count({ where: { guestId } }),
@@ -135,11 +136,6 @@ async function runLoginNoLeakTests() {
         (await prisma.storyWork.findMany({ where: { userId: userA.id } })).length,
         snap.userGen,
         '用户生成历史计数不变',
-    );
-    assert.strictEqual(
-        (await prisma.promptHistory.findMany({ where: { userId: userA.id } })).length,
-        snap.userPrompt,
-        '用户提示词历史计数不变',
     );
     const userProgAfter = await prisma.userPlaybackAnchor.findUnique({ where: { userId: userA.id } });
     assert.strictEqual(userProgAfter?.nextParagraphIndex, snap.userProg?.nextParagraphIndex, '用户进度行不变');

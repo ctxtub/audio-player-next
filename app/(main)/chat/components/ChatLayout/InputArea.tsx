@@ -8,11 +8,11 @@ import styles from './index.module.scss';
  */
 type InputAreaProps = Pick<
   ComposerProps,
-  'onSubmit' | 'disabled' | 'isSending' | 'value' | 'onChange' | 'onClear' | 'leftSlot'
+  'onSubmit' | 'disabled' | 'isSending' | 'value' | 'onChange' | 'onClear' | 'leftSlot' | 'clearText'
 >;
 
 /**
- * 聊天输入区域，占位承载消息输入与发送控制；leftSlot 透传给 Composer（如 History 入口）。
+ * 聊天输入区域，占位承载消息输入与发送控制；leftSlot 透传给 Composer。
  * @returns 输入区域结构 JSX。
  */
 const InputArea: React.FC<InputAreaProps> = ({
@@ -23,6 +23,7 @@ const InputArea: React.FC<InputAreaProps> = ({
   onChange,
   onClear,
   leftSlot,
+  clearText,
 }) => {
   return (
     <div className={styles.inputArea}>
@@ -35,6 +36,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           onChange={onChange}
           onClear={onClear}
           leftSlot={leftSlot}
+          clearText={clearText}
         />
       </div>
     </div>

@@ -18,6 +18,7 @@ import {
   reportTimeUpdate,
 } from '@/app/services/playbackSessionFlow';
 import { usePlaybackStore } from '@/stores/playbackStore';
+import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { createAudioEndedGuard } from '@/utils/audioEndedGuard';
 import type { AudioControllerHandle } from '@/types/audioPlayer';
 
@@ -251,6 +252,26 @@ const AudioControllerHost: React.FC = () => {
     handleUnlock,
     registerAudioController,
   ]);
+
+  useEffect(() => {
+    // T3 单轨：页面隐藏/离开时强制落库当前作品 positionMs（force 绕过客户端节流；
+    // server clamp/单调/节流二次保证不变）。AudioControllerHost 为主区唯一全局挂载点。
+    const flushSingleTrackProgress = () => {
+      void usePlaybackSessionStore.getState().persistSingleTrackProgress({ force: true });
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) flushSingleTrackProgress();
+    };
+    const handlePageHide = () => flushSingleTrackProgress();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('beforeunload', handlePageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('beforeunload', handlePageHide);
+    };
+  }, []);
 
   useEffect(() => {
     if (audioRef.current) {

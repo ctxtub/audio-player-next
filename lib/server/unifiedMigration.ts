@@ -1,7 +1,8 @@
 /**
  * 访客创作数据迁移服务
  *
- * 仅在注册时，将具名访客的聊天记录、生成历史与提示词历史原子级迁移至新用户。
+ * 仅在注册时，将具名访客的聊天记录与生成历史原子级迁移至新用户。
+ * M9-C1 T2：Prompt History 已前后端退役，不再迁移（见下方步骤 3）。
  */
 
 import { TRPCError } from '@trpc/server';
@@ -10,16 +11,19 @@ import { canonicalizeSourceKind } from '@/lib/playback/legacy';
 import { isValidDraftMessageId } from '@/lib/playback/source';
 import { mergeRemappedWorkProgress } from '@/lib/playback/progress';
 import { transferGuestAudioOwnershipTx } from '@/lib/server/audioOwnershipTransfer';
+import { deriveDeterministicId } from '@/lib/storyCollection/identity';
 
 export interface MigrationResult {
     messagesMigrated: number;
     generationsMigrated: number;
+    /** @deprecated M9-C1 T2：Prompt History 已退役，恒为 0（字段保留兼容观测）。 */
     promptsMigrated: number;
     storyWorkIdMap: Map<number, number>;
 }
 
 /**
- * 将指定 guestId 的全部创作记录（聊天、作品历史、提示词历史）拷贝至指定用户。
+ * 将指定 guestId 的全部创作记录（聊天、作品历史）拷贝至指定用户。
+ * M9-C1 T2：提示词历史不再迁移（退役）。
  * 保留访客原表记录供回滚/审计，由 30 天 GC 自然清理。
  *
  * 关键约束：
@@ -33,6 +37,48 @@ export async function migrateGuestCreativeRecordsToUser(
     guestId: string,
     userId: number
 ): Promise<MigrationResult> {
+    // 0. M9-C1 会话 / 作品集迁移（确定性 id + upsert，幂等；只搬运归属，Guest 原行保留给 GC）。
+    const guestConversations = await prisma.guestConversation.findMany({ where: { guestId } });
+    const conversationIdMap = new Map<string, string>();
+    for (const gc of guestConversations) {
+        const mappedId = deriveDeterministicId(
+            'guest-migration-conversation',
+            `${guestId}:${gc.id}`
+        );
+        conversationIdMap.set(gc.id, mappedId);
+        await prisma.conversation.upsert({
+            where: { id: mappedId },
+            create: { id: mappedId, userId, state: gc.state, createdAt: gc.createdAt },
+            update: {},
+        });
+    }
+    const guestCollections = await prisma.guestStoryCollection.findMany({ where: { guestId } });
+    const collectionIdMap = new Map<string, string>();
+    for (const gcol of guestCollections) {
+        const mappedId = deriveDeterministicId(
+            'guest-migration-collection',
+            `${guestId}:${gcol.id}`
+        );
+        const mappedConversationId =
+            conversationIdMap.get(gcol.conversationId) ??
+            deriveDeterministicId('guest-migration-conversation', `${guestId}:${gcol.conversationId}`);
+        collectionIdMap.set(gcol.id, mappedId);
+        await prisma.storyCollection.upsert({
+            where: { id: mappedId },
+            create: {
+                id: mappedId,
+                userId,
+                conversationId: mappedConversationId,
+                title: gcol.title,
+                titleSource: gcol.titleSource,
+                favoritedAt: gcol.favoritedAt,
+                deletedAt: gcol.deletedAt,
+                createdAt: gcol.createdAt,
+            },
+            update: {},
+        });
+    }
+
     // 1. 聊天会话快照迁移（按 position 升序，幂等防重）
     const guestMessages = await prisma.guestChatMessage.findMany({
         where: { guestId },
@@ -48,16 +94,23 @@ export async function migrateGuestCreativeRecordsToUser(
 
         if (messagesToInsert.length > 0) {
             await prisma.chatMessage.createMany({
-                data: messagesToInsert.map((m, idx) => ({
-                    userId,
-                    position: existingMessages.length + idx,
-                    messageId: m.messageId,
-                    role: m.role,
-                    content: m.content,
-                    parts: m.parts,
-                    agentType: m.agentType,
-                    createdAt: m.createdAt,
-                })),
+                data: messagesToInsert.map((m, idx) => {
+                    const mappedConversationId = m.conversationId
+                        ? conversationIdMap.get(m.conversationId) ?? null
+                        : null;
+                    return {
+                        userId,
+                        conversationId: mappedConversationId,
+                        // 已归属会话的消息沿用会话内 position；legacy 快照消息走全局递增。
+                        position: mappedConversationId !== null ? m.position : existingMessages.length + idx,
+                        messageId: m.messageId,
+                        role: m.role,
+                        content: m.content,
+                        parts: m.parts,
+                        agentType: m.agentType,
+                        createdAt: m.createdAt,
+                    };
+                }),
             });
         }
     }
@@ -152,6 +205,10 @@ export async function migrateGuestCreativeRecordsToUser(
                         excerpt: g.excerpt ?? '',
                         contentHash: g.contentHash ?? '',
                         sourceMessageId: g.sourceMessageId ?? null,
+                        collectionId: g.collectionId
+                            ? collectionIdMap.get(g.collectionId) ?? null
+                            : null,
+                        position: g.collectionId ? g.position : null,
                         favoritedAt: g.favoritedAt ?? null,
                         deletedAt: g.deletedAt ?? null,
                         createdAt: g.createdAt,
@@ -185,40 +242,14 @@ export async function migrateGuestCreativeRecordsToUser(
         }, { timeout: 30000 });
     }
 
-    // 3. 提示词历史迁移（30 天内活跃，最多 100 条，upsert 保证幂等）
-    const threshold = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const guestPrompts = await prisma.guestPromptHistory.findMany({
-        where: { guestId, lastUsed: { gte: threshold } },
-        orderBy: { lastUsed: 'desc' },
-        take: 100,
-    });
-    if (guestPrompts.length > 0) {
-        for (const p of guestPrompts) {
-            await prisma.promptHistory.upsert({
-                where: {
-                    userId_prompt: {
-                        userId,
-                        prompt: p.prompt,
-                    },
-                },
-                create: {
-                    userId,
-                    prompt: p.prompt,
-                    lastUsed: p.lastUsed,
-                    useCount: p.useCount,
-                },
-                update: {
-                    lastUsed: p.lastUsed,
-                    useCount: p.useCount,
-                },
-            });
-        }
-    }
+    // 3. M9-C1 T2：Prompt History 前后端退役，注册迁移不再复制访客提示词历史。
+    //    Guest 原行保留给 30 天 GC 自然清理；promptsMigrated 恒为 0（字段保留以兼容调用方与观测）。
+    const promptsMigrated = 0;
 
     return {
         messagesMigrated: guestMessages.length,
         generationsMigrated: guestStoryWorks.length,
-        promptsMigrated: guestPrompts.length,
+        promptsMigrated,
         storyWorkIdMap,
     };
 }

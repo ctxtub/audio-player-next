@@ -87,8 +87,32 @@ function setupJsdomWithFetch(): { spyFetch: unknown; originalFetch: unknown; ori
  */
 function stubChatConversation(spyFetch: unknown): void {
     const chatConversationPath = path.resolve(repoRoot, 'lib/client/chatConversation.ts');
+    const conversationClientPath = path.resolve(repoRoot, 'lib/client/conversation.ts');
     const glassToastPath = path.resolve(repoRoot, 'components/ui/GlassToast.tsx');
     const cache = (nodeRequire as unknown as { cache: Record<string, NodeModule> }).cache;
+    // 中文注释：共享落库桩——记录调用并穿透观测真实 keepalive 包装（legacy/subject 与 conversation 双栈共用）。
+    const recordSave = async (messages: MessageInputLike[]): Promise<{ ok: boolean }> => {
+        stubState.saveCalls += 1;
+        // 中文注释：自证 keepalive 包装——记录调用瞬间 globalThis.fetch 是否为真实包装器（≠ spy 本体）。
+        const currentFetch = (globalThis as unknown as Record<string, unknown>).fetch;
+        stubState.fetchPatchedDuringSave = currentFetch !== spyFetch;
+        // 中文注释：穿透调用一次当前 fetch，观测 keepalive 标记是否透传到底层（真实包装器行为）。
+        try {
+            await (currentFetch as (u: unknown, i: unknown) => Promise<unknown>)(
+                'https://keepalive-probe.invalid/__keepalive__',
+                {},
+            );
+        } catch {
+            // 中文注释：忽略探针调用自身失败，仅观测参数。
+        }
+        const lastCall = stubState.spyFetchCalls[stubState.spyFetchCalls.length - 1];
+        stubState.keepaliveFlag = (lastCall?.init as Record<string, unknown> | undefined)?.keepalive;
+        if (stubState.saveDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, stubState.saveDelayMs));
+        }
+        stubState.snapshots.push(messages);
+        return { ok: true };
+    };
     cache[glassToastPath] = {
         id: glassToastPath,
         filename: glassToastPath,
@@ -101,28 +125,34 @@ function stubChatConversation(spyFetch: unknown): void {
         loaded: true,
         exports: {
             fetchMyConversation: async () => [],
-            saveMyConversation: async (messages: MessageInputLike[]) => {
-                stubState.saveCalls += 1;
-                // 中文注释：自证 keepalive 包装——记录调用瞬间 globalThis.fetch 是否为真实包装器（≠ spy 本体）。
-                const currentFetch = (globalThis as unknown as Record<string, unknown>).fetch;
-                stubState.fetchPatchedDuringSave = currentFetch !== spyFetch;
-                // 中文注释：穿透调用一次当前 fetch，观测 keepalive 标记是否透传到底层（真实包装器行为）。
-                try {
-                    await (currentFetch as (u: unknown, i: unknown) => Promise<unknown>)(
-                        'https://keepalive-probe.invalid/__keepalive__',
-                        {},
-                    );
-                } catch {
-                    // 中文注释：忽略探针调用自身失败，仅观测参数。
-                }
-                const lastCall = stubState.spyFetchCalls[stubState.spyFetchCalls.length - 1];
-                stubState.keepaliveFlag = (lastCall?.init as Record<string, unknown> | undefined)?.keepalive;
-                if (stubState.saveDelayMs > 0) {
-                    await new Promise((resolve) => setTimeout(resolve, stubState.saveDelayMs));
-                }
-                stubState.snapshots.push(messages);
-                return { ok: true };
-            },
+            saveMyConversation: recordSave,
+        },
+    } as unknown as NodeModule;
+    cache[conversationClientPath] = {
+        id: conversationClientPath,
+        filename: conversationClientPath,
+        loaded: true,
+        exports: {
+            getActiveConversation: async () => ({
+                id: 'conv-unit-test',
+                state: 'active',
+                collectionId: null,
+                createdAt: '2026-09-12T10:00:00.000Z',
+                updatedAt: '2026-09-12T10:00:00.000Z',
+            }),
+            ensureActiveConversation: async () => ({
+                id: 'conv-unit-test',
+                state: 'active',
+                collectionId: null,
+                createdAt: '2026-09-12T10:00:00.000Z',
+                updatedAt: '2026-09-12T10:00:00.000Z',
+            }),
+            getConversation: async () => null,
+            createNewConversation: async () => null,
+            closeConversation: async () => null,
+            fetchConversationMessages: async () => [],
+            saveConversationSnapshot: async (_conversationId: string, messages: MessageInputLike[]) =>
+                recordSave(messages),
         },
     } as unknown as NodeModule;
 }

@@ -8,11 +8,11 @@ import { loadEvidenceCatalog, getCaseIdsForExecutable, validateRow, SCHEMA_VERSI
 const cwd = process.cwd();
 
 // 中文注释：预期 schema 表集合（probe 子集断言用，不含迁移内表）。
+// T4 contract 后用户 PromptHistory 已删除（GuestPromptHistory 因 guestGc 保留）。
 const EXPECTED_TABLES = [
     'User',
     'ChatMessage',
     'GenerationHistory',
-    'PromptHistory',
     'UserConfig',
     'GuestConfig',
     'GuestChatMessage',
@@ -55,7 +55,6 @@ const SUITES = [
     { id: 'onboarding-storage', path: './tests/unit/creation-chat/onboarding-storage.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'reject-second-submit-while-streaming', path: './tests/integration/creation-chat/reject-second-submit-while-streaming.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'budget-exhaustion', path: './tests/unit/playback/budget-exhaustion.unit.test.ts', group: 'unit', needs_db: false },
-    { id: 'preload-isolation', path: './tests/integration/creation-chat/preload-isolation.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'clear-during-generate-no-orphan-audio', path: './tests/integration/creation-chat/clear-during-generate-no-orphan-audio.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'pending-save-flush', path: './tests/integration/persistence-config/pending-save-flush.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'stale-conversation-write', path: './tests/integration/persistence-config/stale-conversation-write.integration.test.ts', group: 'integration', needs_db: true },
@@ -93,7 +92,9 @@ const SUITES = [
     { id: 'audio-storage-s3', path: './tests/integration/audio/audio-storage-s3.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'audio-segment-read', path: './tests/integration/audio/audio-segment-read.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'audio-canonical-write', path: './tests/unit/audio/audio-canonical-write.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'story-audio-asset-domain', path: './tests/unit/audio/story-audio-asset-domain.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'audio-ensure-segment', path: './tests/integration/audio/audio-ensure-segment.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'single-track-asset', path: './tests/integration/audio/single-track-asset.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'audio-work-playback-read', path: './tests/unit/audio/audio-work-playback-read.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'audio-work-playback-reuse', path: './tests/integration/audio/audio-work-playback-reuse.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'audio-storage-cleanup', path: './tests/unit/audio/audio-storage-cleanup.unit.test.ts', group: 'unit', needs_db: false },
@@ -110,7 +111,6 @@ const SUITES = [
     { id: 'story-work-create', path: './tests/integration/persistence-config/story-work-create.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-lifecycle', path: './tests/integration/persistence-config/story-work-lifecycle.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-router-facade', path: './tests/integration/persistence-config/story-work-router-facade.integration.test.ts', group: 'integration', needs_db: true },
-    { id: 'legacy-generation-history-cutover', path: './tests/integration/persistence-config/legacy-generation-history-cutover.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-guest-registration', path: './tests/integration/persistence-config/story-work-guest-registration.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'story-work-retention', path: './tests/integration/persistence-config/story-work-retention.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'server-state-identity-isolation', path: './tests/integration/persistence-config/server-state-identity-isolation.integration.test.ts', group: 'integration', needs_db: true },
@@ -127,7 +127,6 @@ const SUITES = [
     { id: 'promotion-orchestration', path: './tests/unit/creation-chat/promotion-orchestration.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'artifact-chat-ui', path: './tests/unit/creation-chat/artifact-chat-ui.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'artifact-history-rehydration', path: './tests/unit/creation-chat/artifact-history-rehydration.unit.test.ts', group: 'unit', needs_db: false },
-    { id: 'history-ui-relocation', path: './tests/unit/creation-chat/history-ui-relocation.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'legacy-cutover', path: './tests/unit/creation-chat/legacy-cutover.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'legacy-compatibility-containment', path: './tests/unit/creation-chat/legacy-compatibility-containment.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'artifact-module-closure', path: './tests/unit/creation-chat/artifact-module-closure.unit.test.ts', group: 'unit', needs_db: false },
@@ -163,6 +162,19 @@ const SUITES = [
     { id: 'catalog-checker', path: './tests/tooling/catalog/catalog-checker.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'evidence-schema', path: './tests/tooling/evidence/evidence-schema.tooling.test.ts', group: 'tooling', needs_db: false },
     { id: 'auto-delivery', path: './tests/tooling/delivery/auto-delivery.tooling.test.ts', group: 'tooling', needs_db: false },
+    { id: 'collection-domain', path: './tests/unit/story-collection/collection-domain.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'continuous-creation-state-machine', path: './tests/unit/continuous-creation/continuous-creation-state-machine.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'continuous-creation-ui-binding', path: './tests/unit/continuous-creation/continuous-creation-ui-binding.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'legacy-history-retirement', path: './tests/unit/story-collection/legacy-history-retirement.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'collection-library-viewmodel', path: './tests/unit/story-collection/collection-library-viewmodel.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'history-stop-migrate', path: './tests/integration/persistence-config/history-stop-migrate.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'prompt-history-contract', path: './tests/integration/persistence-config/prompt-history-contract.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'history-router-retired', path: './tests/integration/identity-session/history-router-retired.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'continuous-creation-budget', path: './tests/integration/creation-conversation/continuous-creation-budget.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'new-creation-reset', path: './tests/integration/creation-conversation/new-creation-reset.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'story-collection-promotion', path: './tests/integration/creation-conversation/story-collection-promotion.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'conversation-scoped-persistence', path: './tests/integration/creation-conversation/conversation-scoped-persistence.integration.test.ts', group: 'integration', needs_db: false },
+    { id: 'story-collection-backfill', path: './tests/integration/persistence-config/story-collection-backfill.integration.test.ts', group: 'integration', needs_db: true },
 ];
 
 /** 当前拥有的子进程（信号处理用）。 */

@@ -1,13 +1,16 @@
 import React from 'react';
 import LibraryUndoProvider from '@/components/Library/LibraryUndoProvider';
+import CollectionUndoProvider from '@/components/Library/CollectionUndoProvider';
 
 /**
- * 故事库全局布局组件（M3-05）
+ * 故事库全局布局组件（M3-05，M9-C1 T4 扩展集合级 Undo）
  *
  * 核心设计原则：
- * 1. /library 与 /library/[id] 共享同一 Library layout；
- * 2. 挂载 LibraryUndoProvider，确保用户在详情页软删除后跳回列表页，Undo 提示不因页面卸载而丢失；
- * 3. 严格使用 React Context / useState 管理瞬时 UI 状态与撤销命令，绝不引入外部持久 store。
+ * 1. /library、/library/[id] 与 /library/collections/[id] 共享同一 Library layout；
+ * 2. 挂载 LibraryUndoProvider（Work 级）与 CollectionUndoProvider（集合级），
+ *    确保详情页软删除后跳回列表页，Undo 提示不因页面卸载而丢失；
+ * 3. 两 provider 会话相互独立（各自 token 隔离），toast 同一时刻至多其一可见；
+ * 4. 严格使用 React Context / useState 管理瞬时 UI 状态与撤销命令，绝不引入外部持久 store.
  *
  * @param props 包含子路由页面节点
  * @returns 故事库布局节点
@@ -17,5 +20,9 @@ export default function LibraryLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <LibraryUndoProvider>{children}</LibraryUndoProvider>;
+  return (
+    <LibraryUndoProvider>
+      <CollectionUndoProvider>{children}</CollectionUndoProvider>
+    </LibraryUndoProvider>
+  );
 }

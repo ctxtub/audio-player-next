@@ -1287,7 +1287,7 @@ export type PhysicalDeleteStoryWorkOptions =
       target: 'user';
       reason: 'trash';
       where: {
-        id?: number;
+        id?: number | { in: number[] };
         userId?: number;
         deletedAt: {
           not: null;
@@ -1300,7 +1300,7 @@ export type PhysicalDeleteStoryWorkOptions =
       target: 'guest';
       reason: 'trash';
       where: {
-        id?: number;
+        id?: number | { in: number[] };
         guestId?: string;
         deletedAt: {
           not: null;
@@ -1313,7 +1313,7 @@ export type PhysicalDeleteStoryWorkOptions =
       target: 'guest';
       reason: 'retention';
       where: {
-        id?: number;
+        id?: number | { in: number[] };
         guestId?: string;
         updatedAt: {
           lt: Date;
@@ -1372,6 +1372,212 @@ export async function pruneSurvivorAudioTombstones(
 }
 
 /**
+ * M9-C1 Blocker 1：trash 物理删除的事务内核结果。
+ *
+ * `remainingIds` 为删除后仍存活的行（restore 竞态 survivor），供 collection seam
+ * 判定「是否允许继续删除 Collection」；单 Work primitive 只消费 committedKeys/deletedCount。
+ */
+type TrashDeleteTxResult = {
+  committedKeys: string[];
+  deletedCount: number;
+  remainingIds: number[];
+};
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/** User trash 事务内核的窄依赖面（不含自由 where，避免退化为通用 delete helper）。 */
+type UserTrashDeleteTx = {
+  storyWork: {
+    findMany(args: any): Promise<Array<{ id: number }>>;
+    deleteMany(args: any): Promise<{ count: number }>;
+  };
+  storyAudioManifest: { findMany(args: any): Promise<Array<{ id: number }>> };
+  storyAudioSegment: { findMany(args: any): Promise<Array<{ storageKey: string }>> };
+  storyAudioAsset: { findMany(args: any): Promise<Array<{ storageKey: string }>> };
+  audioStorageDeletion: { deleteMany(args: any): Promise<unknown> };
+};
+
+/** Guest trash 事务内核的窄依赖面（同上）。 */
+type GuestTrashDeleteTx = {
+  guestStoryWork: {
+    findMany(args: any): Promise<Array<{ id: number }>>;
+    deleteMany(args: any): Promise<{ count: number }>;
+  };
+  guestStoryAudioManifest: { findMany(args: any): Promise<Array<{ id: number }>> };
+  guestStoryAudioSegment: { findMany(args: any): Promise<Array<{ storageKey: string }>> };
+  guestStoryAudioAsset: { findMany(args: any): Promise<Array<{ storageKey: string }>> };
+  audioStorageDeletion: { deleteMany(args: any): Promise<unknown> };
+};
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+/**
+ * User trash 事务内核（唯一 audio-aware 删除逻辑，单 Work primitive 与 collection seam 共用）。
+ *
+ * 调用方必须已处于 `prisma.$transaction` 内；本函数不做 $transaction，保证 collection seam
+ * 能把「Work 删除 + Collection 删除」收敛在同一原子边界。
+ */
+async function deleteUserTrashWorksInTx(
+  tx: UserTrashDeleteTx,
+  where: { id?: number | { in: number[] }; userId?: number; deletedAt: { not: null; lt?: Date } },
+  testHooks?: StoryWorkMutationTestHooks,
+): Promise<TrashDeleteTxResult> {
+  const matched = await tx.storyWork.findMany({ where, select: { id: true } });
+  const matchedIds = matched.map((r) => r.id);
+  let allKeys: string[] = [];
+  if (matchedIds.length > 0) {
+    const manifests = await tx.storyAudioManifest.findMany({
+      where: { storyWorkId: { in: matchedIds } },
+      select: { id: true },
+    });
+    const manifestIds = manifests.map((r) => r.id);
+    if (manifestIds.length > 0) {
+      const segments = await tx.storyAudioSegment.findMany({
+        where: { manifestId: { in: manifestIds } },
+        select: { storageKey: true },
+      });
+      allKeys = segments.map((s) => s.storageKey);
+    }
+    // T3：单轨 Asset 对象同批 tombstone（DB 行随 cascade 消失；旧 Segment 表不物理删除）。
+    const assets = await tx.storyAudioAsset.findMany({
+      where: { storyWorkId: { in: matchedIds } },
+      select: { storageKey: true },
+    });
+    allKeys = [...allKeys, ...assets.map((a) => a.storageKey)];
+    if (allKeys.length > 0) {
+      await enqueueAudioDeletionTombstones(
+        tx as unknown as Parameters<typeof enqueueAudioDeletionTombstones>[0],
+        allKeys,
+      );
+    }
+  }
+  if (testHooks?.__testInsideTransactionHook) {
+    await testHooks.__testInsideTransactionHook();
+  }
+  const deleteResult = await tx.storyWork.deleteMany({ where });
+  const deletedCount = deleteResult.count;
+  if (matchedIds.length === 0) {
+    return { committedKeys: [], deletedCount, remainingIds: [] };
+  }
+  if (deletedCount >= matchedIds.length) {
+    return { committedKeys: allKeys, deletedCount, remainingIds: [] };
+  }
+  // 竞态收敛（M8-05-02 FIXUP fail-closed）：事务内 find 与 delete 之间 restore 导致部分行
+  // 未删时，存活行不得被 tombstone 误清；prune 失败即 throw → 全事务 rollback。
+  const survivors = await tx.storyWork.findMany({
+    where: { id: { in: matchedIds } },
+    select: { id: true },
+  });
+  const remainingIds = survivors.map((r) => r.id);
+  if (remainingIds.length === 0 || allKeys.length === 0) {
+    return { committedKeys: allKeys.length === 0 ? [] : allKeys, deletedCount, remainingIds };
+  }
+  const survivorManifests = await tx.storyAudioManifest.findMany({
+    where: { storyWorkId: { in: remainingIds } },
+    select: { id: true },
+  });
+  const survivorManifestIds = survivorManifests.map((r) => r.id);
+  let survivorKeys: string[] = [];
+  if (survivorManifestIds.length > 0) {
+    const survivorSegments = await tx.storyAudioSegment.findMany({
+      where: { manifestId: { in: survivorManifestIds } },
+      select: { storageKey: true },
+    });
+    survivorKeys = survivorSegments.map((s) => s.storageKey);
+  }
+  const survivorAssets = await tx.storyAudioAsset.findMany({
+    where: { storyWorkId: { in: remainingIds } },
+    select: { storageKey: true },
+  });
+  survivorKeys = [...survivorKeys, ...survivorAssets.map((a) => a.storageKey)];
+  if (survivorKeys.length > 0) {
+    await pruneSurvivorAudioTombstones(tx, survivorKeys);
+    const committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
+    return { committedKeys, deletedCount, remainingIds };
+  }
+  return { committedKeys: allKeys, deletedCount, remainingIds };
+}
+
+/**
+ * Guest trash 事务内核（与 User 分支对称；单 Work primitive 与 collection seam 共用）。
+ */
+async function deleteGuestTrashWorksInTx(
+  tx: GuestTrashDeleteTx,
+  where: { id?: number | { in: number[] }; guestId?: string; deletedAt: { not: null; lt?: Date } },
+  testHooks?: StoryWorkMutationTestHooks,
+): Promise<TrashDeleteTxResult> {
+  const matched = await tx.guestStoryWork.findMany({ where, select: { id: true } });
+  const matchedIds = matched.map((r) => r.id);
+  let allKeys: string[] = [];
+  if (matchedIds.length > 0) {
+    const manifests = await tx.guestStoryAudioManifest.findMany({
+      where: { storyWorkId: { in: matchedIds } },
+      select: { id: true },
+    });
+    const manifestIds = manifests.map((r) => r.id);
+    if (manifestIds.length > 0) {
+      const segments = await tx.guestStoryAudioSegment.findMany({
+        where: { manifestId: { in: manifestIds } },
+        select: { storageKey: true },
+      });
+      allKeys = segments.map((s) => s.storageKey);
+    }
+    const guestAssets = await tx.guestStoryAudioAsset.findMany({
+      where: { storyWorkId: { in: matchedIds } },
+      select: { storageKey: true },
+    });
+    allKeys = [...allKeys, ...guestAssets.map((a) => a.storageKey)];
+    if (allKeys.length > 0) {
+      await enqueueAudioDeletionTombstones(
+        tx as unknown as Parameters<typeof enqueueAudioDeletionTombstones>[0],
+        allKeys,
+      );
+    }
+  }
+  if (testHooks?.__testInsideTransactionHook) {
+    await testHooks.__testInsideTransactionHook();
+  }
+  const deleteResult = await tx.guestStoryWork.deleteMany({ where });
+  const deletedCount = deleteResult.count;
+  if (matchedIds.length === 0) {
+    return { committedKeys: [], deletedCount, remainingIds: [] };
+  }
+  if (deletedCount >= matchedIds.length) {
+    return { committedKeys: allKeys, deletedCount, remainingIds: [] };
+  }
+  const survivors = await tx.guestStoryWork.findMany({
+    where: { id: { in: matchedIds } },
+    select: { id: true },
+  });
+  const remainingIds = survivors.map((r) => r.id);
+  if (remainingIds.length === 0 || allKeys.length === 0) {
+    return { committedKeys: allKeys.length === 0 ? [] : allKeys, deletedCount, remainingIds };
+  }
+  const survivorManifests = await tx.guestStoryAudioManifest.findMany({
+    where: { storyWorkId: { in: remainingIds } },
+    select: { id: true },
+  });
+  const survivorManifestIds = survivorManifests.map((r) => r.id);
+  let survivorKeys: string[] = [];
+  if (survivorManifestIds.length > 0) {
+    const survivorSegments = await tx.guestStoryAudioSegment.findMany({
+      where: { manifestId: { in: survivorManifestIds } },
+      select: { storageKey: true },
+    });
+    survivorKeys = survivorSegments.map((s) => s.storageKey);
+  }
+  const survivorGuestAssets = await tx.guestStoryAudioAsset.findMany({
+    where: { storyWorkId: { in: remainingIds } },
+    select: { storageKey: true },
+  });
+  survivorKeys = [...survivorKeys, ...survivorGuestAssets.map((a) => a.storageKey)];
+  if (survivorKeys.length > 0) {
+    await pruneSurvivorAudioTombstones(tx, survivorKeys);
+    const committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
+    return { committedKeys, deletedCount, remainingIds };
+  }
+  return { committedKeys: allKeys, deletedCount, remainingIds };
+}
+
+/**
  * StoryWork 物理删除唯一合法底层执行点（Server-Internal Primitive / M8 Audio Seam 唯一挂载点）
  *
  * 架构说明与安全约束：
@@ -1404,6 +1610,9 @@ export async function executeStoryWorkPhysicalDelete(
     await options.testHooks.__testBeforeMutationHook();
   }
 
+  let committedKeys: string[] = [];
+  let deletedCount = 0;
+
   if (options.target === 'user') {
     // User 作品物理删除仅支持 reason: 'trash'（audio-aware transaction）
     const where = {
@@ -1411,31 +1620,56 @@ export async function executeStoryWorkPhysicalDelete(
       ...(options.where.userId !== undefined ? { userId: options.where.userId } : {}),
       deletedAt: options.where.deletedAt,
     };
-    let committedKeys: string[] = [];
-    let deletedCount = 0;
+    // 事务内核收敛于 deleteUserTrashWorksInTx（与 collection seam 共用，禁止第二套逻辑）
+    const result = await prisma.$transaction((tx) =>
+      deleteUserTrashWorksInTx(tx as unknown as UserTrashDeleteTx, where, options.testHooks),
+    );
+    committedKeys = result.committedKeys;
+    deletedCount = result.deletedCount;
+  } else if (options.reason === 'trash') {
+    // Guest manual trash（audio-aware transaction；与 collection seam 共用内核）
+    const where = {
+      ...(options.where.id !== undefined ? { id: options.where.id } : {}),
+      ...(options.where.guestId !== undefined ? { guestId: options.where.guestId } : {}),
+      deletedAt: options.where.deletedAt,
+    };
+    const result = await prisma.$transaction((tx) =>
+      deleteGuestTrashWorksInTx(tx as unknown as GuestTrashDeleteTx, where, options.testHooks),
+    );
+    committedKeys = result.committedKeys;
+    deletedCount = result.deletedCount;
+  } else {
+    // reason === 'retention'（Guest GC 统一 seam；primitive audio-aware 后自然获得正确 lifecycle）
+    const where = {
+      ...(options.where.id !== undefined ? { id: options.where.id } : {}),
+      ...(options.where.guestId !== undefined ? { guestId: options.where.guestId } : {}),
+      updatedAt: options.where.updatedAt,
+    };
     await prisma.$transaction(async (tx) => {
-      // 1) 按窄契约解析本次真正匹配的 Work IDs（事务内快照）
-      const matched = await tx.storyWork.findMany({
+      const matched = await tx.guestStoryWork.findMany({
         where,
         select: { id: true },
       });
       const matchedIds = matched.map((r: { id: number }) => r.id);
       let allKeys: string[] = [];
       if (matchedIds.length > 0) {
-        // 2) 读取这些 Work 下所有 Manifest Segment storageKey（cascade 消失前必读）
-        const manifests = await tx.storyAudioManifest.findMany({
+        const manifests = await tx.guestStoryAudioManifest.findMany({
           where: { storyWorkId: { in: matchedIds } },
           select: { id: true },
         });
         const manifestIds = manifests.map((r: { id: number }) => r.id);
         if (manifestIds.length > 0) {
-          const segments = await tx.storyAudioSegment.findMany({
+          const segments = await tx.guestStoryAudioSegment.findMany({
             where: { manifestId: { in: manifestIds } },
             select: { storageKey: true },
           });
           allKeys = segments.map((s: { storageKey: string }) => s.storageKey);
         }
-        // 3) UPSERT AudioStorageDeletion（同 key 幂等；05-01 冻结 API，只消费不改契约）
+        const retentionAssets = await tx.guestStoryAudioAsset.findMany({
+          where: { storyWorkId: { in: matchedIds } },
+          select: { storageKey: true },
+        });
+        allKeys = [...allKeys, ...retentionAssets.map((a: { storageKey: string }) => a.storageKey)];
         if (allKeys.length > 0) {
           await enqueueAudioDeletionTombstones(
             tx as unknown as Parameters<typeof enqueueAudioDeletionTombstones>[0],
@@ -1446,8 +1680,7 @@ export async function executeStoryWorkPhysicalDelete(
       if (options.testHooks?.__testInsideTransactionHook) {
         await options.testHooks.__testInsideTransactionHook();
       }
-      // 4) DELETE StoryWork（Manifest/Segment 靠 FK cascade）
-      const deleteResult = await tx.storyWork.deleteMany({ where });
+      const deleteResult = await tx.guestStoryWork.deleteMany({ where });
       deletedCount = deleteResult.count;
       if (matchedIds.length === 0 || allKeys.length === 0) {
         committedKeys = [];
@@ -1457,12 +1690,7 @@ export async function executeStoryWorkPhysicalDelete(
         committedKeys = allKeys;
         return;
       }
-      // 竞态收敛（M8-05-02 FIXUP fail-closed）：若事务内 find 与 delete 之间出现
-      // restore 导致部分行未删，存活行的音频不得清理——删掉其误记 tombstone，
-      // 本批仅保留真正删除行的 keys。M8-05-01 冻结引擎不检查 live Segment 引用，
-      // stale-tombstone 残留会被 bounded cleanup 误删存活 object，故 prune 失败
-      // 必须 throw → 全事务 rollback（Work/Manifest/Segment 保持、Object 不动）。
-      const survivors = await tx.storyWork.findMany({
+      const survivors = await tx.guestStoryWork.findMany({
         where: { id: { in: matchedIds } },
         select: { id: true },
       });
@@ -1471,221 +1699,152 @@ export async function executeStoryWorkPhysicalDelete(
         return;
       }
       const survivorIds = survivors.map((r: { id: number }) => r.id);
-      const survivorManifests = await tx.storyAudioManifest.findMany({
+      const survivorManifests = await tx.guestStoryAudioManifest.findMany({
         where: { storyWorkId: { in: survivorIds } },
         select: { id: true },
       });
       const survivorManifestIds = survivorManifests.map((r: { id: number }) => r.id);
       let survivorKeys: string[] = [];
       if (survivorManifestIds.length > 0) {
-        const survivorSegments = await tx.storyAudioSegment.findMany({
+        const survivorSegments = await tx.guestStoryAudioSegment.findMany({
           where: { manifestId: { in: survivorManifestIds } },
           select: { storageKey: true },
         });
         survivorKeys = survivorSegments.map((s: { storageKey: string }) => s.storageKey);
       }
+      const survivorRetentionAssets = await tx.guestStoryAudioAsset.findMany({
+        where: { storyWorkId: { in: survivorIds } },
+        select: { storageKey: true },
+      });
+      survivorKeys = [
+        ...survivorKeys,
+        ...survivorRetentionAssets.map((a: { storageKey: string }) => a.storageKey),
+      ];
       if (survivorKeys.length > 0) {
-        await pruneSurvivorAudioTombstones(
-          tx as unknown as SurvivorPruneTx,
-          survivorKeys,
-        );
+        // M8-05-02 FIXUP fail-closed：prune 失败即 throw → 全事务 rollback。
+        await pruneSurvivorAudioTombstones(tx as unknown as SurvivorPruneTx, survivorKeys);
         committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
       } else {
         committedKeys = allKeys;
       }
     });
-    // 5) COMMIT 后 best-effort cleanup 本批 tombstones（失败吞掉，由 tombstone retry 接管）
-    if (committedKeys.length > 0) {
-      try {
-        await cleanupAudioStorageKeys(committedKeys);
-      } catch {
-        // best-effort：永久删除已提交，绝不因此抛错回滚。
-      }
-    }
-    return { count: deletedCount };
-  } else {
-    // Guest 作品物理删除：区分 manual trash 与 retention GC（同为 audio-aware）
-    if (options.reason === 'trash') {
-      const where = {
-        ...(options.where.id !== undefined ? { id: options.where.id } : {}),
-        ...(options.where.guestId !== undefined ? { guestId: options.where.guestId } : {}),
-        deletedAt: options.where.deletedAt,
-      };
-      let committedKeys: string[] = [];
-      let deletedCount = 0;
-      await prisma.$transaction(async (tx) => {
-        const matched = await tx.guestStoryWork.findMany({
-          where,
-          select: { id: true },
-        });
-        const matchedIds = matched.map((r: { id: number }) => r.id);
-        let allKeys: string[] = [];
-        if (matchedIds.length > 0) {
-          const manifests = await tx.guestStoryAudioManifest.findMany({
-            where: { storyWorkId: { in: matchedIds } },
-            select: { id: true },
-          });
-          const manifestIds = manifests.map((r: { id: number }) => r.id);
-          if (manifestIds.length > 0) {
-            const segments = await tx.guestStoryAudioSegment.findMany({
-              where: { manifestId: { in: manifestIds } },
-              select: { storageKey: true },
-            });
-            allKeys = segments.map((s: { storageKey: string }) => s.storageKey);
-          }
-          if (allKeys.length > 0) {
-            await enqueueAudioDeletionTombstones(
-              tx as unknown as Parameters<typeof enqueueAudioDeletionTombstones>[0],
-              allKeys,
-            );
-          }
-        }
-        if (options.testHooks?.__testInsideTransactionHook) {
-          await options.testHooks.__testInsideTransactionHook();
-        }
-        const deleteResult = await tx.guestStoryWork.deleteMany({ where });
-        deletedCount = deleteResult.count;
-        if (matchedIds.length === 0 || allKeys.length === 0) {
-          committedKeys = [];
-          return;
-        }
-        if (deletedCount >= matchedIds.length) {
-          committedKeys = allKeys;
-          return;
-        }
-        const survivors = await tx.guestStoryWork.findMany({
-          where: { id: { in: matchedIds } },
-          select: { id: true },
-        });
-        if (survivors.length === 0) {
-          committedKeys = allKeys;
-          return;
-        }
-        const survivorIds = survivors.map((r: { id: number }) => r.id);
-        const survivorManifests = await tx.guestStoryAudioManifest.findMany({
-          where: { storyWorkId: { in: survivorIds } },
-          select: { id: true },
-        });
-        const survivorManifestIds = survivorManifests.map((r: { id: number }) => r.id);
-        let survivorKeys: string[] = [];
-        if (survivorManifestIds.length > 0) {
-          const survivorSegments = await tx.guestStoryAudioSegment.findMany({
-            where: { manifestId: { in: survivorManifestIds } },
-            select: { storageKey: true },
-          });
-          survivorKeys = survivorSegments.map((s: { storageKey: string }) => s.storageKey);
-        }
-        if (survivorKeys.length > 0) {
-          // M8-05-02 FIXUP fail-closed（见 User 分支）：prune 失败即 throw → 全事务 rollback。
-          await pruneSurvivorAudioTombstones(
-            tx as unknown as SurvivorPruneTx,
-            survivorKeys,
-          );
-          committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
-        } else {
-          committedKeys = allKeys;
-        }
-      });
-      if (committedKeys.length > 0) {
-        try {
-          await cleanupAudioStorageKeys(committedKeys);
-        } catch {
-          // best-effort：见 User 分支。
-        }
-      }
-      return { count: deletedCount };
-    } else {
-      // reason === 'retention'（Guest GC 统一 seam；primitive audio-aware 后自然获得正确 lifecycle）
-      const where = {
-        ...(options.where.id !== undefined ? { id: options.where.id } : {}),
-        ...(options.where.guestId !== undefined ? { guestId: options.where.guestId } : {}),
-        updatedAt: options.where.updatedAt,
-      };
-      let committedKeys: string[] = [];
-      let deletedCount = 0;
-      await prisma.$transaction(async (tx) => {
-        const matched = await tx.guestStoryWork.findMany({
-          where,
-          select: { id: true },
-        });
-        const matchedIds = matched.map((r: { id: number }) => r.id);
-        let allKeys: string[] = [];
-        if (matchedIds.length > 0) {
-          const manifests = await tx.guestStoryAudioManifest.findMany({
-            where: { storyWorkId: { in: matchedIds } },
-            select: { id: true },
-          });
-          const manifestIds = manifests.map((r: { id: number }) => r.id);
-          if (manifestIds.length > 0) {
-            const segments = await tx.guestStoryAudioSegment.findMany({
-              where: { manifestId: { in: manifestIds } },
-              select: { storageKey: true },
-            });
-            allKeys = segments.map((s: { storageKey: string }) => s.storageKey);
-          }
-          if (allKeys.length > 0) {
-            await enqueueAudioDeletionTombstones(
-              tx as unknown as Parameters<typeof enqueueAudioDeletionTombstones>[0],
-              allKeys,
-            );
-          }
-        }
-        if (options.testHooks?.__testInsideTransactionHook) {
-          await options.testHooks.__testInsideTransactionHook();
-        }
-        const deleteResult = await tx.guestStoryWork.deleteMany({ where });
-        deletedCount = deleteResult.count;
-        if (matchedIds.length === 0 || allKeys.length === 0) {
-          committedKeys = [];
-          return;
-        }
-        if (deletedCount >= matchedIds.length) {
-          committedKeys = allKeys;
-          return;
-        }
-        const survivors = await tx.guestStoryWork.findMany({
-          where: { id: { in: matchedIds } },
-          select: { id: true },
-        });
-        if (survivors.length === 0) {
-          committedKeys = allKeys;
-          return;
-        }
-        const survivorIds = survivors.map((r: { id: number }) => r.id);
-        const survivorManifests = await tx.guestStoryAudioManifest.findMany({
-          where: { storyWorkId: { in: survivorIds } },
-          select: { id: true },
-        });
-        const survivorManifestIds = survivorManifests.map((r: { id: number }) => r.id);
-        let survivorKeys: string[] = [];
-        if (survivorManifestIds.length > 0) {
-          const survivorSegments = await tx.guestStoryAudioSegment.findMany({
-            where: { manifestId: { in: survivorManifestIds } },
-            select: { storageKey: true },
-          });
-          survivorKeys = survivorSegments.map((s: { storageKey: string }) => s.storageKey);
-        }
-        if (survivorKeys.length > 0) {
-          // M8-05-02 FIXUP fail-closed（见 User 分支）：prune 失败即 throw → 全事务 rollback。
-          await pruneSurvivorAudioTombstones(
-            tx as unknown as SurvivorPruneTx,
-            survivorKeys,
-          );
-          committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
-        } else {
-          committedKeys = allKeys;
-        }
-      });
-      if (committedKeys.length > 0) {
-        try {
-          await cleanupAudioStorageKeys(committedKeys);
-        } catch {
-          // best-effort：见 User 分支。
-        }
-      }
-      return { count: deletedCount };
+  }
+
+  // COMMIT 后 best-effort cleanup 本批 tombstones（失败吞掉，由 tombstone retry 接管）
+  if (committedKeys.length > 0) {
+    try {
+      await cleanupAudioStorageKeys(committedKeys);
+    } catch {
+      // best-effort：永久删除已提交，绝不因此抛错回滚。
     }
   }
+  return { count: deletedCount };
+}
+
+/**
+ * M9-C1 Blocker 1：集合永久删除的 collection-aware physical-delete seam。
+ *
+ * 唯一语义：在同一 DB 原子边界内完成
+ * 「重验 Collection 仍属当前主体且仍在 trash → 固定全部成员 → audio tombstone →
+ *   删除全部成员（经 deleteUserTrashWorksInTx / deleteGuestTrashWorksInTx，禁止第二套裸删除）→
+ *   确认无 survivor → 才删除 Collection」。
+ *
+ * restore 竞态一律 fail closed：任一成员已恢复（deletedAt IS NULL）→ CONFLICT 并整事务 rollback；
+ * 绝不依赖 StoryWork.collection 的 FK cascade 删除成员（那会绕过 audio-aware seam）。
+ */
+export type PhysicalDeleteStoryCollectionOptions =
+  | {
+      target: 'user';
+      collectionId: string;
+      userId: number;
+      testHooks?: StoryWorkMutationTestHooks;
+    }
+  | {
+      target: 'guest';
+      collectionId: string;
+      guestId: string;
+      testHooks?: StoryWorkMutationTestHooks;
+    };
+
+export async function executeStoryCollectionPhysicalDelete(
+  options: PhysicalDeleteStoryCollectionOptions,
+): Promise<{ count: number }> {
+  let committedKeys: string[] = [];
+  let deletedCount = 0;
+
+  await prisma.$transaction(async (tx) => {
+    if (options.target === 'user') {
+      const collection = await tx.storyCollection.findFirst({
+        where: { id: options.collectionId, userId: options.userId },
+        select: { id: true, deletedAt: true },
+      });
+      if (!collection) throw new TRPCError({ code: 'NOT_FOUND', message: '作品集不存在' });
+      if (collection.deletedAt === null) {
+        throw new TRPCError({ code: 'CONFLICT', message: '仅允许对回收站中的作品集执行永久删除' });
+      }
+      const members = await tx.storyWork.findMany({
+        where: { collectionId: options.collectionId },
+        select: { id: true, deletedAt: true },
+      });
+      if (members.some((m) => m.deletedAt === null)) {
+        throw new TRPCError({ code: 'CONFLICT', message: '集合成员已恢复，永久删除已取消' });
+      }
+      const memberIds = members.map((m) => m.id);
+      if (memberIds.length > 0) {
+        const result = await deleteUserTrashWorksInTx(
+          tx as unknown as UserTrashDeleteTx,
+          { userId: options.userId, id: { in: memberIds }, deletedAt: { not: null } },
+          options.testHooks,
+        );
+        committedKeys = result.committedKeys;
+        deletedCount = result.deletedCount;
+        if (result.remainingIds.length > 0) {
+          throw new TRPCError({ code: 'CONFLICT', message: '集合成员已恢复，永久删除已取消' });
+        }
+      }
+      await tx.storyCollection.delete({ where: { id: options.collectionId } });
+      return;
+    }
+
+    const collection = await tx.guestStoryCollection.findFirst({
+      where: { id: options.collectionId, guestId: options.guestId },
+      select: { id: true, deletedAt: true },
+    });
+    if (!collection) throw new TRPCError({ code: 'NOT_FOUND', message: '作品集不存在' });
+    if (collection.deletedAt === null) {
+      throw new TRPCError({ code: 'CONFLICT', message: '仅允许对回收站中的作品集执行永久删除' });
+    }
+    const members = await tx.guestStoryWork.findMany({
+      where: { collectionId: options.collectionId },
+      select: { id: true, deletedAt: true },
+    });
+    if (members.some((m) => m.deletedAt === null)) {
+      throw new TRPCError({ code: 'CONFLICT', message: '集合成员已恢复，永久删除已取消' });
+    }
+    const memberIds = members.map((m) => m.id);
+    if (memberIds.length > 0) {
+      const result = await deleteGuestTrashWorksInTx(
+        tx as unknown as GuestTrashDeleteTx,
+        { guestId: options.guestId, id: { in: memberIds }, deletedAt: { not: null } },
+        options.testHooks,
+      );
+      committedKeys = result.committedKeys;
+      deletedCount = result.deletedCount;
+      if (result.remainingIds.length > 0) {
+        throw new TRPCError({ code: 'CONFLICT', message: '集合成员已恢复，永久删除已取消' });
+      }
+    }
+    await tx.guestStoryCollection.delete({ where: { id: options.collectionId } });
+  });
+
+  if (committedKeys.length > 0) {
+    try {
+      await cleanupAudioStorageKeys(committedKeys);
+    } catch {
+      // best-effort：集合永久删除已提交，绝不因此抛错回滚。
+    }
+  }
+  return { count: deletedCount };
 }
 
 /**

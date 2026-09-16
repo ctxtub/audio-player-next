@@ -88,6 +88,7 @@ function installStubs() {
         return [...m.segments].sort((a, b) => a.index - b.index).map((s) => s.text);
       },
       isCanonicalPlaybackUrl: (url: string) => typeof url === 'string' && url.startsWith('/api/audio/segments/'),
+      isSingleTrackPlaybackUrl: () => false,
     },
   } as unknown as NodeModule;
   // 真实 playbackSession 模块仅覆盖 promote（其余委托真实实现；本文件不调用其他 server 动作）。

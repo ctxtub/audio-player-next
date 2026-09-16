@@ -71,16 +71,20 @@ export function beginPromotion(
 }
 
 /**
- * 执行唯一 I/O：源快照 → adapter → 门面 create → StoryWorkDetailDTO。
+ * 执行唯一 I/O：源快照 + 当前会话归属 → adapter → collection.promoteArtifact → StoryWorkDetailDTO。
  * 错误（含 CONFLICT）原样上抛，绝不改写 sourceMessageId 或触发重生成。
+ *
+ * @param source 可 promotion 的 Artifact 源快照
+ * @param conversationId 当前 active 会话 id（会话级 promotion 归属证据）
  */
 export async function executePromotionCreate(
   source: PromotionSourceArtifact,
+  conversationId: string,
 ): Promise<StoryWorkDetailDTO> {
   if (createOverride) {
-    return promoteStoryArtifact(source, { create: createOverride });
+    return promoteStoryArtifact(source, { create: createOverride, conversationId });
   }
-  return promoteStoryArtifact(source);
+  return promoteStoryArtifact(source, { conversationId });
 }
 
 /**

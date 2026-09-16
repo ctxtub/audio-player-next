@@ -13,8 +13,7 @@ import assert from 'node:assert';
 import * as nextHeaders from 'next/headers';
 import { prisma } from '../../../lib/db';
 import { chatConversationRouter } from '../../../lib/trpc/routers/chatConversation';
-import { generationHistoryRouter } from '../../../lib/trpc/routers/generationHistory';
-import { promptHistoryRouter } from '../../../lib/trpc/routers/promptHistory';
+import { createStoryWorkForSubject } from '../../../lib/server/storyWork';
 import { authRouter } from '../../../lib/trpc/routers/auth';
 import { encodeSession } from '../../../lib/session';
 
@@ -36,13 +35,9 @@ async function runBrowserE2eHarnessTests() {
 
     // Tab A Router Callers
     const tabAChat = chatConversationRouter.createCaller(guestContext);
-    const tabAGen = generationHistoryRouter.createCaller(guestContext);
-    const tabAPrompt = promptHistoryRouter.createCaller(guestContext);
 
     // Tab B Router Callers (Simulating second tab in same browser)
     const tabBChat = chatConversationRouter.createCaller(guestContext);
-    const tabBGen = generationHistoryRouter.createCaller(guestContext);
-    const tabBPrompt = promptHistoryRouter.createCaller(guestContext);
 
     // --- Scenario 1: Tab A Creates Story & Prompts ---
     // M4-08：经 save 路径新建 storyCard 已被 provenance guard 禁止；Tab A 的旧故事卡
@@ -73,13 +68,15 @@ async function runBrowserE2eHarnessTests() {
         ],
     });
 
-    await tabAGen.record({
+    await createStoryWorkForSubject({ type: 'guest', id: browserGuestId }, {
         prompt: 'Ocean depths story',
         storyText: 'In the deep abyss, bioluminescent creatures glow.',
         voiceId: 'shimmer',
     });
 
-    await tabAPrompt.record({ prompt: 'Ocean depths story' });
+    await prisma.guestPromptHistory.create({
+        data: { guestId: browserGuestId, prompt: 'Ocean depths story', lastUsed: new Date(), useCount: 1 },
+    });
 
     // --- Scenario 2: Tab B Hydrates (Survives New Tab / Same Cookie) ---
     console.log('2. Tab B loads and retrieves Tab A creative records');
@@ -90,20 +87,19 @@ async function runBrowserE2eHarnessTests() {
     const assistantParts = tabBChatMessages[1].parts as Array<Record<string, unknown>>;
     assert.strictEqual(assistantParts[0].audioUrl, '', 'Tab B audioUrl must be empty (regenerated on click)');
 
-    const tabBWorks = await tabBGen.list();
-    assert.strictEqual(tabBWorks.length, 1, 'Tab B works history must contain story created in Tab A');
+    const tabBWorks = await prisma.guestStoryWork.findMany({ where: { guestId: browserGuestId } });
+    assert.strictEqual(tabBWorks.length, 1, 'Tab B works must contain story created in Tab A');
     assert.strictEqual(tabBWorks[0].prompt, 'Ocean depths story');
 
-    const tabBPrompts = await tabBPrompt.list();
-    assert.strictEqual(tabBPrompts.length, 1, 'Tab B prompt history must contain prompt from Tab A');
-    assert.strictEqual(tabBPrompts[0].prompt, 'Ocean depths story');
+    const tabBPrompts = await prisma.guestPromptHistory.findMany({ where: { guestId: browserGuestId } });
+    assert.strictEqual(tabBPrompts.length, 1, 'Tab B guest prompt rows persist (table retained until T4)');
 
     // --- Scenario 3: Page Reload in Tab A (F5 Simulation) ---
     console.log('3. Tab A page reload fetches server cloud records without local storage');
     const reloadedMessages = await tabAChat.getConversation();
     assert.strictEqual(reloadedMessages.length, 2, 'Reloaded chat preserves messages');
-    const reloadedWorks = await tabAGen.list();
-    assert.strictEqual(reloadedWorks.length, 1, 'Reloaded works preserves story');
+    const reloadedWorks = await prisma.guestStoryWork.count({ where: { guestId: browserGuestId } });
+    assert.strictEqual(reloadedWorks, 1, 'Reloaded works preserves story');
 
     // --- Scenario 4: Registration Transformation ---
     console.log('4. Guest registers new account, converting guest records to user account');
@@ -143,18 +139,19 @@ async function runBrowserE2eHarnessTests() {
         clientIp,
     };
     const authedChat = chatConversationRouter.createCaller(authedContext);
-    const authedGen = generationHistoryRouter.createCaller(authedContext);
-    const authedPrompt = promptHistoryRouter.createCaller(authedContext);
 
     const userMessages = await authedChat.getConversation();
     assert.strictEqual(userMessages.length, 2, 'Migrated user account has chat messages');
     assert.strictEqual(userMessages[1].content, 'In the deep abyss, bioluminescent creatures glow.');
 
-    const userWorks = await authedGen.list();
-    assert.strictEqual(userWorks.length, 1, 'Migrated user account has works history');
+    const userWorks = await prisma.storyWork.count({ where: { userId: registeredUser.id } });
+    assert.strictEqual(userWorks, 1, 'Migrated user account has works history');
 
-    const userPrompts = await authedPrompt.list();
-    assert.strictEqual(userPrompts.length, 1, 'Migrated user account has prompt history');
+    // M9-C1 T4：user PromptHistory 表已 contract 删除——“不迁移”语义升级为“表不存在”。
+    const userPromptTables = (await prisma.$queryRawUnsafe(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='PromptHistory'",
+    )) as Array<{ name: string }>;
+    assert.strictEqual(userPromptTables.length, 0, 'T4 contract 后 PromptHistory 表必须不存在');
 
     console.log('PASS: Browser E2E simulation harness successfully verified');
 }

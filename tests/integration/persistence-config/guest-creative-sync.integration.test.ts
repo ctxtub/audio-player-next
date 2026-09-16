@@ -19,15 +19,10 @@ import {
     saveConversationForSubject,
 } from '../../../lib/server/chatConversation';
 import {
-    listGenerationHistoryForSubject,
-    recordGenerationHistoryForSubject,
-    removeGenerationHistoryForSubject,
-} from '../../../lib/server/generationHistory';
-import {
-    listPromptHistoryForSubject,
-    recordPromptHistoryForSubject,
-    removePromptHistoryForSubject,
-} from '../../../lib/server/promptHistory';
+    createStoryWorkForSubject,
+    listStoryWorksForSubject,
+} from '../../../lib/server/storyWork';
+import type { Subject } from '../../../lib/server/subject';
 import { purgeExpiredGuestData } from '../../../lib/server/guestGc';
 import { migrateGuestCreativeRecordsToUser } from '../../../lib/server/unifiedMigration';
 import {
@@ -35,17 +30,67 @@ import {
     enforceProcedureRateLimit,
 } from '../../../lib/server/rateLimit';
 import { chatConversationRouter } from '../../../lib/trpc/routers/chatConversation';
-import { generationHistoryRouter } from '../../../lib/trpc/routers/generationHistory';
-import { promptHistoryRouter } from '../../../lib/trpc/routers/promptHistory';
+import { libraryRouter } from '../../../lib/trpc/routers/library';
 import { authRouter } from '../../../lib/trpc/routers/auth';
-import { createContext } from '../../../lib/trpc/context';
-import { encodeSession } from '../../../lib/session';
-
-const { usePromptHistoryStore } = nodeRequire('../../../stores/promptHistoryStore') as {
-    usePromptHistoryStore: typeof import('../../../stores/promptHistoryStore').usePromptHistoryStore;
-};
 
 process.env.SESSION_SECRET = 'test-secret-guest-creative-sync-12345';
+
+/**
+ * M9-C1 T2：generation/prompt history 服务已退役。
+ * 下列窄 helper 直接驱动持久层，保持与旧服务逐字段等价的真实语义：
+ * - storyWork 记录/列表/删除：createStoryWorkForSubject + prisma 直读直删；
+ * - Prompt History 的 upsert/useCount 递增由显式 DB 读写复刻（不再调用已删除服务）。
+ */
+async function listWorksForSubject(subject: Subject) {
+    if (subject.type === 'user') {
+        return prisma.storyWork.findMany({ where: { userId: subject.id } });
+    }
+    return prisma.guestStoryWork.findMany({ where: { guestId: subject.id } });
+}
+
+async function removeWorksForSubject(subject: Subject, workId: number): Promise<number> {
+    if (subject.type === 'user') {
+        const res = await prisma.storyWork.deleteMany({ where: { id: workId, userId: subject.id } });
+        return res.count;
+    }
+    const res = await prisma.guestStoryWork.deleteMany({ where: { id: workId, guestId: subject.id } });
+    return res.count;
+}
+
+// M9-C1 T4：user PromptHistory 表已 contract 删除，提示词 helper 仅保留 guest 侧
+// （GuestPromptHistory 因 guestGc 到期清理保留）；user 侧隔离改由聊天/作品覆盖。
+async function recordPromptForSubject(subject: Subject, prompt: string) {
+    if (subject.type === 'user') {
+        throw new Error('T4 contract 后 user 提示词历史表已不存在，不得再写入');
+    }
+    const existing = await prisma.guestPromptHistory.findUnique({
+        where: { guestId_prompt: { guestId: subject.id, prompt } },
+    });
+    if (existing) {
+        return prisma.guestPromptHistory.update({
+            where: { guestId_prompt: { guestId: subject.id, prompt } },
+            data: { useCount: { increment: 1 }, lastUsed: new Date() },
+        });
+    }
+    return prisma.guestPromptHistory.create({
+        data: { guestId: subject.id, prompt, lastUsed: new Date(), useCount: 1 },
+    });
+}
+
+async function listPromptsForSubject(subject: Subject) {
+    if (subject.type === 'user') {
+        throw new Error('T4 contract 后 user 提示词历史表已不存在，不得再读取');
+    }
+    return prisma.guestPromptHistory.findMany({ where: { guestId: subject.id } });
+}
+
+async function removePromptForSubject(subject: Subject, prompt: string): Promise<number> {
+    if (subject.type === 'user') {
+        throw new Error('T4 contract 后 user 提示词历史表已不存在，不得再删除');
+    }
+    const res = await prisma.guestPromptHistory.deleteMany({ where: { guestId: subject.id, prompt } });
+    return res.count;
+}
 
 async function runGuestCreativeSyncTests() {
     console.log('=== 1. Testing Guest Creative Records CRUD & Reload ===');
@@ -120,8 +165,8 @@ async function runGuestCreativeSyncTests() {
     assert.strictEqual(parsedParts[0].audioUrl, '', 'audioUrl MUST be sanitized to empty string in DB');
     assert.strictEqual(parsedParts[0].storyText, 'Once upon a time in a magical forest...');
 
-    // 1.2 Generation History Record, List, and Remove
-    const recordedGen = await recordGenerationHistoryForSubject(
+    // 1.2 Story Work Record, List, and Remove
+    const recordedGen = await createStoryWorkForSubject(
         { type: 'guest', id: guestId1 },
         { prompt: 'Story about a robot', storyText: 'The robot learned to paint.', voiceId: 'onyx' }
     );
@@ -129,29 +174,31 @@ async function runGuestCreativeSyncTests() {
     assert.strictEqual(recordedGen.storyText, 'The robot learned to paint.');
     assert.strictEqual(recordedGen.voiceId, 'onyx');
 
-    const genList = await listGenerationHistoryForSubject({ type: 'guest', id: guestId1 });
-    assert.strictEqual(genList.length, 1, 'Should list 1 generation record');
+    const genList = await listWorksForSubject({ type: 'guest', id: guestId1 });
+    assert.strictEqual(genList.length, 1, 'Should list 1 story work record');
     assert.strictEqual(genList[0].id, recordedGen.id);
 
-    await removeGenerationHistoryForSubject({ type: 'guest', id: guestId1 }, recordedGen.id);
-    const genListAfterRemove = await listGenerationHistoryForSubject({ type: 'guest', id: guestId1 });
-    assert.strictEqual(genListAfterRemove.length, 0, 'Generation record should be removed');
+    const genRemoveCount = await removeWorksForSubject({ type: 'guest', id: guestId1 }, recordedGen.id);
+    assert.strictEqual(genRemoveCount, 1, 'Scoped story work removal must delete exactly 1 row');
+    const genListAfterRemove = await listWorksForSubject({ type: 'guest', id: guestId1 });
+    assert.strictEqual(genListAfterRemove.length, 0, 'Story work record should be removed');
 
     // 1.3 Prompt History Record (Upsert & UseCount), List, and Remove
-    const promptRecord1 = await recordPromptHistoryForSubject({ type: 'guest', id: guestId1 }, 'Magic carpet adventure');
+    const promptRecord1 = await recordPromptForSubject({ type: 'guest', id: guestId1 }, 'Magic carpet adventure');
     assert.strictEqual(promptRecord1.prompt, 'Magic carpet adventure');
     assert.strictEqual(promptRecord1.useCount, 1);
 
     // Second record of same prompt increments useCount
-    const promptRecord2 = await recordPromptHistoryForSubject({ type: 'guest', id: guestId1 }, 'Magic carpet adventure');
+    const promptRecord2 = await recordPromptForSubject({ type: 'guest', id: guestId1 }, 'Magic carpet adventure');
     assert.strictEqual(promptRecord2.useCount, 2, 'useCount should increment to 2 on reuse');
 
-    const promptList = await listPromptHistoryForSubject({ type: 'guest', id: guestId1 });
+    const promptList = await listPromptsForSubject({ type: 'guest', id: guestId1 });
     assert.strictEqual(promptList.length, 1);
     assert.strictEqual(promptList[0].useCount, 2);
 
-    await removePromptHistoryForSubject({ type: 'guest', id: guestId1 }, 'Magic carpet adventure');
-    const promptListAfterRemove = await listPromptHistoryForSubject({ type: 'guest', id: guestId1 });
+    const promptRemoveCount = await removePromptForSubject({ type: 'guest', id: guestId1 }, 'Magic carpet adventure');
+    assert.strictEqual(promptRemoveCount, 1, 'Prompt removal must delete exactly 1 row');
+    const promptListAfterRemove = await listPromptsForSubject({ type: 'guest', id: guestId1 });
     assert.strictEqual(promptListAfterRemove.length, 0, 'Prompt record should be removed');
 
     console.log('PASS: Guest creative records CRUD, reload, and audioUrl exclusion verified');
@@ -170,37 +217,39 @@ async function runGuestCreativeSyncTests() {
     await saveConversationForSubject({ type: 'guest', id: guestA }, [
         { messageId: 'msg_a', role: 'user', content: 'Secret of Guest A' },
     ]);
-    await recordGenerationHistoryForSubject({ type: 'guest', id: guestA }, {
+    await createStoryWorkForSubject({ type: 'guest', id: guestA }, {
         prompt: 'Prompt A',
         storyText: 'Story A',
     });
-    await recordPromptHistoryForSubject({ type: 'guest', id: guestA }, 'Prompt A');
+    await recordPromptForSubject({ type: 'guest', id: guestA }, 'Prompt A');
 
     // Populate data for User C
     await saveConversationForSubject({ type: 'user', id: userIdC }, [
         { messageId: 'msg_c', role: 'user', content: 'Secret of User C' },
     ]);
-    await recordGenerationHistoryForSubject({ type: 'user', id: userIdC }, {
+    await createStoryWorkForSubject({ type: 'user', id: userIdC }, {
         prompt: 'Prompt C',
         storyText: 'Story C',
     });
-    await recordPromptHistoryForSubject({ type: 'user', id: userIdC }, 'Prompt C');
+    // M9-C1 T4：user PromptHistory 表已 contract 删除，不再为 User C 造提示词行；
+    // 跨主体隔离仍由聊天/作品断言覆盖。
 
     // Query as Guest B (empty)
     const chatB = await getConversationForSubject({ type: 'guest', id: guestB });
-    const genB = await listGenerationHistoryForSubject({ type: 'guest', id: guestB });
-    const promptB = await listPromptHistoryForSubject({ type: 'guest', id: guestB });
+    const genB = await listWorksForSubject({ type: 'guest', id: guestB });
+    const promptB = await listPromptsForSubject({ type: 'guest', id: guestB });
     assert.strictEqual(chatB.length, 0, 'Guest B must not see any messages');
-    assert.strictEqual(genB.length, 0, 'Guest B must not see any generation history');
+    assert.strictEqual(genB.length, 0, 'Guest B must not see any story work history');
     assert.strictEqual(promptB.length, 0, 'Guest B must not see any prompt history');
 
-    // Attempting unauthorized removal across subjects: Guest B trying to delete Guest A's generation
-    const genA = await listGenerationHistoryForSubject({ type: 'guest', id: guestA });
+    // Attempting unauthorized removal across subjects: Guest B trying to delete Guest A's story work
+    const genA = await listWorksForSubject({ type: 'guest', id: guestA });
     assert.strictEqual(genA.length, 1);
-    await removeGenerationHistoryForSubject({ type: 'guest', id: guestB }, genA[0].id);
+    const crossRemoveCount = await removeWorksForSubject({ type: 'guest', id: guestB }, genA[0].id);
+    assert.strictEqual(crossRemoveCount, 0, 'Cross-subject removal must affect 0 rows');
 
     // Guest A's record must still exist
-    const genAAfterIllegalRemove = await listGenerationHistoryForSubject({ type: 'guest', id: guestA });
+    const genAAfterIllegalRemove = await listWorksForSubject({ type: 'guest', id: guestA });
     assert.strictEqual(genAAfterIllegalRemove.length, 1, 'Guest A record must survive cross-subject remove attempt');
 
     console.log('PASS: Strict multi-subject isolation verified');
@@ -213,22 +262,17 @@ async function runGuestCreativeSyncTests() {
         clientIp: '127.0.0.1',
     };
     const chatCallerAnon = chatConversationRouter.createCaller(anonCtx);
-    const genCallerAnon = generationHistoryRouter.createCaller(anonCtx);
-    const promptCallerAnon = promptHistoryRouter.createCaller(anonCtx);
+    const libraryCallerAnon = libraryRouter.createCaller(anonCtx);
 
     await assert.rejects(
         async () => { await chatCallerAnon.getConversation(); },
         (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED'
     );
     await assert.rejects(
-        async () => { await genCallerAnon.list(); },
+        async () => { await libraryCallerAnon.list(); },
         (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED'
     );
-    await assert.rejects(
-        async () => { await promptCallerAnon.list(); },
-        (err: unknown) => err instanceof TRPCError && err.code === 'UNAUTHORIZED'
-    );
-    console.log('PASS: Anonymous callers received 401 UNAUTHORIZED on all creative routers');
+    console.log('PASS: Anonymous callers received 401 UNAUTHORIZED on creative routers');
 
     console.log('=== 4. Testing Hard Caps Enforcement ===');
     const guestCap = `g_cap_${Date.now()}`;
@@ -249,24 +293,25 @@ async function runGuestCreativeSyncTests() {
     assert.strictEqual(cappedChat[0].messageId, 'msg_21', 'Oldest messages beyond 100 should be truncated');
     assert.strictEqual(cappedChat[99].messageId, 'msg_120', 'Newest message must be preserved');
 
-    // 4.2 Generation History Cutover (No cap / Permanently retained, M2-07)
+    // 4.2 Story Work Cutover (No cap / Permanently retained, M2-07)
     for (let i = 1; i <= 105; i++) {
-        await recordGenerationHistoryForSubject(
+        await createStoryWorkForSubject(
             { type: 'guest', id: guestCap },
             { prompt: `Prompt ${i}`, storyText: `Story ${i}` }
         );
     }
     const genCount = await prisma.guestStoryWork.count({ where: { guestId: guestCap } });
-    assert.strictEqual(genCount, 105, 'Guest generation history must not be capped; all 105 records retained in DB');
+    assert.strictEqual(genCount, 105, 'Guest story works must not be capped; all 105 records retained in DB');
     const firstGen = await prisma.guestStoryWork.findFirst({
         where: { guestId: guestCap, prompt: 'Prompt 1' },
     });
-    assert(firstGen !== null, 'First generation record must still exist after 105 writes');
+    assert(firstGen !== null, 'First story work record must still exist after 105 writes');
 
-    const genList50 = await listGenerationHistoryForSubject({ type: 'guest', id: guestCap });
-    assert.strictEqual(genList50.length, 50, 'listGenerationHistoryForSubject must return at most 50 display records');
+    const cappedWorks = await listStoryWorksForSubject({ type: 'guest', id: guestCap }, { limit: 50 });
+    assert.strictEqual(cappedWorks.items.length, 50, 'library.list must return at most 50 display records');
+    assert.strictEqual(cappedWorks.hasMore, true, '105 works must report hasMore on a 50-item page');
 
-    console.log('PASS: Chat cap (<= 100) and generation history no-cap cutover (105 retained) verified');
+    console.log('PASS: Chat cap (<= 100) and story work no-cap cutover (105 retained) verified');
 
     console.log('=== 5. Testing 30-Day GC Selection Predicate ===');
     const guestExpired = `g_expired_${Date.now()}`;
@@ -315,11 +360,11 @@ async function runGuestCreativeSyncTests() {
     await saveConversationForSubject({ type: 'guest', id: guestActive }, [
         { messageId: 'm_act', role: 'user', content: 'active message' },
     ]);
-    await recordGenerationHistoryForSubject({ type: 'guest', id: guestActive }, {
+    await createStoryWorkForSubject({ type: 'guest', id: guestActive }, {
         prompt: 'active prompt',
         storyText: 'active story',
     });
-    await recordPromptHistoryForSubject({ type: 'guest', id: guestActive }, 'active prompt');
+    await recordPromptForSubject({ type: 'guest', id: guestActive }, 'active prompt');
 
     // Execute GC purge
     const purgeResult = await purgeExpiredGuestData();
@@ -404,12 +449,12 @@ async function runGuestCreativeSyncTests() {
             isOneShot: false,
         },
     });
-    await recordGenerationHistoryForSubject({ type: 'guest', id: guestMigrate }, {
+    await createStoryWorkForSubject({ type: 'guest', id: guestMigrate }, {
         prompt: 'Guest story 1',
         storyText: 'Guest text 1',
         voiceId: 'alloy',
     });
-    await recordPromptHistoryForSubject({ type: 'guest', id: guestMigrate }, 'Guest prompt 1');
+    await recordPromptForSubject({ type: 'guest', id: guestMigrate }, 'Guest prompt 1');
     // 迁移前快照（逐字段保真比对基线）
     const guestChatBefore = await prisma.guestChatMessage.findMany({
         where: { guestId: guestMigrate },
@@ -417,7 +462,7 @@ async function runGuestCreativeSyncTests() {
     });
     assert.strictEqual(guestChatBefore.length, 6, '前置：访客聊天应为 6 条');
     const guestGensBefore = await prisma.guestStoryWork.findMany({ where: { guestId: guestMigrate } });
-    assert.strictEqual(guestGensBefore.length, 1, '前置：访客生成历史应为 1 条');
+    assert.strictEqual(guestGensBefore.length, 1, '前置：访客作品历史应为 1 条');
 
     // 6.1 Successful Registration Migration
     const cookieJar = new Map<string, string>();
@@ -453,11 +498,15 @@ async function runGuestCreativeSyncTests() {
             config: true,
             chatMessages: { orderBy: { position: 'asc' } },
             storyWorks: true,
-            promptHistory: true,
             playbackAnchor: true,
         },
     });
     assert(newUser !== null, 'New user must exist');
+
+    // M9-C1 T2：直接驱动迁移服务取得返回值，验证 promptsMigrated 恒为 0（幂等二次调用，不复制提示词）。
+    const migrateResult = await migrateGuestCreativeRecordsToUser(guestMigrate, newUser.id);
+    assert.strictEqual(migrateResult.promptsMigrated, 0, 'Prompt History 退役：迁移返回值 must be 0');
+
     assert(newUser.config !== null, 'UserConfig must be migrated');
     assert.strictEqual(newUser.config.defaultSleepTimerMinutes, 45);
     assert.strictEqual(newUser.config.speed, 1.5, 'speed must be migrated from guest');
@@ -488,7 +537,7 @@ async function runGuestCreativeSyncTests() {
     assert.strictEqual(newUser.playbackAnchor.totalParagraphs, 4, 'totalParagraphs 保真');
     assert.strictEqual(newUser.playbackAnchor.sourceId, 'gm_2', 'sourceId 保真');
     assert.strictEqual(newUser.playbackAnchor.contentHash, 'migratehash12345', 'contentHash 保真');
-    assert.strictEqual(newUser.storyWorks.length, 1, '1 GenerationHistory must be migrated');
+    assert.strictEqual(newUser.storyWorks.length, 1, '1 StoryWork must be migrated');
     assert.strictEqual(newUser.storyWorks[0].prompt, 'Guest story 1');
     assert.strictEqual(newUser.storyWorks[0].storyText, 'Guest text 1');
     assert.strictEqual(
@@ -496,14 +545,14 @@ async function runGuestCreativeSyncTests() {
         String(guestGensBefore[0].createdAt ?? ''),
         'generation createdAt 保真',
     );
-    assert.strictEqual(newUser.promptHistory.length, 1, '1 PromptHistory must be migrated');
-    assert.strictEqual(newUser.promptHistory[0].prompt, 'Guest prompt 1');
-    // no-duplicate-rows: 用户侧计数与访客侧计数精确 parity
+    // M9-C1 T4：user PromptHistory 表已 contract 删除（表不存在即 0 行语义的终极形态，
+    // 表级断言见 prompt-history-contract 套件）；此处仅保留 Guest 原行不断言。
+    // no-duplicate-rows: 用户侧计数与访客侧计数精确 parity（Prompt 侧已停迁移，Guest 原行保留）
     assert.strictEqual(newUser.chatMessages.length, guestChatBefore.length, 'no-duplicate-rows: 聊天计数 parity');
     const guestGenCount = await prisma.guestStoryWork.count({ where: { guestId: guestMigrate } });
     const guestPromptCount = await prisma.guestPromptHistory.count({ where: { guestId: guestMigrate } });
-    assert.strictEqual(newUser.storyWorks.length, guestGenCount, 'no-duplicate-rows: 生成计数 parity');
-    assert.strictEqual(newUser.promptHistory.length, guestPromptCount, 'no-duplicate-rows: 提示词计数 parity');
+    assert.strictEqual(newUser.storyWorks.length, guestGenCount, 'no-duplicate-rows: 作品计数 parity');
+    assert.strictEqual(guestPromptCount, 1, 'Prompt History 停迁移后 Guest 原行保留（不做物理删除）');
     // 注册即登录（SESSION cookie 签发）
     assert(cookieJar.has('auth'), '注册成功应签发 SESSION(auth) cookie');
 
@@ -523,7 +572,7 @@ async function runGuestCreativeSyncTests() {
     await saveConversationForSubject({ type: 'guest', id: guestRollback }, [
         { messageId: 'rb_m1', role: 'user', content: 'Rollback message' },
     ]);
-    await recordGenerationHistoryForSubject({ type: 'guest', id: guestRollback }, {
+    await createStoryWorkForSubject({ type: 'guest', id: guestRollback }, {
         prompt: 'Rollback story',
         storyText: 'Rollback text',
     });
@@ -655,46 +704,10 @@ async function runGuestCreativeSyncTests() {
 
     console.log('PASS: Dual-dimension (guestId + IP) rate limit guards verified');
 
-    console.log('=== 9. Testing LocalStorage Exception & Prompt History Cleanliness ===');
-    const storageMap = new Map<string, string>();
-    const mockStorage: Storage = {
-        getItem: (k: string) => storageMap.get(k) ?? null,
-        setItem: (k: string, v: string) => { storageMap.set(k, String(v)); },
-        removeItem: (k: string) => { storageMap.delete(k); },
-        clear: () => { storageMap.clear(); },
-        key: (index: number) => Array.from(storageMap.keys())[index] ?? null,
-        get length() { return storageMap.size; },
-    };
-
-    const originalWindow = (globalThis as Record<string, unknown>).window;
-    (globalThis as Record<string, unknown>).window = { localStorage: mockStorage };
-
-    try {
-        // Pre-populate old legacy localStorage
-        mockStorage.setItem('prompt-history-store', JSON.stringify({ recordsMap: { test: { prompt: 'legacy' } } }));
-        mockStorage.setItem('theme-mode', 'dark');
-
-        // Trigger promptHistoryStore reset / hydrate
-        usePromptHistoryStore.getState().reset();
-
-        assert.strictEqual(
-            mockStorage.getItem('prompt-history-store'),
-            null,
-            'prompt-history-store MUST be removed from localStorage'
-        );
-        assert.strictEqual(
-            mockStorage.getItem('theme-mode'),
-            'dark',
-            'theme-mode MUST remain untouched as sole localStorage exception'
-        );
-    } finally {
-        if (originalWindow === undefined) {
-            delete (globalThis as Record<string, unknown>).window;
-        } else {
-            (globalThis as Record<string, unknown>).window = originalWindow;
-        }
-    }
-    console.log('PASS: Theme-only localStorage contract and prompt-history-store purge verified');
+    console.log('=== 9. LocalStorage Prompt History Key Retired ===');
+    // M9-C1 T2：promptHistoryStore 及其 localStorage key 'prompt-history-store' 已随 store 退役删除；
+    // 该 key 的清理路径已不存在，本节不再保留 purge 断言（拒绝以弱化断言替代真实覆盖）。
+    console.log('PASS: prompt-history-store retired with the store (no purge path left to assert)');
 }
 
 const testPromise = runGuestCreativeSyncTests()

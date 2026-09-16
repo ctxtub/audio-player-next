@@ -2,8 +2,12 @@
 
 .libraryPage {
   padding: var(--page-padding);
-  /* M6-03：消费统一 BottomChrome 预留（Mini 出现时最后 Card 可滚到 Mini 之上）。 */
-  padding-bottom: calc(var(--bottom-chrome-safe-bottom, var(--tab-bar-safe-bottom, 80px)) + var(--space-6));
+  /* M9-C1 T4：直接消费 MainChrome 三占位变量（TabBar/Mini/gap），动态跟随 Mini 显隐；
+   * 回退链保证旧变量环境仍可用；预留走容器 padding，禁止末卡固定 margin。 */
+  padding-bottom: calc(
+    var(--main-tabbar-occupied-height, var(--bottom-chrome-safe-bottom, var(--tab-bar-safe-bottom, 80px))) +
+      var(--mini-player-occupied-height, 0px) + var(--bottom-chrome-gap, 0px) + var(--space-6)
+  );
   flex: 1;
   display: flex;
   flex-direction: column;

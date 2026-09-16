@@ -102,7 +102,7 @@ type ChatMsg = ReturnType<typeof useChatStore.getState>['messages'][number];
 
 function resetBaseline(): void {
   useChatStore.getState().reset();
-  useChatStore.setState({ syncEnabled: false });
+  useChatStore.setState({ syncEnabled: false, conversationId: 'conv-unit-test', collectionId: null, collectionTitle: null });
   createCalls = [];
   pendingCreates = [];
 }

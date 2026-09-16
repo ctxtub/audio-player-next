@@ -65,12 +65,17 @@ import { useChatStore } from '@/stores/chatStore';
 import { useConfigStore } from '@/stores/configStore';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
 import {
+  ensureAsset as ensureCanonicalAsset,
   ensureSegment as ensureCanonicalSegment,
   getPlaybackManifest as fetchPlaybackManifest,
   isCanonicalPlaybackUrl,
+  isSingleTrackPlaybackUrl,
+  saveProgress as saveSingleTrackProgress,
   selectWorkParagraphs,
   shouldUseCanonicalAudio,
 } from '@/lib/client/storyAudio';
+import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
+import { SINGLE_TRACK_PROGRESS_THROTTLE_MS } from '@/lib/audio/asset';
 import {
   resolvePlaybackDraftSnapshot,
   type PlaybackDraftSnapshot,
@@ -116,6 +121,10 @@ interface PlaybackSessionState {
   lastSavedKey: string | null;
   /** hydration 纪元（每次 init 自增，过期 resolve 丢弃）。 */
   hydrationEpoch: number;
+  /** T3 单轨服务端恢复位（positionMs；duration 已知后一次性 seek）。 */
+  singleTrackResumePositionMs: number | null;
+  /** T3 单轨恢复位是否已应用（防重复 seek）。 */
+  singleTrackResumeSeekApplied: boolean;
 }
 
 interface PlaybackSessionActions {
@@ -180,6 +189,16 @@ interface PlaybackSessionActions {
   cancelDeferredCheckpoint: () => void;
   saveCheckpointDebounced: (options?: { forceReset?: boolean }) => void;
   saveCheckpointImmediate: (options?: { forceReset?: boolean }) => Promise<void>;
+  /**
+   * T3 单轨：duration 已知（loadedmetadata/timeupdate）后把服务端 positionMs 应用到
+   * transport（仅一次；duration=0 时 no-op，等待元数据）。
+   */
+  applyPendingSingleTrackResume: (durationSeconds: number) => void;
+  /**
+   * T3 单轨：把 transport 当前位置写入 server（client 侧 10s 节流 + 单调守卫；
+   * `force` 用于暂停/完播等关键点，server 端仍做 clamp/单调/节流二次保证）。
+   */
+  persistSingleTrackProgress: (options?: { force?: boolean }) => Promise<void>;
   clearSession: () => Promise<void>;
   stop: () => void;
   reset: () => void;
@@ -244,12 +263,17 @@ const INITIAL_SESSION_STATE: PlaybackSessionState = {
   prefetchingIndex: null,
   lastSavedKey: null,
   hydrationEpoch: 0,
+  singleTrackResumePositionMs: null,
+  singleTrackResumeSeekApplied: false,
 };
 
 let debounceSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let prefetchAbortController: AbortController | null = null;
 let initPromise: Promise<boolean> | null = null;
 let hydrationEpochCounter = 0;
+/** T3 单轨进度 client 侧节流/去重（server 端仍二次 clamp/单调/节流）。 */
+let lastSingleTrackPersistMs = 0;
+let lastSingleTrackPersistPositionMs = -1;
 
 const clearDebounceTimer = () => {
   if (debounceSaveTimer) {
@@ -272,10 +296,11 @@ const abortPrefetch = () => {
  */
 const CANONICAL_ENSURE_MAX_ATTEMPTS = 20;
 
-/** 仅 blob: 才 revoke（canonical /api/audio/segments/* 永不 revoke，spec §19）。 */
+/** 仅 blob: 才 revoke（canonical segment 与 T3 单轨 /api/audio/assets/* 永不 revoke）。 */
 function revokeAudioUrlIfBlob(url: string | null): void {
   if (typeof url !== 'string' || url.length === 0) return;
   if (isCanonicalPlaybackUrl(url)) return;
+  if (isSingleTrackPlaybackUrl(url)) return;
   if (!url.startsWith('blob:')) return;
   try {
     URL.revokeObjectURL(url);
@@ -315,6 +340,35 @@ async function fetchCanonicalAudioUrlWithRetry(
   sessionId: string,
   options?: { signal?: AbortSignal },
 ): Promise<string> {
+  // T3：单轨开关开启时整篇只物化一个 Asset，任意段落索引都返回同一 URL。
+  if (isSingleTrackAudioEnabled()) {
+    let singleAttempts = 0;
+    for (;;) {
+      singleAttempts += 1;
+      const output = await ensureCanonicalAsset({ workId, sessionId });
+      if (output.status === 'ready') {
+        // T3：服务端 positionMs 作为待恢复位，等 duration 已知后一次性 seek。
+        try {
+          usePlaybackSessionStore.setState({
+            singleTrackResumePositionMs:
+              typeof output.asset.positionMs === 'number' ? output.asset.positionMs : null,
+            singleTrackResumeSeekApplied: false,
+          });
+        } catch {
+          // store 尚未就绪（理论不可达）时忽略恢复位，不影响播放。
+        }
+        return output.asset.playbackUrl;
+      }
+      if (singleAttempts >= CANONICAL_ENSURE_MAX_ATTEMPTS) {
+        throw new Error('canonical single-track preparing timeout');
+      }
+      if (options?.signal?.aborted) throw new Error('canonical prefetch aborted');
+      const retryAfter =
+        typeof output.retryAfterMs === 'number' ? output.retryAfterMs : 500;
+      await sleepMs(Math.max(0, Math.min(retryAfter, 2000)), options?.signal);
+      if (options?.signal?.aborted) throw new Error('canonical prefetch aborted');
+    }
+  }
   let attempts = 0;
   for (;;) {
     attempts += 1;
@@ -623,6 +677,12 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
     if (get().hydrationEpoch !== epochAtStart) return false;
 
+    // T3 单轨切曲 seam（真实路径）：覆盖 source 之前，先把「即将离开」的旧作品
+    // positionMs 强制落库。beginPlayback / restart / 自动续写切 Work 均经 hydrateFromAnchor；
+    // force 绕过 client 10s 节流，server clamp/单调/节流二次保证不变；
+    // 初次水合（无旧 source）或 duration 未知时内部早退，幂等无害。
+    void get().persistSingleTrackProgress({ force: true });
+
     // —— §25.5 最终状态：status=ready + transport idle，不 autoplay ——
     set({
       sessionId: anchor.sessionId,
@@ -755,6 +815,11 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
             })(),
           });
 
+    // T3 单轨切曲 seam：覆盖 source 之前，先把「即将离开」的旧作品 positionMs 强制落库
+    //（force 绕过客户端 10s 节流；server clamp/单调/节流二次保证不变）。
+    // 同一作品重水合时幂等无害；无 duration/无旧 source 时内部早退。
+    void get().persistSingleTrackProgress({ force: true });
+
     set({
       sessionId: params.sessionId ?? null,
       source: params.source.kind === 'draft'
@@ -873,7 +938,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     try {
       if (
         state.source?.kind === 'work' &&
-        shouldUseCanonicalAudio(state.source) &&
+        (shouldUseCanonicalAudio(state.source) || isSingleTrackAudioEnabled()) &&
         typeof originatingSessionId === 'string' &&
         isValidPlaybackSessionId(originatingSessionId)
       ) {
@@ -949,6 +1014,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   prefetchNextParagraph: async (paragraphIndex) => {
     const state = get();
+    // T3 单轨：整篇已是一个 Asset，无“下一段”可预取（同一 URL 已缓存）。
+    if (isSingleTrackAudioEnabled()) return;
     if (paragraphIndex !== state.nextParagraphIndex + 1) return;
     if (paragraphIndex >= state.paragraphs.length) return;
     if (!usePlaybackStore.getState().isPlaying) return;
@@ -974,7 +1041,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     try {
       if (
         state.source?.kind === 'work' &&
-        shouldUseCanonicalAudio(state.source) &&
+        (shouldUseCanonicalAudio(state.source) || isSingleTrackAudioEnabled()) &&
         typeof originatingSessionId === 'string' &&
         isValidPlaybackSessionId(originatingSessionId)
       ) {
@@ -1009,6 +1076,28 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   handleParagraphEnded: async (): Promise<boolean> => {
     const state = get();
+    // T3 单轨：整篇是一条时间轴，audio ended 即整 Work 完播；绝不按段落推进导致整轨重放。
+    if (isSingleTrackAudioEnabled()) {
+      // 完播前强制落库最终 positionMs（server 端据此置 completedAt）。
+      await get().persistSingleTrackProgress({ force: true });
+      set({
+        lastCompletedParagraphIndex: Math.max(0, state.totalParagraphs - 1),
+        nextParagraphIndex: state.totalParagraphs,
+        status: 'ended',
+      });
+      try {
+        if (state.sessionId) await completePlaybackSession({ sessionId: state.sessionId });
+      } catch (err) {
+        console.warn('[playbackSessionStore] completeSession failed', err);
+      }
+      set({ sleepTimerMode: 'off' });
+      try {
+        usePlaybackStore.getState().setSleepTimerState('off', null, null);
+      } catch {
+        // transport 同步失败不阻断完播返回。
+      }
+      return false;
+    }
     // M8-04 FIXUP-4 fail-closed（Manifest unknown → 绝不以 Draft 切分冒充 Work Manifest SSOT）：
     // status=error 时当前 Blob 可自然播完，到 ended 事件时停止：不推进 next、不 checkpoint、
     // 不 fetchAudio、不 ensureSegment、不清 Session；等 hydrate/retry 恢复可信 Manifest SSOT。
@@ -1043,6 +1132,54 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     abortPrefetch();
     set({ status: 'paused' });
     get().saveCheckpointDebounced({ forceReset: false });
+    // T3：暂停时强制落库单轨 positionMs（server 端 clamp/单调/节流仍生效）。
+    void get().persistSingleTrackProgress({ force: true });
+  },
+
+  applyPendingSingleTrackResume: (durationSeconds) => {
+    const state = get();
+    if (state.singleTrackResumePositionMs === null || state.singleTrackResumeSeekApplied) {
+      return;
+    }
+    if (!(durationSeconds > 0)) return; // 等待 loadedmetadata
+    set({ singleTrackResumeSeekApplied: true });
+    const targetSeconds = Math.max(
+      0,
+      Math.min(state.singleTrackResumePositionMs / 1000, durationSeconds),
+    );
+    try {
+      usePlaybackStore.getState().seekAudio(targetSeconds);
+    } catch (err) {
+      console.warn('[playbackSessionStore] apply single-track resume failed', err);
+    }
+  },
+
+  persistSingleTrackProgress: async (options) => {
+    const state = get();
+    if (!isSingleTrackAudioEnabled()) return;
+    if (!state.sessionId || !state.source || state.source.kind !== 'work') return;
+    const transport = usePlaybackStore.getState();
+    const durationSeconds = Number.isFinite(transport.duration) ? transport.duration : 0;
+    if (!(durationSeconds > 0)) return;
+    const positionMs = Math.max(0, Math.round(transport.currentTime * 1000));
+    const nowMs = Date.now();
+    if (!options?.force) {
+      if (nowMs - lastSingleTrackPersistMs < SINGLE_TRACK_PROGRESS_THROTTLE_MS) return;
+      if (Math.abs(positionMs - lastSingleTrackPersistPositionMs) < 1000) return;
+    }
+    lastSingleTrackPersistMs = nowMs;
+    lastSingleTrackPersistPositionMs = positionMs;
+    try {
+      await saveSingleTrackProgress({
+        workId: state.source.workId,
+        sessionId: state.sessionId,
+        positionMs,
+        durationMs: Math.round(durationSeconds * 1000),
+        force: options?.force ?? false,
+      });
+    } catch (err) {
+      console.warn('[playbackSessionStore] persist single-track progress failed', err);
+    }
   },
 
   restart: async () => {
@@ -1412,6 +1549,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
   reset: () => {
     clearDebounceTimer();
     abortPrefetch();
+    lastSingleTrackPersistMs = 0;
+    lastSingleTrackPersistPositionMs = -1;
     const epoch = get().hydrationEpoch;
     set({ ...INITIAL_SESSION_STATE, hydrationEpoch: epoch });
   },

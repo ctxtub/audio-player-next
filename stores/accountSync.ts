@@ -1,6 +1,8 @@
 /**
- * 账号数据同步机制：四块上云数据（应用配置 / 提示词历史 / 生成历史 / 单会话聊天）
+ * 账号数据同步机制：三块上云数据（应用配置 / 单会话聊天 / 播放会话）
  * 「登录初始化 + 登出清理」编排的唯一事实源。
+ *
+ * M9-C1 T2：Prompt/Generation History 已前后端退役，不再参与账号同步。
  *
  * - 登录/访客初始化由 AccountSyncProvider 调度（带渲染门）。
  * - 登出/会话失效清理键于 authStore 的 isLogin 下降沿自动触发（401/会话过期复用，零额外接线）。
@@ -8,11 +10,11 @@
 
 import { useAuthStore } from '@/stores/authStore';
 import { useConfigStore } from '@/stores/configStore';
-import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
-import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
 import { useChatStore } from '@/stores/chatStore';
+import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
+import { cancelPendingNextWork } from '@/app/services/continuousCreationFlow';
 
 /**
  * 参与账号数据同步的一块数据的生命周期契约。
@@ -39,18 +41,6 @@ const participants: AccountSyncParticipant[] = [
     reset: () => useConfigStore.getState().reset(),
   },
   {
-    name: 'promptHistory',
-    initForUser: () => usePromptHistoryStore.getState().initForUser(),
-    initForGuest: () => usePromptHistoryStore.getState().initForUser(),
-    reset: () => usePromptHistoryStore.getState().reset(),
-  },
-  {
-    name: 'generationHistory',
-    initForUser: () => useGenerationHistoryStore.getState().initForUser(),
-    initForGuest: () => useGenerationHistoryStore.getState().initForUser(),
-    reset: () => useGenerationHistoryStore.getState().reset(),
-  },
-  {
     name: 'chat',
     initForUser: () => useChatStore.getState().initForUser(),
     initForGuest: () => useChatStore.getState().initForUser(),
@@ -65,6 +55,17 @@ const participants: AccountSyncParticipant[] = [
     reset: () => {
       usePlaybackSessionStore.getState().reset();
       usePlaybackStore.getState().reset();
+    },
+  },
+  {
+    // M9-C1 T2 评审闭合（item 4）：登出必须真正取消在途 next job 并清空连续创作状态，
+    // 旧会话迟到结果不得复活自动续播。
+    name: 'continuousCreation',
+    initForUser: async () => {},
+    initForGuest: async () => {},
+    reset: () => {
+      cancelPendingNextWork();
+      useContinuousCreationStore.getState().reset();
     },
   },
 ];

@@ -64,6 +64,13 @@ import {
   synthesizeSpeechWithProfile,
   type CanonicalTtsSynthesizer,
 } from '@/lib/server/openai';
+import { isSingleTrackServerEnabled } from '@/lib/audio/singleTrackFlag';
+import { buildAssetPlaybackUrl } from '@/lib/audio/asset';
+import {
+  getStoryAudioAssetProjectionForSubject,
+  STORY_AUDIO_ASSET_VERSION,
+  type StoryAudioAssetDTO,
+} from '@/lib/server/storyAudioAsset';
 
 /** Canonical Manifest 世代（V1 StoryWork 内容不可改，正常恒 1；M8-03 只建 v1） */
 export const STORY_AUDIO_MANIFEST_VERSION = 1;
@@ -763,6 +770,8 @@ export type EnsureSegmentReadyResult = {
     totalDurationMs: number | null;
     totalByteLength: number | null;
   };
+  /** T3 单轨资产投影（仅 `SINGLE_TRACK_AUDIO_ENABLED=1` 时存在；旧调用方忽略此字段）。 */
+  asset?: StoryAudioAssetDTO;
 };
 
 export type EnsureSegmentPreparingResult = {
@@ -798,6 +807,9 @@ async function readGuestManifestSnapshot(manifestId: number) {
  * 输入严格三字段；frozen text/profile/storageKey 全由 server 推导。
  * 并发：ready → 直接返回；有效 lease → preparing + retryAfter；
  * missing/failed/过期 lease → 原子 claim 后在 transaction 外合成。
+ *
+ * T3 去耦：单轨开关不再劫持本入口；ensureSegment 恒为旧多段 canonical 路径，
+ * 单轨写入口只在 `storyAudio.ensure`（服务端 flag 门禁）。
  */
 export async function ensureStoryAudioSegmentForSubject(
   subject: Subject,
@@ -1398,7 +1410,57 @@ export type PlaybackManifestDTO = {
   totalDurationMs: number | null;
   totalByteLength: number | null;
   segments: PlaybackManifestSegmentDTO[];
+  /** T3 单轨投影（仅开关开启时存在/非 null；`segments` 同时为空，保证只暴露一条时间轴）。 */
+  singleTrack?: StoryAudioAssetDTO | null;
 };
+
+/** T3：单轨投影 → 旧 PlaybackManifestDTO 形状（segments 空 + singleTrack）。 */
+async function getSingleTrackPlaybackManifest(
+  subject: Subject,
+  input: GetPlaybackManifestInput
+): Promise<PlaybackManifestDTO> {
+  const projection = await getStoryAudioAssetProjectionForSubject(subject, {
+    workId: input.workId,
+  });
+  const singleTrack: StoryAudioAssetDTO | null =
+    projection.status === 'ready' && projection.assetId && projection.durationMs !== null && projection.byteLength !== null
+      ? {
+          assetId: projection.assetId,
+          workId: projection.workId,
+          status: 'ready',
+          version: projection.version || STORY_AUDIO_ASSET_VERSION,
+          contentHash: projection.contentHash,
+          voiceId: projection.voiceId,
+          ttsProfileHash: projection.ttsProfileHash,
+          synthesisVersion: projection.synthesisVersion,
+          audioFormat: projection.audioFormat,
+          chunkCount: projection.chunkCount,
+          durationMs: projection.durationMs,
+          byteLength: projection.byteLength,
+          checksum: projection.checksum ?? '',
+          contentType: 'audio/mpeg',
+          playbackUrl: projection.playbackUrl ?? buildAssetPlaybackUrl(projection.assetId),
+          positionMs: projection.positionMs,
+          readyAt: projection.readyAt ?? '',
+        }
+      : null;
+  return {
+    workId: projection.workId,
+    status:
+      projection.status === 'ready'
+        ? 'ready'
+        : (projection.status as PlaybackManifestDTO['status']),
+    contentHash: projection.contentHash,
+    segmentationVersion: SEGMENTATION_VERSION,
+    voiceId: projection.voiceId,
+    segmentCount: singleTrack ? 1 : 0,
+    readySegmentCount: singleTrack ? 1 : 0,
+    totalDurationMs: projection.durationMs,
+    totalByteLength: projection.byteLength,
+    segments: [],
+    singleTrack,
+  };
+}
 
 /**
  * 读取播放用 Manifest 投影（只读；无 Manifest → missing 空投影，不回填、不合成）。
@@ -1408,6 +1470,10 @@ export async function getPlaybackManifestForSubject(
   subject: Subject,
   input: GetPlaybackManifestInput
 ): Promise<PlaybackManifestDTO> {
+  // T3：开关开启时改走单轨投影（segments 为空 + singleTrack，保证只暴露一条时间轴）。
+  if (isSingleTrackServerEnabled()) {
+    return getSingleTrackPlaybackManifest(subject, input);
+  }
   const { workId } = input;
   if (!Number.isInteger(workId) || workId <= 0) {
     throwDomain('WORK_NOT_FOUND', 'NOT_FOUND');

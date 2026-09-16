@@ -112,15 +112,11 @@ test("/player frozen compatibility boundary 验证 (Legacy Player landmark + 故
     // 中文注释：三项合一 Contract 1 —— URL 保持 /player，无 redirect（严禁 /player -> /library 自动迁移）
     expect(new URL(page.url()).pathname).toBe("/player");
 
-    // 中文注释：三项合一 Contract 2 —— 渲染 Legacy Player 页面（AudioPlayer + HistoryPanel 核心稳定 landmark 可见）
+    // 中文注释：三项合一 Contract 2 —— 渲染 Legacy Player 页面（AudioPlayer 核心稳定 landmark 可见）
     // 1) AudioPlayer: 播放进度条 slider、倍速按钮、从头重播按钮
     await expect(page.getByRole("slider", { name: "播放进度" })).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("button", { name: "播放速度" })).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("button", { name: "从头重播" })).toBeVisible({ timeout: 15000 });
-    // 2) HistoryPanel: 历史类型切换 tablist 及两个 tab（提示词历史、生成历史）
-    await expect(page.getByRole("tablist", { name: "历史类型切换" })).toBeVisible({ timeout: 15000 });
-    await expect(page.getByRole("tab", { name: "提示词历史" })).toBeVisible({ timeout: 15000 });
-    await expect(page.getByRole("tab", { name: "生成历史" })).toBeVisible({ timeout: 15000 });
 
     // 中文注释：三项合一 Contract 3 —— /player 时故事库 Tab 保持 selected (aria-selected="true")
     const libraryTab = page.getByRole("tab", { name: "故事库" });

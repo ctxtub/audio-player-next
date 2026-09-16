@@ -33,10 +33,6 @@ const getTransportStore = () => {
   const mod = nodeRequire('../../../stores/playbackStore') as typeof import('../../../stores/playbackStore');
   return mod.usePlaybackStore;
 };
-const getHistoryStore = () => {
-  const mod = nodeRequire('../../../stores/generationHistoryStore') as typeof import('../../../stores/generationHistoryStore');
-  return mod.useGenerationHistoryStore;
-};
 
 /**
  * M5-09 Client Session SSOT / Rehydrate 单元测试（L1，§25 系列本范围部分）。
@@ -221,16 +217,6 @@ async function runPlaybackSessionRehydrateTests(): Promise<void> {
   __resetPlaybackSessionTestHooks();
   useSession.getState().reset();
   useTransport.getState().reset();
-
-  // legacy 残留：history store 仅有第一页，Anchor 指向第 300 条（远页）。
-  const useHistory = getHistoryStore();
-  useHistory.setState({
-    records: [
-      { id: 1, prompt: 'p1', storyText: 't1', voiceId: '', title: 't1', excerpt: '', contentHash: '', sourceMessageId: null, favoritedAt: null, deletedAt: null, createdAt: '', updatedAt: '' },
-      { id: 2, prompt: 'p2', storyText: 't2', voiceId: '', title: 't2', excerpt: '', contentHash: '', sourceMessageId: null, favoritedAt: null, deletedAt: null, createdAt: '', updatedAt: '' },
-    ] as unknown as ReturnType<typeof useHistory.getState>['records'],
-    syncEnabled: true,
-  });
 
   let cleared: string[] = [];
   let driftNotified = 0;

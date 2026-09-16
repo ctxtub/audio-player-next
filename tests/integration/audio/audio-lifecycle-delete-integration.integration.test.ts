@@ -375,6 +375,50 @@ async function runAudioLifecycleDeleteIntegrationTests() {
       console.log('PASS: 3) Permanent Delete 成功双侧通过');
     }
 
+    console.log('=== 3b) Permanent Delete：T3 单轨 Asset 对象 tombstone（User） ===');
+    {
+      const storage = getAudioAssetStorage();
+      const u = await createUserWorkWithAudio({
+        tag: 'perm-asset-u',
+        segments: 0,
+        deletedAt: new Date(),
+        seedBase: 200,
+      });
+      const assetId = randomUUID();
+      const assetKey = `story-audio/${assetId}.mp3`;
+      await storage.put({ key: assetKey, bytes: sampleBytes(201), contentType: 'audio/mpeg' });
+      await prisma.storyAudioAsset.create({
+        data: {
+          id: assetId,
+          storyWorkId: u.workId,
+          version: 1,
+          status: 'ready',
+          contentHash: `hash_${TAG}_perm-asset`,
+          voiceId: 'nova',
+          ttsProfileHash: 'profile',
+          synthesisVersion: 'canonical-mp3-v1',
+          audioFormat: 'mp3',
+          chunkCount: 1,
+          storageKey: assetKey,
+          contentType: 'audio/mpeg',
+          byteLength: 4170,
+          durationMs: 261,
+          checksum: 'checksum',
+          readyAt: new Date(),
+          lastAccessedAt: new Date(),
+        },
+      });
+      await permanentlyDeleteStoryWorkForSubject({ type: 'user' as const, id: u.userId }, u.workId);
+      assert.strictEqual(
+        await prisma.storyAudioAsset.count({ where: { storyWorkId: u.workId } }),
+        0,
+        '单轨 Asset 行随 cascade 消失',
+      );
+      assert.strictEqual(await storage.exists(assetKey), false, '单轨 Asset Object gone');
+      assert.strictEqual(await countTombstones([assetKey]), 0, '单轨 Asset tombstone 已消费');
+      console.log('PASS: 3b) 单轨 Asset 对象 tombstone 通过');
+    }
+
     console.log('=== 4) Permanent Delete + storage.delete fail → retry 收敛（User/Guest） ===');
     {
       const realStorage = getAudioAssetStorage();

@@ -5,7 +5,7 @@ import path from 'node:path';
 // 中文注释：M9-02 Legacy Player Surface Physical Retirement 静态守卫（L1，纯静态，不触库/网络）。
 // 锁定验收 1–4 + 6：
 // P1 player 目录只剩 page.tsx；P2 全仓 active references 归零；P3 /setting 跳消失且 redirect 冻结；
-// P4 audio owner 唯一收敛；P5 HistoryPanel 零 legacy ownership（Chat 正式实现保留）。
+// P4 audio owner 唯一收敛；P5 Chat/Player 双侧 History surface 全部退役（M9-C1 T2）。
 // Active 口径：app/components/lib/stores 下 .ts/.tsx，注释剥离后匹配；docs/specs/plans/tests 历史引用不计入。
 
 const readRepoText = (rel: string): string =>
@@ -163,7 +163,7 @@ async function runLegacyPlayerRetirementUnit(): Promise<void> {
     console.log('PASS: M9-02-P4 single-audio-owner');
   }
 
-  console.log('=== M9-02-P5: HistoryPanel 零 legacy ownership ===');
+  console.log('=== M9-02-P5: Chat/Player History surface 全部退役 ===');
   {
     // player 侧无任何 History 实现残留（目录已删，此处双保险：若未来重建目录亦能捕获）。
     const playerDir = path.resolve(process.cwd(), 'app/(main)/player');
@@ -185,12 +185,28 @@ async function runLegacyPlayerRetirementUnit(): Promise<void> {
         assert.ok(!code.includes('HistoryPanel'), `${abs} 不得引用 HistoryPanel`);
       }
     }
-    // M4 Chat 正式实现保留（不机械删除别处同名）。
-    assert.ok(
-      fs.existsSync(path.resolve(process.cwd(), 'app/(main)/chat/components/HistoryPanel/index.tsx')),
-      'Chat HistoryPanel 正式实现必须保留（M4 所有）',
-    );
-    console.log('PASS: M9-02-P5 history-ownership');
+    // M9-C1 T2：Chat History Surface 已物理退役——四个目录不得回流。
+    for (const comp of ['HistoryPanel', 'HistoryRecords', 'GenerationHistory', 'HistoryList']) {
+      assert.ok(
+        !fs.existsSync(path.resolve(process.cwd(), `app/(main)/chat/components/${comp}`)),
+        `Chat components/${comp} 不得回流（History surface 已退役）`,
+      );
+    }
+    // Chat 目录内不得再出现「打开历史」入口文案。
+    const chatDir = path.resolve(process.cwd(), 'app/(main)/chat');
+    const chatFiles: string[] = [];
+    const walkChat = (dir: string): void => {
+      if (!fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const abs = path.join(dir, entry.name);
+        if (entry.isDirectory()) walkChat(abs);
+        else if (abs.endsWith('.ts') || abs.endsWith('.tsx')) chatFiles.push(abs);
+      }
+    };
+    walkChat(chatDir);
+    const openHistoryHits = chatFiles.filter((abs) => fs.readFileSync(abs, 'utf8').includes('打开历史'));
+    assert.deepStrictEqual(openHistoryHits, [], `Chat 不得再有「打开历史」入口：${openHistoryHits.join('；')}`);
+    console.log('PASS: M9-02-P5 history-surface-retired');
   }
 
   console.log('\nALL LEGACY PLAYER RETIREMENT UNIT TESTS PASSED SUCCESSFULLY!');

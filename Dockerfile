@@ -20,6 +20,11 @@ ENV NODE_ENV=production
 # 源码默认不得改（canonicalFlag.ts strict '1' 才开）。）
 ARG NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=""
 ENV NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=${NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED}
+# M9-C1 T3 单轨 build flag（构建期变量；缺省空 = fail-closed。最终双 flag 契约见
+# .env.sample 与 lib/audio/singleTrackFlag.ts：build 变量**只**控制 client provider，
+# 服务端授权只认 runtime SINGLE_TRACK_AUDIO_ENABLED；仅置本变量时 server 仍全拒。）
+ARG NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED=""
+ENV NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED=${NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # 构建阶段提供占位 DATABASE_URL，避免服务端模块校验报错；实际连接在运行时由环境变量注入
@@ -39,6 +44,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # 浏览器 provider 的 production rollout 必须在 build 时设置 NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=1，
 # 运行时变量单独不足以开启生产播放。语义见 lib/audio/canonicalFlag.ts，源码默认不得改。）
 ENV CANONICAL_AUDIO_ENABLED=""
+# M9-C1 T3 单轨运行时门（缺省空 = fail-closed；**唯一** 服务端单轨授权依据，
+# 公开变量 NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED 不得授权；需与 build 变量同时为 1
+# 才在生产开启单轨）。
+ENV SINGLE_TRACK_AUDIO_ENABLED=""
 RUN apk add --no-cache libc6-compat su-exec \
   && addgroup -g 1001 nodejs \
   && adduser -D -G nodejs nodejs

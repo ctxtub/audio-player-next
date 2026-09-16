@@ -2,19 +2,10 @@ import { useChatStore } from '@/stores/chatStore';
 import type { ChatMessageOrigin } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
 import { useConfigStore } from '@/stores/configStore';
-import { useGenerationHistoryStore } from '@/stores/generationHistoryStore';
-import { usePromptHistoryStore } from '@/stores/promptHistoryStore';
 import type { ChatConversationMessage } from '@/types/chat';
 import type { AgentMessage } from '@/types/agent';
 import { interactWithAgent } from './agentFlow';
 import { autoplayDraftStory } from './playbackSessionFlow';
-
-/**
- * 自动续写指令文案：预加载下一段故事时作为用户消息提交。
- * 抽为共享常量供 preloadStore 发起续写、player 推导标题时排除续写指令复用，
- * 避免文案在多处硬编码后产生漂移。
- */
-export const AUTO_CONTINUE_PROMPT = '请继续故事';
 
 /**
  * 将未知异常标准化为 Error，便于上层展示 Toast。
@@ -34,17 +25,23 @@ const normalizeError = (error: unknown): Error => {
 let globalAbortController: AbortController | null = null;
 
 /**
+ * M9-C1 T2 评审闭合：聊天流运行代次。
+ *
+ * 每次新开流或显式中止自增。`onComplete` 的异步 autoplay IIFE 在落盘 await 后会
+ * 复核代次：若期间发生 abort/新建创作/登出，则放弃起播，旧故事绝不复活。
+ */
+let streamSeq = 0;
+
+/**
  * 执行一次聊天流式调用，根据流事件更新 store。
  * M4-02：全链路按 assistantMessageId（attempt 身份）定位 Artifact；
  * story_complete 仅完成正文（draft→complete），done 仅标记 delivered，音频仅瞬态播放不写入消息。
  * @param context 即将发送给后端的对话上下文。
- * @param recordHistory 是否记入生成历史与提示词历史（预载续写传 false）。
  * @param assistantMessageId 本次 attempt 的助手消息 id（sourceMessageId 同值）。
  * @returns 包含最终音频地址和生成内容的对象
  */
 const executeChatStream = async (
   context: ChatConversationMessage[],
-  recordHistory: boolean,
   assistantMessageId: string,
   frozenVoiceId?: string,
 ): Promise<{ audioUrl: string; content: string }> => {
@@ -55,6 +52,7 @@ const executeChatStream = async (
     globalAbortController.abort();
   }
   globalAbortController = new AbortController();
+  const myStreamSeq = ++streamSeq;
 
   let streamErrored = false;
   let lastErrorMessage: string | undefined;
@@ -64,11 +62,6 @@ const executeChatStream = async (
     role: message.role,
     content: typeof message.content === 'string' ? message.content : '',
   }));
-
-  // 触发本次生成的用户提示词（上下文中最后一条 user 消息），用于生成历史记录
-  const lastUserMessage = [...context].reverse().find((m) => m.role === 'user');
-  const triggerPrompt =
-    typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
 
   try {
     // 瞬态音频 Blob（仅用于播放，不写入 Chat 消息/Artifact；M4-02 起消息层 audioUrl write = 0）。
@@ -154,25 +147,31 @@ const executeChatStream = async (
                   } catch {
                     // 落盘失败不阻断 begin 尝试（行可能已存在）；begin 侧自行 fail-closed。
                   }
+                  // M9-C1 T2 评审闭合：落盘 await 期间若发生 abort/新流/强重置（代次变化）
+                  // 或消息已被清空，则绝不复活旧故事起播，仅吊销 Blob。
+                  const revoked = () => {
+                    try {
+                      if (typeof pendingAudioBlob === 'string' && pendingAudioBlob.startsWith('blob:')) {
+                        URL.revokeObjectURL(pendingAudioBlob);
+                      }
+                    } catch {
+                      // 吊销失败不影响播放链。
+                    }
+                  };
+                  if (myStreamSeq !== streamSeq) {
+                    revoked();
+                    return;
+                  }
+                  if (!useChatStore.getState().messages.some((m) => m.id === assistantMessageId)) {
+                    revoked();
+                    return;
+                  }
                   autoplayDraftStory({
                     messageId: assistantMessageId,
                     storyText: generatedContent,
                   }).catch(console.error);
-                  try {
-                    if (typeof pendingAudioBlob === 'string' && pendingAudioBlob.startsWith('blob:')) {
-                      URL.revokeObjectURL(pendingAudioBlob);
-                    }
-                  } catch {
-                    // 吊销失败不影响播放链。
-                  }
+                  revoked();
                 })();
-              }
-              // 记录到生成历史 + 提示词历史（仅用户主动发起、真正生成了故事时记；预加载续写不记录）
-              if (recordHistory) {
-                useGenerationHistoryStore
-                  .getState()
-                  .record(triggerPrompt, generatedContent, voiceId);
-                usePromptHistoryStore.getState().addOrUpdate(triggerPrompt);
               }
             } else if (stillExists) {
               // 无音频的普通对话同样已在上标记 delivered，无需额外分支。
@@ -219,13 +218,12 @@ const executeChatStream = async (
 /**
  * 开启新的聊天流式请求：准备上下文并发起调用。
  * @param content 用户输入的文本内容。
- * @param options.recordHistory 是否记入生成历史与提示词历史（预载续写传 false）。
- * @param options.origin 消息来源（预载续写传 'preload'，用于隔离用户草稿与可见气泡）。
+ * @param options.origin 消息来源（连续创作续写传 'preload'，用于隔离用户草稿与可见气泡）。
  * @returns 包含生成的消息 ID 和音频 URL
  */
 export const beginChatStream = async (
   content: string,
-  options?: { recordHistory?: boolean; origin?: ChatMessageOrigin },
+  options?: { origin?: ChatMessageOrigin },
 ): Promise<{ messageId: string; audioUrl: string; content: string }> => {
   // M4-03 快照冻结：在生成开始前单次捕获实际请求所用 voice，并与 prompt 一同冻结进 draft；
   // 同一快照透传给 executeChatStream，确保 draft 冻结值与真实请求用值恒等；promotion 严禁重读 Settings。
@@ -249,13 +247,26 @@ export const beginChatStream = async (
   if (assistantMsgId) {
     const { audioUrl, content: generatedContent } = await executeChatStream(
       context,
-      options?.recordHistory ?? true,
       assistantMsgId,
       frozenVoiceId,
     );
     return { messageId: assistantMsgId, audioUrl, content: generatedContent };
   }
   throw new Error('Failed to create assistant message');
+};
+
+/**
+ * M9-C1 T2：新建创作强重置时中止在途聊天流。
+ *
+ * 仅中止当前 transport；epoch 递增由调用方先行完成，旧回调凭 epoch no-op，
+ * 因此本函数不额外处理 stale 回写。
+ */
+export const abortActiveChatStream = (): void => {
+  streamSeq += 1;
+  if (globalAbortController) {
+    globalAbortController.abort();
+    globalAbortController = null;
+  }
 };
 
 /**
@@ -287,10 +298,10 @@ export const retryChatStream = async (): Promise<void> => {
   // 2. 获取上下文
   const context = useChatStore.getState().selectors.conversationMessages();
 
-  // 3. 执行流（用户主动重试，记录生成历史）：按新 Attempt 身份执行，stale 旧事件不得覆盖。
+  // 3. 执行流：按新 Attempt 身份执行，stale 旧事件不得覆盖。
   const retryAssistantId = useChatStore.getState().selectors.latestAssistantMessage()?.id;
   if (!retryAssistantId) {
     throw new Error('Failed to create assistant message');
   }
-  await executeChatStream(context, true, retryAssistantId, retryVoiceSnapshot);
+  await executeChatStream(context, retryAssistantId, retryVoiceSnapshot);
 };

@@ -1,7 +1,12 @@
 /**
  * 访客数据垃圾回收 (GC) 服务
  *
- * 清理 30 天未更新的访客配置、聊天消息、生成历史与提示词历史。
+ * 清理 30 天未更新的访客配置、聊天消息、生成历史、提示词历史、会话与空作品集。
+ *
+ * M9-C1（change-id 2026-09-15-story-collection-continuous-creation T1）：
+ * - 作品仍统一经 executeStoryWorkPhysicalDelete（audio-aware seam）；
+ * - 集合 / 会话按 GC 清理时只删「无存活成员」的行，绝不触发 Cascade 误删未过期 Work：
+ *   先删 Work（retention）→ 再删空 GuestStoryCollection → 最后删空 GuestConversation。
  */
 
 import { prisma } from '@/lib/db';
@@ -16,6 +21,10 @@ export interface PurgeResult {
     storyWorksDeleted?: number;
     promptsDeleted: number;
     playbackProgressDeleted: number;
+    /** M9-C1：被清理的空作品集数 */
+    collectionsDeleted?: number;
+    /** M9-C1：被清理的空会话数 */
+    conversationsDeleted?: number;
 }
 
 /**
@@ -41,6 +50,20 @@ export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeRes
         prisma.guestPlaybackAnchor.deleteMany({ where: { updatedAt: { lt: threshold } } }),
     ]);
 
+    // M9-C1：仅清理无存活成员的空集合 / 空会话，避免 Cascade 误删未过期 Work。
+    const collections = await prisma.guestStoryCollection.deleteMany({
+        where: {
+            updatedAt: { lt: threshold },
+            works: { none: {} },
+        },
+    });
+    const conversations = await prisma.guestConversation.deleteMany({
+        where: {
+            updatedAt: { lt: threshold },
+            collections: { none: {} },
+        },
+    });
+
     return {
         configsDeleted: configs.count,
         messagesDeleted: messages.count,
@@ -48,5 +71,7 @@ export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeRes
         storyWorksDeleted: generations.count,
         promptsDeleted: prompts.count,
         playbackProgressDeleted: playback.count,
+        collectionsDeleted: collections.count,
+        conversationsDeleted: conversations.count,
     };
 }

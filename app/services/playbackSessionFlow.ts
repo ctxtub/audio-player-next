@@ -33,6 +33,7 @@
 import { usePlaybackStore, clampSegmentSeekTarget } from '@/stores/playbackStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { useConfigStore } from '@/stores/configStore';
+import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 import { resolvePlaybackDraftSnapshot } from '@/lib/client/playbackDraftSnapshot';
 import {
   computeStoryContentHash,
@@ -41,6 +42,7 @@ import {
 } from '@/utils/segmentation';
 import { isValidDraftMessageId, isValidWorkId } from '@/lib/playback/source';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
+import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
 import type { SessionContinuationMode } from '@/stores/playbackSessionStore';
 import type { SleepTimerMode } from '@/lib/playback/sleepTimer';
 
@@ -551,11 +553,19 @@ export function reportPlaybackPause(): void {
  */
 export function reportAudioActive(active: boolean): void {
   usePlaybackStore.getState().reportAudioActive(active);
+  // M9-C1 T2：同一 audio-active 信号驱动连续创作预算；动态 import 避免模块环。
+  void import('./continuousCreationFlow')
+    .then((flow) => flow.reportContinuousAudioActive(active))
+    .catch(() => undefined);
 }
 
 /** 播放进度推进（供 timeupdate/loadedmetadata 复用）。 */
 export function reportProgress(payload: { currentTime: number; duration: number }): void {
   usePlaybackStore.getState().updateProgress(payload);
+  // T3 单轨：duration 已知后一次性应用服务端恢复位（内部 duration>0 守卫 + 幂等）。
+  usePlaybackSessionStore.getState().applyPendingSingleTrackResume(payload.duration);
+  // T3 单轨：常规 timeupdate 机会式落库（client 10s 节流；暂停/完播走 force）。
+  void usePlaybackSessionStore.getState().persistSingleTrackProgress();
 }
 
 /**
@@ -566,12 +576,15 @@ export function reportProgress(payload: { currentTime: number; duration: number 
  */
 export async function handleNearEnd(): Promise<void> {
   const session = usePlaybackSessionStore.getState();
-  // §28 唯一门：有 session 且 finite → 播完现有 paragraphs，严禁 AI 续写，直接返回。
+  // §28 唯一门：有 session 且 finite → 不续写聊天；M9-C1 T2 改为走连续创作
+  // 预生成下一作品（lookahead=1，窗口/预算/开关由状态机守卫）。
   if (
     session.source &&
     session.totalParagraphs > 0 &&
     !shouldAllowAiContinuation(session.continuationMode)
   ) {
+    const { scheduleContinuousNextWork } = await import('@/app/services/continuousCreationFlow');
+    await scheduleContinuousNextWork();
     return;
   }
   // 到达此处仅两种情形：无 session 的 legacy 音频，或 extendable 会话尾段
@@ -608,9 +621,15 @@ export function reportTimeUpdate(payload: {
     return;
   }
   if (session.source && session.totalParagraphs > 0) {
-    // 有 session 的尾段/单段：§28 唯一门——finite 严禁聊天续写，直接返回；
-    // 仅 extendable 允许回退 legacy AI 续写链。
+    // 有 session 的尾段/单段：§28 唯一门——finite 不续写聊天；M9-C1 T2 改为
+    // 触发连续创作预生成（lookahead=1，状态机自守卫；未进窗/已有 next job 则 no-op）。
     if (!shouldAllowAiContinuation(session.continuationMode)) {
+      payload.hasTriggeredPreload.current = true;
+      void import('@/app/services/continuousCreationFlow')
+        .then((flow) => flow.scheduleContinuousNextWork())
+        .catch((error) => {
+          console.error('连续创作调度下一作品失败:', error);
+        });
       return;
     }
   }
@@ -634,11 +653,25 @@ export function reportTimeUpdate(payload: {
 export async function handleEnded(play: (audioUrl: string, messageId?: string) => Promise<void>): Promise<boolean> {
   const session = usePlaybackSessionStore.getState();
   if (session.source && session.totalParagraphs > 0) {
-    const atTail = session.nextParagraphIndex + 1 >= session.totalParagraphs;
-    // §28 唯一门：非尾段，或尾段 finite → 会话段落机收尾，不碰 AI 续写。
-    if (!atTail || !shouldAllowAiContinuation(session.continuationMode)) {
-      const continued = await session.handleParagraphEnded();
-      return continued;
+    // T3 单轨：整轨只有一个 Asset，任意物理 ended 都代表「整 track 播完」，
+    // 必须走尾段分支（先试连续创作下一 Work，再整 Work 完播），不得按段落推进。
+    const singleTrack = isSingleTrackAudioEnabled();
+    const atTail = singleTrack || session.nextParagraphIndex + 1 >= session.totalParagraphs;
+    if (!atTail) {
+      // 非尾段：会话段落机推进，不碰连续创作。
+      return await session.handleParagraphEnded();
+    }
+    if (!shouldAllowAiContinuation(session.continuationMode)) {
+      // M9-C1 T2：finite 整轨结束 → 优先无缝续播连续创作已就绪的下一作品；
+      // 无/过期则进入 waiting_next 并收尾（绝不复活旧结果）。
+      const epoch = useContinuousCreationStore.getState().epoch;
+      const { handleTrackEnded } = await import('@/app/services/continuousCreationFlow');
+      const nextWork = handleTrackEnded(epoch);
+      if (nextWork) {
+        await play(nextWork.audioUrl, nextWork.messageId);
+        return true;
+      }
+      return await session.handleParagraphEnded();
     }
     // extendable 尾段（唯一例外）：先试 legacy AI 续写链，取不到才收尾。
     const { handleSegmentEnded } = await import('@/app/services/storyFlow');

@@ -941,7 +941,7 @@ cases:
     display_name_zh: 故事库完整生命周期旅程
     legacy_aliases: [E2E-07-15]
     journey_id: story-library
-    user_goal: 用户在真实浏览器中完整经历故事库全生命周期：海量作品分页滚动加载、关键词搜索过滤、进入详情页、标题重命名跨缓存同步、收藏状态切换与列表呈现、详情软删除离开与撤销恢复、回收站安全隔离与无详情入口、从回收站恢复、二次软删除与永久删除二次确认流、跨视图彻底消失。
+    user_goal: 用户在真实浏览器中完整经历故事库集合级全生命周期：海量集合分页滚动加载、关键词搜索按集合去重过滤、进入集合详情页、标题重命名跨缓存同步、收藏状态切换与列表呈现、详情软删除离开与撤销恢复、回收站安全隔离与无详情入口、从回收站恢复、二次软删除与永久删除二次确认流、跨视图彻底消失。
     priority: P0
     lifecycle_status: ACTIVE
     risk_tags: [story-work, library, l3-journey, pagination, search, rename, favorite, trash, undo, restore, permanent-delete]
@@ -958,7 +958,7 @@ cases:
     lifecycle_status: ACTIVE
     risk_tags: [story-collection, library, collection-ui, lifecycle, undo, per-work-play]
     spec_path: docs/e2e/07-故事库与作品资产/18-Collection-Library两层列表与生命周期.md
-    executable_ids: [exec-l3-collection-library]
+    executable_ids: [exec-l3-collection-library, exec-collection-library-viewmodel]
     fixtures: []
     owner: story-library
   - case_id: library-mini-safe-area
@@ -1971,6 +1971,10 @@ executables:
     display_name_zh: L3 Collection两层列表与Mini安全区
     layer: L3
     path: ./tests/system/browser/scenarios/library-collection.spec.ts
+  - executable_id: exec-collection-library-viewmodel
+    display_name_zh: Collection ViewModel与占位变量单元
+    layer: L1
+    path: ./tests/unit/story-collection/collection-library-viewmodel.unit.test.ts
   - executable_id: exec-prompt-history-contract
     display_name_zh: PromptHistory表contract删除（隔离库）
     layer: L2

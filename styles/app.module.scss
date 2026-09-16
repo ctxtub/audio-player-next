@@ -1,8 +1,12 @@
-/* M6-03 Bottom Chrome Reservation（spec §15/§29）。
+/* M6-03 Bottom Chrome Reservation（spec §15/§29；M9-C1 T4 输出三占位变量）。
  * --tab-bar-safe-bottom 仍表示“仅 TabBar 占用”（定义见 styles/tokens/_spacing.scss）；
- * --bottom-chrome-safe-bottom 为 scoped 实际避让量：默认等于 TabBar，
- * 有 docked Mini 时叠加 Mini 高度 + 间距。页面/Composer 一律消费后者，
- * 禁止各自 hardcode Mini 高度或重复加 safe-area。
+ * MainChrome 在 .app 上单源输出三占位变量：
+ * - --main-tabbar-occupied-height：恒等于 TabBar 占用；
+ * - --mini-player-occupied-height：无 docked Mini 时 0，有 docked Mini 时为 Mini 高度；
+ * - --bottom-chrome-gap：无 docked Mini 时 0，有 docked Mini 时为 Mini 与 TabBar 间距；
+ * --bottom-chrome-safe-bottom 为三者组合（既有消费者行为不变）。
+ * 页面/滚动容器消费三变量或组合量，禁止各自 hardcode Mini 高度或重复加 safe-area，
+ * 禁止末卡固定 margin（预留一律走容器 padding）。
  */
 .app {
   max-width: 800px;
@@ -17,7 +21,13 @@
   transition: background-color var(--duration-normal) var(--ease-default),
     color var(--duration-normal) var(--ease-default);
 
-  --bottom-chrome-safe-bottom: var(--tab-bar-safe-bottom);
+  --main-tabbar-occupied-height: var(--tab-bar-safe-bottom);
+  --mini-player-occupied-height: 0px;
+  --bottom-chrome-gap: 0px;
+  --bottom-chrome-safe-bottom: calc(
+    var(--main-tabbar-occupied-height) + var(--mini-player-occupied-height) +
+      var(--bottom-chrome-gap)
+  );
 
   .content {
     display: flex;
@@ -30,7 +40,6 @@
 }
 
 .appWithDockedNowPlaying {
-  --bottom-chrome-safe-bottom: calc(
-    var(--tab-bar-safe-bottom) + var(--size-mini-now-playing-height) + var(--space-2)
-  );
+  --mini-player-occupied-height: var(--size-mini-now-playing-height);
+  --bottom-chrome-gap: var(--space-2);
 }

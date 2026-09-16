@@ -19,7 +19,6 @@ model User {
   nickname         String?
   createdAt        DateTime              @default(now())
   config           UserConfig?
-  promptHistory    PromptHistory[]
   storyWorks       StoryWork[]
   chatMessages     ChatMessage[]
   conversations    Conversation[]
@@ -184,21 +183,6 @@ model StoryWork {
   @@index([userId, favoritedAt])
   @@index([collectionId, position])
   @@map("GenerationHistory")
-}
-
-/// 用户提示词使用历史，与 User 多对一关联。
-model PromptHistory {
-  id       Int      @id @default(autoincrement())
-  userId   Int
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// 提示词原文
-  prompt   String
-  /// 最近一次使用时间
-  lastUsed DateTime
-  /// 累计使用次数
-  useCount Int      @default(1)
-
-  @@unique([userId, prompt])
 }
 
 /// 用户个性化配置，与 User 一对一关联。

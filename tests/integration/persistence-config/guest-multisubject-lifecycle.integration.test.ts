@@ -147,9 +147,11 @@ async function runBrowserE2eHarnessTests() {
     const userWorks = await prisma.storyWork.count({ where: { userId: registeredUser.id } });
     assert.strictEqual(userWorks, 1, 'Migrated user account has works history');
 
-    // M9-C1 T2：Prompt History 已退役，注册迁移不再复制（Guest 原行保留给 GC）。
-    const userPrompts = await prisma.promptHistory.count({ where: { userId: registeredUser.id } });
-    assert.strictEqual(userPrompts, 0, 'Prompt History 退役后注册不迁移提示词历史');
+    // M9-C1 T4：user PromptHistory 表已 contract 删除——“不迁移”语义升级为“表不存在”。
+    const userPromptTables = (await prisma.$queryRawUnsafe(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='PromptHistory'",
+    )) as Array<{ name: string }>;
+    assert.strictEqual(userPromptTables.length, 0, 'T4 contract 后 PromptHistory 表必须不存在');
 
     console.log('PASS: Browser E2E simulation harness successfully verified');
 }

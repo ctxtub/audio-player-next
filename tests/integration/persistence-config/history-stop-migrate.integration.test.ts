@@ -41,11 +41,14 @@ async function runHistoryStopMigrateIntegrationTests(): Promise<void> {
       'Prompt History 已退役；迁移计数必须为 0（旧行为会返回 1 条）',
     );
 
-    const userPromptCount = await prisma.promptHistory.count({ where: { userId: user.id } });
+    // M9-C1 T4：user PromptHistory 表已 contract 删除——“0 行”语义升级为“表不存在”。
+    const userPromptTables = (await prisma.$queryRawUnsafe(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='PromptHistory'",
+    )) as Array<{ name: string }>;
     assert.strictEqual(
-      userPromptCount,
+      userPromptTables.length,
       0,
-      '新用户 PromptHistory 必须 0 行（旧行为会拷贝访客记录）',
+      'T4 contract 后 PromptHistory 表必须不存在（旧行为会拷贝访客记录）',
     );
 
     const guestPromptCount = await prisma.guestPromptHistory.count({ where: { guestId } });
@@ -72,10 +75,14 @@ async function runHistoryStopMigrateIntegrationTests(): Promise<void> {
     const second = await migrateGuestCreativeRecordsToUser(guestId, user.id);
 
     assert.strictEqual(second.promptsMigrated, 0, '重复迁移仍为 0');
+    // M9-C1 T4：同上，重复迁移亦不得复活该表（表级断言详见 prompt-history-contract 套件）。
+    const userPromptTablesAgain = (await prisma.$queryRawUnsafe(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='PromptHistory'",
+    )) as Array<{ name: string }>;
     assert.strictEqual(
-      await prisma.promptHistory.count({ where: { userId: user.id } }),
+      userPromptTablesAgain.length,
       0,
-      '重复迁移不写入任何 PromptHistory',
+      '重复迁移不复活 PromptHistory 表',
     );
     console.log('PASS: 2');
   }

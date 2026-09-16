@@ -135,7 +135,7 @@ test("Collection 两层列表/详情/逐Work播放 + Mini 安全区", async ({
     recorder.step("顶层集合卡片可见", { collectionId: seed.collectionId });
 
     // 详情成员按 position 升序。
-    await card.click();
+    await page.getByTestId(`collection-link-${seed.collectionId}`).click();
     await expect(page.getByTestId("collection-detail-page")).toBeVisible({ timeout: 15000 });
     const positions: number[] = [];
     for (const workId of seed.workIds) {
@@ -157,7 +157,7 @@ test("Collection 两层列表/详情/逐Work播放 + Mini 安全区", async ({
     await expect(page.getByTestId("mini-slot")).toHaveAttribute("data-visible", "true", {
         timeout: 30000,
     });
-    const miniTop = await page.getByTestId("mini-slot").evaluate((el) => {
+    const miniTop = await page.getByTestId("mini-now-playing").evaluate((el) => {
         const r = el.getBoundingClientRect();
         return r.top;
     });
@@ -169,9 +169,11 @@ test("Collection 两层列表/详情/逐Work播放 + Mini 安全区", async ({
             return r.bottom;
         });
     expect(lastCardBottom).toBeLessThanOrEqual(miniTop);
-    const miniVar = await page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--mini-player-occupied-height"),
-    );
+    const miniVar = await page.evaluate(() => {
+        const host = document.querySelector('[data-testid="main-chrome"]');
+        if (!host) return "";
+        return getComputedStyle(host).getPropertyValue("--mini-player-occupied-height");
+    });
     expect(miniVar.trim().length).toBeGreaterThan(0);
     expect(miniVar.trim()).not.toBe("0px");
     recorder.step("Mini安全区断言通过", { lastCardBottom, miniTop });
@@ -194,7 +196,7 @@ test("Collection 集合级生命周期：重命名/收藏/删除/Undo/恢复/永
     });
 
     // 重命名→列表同步。
-    await page.getByTestId(`collection-card-${seed.collectionId}`).click();
+    await page.getByTestId(`collection-link-${seed.collectionId}`).click();
     await expect(page.getByTestId("collection-detail-page")).toBeVisible({ timeout: 15000 });
     const newTitle = `重命名集合${runKey}`;
     await page.getByTestId("collection-rename-btn").click();
@@ -208,7 +210,7 @@ test("Collection 集合级生命周期：重命名/收藏/删除/Undo/恢复/永
     recorder.step("重命名同步通过", { newTitle });
 
     // 收藏→收藏视图出现→取消。
-    await page.getByTestId(`collection-card-${seed.collectionId}`).click();
+    await page.getByTestId(`collection-link-${seed.collectionId}`).click();
     await page.getByTestId("collection-favorite-btn").click();
     await expect(page.getByTestId("collection-favorite-btn")).toHaveAttribute(
         "data-favorited",
@@ -216,15 +218,15 @@ test("Collection 集合级生命周期：重命名/收藏/删除/Undo/恢复/永
         { timeout: 15000 },
     );
     await page.getByTestId("collection-back-btn").click();
-    await page.getByTestId("library-view-favorites").click();
+    await page.getByTestId("view-tab-favorites").click();
     await expect(page.getByTestId(`collection-card-${seed.collectionId}`)).toBeVisible({
         timeout: 15000,
     });
     recorder.step("收藏视图通过", {});
 
     // 软删除→Undo 恢复。
-    await page.getByTestId("library-view-active").click();
-    await page.getByTestId(`collection-card-${seed.collectionId}`).click();
+    await page.getByTestId("view-tab-active").click();
+    await page.getByTestId(`collection-link-${seed.collectionId}`).click();
     await page.getByTestId("collection-delete-btn").click();
     await expect(page.getByTestId("collection-detail-page")).toBeHidden({ timeout: 15000 });
     await expect(page.getByTestId("library-undo-toast")).toBeVisible({ timeout: 15000 });
@@ -236,27 +238,27 @@ test("Collection 集合级生命周期：重命名/收藏/删除/Undo/恢复/永
     recorder.step("删除Undo恢复通过", {});
 
     // 再次删除→回收站（无详情入口）→恢复。
-    await page.getByTestId(`collection-card-${seed.collectionId}`).click();
+    await page.getByTestId(`collection-link-${seed.collectionId}`).click();
     await page.getByTestId("collection-delete-btn").click();
     await expect(page.getByTestId("library-undo-toast")).toBeVisible({ timeout: 15000 });
     await page.getByTestId("library-undo-dismiss-btn").click();
-    await page.getByTestId("library-view-trash").click();
+    await page.getByTestId("view-tab-trash").click();
     const trashCard = page.getByTestId(`collection-card-${seed.collectionId}`);
     await expect(trashCard).toBeVisible({ timeout: 15000 });
     expect(await trashCard.locator("a").count()).toBe(0);
     await page.getByTestId("collection-restore-btn").click();
-    await page.getByTestId("library-view-active").click();
+    await page.getByTestId("view-tab-active").click();
     await expect(page.getByTestId(`collection-card-${seed.collectionId}`)).toBeVisible({
         timeout: 15000,
     });
     recorder.step("回收站恢复通过", {});
 
     // 第三次删除→永久删除二次确认→彻底消失。
-    await page.getByTestId(`collection-card-${seed.collectionId}`).click();
+    await page.getByTestId(`collection-link-${seed.collectionId}`).click();
     await page.getByTestId("collection-delete-btn").click();
     await expect(page.getByTestId("library-undo-toast")).toBeVisible({ timeout: 15000 });
     await page.getByTestId("library-undo-dismiss-btn").click();
-    await page.getByTestId("library-view-trash").click();
+    await page.getByTestId("view-tab-trash").click();
     await expect(page.getByTestId(`collection-card-${seed.collectionId}`)).toBeVisible({
         timeout: 15000,
     });
@@ -266,7 +268,7 @@ test("Collection 集合级生命周期：重命名/收藏/删除/Undo/恢复/永
     await expect(page.getByTestId(`collection-card-${seed.collectionId}`)).toBeHidden({
         timeout: 30000,
     });
-    await page.getByTestId("library-view-active").click();
+    await page.getByTestId("view-tab-active").click();
     await expect(page.getByTestId(`collection-card-${seed.collectionId}`)).toBeHidden({
         timeout: 15000,
     });

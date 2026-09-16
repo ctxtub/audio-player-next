@@ -57,20 +57,11 @@ async function removeWorksForSubject(subject: Subject, workId: number): Promise<
     return res.count;
 }
 
+// M9-C1 T4：user PromptHistory 表已 contract 删除，提示词 helper 仅保留 guest 侧
+// （GuestPromptHistory 因 guestGc 到期清理保留）；user 侧隔离改由聊天/作品覆盖。
 async function recordPromptForSubject(subject: Subject, prompt: string) {
     if (subject.type === 'user') {
-        const existing = await prisma.promptHistory.findUnique({
-            where: { userId_prompt: { userId: subject.id, prompt } },
-        });
-        if (existing) {
-            return prisma.promptHistory.update({
-                where: { userId_prompt: { userId: subject.id, prompt } },
-                data: { useCount: { increment: 1 }, lastUsed: new Date() },
-            });
-        }
-        return prisma.promptHistory.create({
-            data: { userId: subject.id, prompt, lastUsed: new Date(), useCount: 1 },
-        });
+        throw new Error('T4 contract 后 user 提示词历史表已不存在，不得再写入');
     }
     const existing = await prisma.guestPromptHistory.findUnique({
         where: { guestId_prompt: { guestId: subject.id, prompt } },
@@ -88,15 +79,14 @@ async function recordPromptForSubject(subject: Subject, prompt: string) {
 
 async function listPromptsForSubject(subject: Subject) {
     if (subject.type === 'user') {
-        return prisma.promptHistory.findMany({ where: { userId: subject.id } });
+        throw new Error('T4 contract 后 user 提示词历史表已不存在，不得再读取');
     }
     return prisma.guestPromptHistory.findMany({ where: { guestId: subject.id } });
 }
 
 async function removePromptForSubject(subject: Subject, prompt: string): Promise<number> {
     if (subject.type === 'user') {
-        const res = await prisma.promptHistory.deleteMany({ where: { userId: subject.id, prompt } });
-        return res.count;
+        throw new Error('T4 contract 后 user 提示词历史表已不存在，不得再删除');
     }
     const res = await prisma.guestPromptHistory.deleteMany({ where: { guestId: subject.id, prompt } });
     return res.count;
@@ -241,7 +231,8 @@ async function runGuestCreativeSyncTests() {
         prompt: 'Prompt C',
         storyText: 'Story C',
     });
-    await recordPromptForSubject({ type: 'user', id: userIdC }, 'Prompt C');
+    // M9-C1 T4：user PromptHistory 表已 contract 删除，不再为 User C 造提示词行；
+    // 跨主体隔离仍由聊天/作品断言覆盖。
 
     // Query as Guest B (empty)
     const chatB = await getConversationForSubject({ type: 'guest', id: guestB });
@@ -507,7 +498,6 @@ async function runGuestCreativeSyncTests() {
             config: true,
             chatMessages: { orderBy: { position: 'asc' } },
             storyWorks: true,
-            promptHistory: true,
             playbackAnchor: true,
         },
     });
@@ -555,8 +545,8 @@ async function runGuestCreativeSyncTests() {
         String(guestGensBefore[0].createdAt ?? ''),
         'generation createdAt 保真',
     );
-    // M9-C1 T2：Prompt History 停迁移，新用户不得有提示词历史行。
-    assert.strictEqual(newUser.promptHistory.length, 0, 'Prompt History 退役后新用户必须 0 行');
+    // M9-C1 T4：user PromptHistory 表已 contract 删除（表不存在即 0 行语义的终极形态，
+    // 表级断言见 prompt-history-contract 套件）；此处仅保留 Guest 原行不断言。
     // no-duplicate-rows: 用户侧计数与访客侧计数精确 parity（Prompt 侧已停迁移，Guest 原行保留）
     assert.strictEqual(newUser.chatMessages.length, guestChatBefore.length, 'no-duplicate-rows: 聊天计数 parity');
     const guestGenCount = await prisma.guestStoryWork.count({ where: { guestId: guestMigrate } });

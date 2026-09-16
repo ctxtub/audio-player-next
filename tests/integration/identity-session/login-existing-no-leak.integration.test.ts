@@ -46,10 +46,8 @@ async function runLoginNoLeakTests() {
         storyText: 'USER-A-STORY',
         voiceId: 'alloy',
     });
-    // M9-C1 T2：Prompt History 已退役，直接落库以验证登录 no-leak（不再经已删服务）。
-    await prisma.promptHistory.create({
-        data: { userId: userA.id, prompt: 'USER-A-PROMPT-HIST', lastUsed: new Date(), useCount: 1 },
-    });
+    // M9-C1 T4：user PromptHistory 表已 contract 删除（GuestPromptHistory 保留），
+    // 登录 no-leak 改由聊天/作品/进度快照覆盖，本表无行可漏。
     await prisma.userPlaybackAnchor.create({
         data: {
             userId: userA.id,
@@ -86,7 +84,6 @@ async function runLoginNoLeakTests() {
         userChat: await getConversationForSubject({ type: 'user', id: userA.id }),
         guestChat: await getConversationForSubject({ type: 'guest', id: guestId }),
         userGen: (await prisma.storyWork.findMany({ where: { userId: userA.id } })).length,
-        userPrompt: (await prisma.promptHistory.findMany({ where: { userId: userA.id } })).length,
         userProg: await prisma.userPlaybackAnchor.findUnique({ where: { userId: userA.id } }),
         guestGen: await prisma.guestStoryWork.count({ where: { guestId } }),
         guestPrompt: await prisma.guestPromptHistory.count({ where: { guestId } }),
@@ -139,11 +136,6 @@ async function runLoginNoLeakTests() {
         (await prisma.storyWork.findMany({ where: { userId: userA.id } })).length,
         snap.userGen,
         '用户生成历史计数不变',
-    );
-    assert.strictEqual(
-        (await prisma.promptHistory.findMany({ where: { userId: userA.id } })).length,
-        snap.userPrompt,
-        '用户提示词历史计数不变',
     );
     const userProgAfter = await prisma.userPlaybackAnchor.findUnique({ where: { userId: userA.id } });
     assert.strictEqual(userProgAfter?.nextParagraphIndex, snap.userProg?.nextParagraphIndex, '用户进度行不变');

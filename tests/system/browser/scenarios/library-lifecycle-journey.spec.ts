@@ -2,43 +2,82 @@
 // journey: story-library
 // legacy_aliases: [E2E-07-15]
 import { test, expect } from "../harness/fixtures";
+import type { Page } from "@playwright/test";
 import { ensureRegisteredByApi } from "./helpers/auth";
-import { bulkCreateStoryWorksByPage, type CreateStoryWorkInput } from "./helpers/library";
 
 /**
- * 故事库完整生命周期旅程（E2E-07-15，L3 真实浏览器端到端全链路）。
+ * 故事库完整生命周期旅程（E2E-07-15，L3 真实浏览器端到端全链路，M9-C1 T4 集合级）。
  *
- * 覆盖完整的 17 个有序步骤：
- * 1. 创建 >=21 条真实 StoryWorks（保证分页成立）
- * 2. /library active 首屏 = 20 条
- * 3. scroll 拉取下一页（21+ 条出现）
- * 4. 搜索（q 过滤）
- * 5. 打开某条的真实 detail（/library/{真实id}）
+ * 顶层恒为 Collection 卡片；覆盖完整的 17 个有序步骤：
+ * 1. 创建 22 个集合（各 1 作品，保证分页成立）
+ * 2. /library active 首屏 = 20 张卡片
+ * 3. scroll 拉取下一页（22 张出现）
+ * 4. 搜索（命中集内作品时按集合去重）
+ * 5. 打开某集合的真实详情（/library/collections/{真实id}）
  * 6. Rename（改名后返回列表验证标题同步）
  * 7. Favorite（收藏）
  * 8. 返回列表 / 切 favorites 验证收藏出现
- * 9. Move to Trash（从 detail 移入回收站，应离开详情）
+ * 9. Move to Trash（从详情删除，应离开详情）
  * 10. Undo（Restore）恢复
  * 11. 再 Move（第二次移入回收站）
  * 12. 切到 trash 视图
- * 13. Trash 卡片无 Detail 入口（无法进入详情，直接访问呈现统一不可用）
+ * 13. Trash 卡片无详情入口（直接访问呈现统一不可用）
  * 14. Restore（从 trash 恢复）
  * 15. 再 Trash（第三次移入回收站）
  * 16. Permanent Delete（二次确认流）
- * 17. 最终消失（全部/收藏/回收站列表均无此作品，直接访问不可用）
+ * 17. 最终消失（全部/收藏/回收站列表均无此集合，直接访问不可用）
  */
+
+type TrpcBatch = Array<{ result: { data: { json: unknown } } }>;
+
+async function trpcMutate(page: Page, path: string, input: unknown): Promise<unknown> {
+    return page.evaluate(
+        async (args: { path: string; input: unknown }) => {
+            const res = await fetch(`/api/trpc/${args.path}?batch=1`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ "0": { json: args.input } }),
+            });
+            if (!res.ok) throw new Error(`trpc-http-${res.status}`);
+            const batch = (await res.json()) as TrpcBatch;
+            const first = batch[0];
+            if (!first || !("result" in first)) throw new Error("trpc-error-shape");
+            return (first as { result: { data: { json: unknown } } }).result.data.json;
+        },
+        { path, input },
+    );
+}
+
+async function trpcQuery(page: Page, path: string, input: unknown): Promise<unknown> {
+    return page.evaluate(
+        async (args: { path: string; input: unknown }) => {
+            const encoded = encodeURIComponent(JSON.stringify({ "0": { json: args.input } }));
+            const res = await fetch(`/api/trpc/${args.path}?batch=1&input=${encoded}`, {
+                method: "GET",
+                headers: { accept: "application/json" },
+            });
+            if (!res.ok) throw new Error(`trpc-http-${res.status}`);
+            const batch = (await res.json()) as TrpcBatch;
+            const first = batch[0];
+            if (!first || !("result" in first)) throw new Error("trpc-error-shape");
+            return (first as { result: { data: { json: unknown } } }).result.data.json;
+        },
+        { path, input },
+    );
+}
+
 test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence }) => {
-    test.setTimeout(180000);
+    test.setTimeout(300000);
 
     const recorder = evidence as unknown as {
         step: (name: string, detail?: unknown) => void;
     };
 
     let allowExpected404 = false;
-    let deletePermanentlyRequestCount = 0;
+    let deleteForeverRequestCount = 0;
     page.on("request", (req) => {
-        if (req.url().includes("library.deletePermanently")) {
-            deletePermanentlyRequestCount += 1;
+        if (req.url().includes("collection.deleteForever")) {
+            deleteForeverRequestCount += 1;
         }
     });
 
@@ -70,36 +109,43 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
         } catch {}
     });
 
-    // 注册全新独立用户（authedLimit = 60，满足批量创建 22 条作品限额与数据隔离）
+    // 注册全新独立用户（authedLimit = 60，满足批量建集限额与数据隔离）
     const username = `journey_user_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
     await ensureRegisteredByApi(page, harnessEnv.appUrl, username, "SecurePass123!");
     recorder.step("注册独立用户完成", { username });
 
-    // 1. 批量创建 22 条真实作品（>=21 条，保证分页成立）
-    const storyInputs: CreateStoryWorkInput[] = [];
-    for (let i = 1; i <= 21; i += 1) {
+    // 1. 经真实 promotion 创建 22 个集合（各 1 作品，保证分页成立）
+    const runKey = `${Date.now()}${Math.floor(Math.random() * 100000)}`;
+    const collectionIds: string[] = [];
+    for (let i = 1; i <= 22; i += 1) {
         const padded = String(i).padStart(2, "0");
-        storyInputs.push({
-            title: `星际探索第${padded}章`,
-            prompt: `关于宇宙深处探险的第${padded}段提示词`,
-            storyText: `这是星际探索故事正文的第${padded}部分，记录了深空飞船航行中的精彩记录...`,
+        const isTarget = i === 22;
+        const created = (await trpcMutate(page, "conversation.createNew", {})) as {
+            id?: string;
+        };
+        if (!created.id) throw new Error("no-conversation-id");
+        await trpcMutate(page, "collection.promoteArtifact", {
+            conversationId: created.id,
+            sourceMessageId: `t4-journey-${runKey}-${padded}`,
+            prompt: isTarget ? "勇敢小猫寻找魔法宝石的故事" : `关于宇宙深处探险的第${padded}段提示词`,
+            storyText: isTarget
+                ? "从前在一座充满奇迹的森林边，有一只勇敢的小猫咪，它踏上了寻找神秘魔法宝石的历险旅程..."
+                : `这是星际探索故事正文的第${padded}部分，记录了深空飞船航行中的精彩记录...${"星光与航线交织的夜晚。".repeat(4)}`,
         });
+        const found = (await trpcQuery(page, "collection.list", {
+            view: "active",
+            query: isTarget ? "小猫" : `第${padded}段提示词`,
+            limit: 5,
+        })) as { items?: Array<{ id?: string }> };
+        const cid = found.items?.[0]?.id;
+        if (!cid) throw new Error(`no-collection-id-${padded}`);
+        collectionIds.push(cid);
     }
-    // 第 22 条为具备特定关键词的目标作品
-    storyInputs.push({
-        title: "小猫历险记",
-        prompt: "勇敢小猫寻找魔法宝石的故事",
-        storyText: "从前在一座充满奇迹的森林边，有一只勇敢的小猫咪，它踏上了寻找神秘魔法宝石的历险旅程...",
-    });
+    expect(collectionIds).toHaveLength(22);
+    const targetId = collectionIds[21]!;
+    recorder.step("真实集合批量创建完成", { total: 22, targetId });
 
-    const createdWorks = await bulkCreateStoryWorksByPage(page, storyInputs);
-    expect(createdWorks).toHaveLength(22);
-    const targetWork = createdWorks[21]!;
-    expect(targetWork.title).toBe("小猫历险记");
-    expect(targetWork.id).toBeGreaterThan(0);
-    recorder.step("真实作品批量创建完成", { total: 22, targetId: targetWork.id });
-
-    // 2. /library active 首屏 = 20 条
+    // 2. /library active 首屏 = 20 张
     await page.goto(`${harnessEnv.appUrl}/library`, { waitUntil: "networkidle", timeout: 30000 });
     const retryBtn = page.getByRole("button", { name: "重试" });
     const libraryPage = page.getByTestId("library-page");
@@ -113,11 +159,11 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
         await page.waitForTimeout(500);
     }
     await expect(libraryPage).toBeVisible({ timeout: 15000 });
-    const cards = page.locator('article[data-testid^="story-work-card-"]');
+    const cards = page.locator('article[data-testid^="collection-card-"]');
     await expect(cards).toHaveCount(20, { timeout: 15000 });
-    recorder.step("首屏20条截断验证", { count: 20 });
+    recorder.step("首屏20张截断验证", { count: 20 });
 
-    // 3. scroll 拉取下一页（21+ 条出现）
+    // 3. scroll 拉取下一页（22 张出现）
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     const sentinel = page.getByTestId("infinite-scroll-sentinel");
     if (await sentinel.isVisible().catch(() => false)) {
@@ -134,159 +180,165 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
 
     await expect(cards).toHaveCount(22, { timeout: 20000 });
     await expect(page.getByTestId("terminal-no-more")).toBeVisible({ timeout: 15000 });
-    recorder.step("滚动分页加载至22条全部加载完成", { totalCount: 22 });
+    recorder.step("滚动分页加载至22张全部加载完成", { totalCount: 22 });
 
-    // 4. 搜索（q 过滤）
+    // 4. 搜索（命中集内作品时按集合去重）
     const searchInput = page.getByTestId("library-search-input");
     await searchInput.fill("小猫");
-    // 等待搜索防抖完成，列表应仅匹配出 1 条目标作品
+    // 等待搜索防抖完成，列表应仅匹配出 1 张目标集合卡片
     await expect(cards).toHaveCount(1, { timeout: 15000 });
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId(`story-card-link-${targetWork.id}`)).toHaveText("小猫历险记");
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeVisible({ timeout: 15000 });
 
-    // 清空搜索恢复全量 22 条
+    // 清空搜索恢复全量 22 张
     await page.getByTestId("library-search-clear-btn").click();
     await expect(searchInput).toHaveValue("");
     await expect(cards).toHaveCount(22, { timeout: 15000 });
     recorder.step("搜索过滤与恢复验证", { searchTarget: "小猫", filtered: 1, restored: 22 });
 
-    // 5. 打开某条的真实 detail（/library/{真实id}）
-    await page.getByTestId(`story-card-link-${targetWork.id}`).click();
-    await page.waitForURL(`**/library/${targetWork.id}`, { timeout: 15000 });
-    expect(new URL(page.url()).pathname).toBe(`/library/${targetWork.id}`);
-    await expect(page.getByTestId("story-detail-container")).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId("story-detail-title")).toHaveText("小猫历险记");
-    recorder.step("进入真实详情页", { id: targetWork.id });
+    // 5. 打开目标集合的真实详情（/library/collections/{真实id}）
+    await page.getByTestId(`collection-link-${targetId}`).click();
+    await page.waitForURL(`**/library/collections/${targetId}`, { timeout: 15000 });
+    expect(new URL(page.url()).pathname).toBe(`/library/collections/${targetId}`);
+    await expect(page.getByTestId("collection-detail-page")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("collection-members")).toBeVisible({ timeout: 15000 });
+    recorder.step("进入真实集合详情页", { id: targetId });
 
     // 6. Rename（改名后返回列表验证标题同步）
-    await page.getByTestId("story-detail-rename-btn").click();
-    const renameInput = page.getByTestId("story-detail-rename-input");
+    await page.getByTestId("collection-rename-btn").click();
+    const renameInput = page.getByTestId("collection-rename-input");
     await expect(renameInput).toBeVisible({ timeout: 15000 });
     await renameInput.fill("勇敢小猫大冒险");
-    await page.getByTestId("story-detail-rename-save-btn").click();
-    await expect(page.getByTestId("story-detail-title")).toHaveText("勇敢小猫大冒险", { timeout: 15000 });
+    await page.getByTestId("collection-rename-save").click();
+    await expect(page.getByTestId("collection-title")).toHaveText("勇敢小猫大冒险", { timeout: 15000 });
 
     // 返回列表验证标题同步
-    await page.getByTestId("back-to-library-link").click();
+    await page.getByTestId("collection-back-btn").click();
     await page.waitForURL("**/library", { timeout: 15000 });
-    await expect(page.getByTestId(`story-card-link-${targetWork.id}`)).toHaveText("勇敢小猫大冒险", { timeout: 15000 });
+    await expect(
+        page.getByTestId(`collection-card-${targetId}`).getByTestId("collection-title"),
+    ).toHaveText("勇敢小猫大冒险", { timeout: 15000 });
     recorder.step("重命名跨缓存列表同步完成", { newTitle: "勇敢小猫大冒险" });
 
     // 7. Favorite（在详情中收藏）
-    await page.getByTestId(`story-card-link-${targetWork.id}`).click();
-    await page.waitForURL(`**/library/${targetWork.id}`, { timeout: 15000 });
-    const favoriteBtn = page.getByTestId("story-detail-favorite-btn");
-    await favoriteBtn.click();
-    await expect(page.getByTestId("story-detail-favorite-badge")).toBeVisible({ timeout: 15000 });
-    recorder.step("详情页收藏成功", { id: targetWork.id });
+    await page.getByTestId(`collection-link-${targetId}`).click();
+    await page.waitForURL(`**/library/collections/${targetId}`, { timeout: 15000 });
+    await page.getByTestId("collection-favorite-btn").click();
+    await expect(page.getByTestId("collection-favorite-btn")).toHaveAttribute("data-favorited", "true", {
+        timeout: 15000,
+    });
+    recorder.step("详情页收藏成功", { id: targetId });
 
     // 8. 返回列表 / 切 favorites 验证收藏出现
-    await page.getByTestId("back-to-library-link").click();
+    await page.getByTestId("collection-back-btn").click();
     await page.waitForURL("**/library", { timeout: 15000 });
     await page.getByTestId("view-tab-favorites").click();
     await expect(page.getByTestId("view-tab-favorites")).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId(`story-card-link-${targetWork.id}`)).toHaveText("勇敢小猫大冒险");
-    recorder.step("收藏视图验证卡片呈现", { id: targetWork.id });
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeVisible({ timeout: 15000 });
+    await expect(
+        page.getByTestId(`collection-card-${targetId}`).getByTestId("collection-title"),
+    ).toHaveText("勇敢小猫大冒险");
+    recorder.step("收藏视图验证卡片呈现", { id: targetId });
 
-    // 9. Move to Trash（从 detail 移入回收站，应离开详情）
-    await page.getByTestId(`story-card-link-${targetWork.id}`).click();
-    await page.waitForURL(`**/library/${targetWork.id}`, { timeout: 15000 });
-    await page.getByTestId("story-detail-trash-btn").click();
+    // 9. Move to Trash（从详情移入回收站，应离开详情）
+    await page.getByTestId(`collection-link-${targetId}`).click();
+    await page.waitForURL(`**/library/collections/${targetId}`, { timeout: 15000 });
+    await page.getByTestId("collection-delete-btn").click();
 
     // 验证软删除后离开详情页，跳转至 /library 并展示撤销提示栏
     await page.waitForURL("**/library", { timeout: 15000 });
     expect(new URL(page.url()).pathname).toBe("/library");
     await expect(page.getByTestId("library-undo-toast")).toBeVisible({ timeout: 15000 });
-    recorder.step("详情页软删除并自动导航离开", { id: targetWork.id });
+    recorder.step("详情页软删除并自动导航离开", { id: targetId });
 
     // 10. Undo（Restore）恢复
     await page.getByTestId("library-undo-btn").click();
     await expect(page.getByTestId("library-undo-toast")).toBeHidden({ timeout: 15000 });
     await page.getByTestId("view-tab-active").click();
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId(`story-card-link-${targetWork.id}`)).toHaveText("勇敢小猫大冒险");
-    recorder.step("Undo撤销恢复成功", { id: targetWork.id });
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeVisible({ timeout: 15000 });
+    await expect(
+        page.getByTestId(`collection-card-${targetId}`).getByTestId("collection-title"),
+    ).toHaveText("勇敢小猫大冒险");
+    recorder.step("Undo撤销恢复成功", { id: targetId });
 
     // 11. 再 Move（第二次移入回收站）
-    await page.getByTestId(`story-card-trash-btn-${targetWork.id}`).click();
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeHidden({ timeout: 15000 });
+    await page.getByTestId(`collection-trash-btn-${targetId}`).click();
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeHidden({ timeout: 15000 });
     await expect(page.getByTestId("library-undo-toast")).toBeVisible({ timeout: 15000 });
     // 关闭 Undo 浮条
     await page.getByTestId("library-undo-dismiss-btn").click();
     await expect(page.getByTestId("library-undo-toast")).toBeHidden({ timeout: 15000 });
-    recorder.step("第二次移入回收站完成", { id: targetWork.id });
+    recorder.step("第二次移入回收站完成", { id: targetId });
 
     // 12. 切到 trash 视图
     await page.getByTestId("view-tab-trash").click();
     await expect(page.getByTestId("view-tab-trash")).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId(`story-card-trash-badge-${targetWork.id}`)).toHaveText("已移入回收站");
-    recorder.step("切换至回收站视图确认作品在列", { id: targetWork.id });
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("collection-trash-badge")).toHaveText("已移入回收站");
+    recorder.step("切换至回收站视图确认集合在列", { id: targetId });
 
-    // 13. Trash 卡片无 Detail 入口（无法进入详情）
-    await expect(page.getByTestId(`story-card-static-${targetWork.id}`)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId(`story-card-link-${targetWork.id}`)).toHaveCount(0);
-    const trashCard = page.getByTestId(`story-work-card-${targetWork.id}`);
+    // 13. Trash 卡片无详情入口（无法进入详情）
+    await expect(page.getByTestId("collection-title-static")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId(`collection-link-${targetId}`)).toHaveCount(0);
+    const trashCard = page.getByTestId(`collection-card-${targetId}`);
     await expect(trashCard.locator("a")).toHaveCount(0);
 
-    // 直接在浏览器地址栏强制访问该 trashed 作品详情，必须触发统一不可用保护（预期 404 响应，局域临时允许资源 404 日志）
+    // 直接在浏览器地址栏强制访问该 trashed 集合详情，必须触发统一不可用保护（预期 404 响应，局域临时允许资源 404 日志）
     allowExpected404 = true;
     try {
-        await page.goto(`${harnessEnv.appUrl}/library/${targetWork.id}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await page.goto(`${harnessEnv.appUrl}/library/collections/${targetId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
         await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
-        await expect(page.getByTestId("story-detail-container")).toBeHidden();
+        await expect(page.getByTestId("collection-detail-page")).toBeHidden();
         await page.getByTestId("back-to-library-link").click();
         await page.waitForURL("**/library", { timeout: 15000 });
     } finally {
         allowExpected404 = false;
     }
-    recorder.step("回收站卡片无详情入口且直接访问被统一不可用拦截", { id: targetWork.id });
+    recorder.step("回收站卡片无详情入口且直接访问被统一不可用拦截", { id: targetId });
 
     // 14. Restore（从 trash 恢复）
     await page.getByTestId("view-tab-trash").click();
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeVisible({ timeout: 15000 });
-    await page.getByTestId(`story-card-restore-btn-${targetWork.id}`).click();
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeHidden({ timeout: 15000 });
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeVisible({ timeout: 15000 });
+    await page.getByTestId("collection-restore-btn").click();
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeHidden({ timeout: 15000 });
 
-    // 切换至全部视图验证作品恢复可见
+    // 切换至全部视图验证集合恢复可见
     await page.getByTestId("view-tab-active").click();
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByTestId(`story-card-link-${targetWork.id}`)).toBeVisible({ timeout: 15000 });
-    recorder.step("从回收站恢复至全部列表完成", { id: targetWork.id });
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId(`collection-link-${targetId}`)).toBeVisible({ timeout: 15000 });
+    recorder.step("从回收站恢复至全部列表完成", { id: targetId });
 
     // 15. 再 Trash（第三次移入回收站）
-    await page.getByTestId(`story-card-trash-btn-${targetWork.id}`).click();
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeHidden({ timeout: 15000 });
+    await page.getByTestId(`collection-trash-btn-${targetId}`).click();
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeHidden({ timeout: 15000 });
     if (await page.getByTestId("library-undo-dismiss-btn").isVisible()) {
         await page.getByTestId("library-undo-dismiss-btn").click();
     }
     await page.getByTestId("view-tab-trash").click();
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeVisible({ timeout: 15000 });
-    recorder.step("第三次移入回收站准备永久删除", { id: targetWork.id });
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeVisible({ timeout: 15000 });
+    recorder.step("第三次移入回收站准备永久删除", { id: targetId });
 
     // 16. Permanent Delete（二次确认流与零 RPC 守卫）
-    expect(deletePermanentlyRequestCount).toBe(0);
-    await page.getByTestId(`story-card-delete-permanently-btn-${targetWork.id}`).click();
-    const deleteDialog = page.getByTestId(`permanent-delete-dialog-${targetWork.id}`);
+    expect(deleteForeverRequestCount).toBe(0);
+    await page.getByTestId("collection-permanent-delete-btn").click();
+    const deleteDialog = page.getByTestId("collection-delete-confirm");
     await expect(deleteDialog).toBeVisible({ timeout: 15000 });
     // 未确认前严格零 RPC
-    expect(deletePermanentlyRequestCount).toBe(0);
+    expect(deleteForeverRequestCount).toBe(0);
     recorder.step("永久删除未确认前零RPC", { rpcCount: 0 });
 
-    await page.getByTestId("permanent-delete-confirm-btn").click();
+    await page.getByTestId("collection-delete-confirm-ok").click();
     await expect(deleteDialog).toBeHidden({ timeout: 15000 });
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeHidden({ timeout: 15000 });
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeHidden({ timeout: 15000 });
     // 确认后恰好触发 1 次永久删除 RPC
-    expect(deletePermanentlyRequestCount).toBe(1);
-    recorder.step("永久删除二次确认流执行完成", { id: targetWork.id, rpcCount: 1 });
+    expect(deleteForeverRequestCount).toBe(1);
+    recorder.step("永久删除二次确认流执行完成", { id: targetId, rpcCount: 1 });
 
-    // 17. 最终消失（列表/trash 均无此作品，直接访问不可用）
+    // 17. 最终消失（列表/trash 均无此集合，直接访问不可用）
     // 回收站中无
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeHidden();
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeHidden();
     // 全部列表中无
     await page.getByTestId("view-tab-active").click();
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeHidden();
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeHidden();
     // 收藏列表中无（先等 tab 切换触发的合法客户端导航落定，再断言与后续硬导航；
     // 否则 WebKit 下 page.goto 会被该尚未完成的客户端导航打断）
     await page.getByTestId("view-tab-favorites").click();
@@ -295,17 +347,17 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
         (url) => url.pathname === "/library" && url.searchParams.get("view") === "favorites",
         { timeout: 15000 },
     );
-    await expect(page.getByTestId(`story-work-card-${targetWork.id}`)).toBeHidden();
+    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeHidden();
     // 直接访问详情无（预期 404 响应，局域临时允许资源 404 日志）
     allowExpected404 = true;
     try {
-        await page.goto(`${harnessEnv.appUrl}/library/${targetWork.id}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+        await page.goto(`${harnessEnv.appUrl}/library/collections/${targetId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
         await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
-        await expect(page.getByTestId("story-detail-container")).toBeHidden();
+        await expect(page.getByTestId("collection-detail-page")).toBeHidden();
     } finally {
         allowExpected404 = false;
     }
-    recorder.step("作品全维度彻底消失验证完毕", { id: targetWork.id });
+    recorder.step("集合全维度彻底消失验证完毕", { id: targetId });
 
     // 全程零控制台与页面未捕获错误
     expect(consoleErrors).toEqual([]);

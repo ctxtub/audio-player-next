@@ -8,11 +8,11 @@ import { loadEvidenceCatalog, getCaseIdsForExecutable, validateRow, SCHEMA_VERSI
 const cwd = process.cwd();
 
 // 中文注释：预期 schema 表集合（probe 子集断言用，不含迁移内表）。
+// T4 contract 后用户 PromptHistory 已删除（GuestPromptHistory 因 guestGc 保留）。
 const EXPECTED_TABLES = [
     'User',
     'ChatMessage',
     'GenerationHistory',
-    'PromptHistory',
     'UserConfig',
     'GuestConfig',
     'GuestChatMessage',
@@ -166,6 +166,7 @@ const SUITES = [
     { id: 'continuous-creation-state-machine', path: './tests/unit/continuous-creation/continuous-creation-state-machine.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'continuous-creation-ui-binding', path: './tests/unit/continuous-creation/continuous-creation-ui-binding.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'legacy-history-retirement', path: './tests/unit/story-collection/legacy-history-retirement.unit.test.ts', group: 'unit', needs_db: false },
+    { id: 'collection-library-viewmodel', path: './tests/unit/story-collection/collection-library-viewmodel.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'history-stop-migrate', path: './tests/integration/persistence-config/history-stop-migrate.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'prompt-history-contract', path: './tests/integration/persistence-config/prompt-history-contract.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'history-router-retired', path: './tests/integration/identity-session/history-router-retired.integration.test.ts', group: 'integration', needs_db: true },

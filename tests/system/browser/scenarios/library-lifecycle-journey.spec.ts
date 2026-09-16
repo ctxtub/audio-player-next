@@ -73,7 +73,6 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
         step: (name: string, detail?: unknown) => void;
     };
 
-    let allowExpected404 = false;
     let deleteForeverRequestCount = 0;
     page.on("request", (req) => {
         if (req.url().includes("collection.deleteForever")) {
@@ -83,6 +82,14 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
 
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
+    // fail-closed 读路径（直接访问已删除集合）必然产生 collection.get 404；
+    // 以 response URL 白名单精确放行（竞态安全），其余 404 一律视为真实失败。
+    const observed404Urls: string[] = [];
+    page.on("response", (res) => {
+        if (res.status() === 404) {
+            observed404Urls.push(res.url());
+        }
+    });
     page.on("console", (msg) => {
         if (msg.type() === "error") {
             const text = msg.text().slice(0, 300);
@@ -92,10 +99,12 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
             ) {
                 return;
             }
-            if (allowExpected404 && text.includes("status of 404 (Not Found)")) {
+            if (text.includes("status of 404 (Not Found)")) {
                 return;
             }
-            consoleErrors.push(text);
+            // 附来源 URL，便于区分预期导航 404 与真实资源 404。
+            const loc = msg.location();
+            consoleErrors.push(loc?.url ? `${text} @ ${loc.url.slice(0, 160)}` : text);
         }
     });
     page.on("pageerror", (err) => {
@@ -282,17 +291,13 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
     const trashCard = page.getByTestId(`collection-card-${targetId}`);
     await expect(trashCard.locator("a")).toHaveCount(0);
 
-    // 直接在浏览器地址栏强制访问该 trashed 集合详情，必须触发统一不可用保护（预期 404 响应，局域临时允许资源 404 日志）
-    allowExpected404 = true;
-    try {
-        await page.goto(`${harnessEnv.appUrl}/library/collections/${targetId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
-        await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
-        await expect(page.getByTestId("collection-detail-page")).toBeHidden();
-        await page.getByTestId("back-to-library-link").click();
-        await page.waitForURL("**/library", { timeout: 15000 });
-    } finally {
-        allowExpected404 = false;
-    }
+    // 直接在浏览器地址栏强制访问该 trashed 集合详情，必须触发统一不可用保护
+    // （fail-closed 读产生 collection.get 404，由 response 白名单精确放行）。
+    await page.goto(`${harnessEnv.appUrl}/library/collections/${targetId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("collection-detail-page")).toBeHidden();
+    await page.getByTestId("back-to-library-link").click();
+    await page.waitForURL("**/library", { timeout: 15000 });
     recorder.step("回收站卡片无详情入口且直接访问被统一不可用拦截", { id: targetId });
 
     // 14. Restore（从 trash 恢复）
@@ -348,19 +353,16 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
         { timeout: 15000 },
     );
     await expect(page.getByTestId(`collection-card-${targetId}`)).toBeHidden();
-    // 直接访问详情无（预期 404 响应，局域临时允许资源 404 日志）
-    allowExpected404 = true;
-    try {
-        await page.goto(`${harnessEnv.appUrl}/library/collections/${targetId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
-        await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
-        await expect(page.getByTestId("collection-detail-page")).toBeHidden();
-    } finally {
-        allowExpected404 = false;
-    }
+    // 直接访问详情无（fail-closed 读产生 collection.get 404，由 response 白名单精确放行）。
+    await page.goto(`${harnessEnv.appUrl}/library/collections/${targetId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("collection-detail-page")).toBeHidden();
     recorder.step("集合全维度彻底消失验证完毕", { id: targetId });
 
-    // 全程零控制台与页面未捕获错误
+    // 全程零控制台与页面未捕获错误；404 响应只允许 fail-closed 的 collection.get。
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
+    const unexpected404 = observed404Urls.filter((u) => !u.includes("/api/trpc/collection.get"));
+    expect(unexpected404).toEqual([]);
     recorder.step("终态控制台与页面零报错", { consoleErrors: 0, pageErrors: 0 });
 });

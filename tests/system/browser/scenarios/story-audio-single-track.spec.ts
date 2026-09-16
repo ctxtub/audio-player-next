@@ -238,11 +238,13 @@ test("StoryAudio 单轨资产：一条时间轴 + 卡片/Mini/Expanded 同源 + 
     expect(second.transport?.audioUrl).toBe(firstUrl);
     recorder.step("段落 1 复用同一 Asset", { audioUrl: second.transport?.audioUrl });
 
-    // 卡片表面：SPA 导航到 /library，全局唯一 `<audio>` 时间轴仍绑定同一 Asset。
+    // 列表表面（M9-C1 T4：/library 顶层恒为 Collection 卡片，不再有 Work 直链；
+    // 本步 oracle 仍是 probe 会话快照——SPA 导航后全局唯一 `<audio>` 时间轴仍绑定同一 Asset。
+    // 就绪门改为 library-page 本体 + 集合列表哨兵）。
     await page.getByRole("tab", { name: "故事库" }).click({ timeout: 15000 });
-    await expect(page.getByTestId(`story-card-link-${work.id}`)).toBeAttached({ timeout: 20000 });
+    await expect(page.getByTestId("library-page")).toBeVisible({ timeout: 20000 });
     const onLibrarySnapshot = await readProbe(page);
-    recorder.step("卡片表面会话快照", {
+    recorder.step("列表表面会话快照", {
         source: onLibrarySnapshot.source,
         status: onLibrarySnapshot.status,
         audioUrl: onLibrarySnapshot.transport?.audioUrl,
@@ -252,7 +254,7 @@ test("StoryAudio 单轨资产：一条时间轴 + 卡片/Mini/Expanded 同源 + 
     expect(onLibrarySnapshot.source?.workId).toBe(work.id);
     expect(onLibrarySnapshot.transport?.audioUrl).toBe(firstUrl);
     expect(onLibrarySnapshot.audioCount).toBe(1);
-    recorder.step("卡片表面同源", { cards: await page.getByTestId(`story-card-link-${work.id}`).count() });
+    recorder.step("列表表面同源", { workId: work.id });
 
     // Mini → Expanded：同一 transport 时间轴，Expanded 时长 == 整轨时长。
     await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 15000 });

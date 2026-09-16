@@ -122,6 +122,8 @@ test("Collection 两层列表/详情/逐Work播放 + Mini 安全区", async ({
 }) => {
     test.setTimeout(240000);
     const recorder = evidence as unknown as { step: (name: string, detail?: unknown) => void };
+    // Mini 安全区走 docked 路径（visible + layoutMode 非 wide-floating）；窄视口锁定该路径。
+    await page.setViewportSize({ width: 767, height: 844 });
     await registerAndDismiss(page, harnessEnv.appUrl, "a");
     const runKey = `${Date.now()}${Math.floor(Math.random() * 100000)}`;
     const seed = await seedOneCollection(page, runKey);
@@ -153,9 +155,12 @@ test("Collection 两层列表/详情/逐Work播放 + Mini 安全区", async ({
         .toBe(seed.workIds[1]);
     recorder.step("逐Work播放精确", { workId: seed.workIds[1] });
 
-    // Mini 安全区：有 Mini 时末卡位于 Mini 之上。
+    // Mini 安全区（docked 路径）：末成员可滚到 Mini 之上，且三占位变量数值组合成立。
     await expect(page.getByTestId("mini-slot")).toHaveAttribute("data-visible", "true", {
         timeout: 30000,
+    });
+    await expect(page.getByTestId("main-chrome")).toHaveAttribute("data-has-docked-mini", "true", {
+        timeout: 15000,
     });
     const miniTop = await page.getByTestId("mini-now-playing").evaluate((el) => {
         const r = el.getBoundingClientRect();
@@ -169,14 +174,22 @@ test("Collection 两层列表/详情/逐Work播放 + Mini 安全区", async ({
             return r.bottom;
         });
     expect(lastCardBottom).toBeLessThanOrEqual(miniTop);
-    const miniVar = await page.evaluate(() => {
+    const occupancy = await page.evaluate(() => {
         const host = document.querySelector('[data-testid="main-chrome"]');
-        if (!host) return "";
-        return getComputedStyle(host).getPropertyValue("--mini-player-occupied-height");
+        if (!host) return null;
+        const cs = getComputedStyle(host);
+        const num = (name: string) => Number.parseFloat(cs.getPropertyValue(name)) || 0;
+        return {
+            tab: num("--main-tabbar-occupied-height"),
+            mini: num("--mini-player-occupied-height"),
+            gap: num("--bottom-chrome-gap"),
+            safe: num("--bottom-chrome-safe-bottom"),
+        };
     });
-    expect(miniVar.trim().length).toBeGreaterThan(0);
-    expect(miniVar.trim()).not.toBe("0px");
-    recorder.step("Mini安全区断言通过", { lastCardBottom, miniTop });
+    expect(occupancy).not.toBeNull();
+    expect(occupancy!.mini).toBeGreaterThan(0);
+    expect(Math.abs(occupancy!.safe - (occupancy!.tab + occupancy!.mini + occupancy!.gap))).toBeLessThanOrEqual(1);
+    recorder.step("Mini安全区断言通过", { lastCardBottom, miniTop, occupancy });
 });
 
 test("Collection 集合级生命周期：重命名/收藏/删除/Undo/恢复/永久删除", async ({

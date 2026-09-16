@@ -15,7 +15,7 @@
 ## 操作步骤
 
 1. **无 Mini 基线**：新用户无播放会话时访问 `/library`，读取滚动容器 `padding-bottom` 计算值，确认等于 TabBar 占用（含 safe-area），且末卡底部与视口底部保留合理间距、无超大空白。
-2. **有 Mini 抬升（docked 路径，窄视口 767px）**：播放任意作品使 Mini 出现（`mini-slot[data-visible="true"]` 且 `main-chrome[data-has-docked-mini="true"]`），确认 `--mini-player-occupied-height` 非零；行为断言取已求值几何：`.content` 的 `padding-bottom` ≈ TabBar 矩形高 + Mini 矩形高 + gap（8px，容差 2px）。
+2. **有 Mini 抬升（docked 路径，窄视口 767px）**：播放任意作品使 Mini 出现（`mini-slot[data-visible="true"]` 且 `main-chrome[data-has-docked-mini="true"]`），确认 `--mini-player-occupied-height` 非零；行为断言取已求值几何：`.content` 的 `padding-bottom` ≈ TabBar 矩形高 + Mini 矩形高 + gap（8px，容差 4px：WebKit 亚像素舍入可达 ±3，仍能捕获任何缺项）。
 3. **末卡可达**：将集合列表滚动到底，断言末张卡片包围盒底边严格位于 Mini 包围盒顶边之上（`cardBottom <= miniTop`），“加载更多”哨兵同样不被遮挡。
 4. **Mini 消失回落**：关闭会话（新建创作强重置或暂停卸载以隐藏 Mini），确认占位变量回落、padding 收缩，无残留空白。
 

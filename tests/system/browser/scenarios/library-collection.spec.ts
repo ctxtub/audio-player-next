@@ -196,9 +196,10 @@ test("Collection 两层列表/详情/逐Work播放 + Mini 安全区", async ({
         };
     });
     expect(reservation).not.toBeNull();
+    // WebKit 亚像素舍入可达 ±3（总量 ~140），容差 4 仍能捕获任何缺项（缺 Mini 差 68，缺 TabBar 差 64）。
     expect(
         Math.abs(reservation!.pad - (reservation!.tabH + reservation!.miniH + 8)),
-    ).toBeLessThanOrEqual(2);
+    ).toBeLessThanOrEqual(4);
     recorder.step("Mini安全区断言通过", { lastCardBottom, miniTop, reservation });
 });
 

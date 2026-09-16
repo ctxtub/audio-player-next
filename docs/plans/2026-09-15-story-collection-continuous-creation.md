@@ -283,3 +283,61 @@ r2 commit 链: 2e74b15（RED 纯测试）→ 5d51483（实现）→ 6c36075（RE
 限制: 见 T3/post/CLOSEOUT-T3.md r2-5（沿用 r1 §4/§5；增补后台 kill 极端丢心跳说明）
 ```
 
+## 8. Task 4 交接记录（Implementer 自证，待独立 Reviewer）
+
+```text
+change-id: 2026-09-15-story-collection-continuous-creation（T4）
+目标完整 SHA: 125a08e4f00be49a1c8fe63c8b14507fdb3ac138
+实际 commit（本地，未 push）:
+  aa7ae96 test(T4): RED 集合两层列表/生命周期/安全区与 PromptHistory contract
+  c4bf8d1 feat(M9-C1-T4): GREEN 集合两层列表/生命周期/安全区与 PromptHistory contract
+  2ba95ce fix(M9-C1-T4): L3 首轮反馈（docked 视口/404 白名单/单轨卡片门迁移）
+  20a6a11 fix(M9-C1-T4): 安全区断言改取已求值几何
+  125a08e fix(M9-C1-T4): 安全区几何容差 4px（WebKit 亚像素舍入）
+修改文件:
+  app/(main)/library/index.tsx（重写：顶层恒为 Collection）/ index.module.scss /
+  components/CollectionCard.tsx（新）/ components/index.ts / layout.tsx（+CollectionUndoProvider）/
+  collections/[id]/index.tsx + page.tsx（新：集合详情）
+  lib/client/collectionViewModel.ts + collectionQueries.ts + collectionMutations.ts + bottomInset.ts（新）/
+  components/Library/CollectionUndoProvider.tsx（新）
+  styles/app.module.scss（三占位变量单源输出）
+  prisma/schema.prisma + prisma/migrations/20260916090000_m9_c1_t4_prompt_history_contract/（DROP TABLE PromptHistory）
+  scripts/run-tests.mjs（EXPECTED_TABLES 去 PromptHistory；注册 collection-library-viewmodel）
+  tests/unit/story-collection/collection-library-viewmodel.unit.test.ts（新 L1）
+  tests/system/browser/scenarios/library-collection.spec.ts（RED + 精度修正 + docked/几何断言）
+  tests/system/browser/scenarios/library-lifecycle-journey.spec.ts（重写为集合级 17 步）
+  tests/system/browser/scenarios/story-audio-single-track.spec.ts（卡片门迁移，oracle 未动）
+  tests/integration/{identity-session/login-existing-no-leak,
+    persistence-config/guest-creative-sync,
+    persistence-config/guest-multisubject-lifecycle,
+    persistence-config/history-stop-migrate}.integration.test.ts（contract 跟随）
+  docs/e2e/07-故事库与作品资产/{15,18（RED）,19}.md / tests/test-catalog.yaml / README.md
+case/executable ids:
+  case collection-library-ui（exec-l3-collection-library + exec-collection-library-viewmodel）
+  case library-mini-safe-area（exec-l3-collection-library）
+  case prompt-history-contract（exec-prompt-history-contract）
+  case library-lifecycle-journey（exec-l3-library-lifecycle-journey，集合级重写）
+实际命令与 exit code: 见 .e2e-results/2026-09-15-story-collection-continuous-creation/T4/post/（*.green.log 均带 # tree 头与 EXIT=）
+  RED: T4/red/prompt-history-contract.red.log（L2，EXIT=1）/
+       T4/red/library-collection.red.log（L3，4 failed，EXIT=1）
+  首轮 L3 全量 71 passed/9 failed（4 真问题 + 单轨卡片门 + 3 webkit flake + 1 webkit 舍入；红跑留档）
+  隔离重跑: targeted 12 passed（journey/单轨双浏览器转绿）/
+            webkit test1 隔离转绿 / webkit trio 3 passed
+完成门（tree 125a08e, dirty=0）: catalog EXIT=0；unit 71/71；integration 60/60；
+  tooling 10/10；tsc EXIT=0；lint EXIT=0；prisma validate valid；build EXIT=0；
+  yarn test:browser 80 passed EXIT=0（4.7m，一轮全绿）
+迁移计数证据: T4/post/contract-deploy.green.log —— 隔离库 migrate deploy 全链通过，
+  28 表；PromptHistory 缺席；GuestPromptHistory / StoryWorkMigration /
+  GenerationHistory / GuestGenerationHistory / StoryAudioSegment / StoryAudioManifest / StoryCollection 齐在
+feature flag: 无新增（T1 rollout 开关未动；T3 双 flag 未动）
+回滚方法: 本 T4 不执行生产数据删除；代码回滚即 revert 本段 5 提交（contract 迁移未上生产，无需 DB 回滚）
+git status --short: 干净（本段提交后）
+git worktree list: 仅主树；git stash list: 空
+限制: 详见 T4/post/CLOSEOUT-T4.md §5（L1 无独立 RED；早期无效 RED 已 rm；legacy 清除结论；
+  视觉验收由 supervisor 做；生产事项一律未动）
+视觉验收（supervisor）: `yarn test:browser` 自带隔离服务（31120-31150 空闲端口 + per-run 库 + mock OpenAI）；
+  路由 /library、/library/collections/{id}、/library/{workId}、/chat、/setting
+报告: READY（Implementer 自证；最终 APPROVE 由独立 Reviewer 给出，push 由 supervisor 执行）
+```
+```
+

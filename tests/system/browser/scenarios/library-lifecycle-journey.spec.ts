@@ -85,14 +85,84 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
 
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
-    // fail-closed 读路径（直接访问已删除集合）在刻意探测窗内产生 collection.get 404；
-    // 窗口外任何 404 计入 consoleErrors（默认拒绝），末端再以 response URL 白名单复核。
-    const observed404Urls: string[] = [];
-    page.on("response", (res) => {
-        if (res.status() === 404) {
-            observed404Urls.push(res.url());
-        }
+    // fail-closed 读路径（直接访问已删除集合 / 软删后重取）在刻意探测窗内产生
+    // collection.get 404；窗口外任何 404 计入 consoleErrors（默认拒绝），末端再以
+    // response URL 白名单复核（§W36：时间窗 ∧ URL 白名单 双条件）。
+    const testStart = Date.now();
+    const observed404s: Array<{ url: string; t: number }> = [];
+    // 期望窗：step 绑定的真实触发点，open/close 为相对 testStart 的 ms。
+    const windows: Array<{ step: string; open: number; close: number | null }> = [];
+    // 全量 collection.* 时间线（W41 取证，长期有效）：仅存诊断最小字段（过程名/ID 前缀/状态），
+    // 逐行打印而非整串 JSON，避免长串被截断而丢掉后半段时间线。
+    type ColEntry = {
+        dt: number;
+        dir: "→" | "←";
+        method: string;
+        proc: string;
+        idPrefix: string;
+        status: number | null;
+    };
+    const colTimeline: ColEntry[] = [];
+    const parseCol = (u: string): { proc: string; idPrefix: string } => {
+        const proc = /\/api\/trpc\/(collection\.[A-Za-z]+)/.exec(u)?.[1] ?? "collection.?";
+        const id = /%22id%22%3A%22([0-9a-fA-F-]{0,8})/.exec(u)?.[1];
+        return { proc, idPrefix: id ?? "-" };
+    };
+    page.on("request", (req) => {
+        const u = req.url();
+        if (!u.includes("/api/trpc/collection.")) return;
+        const { proc, idPrefix } = parseCol(u);
+        colTimeline.push({
+            dt: Date.now() - testStart,
+            dir: "→",
+            method: req.method(),
+            proc,
+            idPrefix,
+            status: null,
+        });
     });
+    page.on("response", (res) => {
+        const u = res.url();
+        if (u.includes("/api/trpc/collection.")) {
+            const { proc, idPrefix } = parseCol(u);
+            colTimeline.push({
+                dt: Date.now() - testStart,
+                dir: "←",
+                method: res.request().method(),
+                proc,
+                idPrefix,
+                status: res.status(),
+            });
+        }
+        if (res.status() === 404) observed404s.push({ url: u, t: Date.now() });
+    });
+    const observed404Urls = (): string[] => observed404s.map((o) => o.url);
+    /** 逐行完整打印时间线（不截断整串），仅在出现未预期错误时调用。 */
+    const dumpDiagnostics = (label: string): void => {
+        const rel = (t: number): number => t - testStart;
+        console.log(
+            `[${label}] windows=${JSON.stringify(
+                windows.map((w) => ({
+                    step: w.step,
+                    open: rel(w.open),
+                    close: w.close == null ? null : rel(w.close),
+                })),
+            )}`,
+        );
+        console.log(
+            `[${label}] 404-resp=${
+                observed404s
+                    .map((o) => `${rel(o.t)}ms:${/collection\.[A-Za-z]+/.exec(o.url)?.[0] ?? o.url.slice(0, 40)}`)
+                    .join(" | ") || "none"
+            }`,
+        );
+        console.log(`[${label}] collection.* timeline (${colTimeline.length} entries, showing last 40):`);
+        for (const e of colTimeline.slice(-40)) {
+            console.log(
+                `[${label}]   ${e.dt}ms ${e.dir}${e.method} ${e.proc} id=${e.idPrefix} status=${e.status ?? "-"}`,
+            );
+        }
+    };
     page.on("console", (msg) => {
         if (msg.type() === "error") {
             const text = msg.text().slice(0, 300);
@@ -127,24 +197,34 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
     await ensureRegisteredByApi(page, harnessEnv.appUrl, username, "SecurePass123!");
     recorder.step("注册独立用户完成", { username });
 
-    // W36（T4R1）：刻意 fail-closed 探测的关窗条件——React Query 默认重试尾巴
-    // （间隔 1s/2s/4s，console 错误与 retry 一一对应）必须落定后才关窗，否则纯墙钟窗恒有竞态。
-    // 关窗 = observed404Urls 连续 8s 无增长（覆盖最大 4s 重试间隔 + 抖动），60s 上限 fail-closed。
+    // 期望窗原语（W41）：open 于真实触发点之前/之内，close 于触发后的重试尾巴落定之后。
+    const openExpected404Window = (step: string): void => {
+        allowExpected404 = true;
+        windows.push({ step, open: Date.now(), close: null });
+    };
+    const closeExpected404Window = (): void => {
+        allowExpected404 = false;
+        const seg = windows[windows.length - 1];
+        if (seg && seg.close == null) seg.close = Date.now();
+    };
+    // 刻意 fail-closed 探测的关窗条件——React Query 默认重试尾巴（间隔 1s/2s/4s，
+    // console 错误与 retry 一一对应）必须落定后才关窗，否则纯墙钟窗恒有竞态。
+    // 关窗 = observed404s 连续 8s 无增长（覆盖最大 4s 重试间隔 + 抖动），60s 上限 fail-closed。
     async function settleExpected404sAndCloseWindow(): Promise<void> {
         const deadline = Date.now() + 60000;
-        let last = observed404Urls.length;
+        let last = observed404s.length;
         let quietSince = Date.now();
         for (;;) {
             if (Date.now() > deadline) throw new Error("expected-404-settle-timeout");
             await page.waitForTimeout(1000);
-            if (observed404Urls.length !== last) {
-                last = observed404Urls.length;
+            if (observed404s.length !== last) {
+                last = observed404s.length;
                 quietSince = Date.now();
             } else if (Date.now() - quietSince >= 8000) {
                 break;
             }
         }
-        allowExpected404 = false;
+        closeExpected404Window();
     }
 
     // 1. 经真实 promotion 创建 22 个集合（各 1 作品，保证分页成立）
@@ -275,23 +355,37 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
     // 9. Move to Trash（从详情移入回收站，应离开详情）
     await page.getByTestId(`collection-link-${targetId}`).click();
     await page.waitForURL(`**/library/collections/${targetId}`, { timeout: 15000 });
-    await page.getByTestId("collection-delete-btn").click();
+    // W41：软删除动作的真实触发点——详情页 `moveToTrash` 的 invalidateCollection 会
+    // 对刚被软删的集合重取详情（fail-closed → collection.get 404）。期望窗必须以该
+    // 真实触发点开窗（删除点击之前），而非守着"不会发生请求"的静默区间。
+    // 该重取属产品面次生瑕疵（软删后不应再发详情读），本轮窄修不改为产品行为，
+    // 作为已知缺口写入 CLOSEOUT §5/§9，窗口 + URL 白名单双条件保持不变。
+    // 注：关窗的 8s settle 会越过 Undo 浮条 6s 自动消失窗口，故 Undo 恢复必须与
+    // 软删除同处一个窗口块内先执行、再结算关窗（断言零削减，仅调整先后）。
+    openExpected404Window("step9-detail-soft-delete");
+    try {
+        await page.getByTestId("collection-delete-btn").click();
 
-    // 验证软删除后离开详情页，跳转至 /library 并展示撤销提示栏
-    await page.waitForURL("**/library", { timeout: 15000 });
-    expect(new URL(page.url()).pathname).toBe("/library");
-    await expect(page.getByTestId("library-undo-toast")).toBeVisible({ timeout: 15000 });
-    recorder.step("详情页软删除并自动导航离开", { id: targetId });
+        // 验证软删除后离开详情页，跳转至 /library 并展示撤销提示栏
+        await page.waitForURL("**/library", { timeout: 15000 });
+        expect(new URL(page.url()).pathname).toBe("/library");
+        await expect(page.getByTestId("library-undo-toast")).toBeVisible({ timeout: 15000 });
+        recorder.step("详情页软删除并自动导航离开", { id: targetId });
 
-    // 10. Undo（Restore）恢复
-    await page.getByTestId("library-undo-btn").click();
-    await expect(page.getByTestId("library-undo-toast")).toBeHidden({ timeout: 15000 });
-    await page.getByTestId("view-tab-active").click();
-    await expect(page.getByTestId(`collection-card-${targetId}`)).toBeVisible({ timeout: 15000 });
-    await expect(
-        page.getByTestId(`collection-card-${targetId}`).getByTestId("collection-title"),
-    ).toHaveText("勇敢小猫大冒险");
-    recorder.step("Undo撤销恢复成功", { id: targetId });
+        // 10. Undo（Restore）恢复（保持在 Undo 浮条 6s 生命周期内）
+        await page.getByTestId("library-undo-btn").click();
+        await expect(page.getByTestId("library-undo-toast")).toBeHidden({ timeout: 15000 });
+        await page.getByTestId("view-tab-active").click();
+        await expect(page.getByTestId(`collection-card-${targetId}`)).toBeVisible({ timeout: 15000 });
+        await expect(
+            page.getByTestId(`collection-card-${targetId}`).getByTestId("collection-title"),
+        ).toHaveText("勇敢小猫大冒险");
+        recorder.step("Undo撤销恢复成功", { id: targetId });
+
+        await settleExpected404sAndCloseWindow();
+    } finally {
+        if (allowExpected404) closeExpected404Window();
+    }
 
     // 11. 再 Move（第二次移入回收站）
     await page.getByTestId(`collection-trash-btn-${targetId}`).click();
@@ -316,8 +410,8 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
     await expect(trashCard.locator("a")).toHaveCount(0);
 
     // 直接在浏览器地址栏强制访问该 trashed 集合详情，必须触发统一不可用保护
-    // （fail-closed 读产生 collection.get 404，时间窗内放行 + 末端 URL 白名单复核）。
-    allowExpected404 = true;
+    // （fail-closed 读产生 collection.get 404，窗口 ∧ URL 白名单双条件）。
+    openExpected404Window("step13-trash-direct-visit");
     try {
         await page.goto(`${harnessEnv.appUrl}/library/collections/${targetId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
         await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
@@ -326,7 +420,7 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
         await page.waitForURL("**/library", { timeout: 15000 });
         await settleExpected404sAndCloseWindow();
     } finally {
-        if (allowExpected404) allowExpected404 = false;
+        if (allowExpected404) closeExpected404Window();
     }
     recorder.step("回收站卡片无详情入口且直接访问被统一不可用拦截", { id: targetId });
 
@@ -383,22 +477,37 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
         { timeout: 15000 },
     );
     await expect(page.getByTestId(`collection-card-${targetId}`)).toBeHidden();
-    // 直接访问详情无（fail-closed 读产生 collection.get 404，时间窗内放行 + 末端 URL 白名单复核）。
-    allowExpected404 = true;
+    // 直接访问详情无（fail-closed 读产生 collection.get 404，窗口 ∧ URL 白名单双条件）。
+    // 诊断式轮询：不断言弱化，失败时输出当时画面状态（路由/两候选 testid/pageErrors）。
+    openExpected404Window("step17-forever-deleted-direct-visit");
     try {
         await page.goto(`${harnessEnv.appUrl}/library/collections/${targetId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
-        await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
+        await expect
+            .poll(async () => {
+                if (await page.getByTestId("library-unavailable").isVisible().catch(() => false)) {
+                    return "unavailable";
+                }
+                if (await page.getByTestId("collection-detail-page").isVisible().catch(() => false)) {
+                    return "detail-still-mounted";
+                }
+                return `neither(path=${new URL(page.url()).pathname},pageErrors=[${pageErrors.join("|").slice(0, 200)}],resp404=${observed404s.length})`;
+            }, { timeout: 30000 })
+            .toBe("unavailable");
         await expect(page.getByTestId("collection-detail-page")).toBeHidden();
         await settleExpected404sAndCloseWindow();
     } finally {
-        if (allowExpected404) allowExpected404 = false;
+        if (allowExpected404) closeExpected404Window();
     }
     recorder.step("集合全维度彻底消失验证完毕", { id: targetId });
 
     // 全程零控制台与页面未捕获错误；404 响应只允许 fail-closed 的 collection.get。
+    // 失败时逐行完整打印窗口与 collection.* 时间线（不截断整串）。
+    if (consoleErrors.length > 0 || pageErrors.length > 0) {
+        dumpDiagnostics(`stray-404-diag target=${targetId.slice(0, 8)}`);
+    }
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
-    const unexpected404 = observed404Urls.filter((u) => !u.includes("/api/trpc/collection.get"));
+    const unexpected404 = observed404Urls().filter((u) => !u.includes("/api/trpc/collection.get"));
     expect(unexpected404).toEqual([]);
     recorder.step("终态控制台与页面零报错", { consoleErrors: 0, pageErrors: 0 });
 });

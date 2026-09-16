@@ -340,5 +340,62 @@ git worktree list: 仅主树；git stash list: 空
   路由 /library、/library/collections/{id}、/library/{workId}、/chat、/setting
 报告: READY（Implementer 自证；最终 APPROVE 由独立 Reviewer 给出，push 由 supervisor 执行）
 ```
+
+## 8b. Task 4 修复轮 1 交接记录（T4R1，Implementer 自证，待独立 Reviewer）
+
+```text
+change-id: 2026-09-15-story-collection-continuous-creation（T4R1）
+起点: b25b2f1（dirty=0；worktree 仅主树；stash 空）
+目标完整 SHA: 本段收口提交（= 运行全部完成门的树；40 位 SHA 见 T4/post/CLOSEOUT-T4.md §7 与 READY 报告；
+  为避免"文档提交晚于门禁树"导致 green 证据树漂移，收口提交后不再追加任何提交）
+实际 commit（本地，未 push）:
+  14dd334 fix(M9-C1-T4R1): W39 P3B扫描排除gitignore生成物＋自证；W36 404双条件；
+          W35单轨两层可达；W38成员可播oracle
+  beacffc fix(M9-C1-T4R1): W38可播断言去单轨前缀；W36关窗待重试尾巴落定
+  b764ccd fix(M9-C1-T4R1): W41 404期望窗绑定真实触发点（软删后重取）＋诊断收敛为逐行完整输出
+          （收口前 squash：bebb87c/5ec1795/7b6c822/c55a6ca/d5df847/19315e4/994c8f6 七个施工期
+           诊断提交 → 本提交；W39/W35/W36/W38 内容未被回退）
+本轮必收项与证据:
+  W39（unit 假红根因）: tests/unit/navigation/m9-player-retirement-closure.unit.test.ts
+    审计集改为 walk − `git check-ignore --stdin` 命中子集（排除 gitignore 生成物，非用 ls-files
+    白名单以免漏扫未提交手写文件）；新增 M9-04-10b 自证：被排除者须全被 ignore 命中、
+    lib/generated/prisma/internal/class.ts 须在被排除集、对排除集复跑 P3B 命中仅允许来自
+    lib/generated/（其余即掩盖，fail-closed）。重跑 unit 71/71 EXIT=0。
+  W36（404 收回双条件）: journey 恢复默认拒绝——仅刻意探测窗内放行 console 404，
+    窗口外一律计入 consoleErrors；末端保留 unexpected404（非 /api/trpc/collection.get）复核。
+  W41（journey 残留 1 红）: 根因=详情页软删除的 invalidateCollection 对已删集合重取详情 →
+    fail-closed 404，落在原两窗之外的静默区。处置=新增 step9 窗口（删除点击前开启），
+    Undo 恢复并入同窗口块（避开 6s 浮条寿命），settle 待重试尾巴落定后关窗。
+    选择"绑窗+披露"而非"改产品行为"（窄修）；缺口如实登记。诊断改为仅失败时逐行打印
+    窗口与最近 40 条 collection.* 往返（不再对整串 JSON slice）。
+  W35（T3 oracle 门迁移）: single-track test-1 种子改真实 conversation.createNew +
+    collection.promoteArtifact（与旧 library.create 同构，promote 不触 TTS），新增两层路径
+    成员可达观测（collection-link → member-work{data-position=0} → member-play 可见，
+    二次导航后 source.workId/audioUrl 不变）；核心同源 oracle 零削减。
+  W38（成员播放可播性）: library-collection test-1 增 hasAudioUrl + status≠error + 非空 URL
+    可播 oracle（不再只断言 source.workId）；并如实记录本 spec 未开单轨 flag 时
+    isCanonicalAssetUrl=false（ephemeral 音源，符合设计）。
+  W31（零引用遗留组件）: StoryWorkCard.tsx / LibraryTimeGroup.tsx 产品面零引用但被两套
+    已接受 L1 直接依赖（含 fs.existsSync 存在性断言）⇒ 保留并定位为"产品面已退役、仅作 L1
+    fixture 存活"；CLOSEOUT §5.3 原"无可删残留"结论已修正。
+  W27/W30（披露）: journey 改写对照（含逐条覆盖映射与**消失的 L3 work 详情生命周期覆盖**）
+    与 2 处 user 提示词断言移除的覆盖面收窄说明，写入 T4/post/CLOSEOUT-T4.md §8。
+  W32（名 green 实红日志）: l3-targeted-r1 / l3-targeted-r1-run2 等改名 *.red.log；
+    全部非最终树 green 改 *.pre-final.log；收口机械自检每份 .green.log 的 # tree == 最终树。
+  W28（最终树证据）: unit/tooling/build/定向 L3/全量 yarn test:browser 均在最终树 dirty=0 重出。
+完成门（最终树, dirty=0）: 见 T4/post/ 最终树 *.green.log（catalog/lint/tsc/unit/integration/
+  tooling/prisma validate/build/定向L3/全量 browser），每份带 # tree 头与 EXIT=。
+feature flag: 无新增；回滚：revert 本段 3 提交。
+限制（不隐瞒）:
+  1) W41 已知缺口：详情页软删后多发一次注定 404 的 collection.get（产品面次生瑕疵；本轮不修，
+     建议后续在 moveToTrash/deleteForever 后跳过 detail(id) 失效）。
+  2) W27 覆盖缺口：/library/{workId} Work 详情的 rename/favorite/trash 端到端 L3 覆盖随
+     journey 重写消失（仅剩 L1 library-detail-* + main-navigation-route-journey 标题断言）；
+     建议后续补场景或显式标记 L1-only。
+  3) L1 无独立 RED（沿用 T3 口径）；W31 遗留组件保留属有意取舍。
+  4) 生产事项一律未动：无 push/merge/deploy、无生产数据删除；contract 迁移仅生成+本地验证。
+视觉验收（supervisor）: `yarn test:browser` 自带隔离服务（31120-31150 空闲端口 + per-run 库 +
+  mock OpenAI）；路由 /library、/library/collections/{id}、/library/{workId}、/chat、/setting
+报告: READY（Implementer 自证；最终 APPROVE 由独立 Reviewer 给出，push 由 supervisor 执行）
 ```
 

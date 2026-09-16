@@ -1,5 +1,5 @@
 /**
- * M9-C1 T2：连续创作 store（薄封装 `lib/continuous-creation/stateMachine`）。
+ * 连续创作 store（薄封装 `lib/continuous-creation/stateMachine`）。
  *
  * 唯一职责：把纯状态机接到 Zustand，并持有 collection identity；不做 IO、不生成、不播放。
  * 真正的编排（生成下一 Work / 准备音频 / 自动续播）在
@@ -98,7 +98,7 @@ function applyEvent(
  * 仅当编排服务已被加载（即可能已经产生在途/就绪 next）时钩子非空；否则无任务可取消，
  * `switchCollection` 退化为纯 epoch 推进 + 绑定新集合。
  *
- * 钩子语义（M9-C1 T2 修复轮 2）：abort 在途传输、清空 prepared/调度锁/采样点，
+ * 钩子语义（：abort 在途传输、清空 prepared/调度锁/采样点，
  * 再以新 collection identity 重新初始化并重新快照预算，返回新 epoch。
  */
 export type ContinuousCreationSwitchHandler = (collectionId: string | null) => number;
@@ -118,7 +118,7 @@ export function registerContinuousCreationSwitchHandler(
 /**
  * 关闭开关（disable）的「真取消」钩子（由 `continuousCreationFlow` 注册）。
  *
- * M9-C1 T2 修复轮 3：`disable` 不能只改 store status——必须 abort 在途生成传输并清空
+ * `disable` 不能只改 store status——必须 abort 在途生成传输并清空
  * 模块级 prepared/调度锁，否则关闭前就绪的 next 会被迟到 `handleTrackEnded` 取出续播。
  * 与 switch 钩子同理，store 不得反向 import service。
  */
@@ -141,7 +141,7 @@ const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (s
 
   enable: () => set((state) => applyEvent(state, { type: 'enable' })),
   disable: () => {
-    // M9-C1 T2 修复轮 3：关闭开关必须先走真取消 seam（abort 在途传输 + 清 prepared/
+    // 关闭开关必须先走真取消 seam（abort 在途传输 + 清 prepared/
     // 调度锁），再落 disabled 终态；否则关闭前的就绪 next 会被迟到轨道结束续播。
     cancelHandler?.();
     set((state) => applyEvent(state, { type: 'disable' }));
@@ -178,7 +178,7 @@ const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (s
   },
 
   switchCollection: (collectionId) => {
-    // M9-C1 T2 修复轮 2：切换会话/集合必须「真取消」在途 next 并清 prepared，
+    // 切换会话/集合必须「真取消」在途 next 并清 prepared，
     // 不能只靠 epoch 失配做逻辑 no-op（否则 prepared/调度锁会占住 lookahead=1 槽位，
     // 导致新会话无法立即重新调度）。真实取消 + 重新初始化由编排服务钩子完成。
     if (switchHandler !== null) {
@@ -196,7 +196,7 @@ const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (s
   isStale: (epoch) => isStaleCallback(machineStateOf(get()), epoch),
   hasNextJob: () => hasNextJob(machineStateOf(get())),
   reset: () => {
-    // M9-C1 T2 评审闭合：登出/全局重置必须推进 epoch（绝不回落到 0），
+    // 评审闭合：登出/全局重置必须推进 epoch（绝不回落到 0），
     // 否则旧会话在途回调可能因 epoch 恰好相等而误判“新鲜”。
     const nextEpoch = get().epoch + 1;
     set({ ...INITIAL_STATE, epoch: nextEpoch });

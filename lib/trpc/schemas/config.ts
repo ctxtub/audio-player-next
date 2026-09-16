@@ -1,13 +1,13 @@
 /**
  * 用户配置相关 Zod Schemas 与默认值。
  *
- *：领域语义迁移 floatingPlayerEnabled → desktopFloatingPlayerEnabled。
+ * 领域语义迁移 floatingPlayerEnabled → desktopFloatingPlayerEnabled。
  * - DTO 只暴露 desktopFloatingPlayerEnabled（新产品语义唯一来源）。
  * - Patch 以 desktopFloatingPlayerEnabled 为准；legacy floatingPlayerEnabled
  *   仅在 config compatibility boundary 收敛（旧 Bundle 兼容），不得向 Store/DTO 传播。
  * - 两者同时出现且值不同 → BAD_REQUEST（由 superRefine 抛 ZodError，tRPC 映射为 BAD_REQUEST）。
  *
- *：领域语义迁移 playDuration → defaultSleepTimerEnabled + defaultSleepTimerMinutes。
+ * 领域语义迁移 playDuration → defaultSleepTimerEnabled + defaultSleepTimerMinutes。
  * - DTO 正式字段 defaultSleepTimerEnabled/defaultSleepTimerMinutes（spec §30）；
  * - 旧 playDuration 作为 compatibility alias 保留一个发布周期（与  策略一致）；
  * - Patch 以新字段为准；legacy playDuration 仅在 boundary 收敛；
@@ -68,7 +68,7 @@ export const userConfigPatchSchema = z
                 path: ['desktopFloatingPlayerEnabled'],
             });
         }
-        //：新旧睡眠定时时长同时出现且不同 → BAD_REQUEST（与  双字段策略一致）。
+        // 新旧睡眠定时时长同时出现且不同 → BAD_REQUEST（与  双字段策略一致）。
         if (
             val.defaultSleepTimerMinutes !== undefined &&
             val.playDuration !== undefined &&
@@ -100,7 +100,7 @@ export type NormalizedUserConfigPatch = Omit<UserConfigPatch, 'floatingPlayerEna
  * - 两者都存在且相同 → 以新字段为准；
  * - 两者都存在且不同 → 抛错（调用方映射为 BAD_REQUEST）。
  *
- *：旧 playDuration 映射为 defaultSleepTimerMinutes 时不碰
+ * 旧 playDuration 映射为 defaultSleepTimerMinutes 时不碰
  * defaultSleepTimerEnabled（旧语义“设置时长”本身即启用意图由调用方显式 enabled 表达；
  * 纯旧 Bundle 只发 playDuration 时保持原值 enabled 不变——既有用户 enabled 默认为 true，
  * 行为保持 30 分钟默认，§29.2）。
@@ -132,8 +132,8 @@ export const normalizeUserConfigPatch = (
 
 /**
  * 返回前端的用户配置 DTO（前端语义命名）。
- *：只暴露 desktopFloatingPlayerEnabled，不再传播 legacy 别名。
- *：正式暴露 defaultSleepTimerEnabled/defaultSleepTimerMinutes；
+ * 只暴露 desktopFloatingPlayerEnabled，不再传播 legacy 别名。
+ * 正式暴露 defaultSleepTimerEnabled/defaultSleepTimerMinutes；
  * 旧 playDuration 作为 compatibility alias 同值保留一个发布周期（spec §30）。
  */
 export const userConfigDtoSchema = z.object({

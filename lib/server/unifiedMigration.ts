@@ -2,7 +2,7 @@
  * 访客创作数据迁移服务
  *
  * 仅在注册时，将具名访客的聊天记录与生成历史原子级迁移至新用户。
- *：Prompt History 已前后端退役，不再迁移（见下方步骤 3）。
+ * Prompt History 已前后端退役，不再迁移（见下方步骤 3）。
  */
 
 import { TRPCError } from '@trpc/server';
@@ -23,7 +23,7 @@ export interface MigrationResult {
 
 /**
  * 将指定 guestId 的全部创作记录（聊天、作品历史）拷贝至指定用户。
- *：提示词历史不再迁移（退役）。
+ * 提示词历史不再迁移（退役）。
  * 保留访客原表记录供回滚/审计，由 30 天 GC 自然清理。
  *
  * 关键约束：
@@ -149,7 +149,7 @@ export async function migrateGuestCreativeRecordsToUser(
             }
 
             for (const g of guestStoryWorks) {
-                // 若已迁移，直接复用既有映射（：同事务内幂等补转 audio ownership；
+                // 若已迁移，直接复用既有映射（同事务内幂等补转 audio ownership；
                 // Guest Manifest 已清则 no-op，等价已存在则清 Guest rows，冲突则整事务 CONFLICT 回滚）
                 if (existingMap.has(g.id)) {
                     storyWorkIdMap.set(g.id, existingMap.get(g.id)!);
@@ -181,7 +181,7 @@ export async function migrateGuestCreativeRecordsToUser(
                                 userStoryWorkId: existing.id,
                             },
                         });
-                        //：复用既有 User Work 时同事务 transfer audio
+                        // 复用既有 User Work 时同事务 transfer audio
                         //（User Manifest 缺席→transfer；等价→幂等清 Guest；冲突→CONFLICT 全回滚）
                         await transferGuestAudioOwnershipTx(tx, g.id, existing.id);
                         continue;
@@ -234,7 +234,7 @@ export async function migrateGuestCreativeRecordsToUser(
                     },
                 });
 
-                //：同一 DB transaction 内 transfer audio ownership
+                // 同一 DB transaction 内 transfer audio ownership
                 //（Guest Manifest→User Manifest(storyWorkId=created.id)，storageKey 不变，
                 // 随后删 Guest Segment/Manifest rows；object/TTS/tombstone 零触达）
                 await transferGuestAudioOwnershipTx(tx, g.id, created.id);

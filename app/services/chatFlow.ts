@@ -34,7 +34,7 @@ let streamSeq = 0;
 
 /**
  * 执行一次聊天流式调用，根据流事件更新 store。
- *：全链路按 assistantMessageId（attempt 身份）定位 Artifact；
+ * 全链路按 assistantMessageId（attempt 身份）定位 Artifact；
  * story_complete 仅完成正文（draft→complete），done 仅标记 delivered，音频仅瞬态播放不写入消息。
  * @param context 即将发送给后端的对话上下文。
  * @param assistantMessageId 本次 attempt 的助手消息 id（sourceMessageId 同值）。
@@ -90,7 +90,7 @@ const executeChatStream = async (
         onTextDelta: (delta) => {
           // 同步更新 UI 状态
           generationStore.appendText(delta);
-          //：按 attempt 身份追加（draft→draft），stale 直接忽略。
+          // 按 attempt 身份追加（draft→draft），stale 直接忽略。
           useChatStore.getState().dispatch({ type: 'stream.delta', content: delta, messageId: assistantMessageId });
           // 累积生成内容
           generatedContent += delta;
@@ -117,7 +117,7 @@ const executeChatStream = async (
           pendingAudioBlob = url;
         },
         onComplete: () => {
-          //：done 仅标记传输结束，绝不隐式 promotion；音频仅在消息仍存在时瞬态播放。
+          // done 仅标记传输结束，绝不隐式 promotion；音频仅在消息仍存在时瞬态播放。
           generationStore.setPhase('ready');
 
           if (!streamErrored) {
@@ -137,7 +137,7 @@ const executeChatStream = async (
                 .getState()
                 .selectors.hasStoryMessages(assistantMessageId);
               if (!existingStories) {
-                //：autoplay 经正式 Draft Session（先落盘保证 ChatMessage 行存在，
+                // autoplay 经正式 Draft Session（先落盘保证 ChatMessage 行存在，
                 // 再 begin+provider 起播；旧整篇 blob 无 segment identity 不得当 paragraph
                 // 播放，一律吊销丢弃）。失败则 fail-closed 静默（聊天持久化本身亦已失败）。
                 // onComplete 是同步回调，落盘/起播链经 async IIFE 串行，不阻塞流收尾。
@@ -199,7 +199,7 @@ const executeChatStream = async (
   } catch (error) {
     globalAbortController = null;
     if (error instanceof DOMException && error.name === 'AbortError') {
-      //：abort 按身份中断 draft→interrupted，不复活、不污染其它 attempt。
+      // abort 按身份中断 draft→interrupted，不复活、不污染其它 attempt。
       useChatStore.getState().dispatch({ type: 'stream.abort', messageId: assistantMessageId, reason: 'aborted' });
 
       throw error;
@@ -256,7 +256,7 @@ export const beginChatStream = async (
 };
 
 /**
- *：新建创作强重置时中止在途聊天流。
+ * 新建创作强重置时中止在途聊天流。
  *
  * 仅中止当前 transport；epoch 递增由调用方先行完成，旧回调凭 epoch no-op，
  * 因此本函数不额外处理 stale 回写。

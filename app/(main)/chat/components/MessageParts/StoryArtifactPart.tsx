@@ -35,7 +35,7 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
   const status = artifact.status;
   const isDraft = status === 'draft';
 
-  //：正文唯一来源是 Artifact 自身持有，不读全局 generation。
+  // 正文唯一来源是 Artifact 自身持有，不读全局 generation。
   const currentText = artifact.storyText;
 
   // draft 自动滚动：条件只看 Artifact 自身（status + storyText 变化）。
@@ -56,7 +56,7 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
     return `${currentText.slice(0, PREVIEW_MAX_LENGTH)}...`;
   }, [isDraft, needsTruncation, currentText]);
 
-  //：promotion_failed 重试唯一动作；messageId 缺失时 fail-closed（不猜 latest）。
+  // promotion_failed 重试唯一动作；messageId 缺失时 fail-closed（不猜 latest）。
   const handleRetryPromotion = () => {
     if (!messageId) return;
     dispatch({ type: 'promotion.retry', messageId });

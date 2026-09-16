@@ -80,7 +80,7 @@ const useMiniPrimaryAction = (primaryAction: 'play' | 'pause' | 'restart' | 'ret
 };
 
 /**
- * Global Mini Now Playing（ 收官 + FIXUP：FloatingPlayer 仅留 deprecated 兼容 shim，正式命名唯一）。
+ * Global Mini Now Playing（ 收官 + FloatingPlayer 仅留 deprecated 兼容 shim，正式命名唯一）。
  * 无 current session → 返回 null（不渲染）；config 只决定 layoutMode，不决定存在性。
  * Wide Floating 坐标仅在 wide-floating + 已拖拽时以内联 left/top 应用；
  * docked/compact 一律走 CSS 默认（旧 floating 坐标不残留，跨 768 往返合法）。

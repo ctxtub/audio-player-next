@@ -1,5 +1,5 @@
 /**
- *：连续创作会话预算快照解析（中性模块，避免 store↔service 成环）。
+ * 连续创作会话预算快照解析（中性模块，避免 store↔service 成环）。
  *
  * 预算口径：设置页「播放时长」；定时关闭或 <=0/缺失视为「不限」（0 分钟）。
  * `startNewCreation` 与 `continuousCreationFlow.switchCollection` 重新初始化共用此口径。

@@ -1,5 +1,5 @@
 /**
- *：连续创作编排服务。
+ * 连续创作编排服务。
  *
  * 取代旧 `stores/preloadStore` + `AUTO_CONTINUE_PROMPT` 续写链：
  * - 调度门：enabled、预算有效、当前 track 正在播放、epoch 匹配、无 next job、进入调度窗；
@@ -8,7 +8,7 @@
  * - 所有异步回写携带 epoch + 运行代次，`isStale` / 代次失配一律 no-op；
  * - 预算只在 audio 实际推进时递减，耗尽立即停声并作废在途 next job。
  *
- *  评审闭合（item 4，最严解读）：停止矩阵（关闭开关 / 预算耗尽 / 新建创作 /
+ *  评审闭合（最严解读）：停止矩阵（关闭开关 / 预算耗尽 / 新建创作 /
  * 切换集合 / 登出 / 用户输入抢占）必须真正作废所有在途 next job——
  * 旧结果绝不写回、等待中的结果不得复活自动续播、新会话可立即重新调度。
  *
@@ -113,7 +113,7 @@ export function endContinuousCreationRun(): void {
 }
 
 /**
- *   修复轮 2：会话/集合切换的真实取消 + 重新初始化。
+ *   会话/集合切换的真实取消 + 重新初始化。
  *
  * 停止矩阵要求「切换集合 → abort 且以新 collection identity 重新初始化」：
  * 1) 真 abort 在途生成传输，释放单槽 lookahead、清空 prepared（含 blob 释放）与采样点；
@@ -138,7 +138,7 @@ function reinitializeForCollectionSwitch(collectionId: string | null): number {
 // 模块加载即注册切换钩子：此后任何 switchCollection 都走到真取消 seam。
 registerContinuousCreationSwitchHandler(reinitializeForCollectionSwitch);
 
-//   修复轮 3：注册 disable 的真取消 seam——关闭开关必须 abort 在途传输并清
+//   注册 disable 的真取消 seam——关闭开关必须 abort 在途传输并清
 // prepared/调度锁，而不是只改 store status（否则 prepared 残留会被迟到轨道结束取出）。
 registerContinuousCreationCancelHandler(cancelPendingNextWork);
 
@@ -275,7 +275,7 @@ export function handleTrackEnded(epoch: number): PreparedNextWork | null {
   if (store.isStale(epoch)) {
     return null;
   }
-  //   修复轮 3：终态锁死——disabled / ended_budget 后，迟到的轨道结束
+  //   终态锁死——disabled / ended_budget 后，迟到的轨道结束
   // 不得取出旧 next，也不得把终态复活成 waiting_next / enabled_idle。
   if (isTerminalStatus(store.status)) {
     return null;

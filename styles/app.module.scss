@@ -1,4 +1,4 @@
-/* M6-03 Bottom Chrome Reservation（spec §15/§29；M9-C1 T4 输出三占位变量）。
+/* Bottom Chrome Reservation（spec §15/§29；输出三占位变量）。
  * --tab-bar-safe-bottom 仍表示“仅 TabBar 占用”（定义见 styles/tokens/_spacing.scss）；
  * MainChrome 在 .app 上单源输出三占位变量：
  * - --main-tabbar-occupied-height：恒等于 TabBar 占用；

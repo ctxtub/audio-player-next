@@ -2,8 +2,8 @@
  * 统一配置服务层
  *
  * 为已登录用户（UserConfig）与具名访客（GuestConfig）提供多主体的统一配置抽象。
- *：领域字段 desktopFloatingPlayerEnabled（Prisma 逻辑名，物理列仍为旧列 via @map）；legacy patch 别名仅在此 boundary 收敛。
- *：领域字段 defaultSleepTimerMinutes（逻辑名，物理列仍为 playDurationMinutes via @map）
+ * 领域字段 desktopFloatingPlayerEnabled（Prisma 逻辑名，物理列仍为旧列 via @map）；legacy patch 别名仅在此 boundary 收敛。
+ * 领域字段 defaultSleepTimerMinutes（逻辑名，物理列仍为 playDurationMinutes via @map）
  * + defaultSleepTimerEnabled；legacy patch 别名 playDuration 仅在此 boundary 收敛为
  * defaultSleepTimerMinutes（保留一个发布周期，与  策略一致）。
  */
@@ -57,7 +57,7 @@ export const toConfigDto = (row: ConfigRow): UserConfigDTO => ({
  * 将 UserConfigPatch 映射到数据库字段名。
  *  compatibility boundary：先经 normalizeUserConfigPatch 收敛 legacy 别名；
  * 冲突（新旧不同值）抛 BAD_REQUEST。
- *：CONFLICTING_SLEEP_TIMER_FIELDS 同理映射为 BAD_REQUEST。
+ * CONFLICTING_SLEEP_TIMER_FIELDS 同理映射为 BAD_REQUEST。
  */
 export const mapPatchToDbFields = (patch: UserConfigPatch) => {
     let normalized: ReturnType<typeof normalizeUserConfigPatch>;

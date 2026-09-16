@@ -7,7 +7,7 @@
  *  正式语义：openDetails/openExpanded → nowPlayingUiStore.openExpanded()
  *（Expanded 不属于 route，URL 不变；Mini Component 零改动，spec §6）。
  *
- *： legacy 兼容符号已随旧播放器产品入口退役删除；本文件仅保留
+ *  legacy 兼容符号已随旧播放器产品入口退役删除；本文件仅保留
  *  正式入口（useNowPlayingEntry / createExpandedNowPlayingEntryController /
  * NowPlayingEntryController 类型，Mini 消费）。
  */
@@ -16,7 +16,7 @@ import { useCallback, useMemo } from 'react';
 
 import { useNowPlayingUiStore } from '@/stores/nowPlayingUiStore';
 
-/** NowPlaying 入口控制器（：Expanded UI）。 */
+/** NowPlaying 入口控制器（Expanded UI）。 */
 export type NowPlayingEntryController = {
     /** 打开详情（ → Expanded UI open，URL 不变；透传触发元素供焦点返回）。 */
     openDetails: (target?: HTMLElement | null) => void;

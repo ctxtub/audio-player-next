@@ -1323,7 +1323,7 @@ export type PhysicalDeleteStoryWorkOptions =
     };
 
 /**
- *  FIXUP：survivor stale-tombstone 收敛窄 helper（fail-closed）。
+ *  survivor stale-tombstone 收敛窄 helper（fail-closed）。
  *
  * 背景（Blocker 反例链）：事务内 restore 竞态可致 Work B 存活；若 B.storageKey 的
  * tombstone prune 失败被吞（旧 best-effort catch），事务照常 commit → tombstone
@@ -1436,7 +1436,7 @@ async function deleteUserTrashWorksInTx(
       });
       allKeys = segments.map((s) => s.storageKey);
     }
-    //：单轨 Asset 对象同批 tombstone（DB 行随 cascade 消失；旧 Segment 表不物理删除）。
+    // 单轨 Asset 对象同批 tombstone（DB 行随 cascade 消失；旧 Segment 表不物理删除）。
     const assets = await tx.storyAudioAsset.findMany({
       where: { storyWorkId: { in: matchedIds } },
       select: { storageKey: true },
@@ -1460,7 +1460,7 @@ async function deleteUserTrashWorksInTx(
   if (deletedCount >= matchedIds.length) {
     return { committedKeys: allKeys, deletedCount, remainingIds: [] };
   }
-  // 竞态收敛（ FIXUP fail-closed）：事务内 find 与 delete 之间 restore 导致部分行
+  // 竞态收敛（ fail-closed）：事务内 find 与 delete 之间 restore 导致部分行
   // 未删时，存活行不得被 tombstone 误清；prune 失败即 throw → 全事务 rollback。
   const survivors = await tx.storyWork.findMany({
     where: { id: { in: matchedIds } },
@@ -1591,7 +1591,7 @@ async function deleteGuestTrashWorksInTx(
  *    COMMIT 后 best-effort 调用 05-01 冻结引擎 cleanupAudioStorageKeys 本批 tombstones。
  *    Storage cleanup 失败不得 rollback 已完成的永久删除；失败由 tombstone retry 接管。
  *    禁止先 delete Work → commit → 再查 storageKey（届时 key 已随 cascade 消失）。
- *    Survivor 收敛失败必须 throw → 全事务 rollback（ FIXUP）：
+ *    Survivor 收敛失败必须 throw → 全事务 rollback（ ：
  *     冻结引擎不检查 key 是否被 live Segment 引用，stale-tombstone 残留
  *    会致 bounded cleanup 误删存活 Work 的 canonical object，故事务内 prune 不得 best-effort。
  * 3. 安全规则与显式 Discriminated Contract：
@@ -1721,7 +1721,7 @@ export async function executeStoryWorkPhysicalDelete(
         ...survivorRetentionAssets.map((a: { storageKey: string }) => a.storageKey),
       ];
       if (survivorKeys.length > 0) {
-        //  FIXUP fail-closed：prune 失败即 throw → 全事务 rollback。
+        //  fail-closed：prune 失败即 throw → 全事务 rollback。
         await pruneSurvivorAudioTombstones(tx as unknown as SurvivorPruneTx, survivorKeys);
         committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
       } else {

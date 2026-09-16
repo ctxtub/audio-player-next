@@ -37,7 +37,7 @@
  *   现有 Anchor，accepted:true，新 input 根本无此字段，
  *   透传亦忽略）；预读仅 fast-path，权威判定下沉 conditional write CAS
  *（WHERE sessionId + next lte，以 DB 当前值为准，消除 TOCTOU）；
- *    FIXUP 再绑 content identity（WHERE contentHash +
+ *    再绑 content identity（WHERE contentHash +
  *   segmentationVersion，同一原子子句）：seamless promotion 是唯一 source
  *   identity 改变而 sessionId 不变的 transition，promotion 前发出的旧包晚到时
  *   必须因 identity 失配 CAS 失败而 no-op，绝不把 Anchor 拉回旧 hash/next
@@ -430,7 +430,7 @@ const computeWorkTotalParagraphs = (storyText: string): number => {
 };
 
 /**
- *  FIXUP（Blocking 1/2）/ FIXUP-2（Blocking 2）：Work 有效切分身份
+ *  /2）/ ：Work 有效切分身份
  * 只读 helper（Manifest 权威，spec §23；beginSession / completeSession /
  * promoteDraftToWork 三个身份写路径统一消费）。
  *
@@ -516,7 +516,7 @@ export const beginPlaybackSessionForSubject = async (
   }
   const beginTimerInputRemaining = input.remainingAllowedMs ?? null;
   const beginTimerInputTotal = input.totalAllowedMs ?? null;
-  //：新写入一律走三元组归一（全局不变式：预算只存在于 minutes）；
+  // 新写入一律走三元组归一（全局不变式：预算只存在于 minutes）；
   // 缺省 mode（旧客户端）按 Legacy 规则派生（remaining!=null→minutes，否则 off，
   // §23.1），显式 off/story_end 优先于派生且预算清零，不得只依赖列 default。
   const beginTimer = normalizeSleepTimerTriple(
@@ -540,7 +540,7 @@ export const beginPlaybackSessionForSubject = async (
     // 不得重算 title、不得重定义 contentHash、不得直查 GenerationHistory。
     // getStoryWorkForSubject 对 missing / foreign / trash 统一抛 NOT_FOUND，原样透出。
     const work = await getStoryWorkForSubject(subject, input.source.workId);
-    //  FIXUP（Blocking 1/2）：Manifest 权威 effective pair；读失败直接抛 fail-closed。
+    //  /2）：Manifest 权威 effective pair；读失败直接抛 fail-closed。
     const { effectiveSegmentationVersion, effectiveTotalParagraphs } =
       await resolveWorkEffectiveSegmentation(subject, work.id, work.storyText);
     const totalParagraphs = effectiveTotalParagraphs;
@@ -596,7 +596,7 @@ export const beginPlaybackSessionForSubject = async (
       lastCompletedParagraphIndex = -1;
       nextParagraphIndex = 0;
     } else if (existingProgress) {
-      // §16.2 Work Resume：校验 hash + segmentationVersion（ FIXUP：version 对 Manifest 权威）。
+      // §16.2 Work Resume：校验 hash + segmentationVersion（ version 对 Manifest 权威）。
       const hashMatch = existingProgress.contentHash === work.contentHash;
       const versionMatch = existingProgress.segmentationVersion === effectiveSegmentationVersion;
       if (hashMatch && versionMatch) {
@@ -757,14 +757,14 @@ export const beginPlaybackSessionForSubject = async (
 };
 
 /**
- *  FIXUP conditional-write (CAS) helpers（评审 Blocking 1：消除 TOCTOU；
- *  FIXUP 再绑 content identity：消除 promotion 竞态）。
+ *  conditional-write (CAS) helpers（评审 消除 TOCTOU；
+ *  再绑 content identity：消除 promotion 竞态）。
  *
  * 预读快照只做 fast-path 早退与 source 定路（不具权威性）；最终写入一律经
  * conditional updateMany 原子绑定，以数据库当前值（而非几毫秒前快照）为准：
  * - Stale CAS：anchor.sessionId === expectedSessionId
  * - Monotonic CAS：currentAnchor.nextParagraphIndex <= incomingNext
- * - Identity CAS（ FIXUP）：currentAnchor.contentHash === expectedContentHash
+ * - Identity CAS（ ：currentAnchor.contentHash === expectedContentHash
  *   AND currentAnchor.segmentationVersion === expectedSegmentationVersion
  * 三者同时下沉到同一 WHERE，count===1 方为成功，count===0 则按当前 DB 值
  * 区分 STALE_SESSION / identity no-op / monotonic no-op
@@ -890,7 +890,7 @@ const resolveConditionalCheckpointFailureForSubject = async (
 
 /**
  * §17 playback.saveCheckpoint：Session 归属 + 单调守卫后更新 Anchor（ 落地，
- *  FIXUP 原子绑定：预读仅 fast-path，权威判定下沉 conditional write CAS）。
+ *  原子绑定：预读仅 fast-path，权威判定下沉 conditional write CAS）。
  *
  * 顺序冻结（§17.1 → §17.2 → §18）：
  * 1. Stale Guard：无 Anchor / anchor.sessionId !== input.sessionId（含 null/非法
@@ -902,7 +902,7 @@ const resolveConditionalCheckpointFailureForSubject = async (
  *    不允许回退（保持旧 server 保护性质；accepted:true + 现有 Anchor 原样返回，
  *    不写 Anchor、不碰 Progress；新 input 无此字段，透传亦忽略）。
  *    预读回退直接 no-op 返回；预读放行仍须经 CAS lte 子句复核（防同 Session 竞争回写）。
- * 2b. Content-Identity Guard（ FIXUP）：同 Session 但 incoming
+ * 2b. Content-Identity Guard（ ：同 Session 但 incoming
  *    contentHash / segmentationVersion 与现有 Anchor 不一致 → 安全 no-op
  *（accepted:true + 现有 Anchor 原样返回，不写 Anchor、不碰 Progress，
  *    不伪装成 STALE_SESSION）。promotion 是唯一合法变更面（§24.1）；
@@ -963,7 +963,7 @@ export const savePlaybackCheckpointForSubject = async (
   // §17.2：同 Session 单调守卫 fast-path——incoming.next < existing.next → 不回退。
   // 保持旧 server 保护性质：不写 Anchor、不碰 Progress，原样返回现有 Anchor。
   // 放行（>=）仍须经 CAS lte 子句以 DB 当前值复核，防同 Session 竞争回写。
-  // Content-identity fast-path（ FIXUP，与 CAS 同判定，非权威）：
+  // Content-identity fast-path（ 与 CAS 同判定，非权威）：
   // session 相同但 DB hash/version 已与 input 不一致（promotion 唯一合法变更面，
   // §24.1）→ accepted:true + 现有 Anchor 安全 no-op，不伪装 STALE；hash/version
   // 一致的 seamless 老包不受影响，继续下沉 CAS 吸收。放行仍须经 CAS identity
@@ -978,7 +978,7 @@ export const savePlaybackCheckpointForSubject = async (
     return { accepted: true, anchor: existingDto };
   }
 
-  //：显式携带则更新 Timer；缺省（旧客户端/旧包）保持 Anchor 现值，
+  // 显式携带则更新 Timer；缺省（旧客户端/旧包）保持 Anchor 现值，
   // 绝不回退为列 default——旧 in-flight 包不得覆盖 setSleepTimer 新值。
   // 写前走三元组归一：保持的 off/story_end 配输入预算亦清零（旧包预算不得复活已关 Timer）；
   // minutes 缺正预算则安全降级 off（fail-closed 到安全态）。
@@ -1236,7 +1236,7 @@ export const setSleepTimerForSubject = async (
  * - Work：先经  getStoryWorkForSubject（subject, workId）鉴权
  *（missing/foreign/trash 统一 NOT_FOUND，原样透出，无 partial 写）；
  *   total/version 经 resolveWorkEffectiveSegmentation Manifest 权威
- *（ FIXUP-2 Blocking 2：有 Manifest→manifest pair，无→当前切分，
+ *（ 有 Manifest→manifest pair，无→当前切分，
  *   读失败 fail-closed 写前抛，不写库；trash 自有仍取 Anchor frozen）；
  *   同一事务内 CAS Anchor（WHERE sessionId + sourceId，position→total、
  *   state→ended）+ UPSERT Progress（next=total/last=total-1、
@@ -1315,7 +1315,7 @@ export const completePlaybackSessionForSubject = async (
   // trash 自有时 total/content 取 Anchor 已存值（frozen，不重算、不取 trash 行元数据，
   // Anchor frozen 与 Manifest 权威一致，因 begin 已用 effective pair 落库），
   // 同一 CAS 面落库；非 trash 的 missing/foreign/已物理删除仍 NOT_FOUND 原样透出。
-  //  FIXUP-2 Blocking 2：非 trash 时 total/version 经
+  //  非 trash 时 total/version 经
   // resolveWorkEffectiveSegmentation Manifest 权威（写身份前只读，读失败直接抛 fail-closed）。
   let workTotal!: number;
   let workHashForProgress!: string;
@@ -1522,7 +1522,7 @@ export const invalidatePlaybackReferencesForWork = async (
  * 成功（同一事务内 CAS Anchor + UPSERT Progress）：
  * - Anchor：source→work(workId)/title→work.title/contentHash→work.contentHash/
  *   voiceId→work.voiceId/segmentationVersion→effective/total→effective
- *（ FIXUP-2 Blocking 2：目标 Work 已有 Manifest 时用 manifest pair，
+ *（ 目标 Work 已有 Manifest 时用 manifest pair，
  *   守「Audio segment index == Playback progress index」长期 invariant；
  *   无 Manifest→当前切分；Manifest 读失败则事务前直接抛 fail-closed，不写库）；
  *   **sessionId 不变**（§45 audio 不重启的 server 侧保证；client 维持播放）；
@@ -1581,7 +1581,7 @@ export const promoteDraftPlaybackToWorkForSubject = async (
       message: '[playback-session] StoryWork.sourceMessageId 与 Draft.messageId 不一致，拒绝 promotion',
     });
   }
-  //  FIXUP-2 Blocking 2：目标 Work 有效身份 Manifest 权威（写身份前只读，
+  //  目标 Work 有效身份 Manifest 权威（写身份前只读，
   // 读失败直接抛 fail-closed，不进事务不写库）。
   const workEffective = await resolveWorkEffectiveSegmentation(subject, work.id, work.storyText);
   const workTotal = workEffective.effectiveTotalParagraphs;

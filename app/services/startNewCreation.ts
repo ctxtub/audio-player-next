@@ -1,7 +1,7 @@
 /**
- *：唯一 `startNewCreation()` 强重置入口。
+ * 唯一 `startNewCreation()` 强重置入口。
  *
- * 契约：`docs/specs/2026-09-15-story-collection-continuous-creation-technical-design.md` §5「新建创作」
+ * 产品契约见 `docs/archive/product-decisions.md` 的“创作体验”。
  * 用户触发后必须中止旧生成、停止播放并恢复创作初始状态。
  *
  * 顺序（不得拆散、不得各自 abort）：
@@ -119,7 +119,7 @@ export async function startNewCreation(
 
   // 8) 连续创作默认开启 + 预算快照（epoch 已递增，旧回调不会写回）
   if (conversationId !== null) {
-    //：创作页围绕新 active Conversation 运行（identity 读路径）。
+    // 创作页围绕新 active Conversation 运行（identity 读路径）。
     useChatStore.getState().applyConversationIdentity({
       conversationId,
       collectionId,

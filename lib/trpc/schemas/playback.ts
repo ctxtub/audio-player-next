@@ -21,7 +21,7 @@ export const playbackCanonicalSourceTypeSchema = z.enum(['draft', 'work']);
 export type PlaybackCanonicalSourceType = z.infer<typeof playbackCanonicalSourceTypeSchema>;
 
 /**
- *  identity invariant 的 Session API 继承点（评审 Blocking 1 锁死）：
+ *  identity invariant 的 Session API 继承点（评审 锁死）：
  * Session API 的全部 sessionId 输入/输出必须为 UUID v4 + RFC variant
  *（ lib/playback/session.ts isValidPlaybackSessionId 契约），
  * nil UUID / v1 / v7 / 坏 variant 一律拒绝。
@@ -31,7 +31,7 @@ export type PlaybackCanonicalSourceType = z.infer<typeof playbackCanonicalSource
 export const playbackSessionIdSchema = z.uuidv4();
 export type PlaybackSessionId = z.infer<typeof playbackSessionIdSchema>;
 
-/*：旧 getProgress/saveProgress/clearProgress 专用 DTO/Input 已删除
+/* 旧 getProgress/saveProgress/clearProgress 专用 DTO/Input 已删除
  *（PlaybackProgressDTO / SavePlaybackProgressInput，无合法 consumer）。
  * DB canonical reader 兼容（chat|generation → draft|work）仍由
  * playbackSourceTypeSchema + lib/playback/legacy.ts 承载，不在此动。
@@ -189,7 +189,7 @@ export type BeginPlaybackSessionInput = z.infer<typeof beginPlaybackSessionInput
 /**
  * §17 playback.saveCheckpoint 输入。
  * 不再由客户端发送 source / title：当前 Source 由 Anchor.sessionId 决定。
- *：增补可选 sleepTimerMode（缺省保持 Anchor 现值，旧客户端不覆盖 Timer；
+ * 增补可选 sleepTimerMode（缺省保持 Anchor 现值，旧客户端不覆盖 Timer；
  * 到期/切换/off 等 Timer 变更必须显式携带，否则会被 dedupe 语义吞掉）。
  */
 export const savePlaybackCheckpointInputSchema = z.object({

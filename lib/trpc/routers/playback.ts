@@ -1,11 +1,11 @@
 /**
  * 断点续播 Router
  *
- *：Playback router 从 CRUD Progress 升级成 Session API（spec §13/§14）。
+ * Playback router 从 CRUD Progress 升级成 Session API（spec §13/§14）。
  * 7 个正式 procedures（getAnchor / beginSession / saveCheckpoint /
  * completeSession / clearAnchor / promoteDraftToWork / getWorkProgressBatch），
  * 经 lib/server/playbackSession.ts facade 对外提供。
- *：旧 getProgress / saveProgress / clearProgress compatibility procedures
+ * 旧 getProgress / saveProgress / clearProgress compatibility procedures
  * 已删除（无合法 consumer，经全仓 audit 确认），行为由 Session API 承载。
  */
 

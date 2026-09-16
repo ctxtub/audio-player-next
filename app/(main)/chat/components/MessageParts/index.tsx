@@ -10,7 +10,7 @@ import SummaryPartRenderer from './SummaryPart';
 
 /**
  * 片段渲染器的通用 Props 定义。
- *：onPlayStory Transport 回调已删除——StoryCard 播放 ownership 收口至
+ * onPlayStory Transport 回调已删除——StoryCard 播放 ownership 收口至
  * PlaybackSessionFlow.playStoryCard，组件只收 messageId。
  */
 export type PartRendererProps<T extends MessagePart = MessagePart> = {
@@ -33,7 +33,7 @@ const MessagePartRenderer: FC<PartRendererProps> = ({ part, messageId }) => {
         case 'storyCard':
             return <StoryCardPartRenderer part={part} messageId={messageId} />;
         case 'storyArtifact':
-            //：Modern StoryArtifact 为纯 lifecycle UI，不再接收 playback 回调；
+            // Modern StoryArtifact 为纯 lifecycle UI，不再接收 playback 回调；
             return <StoryArtifactPartRenderer part={part} messageId={messageId} />;
         case 'guidance':
             return <GuidancePartComponent part={part} />;

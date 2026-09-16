@@ -14,13 +14,13 @@ RUN yarn install --frozen-lockfile
 
 FROM base AS builder
 ENV NODE_ENV=production
-# M8-05-04 canonical enable gate（构建期变量，供 Next 构建内联
+# canonical enable gate（构建期变量，供 Next 构建内联
 # NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED；缺省空 = fail-closed，生产默认关闭。
 # 开启方式：docker build --build-arg NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=1，
 # 源码默认不得改（canonicalFlag.ts strict '1' 才开）。）
 ARG NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=""
 ENV NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=${NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED}
-# M9-C1 T3 单轨 build flag（构建期变量；缺省空 = fail-closed。最终双 flag 契约见
+# 单轨 build flag（构建期变量；缺省空 = fail-closed。最终双 flag 契约见
 # .env.sample 与 lib/audio/singleTrackFlag.ts：build 变量**只**控制 client provider，
 # 服务端授权只认 runtime SINGLE_TRACK_AUDIO_ENABLED；仅置本变量时 server 仍全拒。）
 ARG NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED=""
@@ -39,12 +39,12 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-# M8-05-04 canonical enable gate（运行时变量；缺省空 = fail-closed，生产默认关闭。
+# canonical enable gate（运行时变量；缺省空 = fail-closed，生产默认关闭。
 # server 兼容可保留 CANONICAL_AUDIO_ENABLED=1，但不能替代 client build flag；
 # 浏览器 provider 的 production rollout 必须在 build 时设置 NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=1，
 # 运行时变量单独不足以开启生产播放。语义见 lib/audio/canonicalFlag.ts，源码默认不得改。）
 ENV CANONICAL_AUDIO_ENABLED=""
-# M9-C1 T3 单轨运行时门（缺省空 = fail-closed；**唯一** 服务端单轨授权依据，
+# 单轨运行时门（缺省空 = fail-closed；**唯一** 服务端单轨授权依据，
 # 公开变量 NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED 不得授权；需与 build 变量同时为 1
 # 才在生产开启单轨）。
 ENV SINGLE_TRACK_AUDIO_ENABLED=""
@@ -70,7 +70,7 @@ COPY --from=builder /app/scripts/docker-start.sh ./scripts/docker-start.sh
 RUN chmod +x ./scripts/docker-start.sh
 
 # 数据持久化目录（映射宿主机 volume）
-# /app/data → SQLite；/app/audio → M8 Canonical Audio（Local backend 独立 volume，
+# /app/data → SQLite；/app/audio → Canonical Audio（Local backend 独立 volume，
 # 与数据库解耦，禁止落入 /app/data/audio，见 spec §2.1/§3.1）
 RUN mkdir -p /app/data /app/audio && chown -R nodejs:nodejs /app/data /app/audio /app/scripts
 

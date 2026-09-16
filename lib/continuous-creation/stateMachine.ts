@@ -1,7 +1,7 @@
 /**
- *：连续创作领域状态机（纯函数，无 React/Zustand/DB 依赖）。
+ * 连续创作领域状态机（纯函数，无 React/Zustand/DB 依赖）。
  *
- * 契约来源：`docs/specs/2026-09-15-story-collection-continuous-creation-technical-design.md` §5
+ * 产品契约见 `docs/archive/product-decisions.md` 的“创作体验”。
  * 对应连续创作、预算停止和下一作品准备状态。
  *
  * 设计约束：
@@ -220,7 +220,7 @@ export function reduce(
   state: ContinuousCreationState,
   event: ContinuousCreationEvent,
 ): ContinuousCreationState {
-  //   修复轮 3：终态锁死守卫——disabled / ended_budget 一旦进入，迟到事件
+  //   终态锁死守卫——disabled / ended_budget 一旦进入，迟到事件
   //（trackEnded / nextConsumed / generationFailed / schedule / audioPreparing / audioReady）
   // 一律 no-op，不得把终态复活成 waiting_next / enabled_idle / error。
   // 仅显式恢复路径（enable / reset / setBudget / advanceEpoch）可离开终态。

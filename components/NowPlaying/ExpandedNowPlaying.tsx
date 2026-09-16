@@ -128,14 +128,14 @@ export const ExpandedNowPlaying: React.FC = () => {
     const [expandedView, setExpandedView] = useState<ExpandedLocalView>('controls');
     const dragOffsetRef = useRef(0);
     dragOffsetRef.current = dragOffsetY;
-    // Escape 兜底的事实判断锚点（Blocking 3）：用真实 overlay/dialog ref 做 contains，
+    // Escape 兜底的事实判断锚点（：用真实 overlay/dialog ref 做 contains，
     // 不依赖 testid query。
     const overlayRef = useRef<HTMLDivElement | null>(null);
     const dialogRef = useRef<HTMLElement | null>(null);
 
     const handleClose = useCallback(() => {
         // 只关闭 UI，不暂停/不 clear Session（spec §9：播放继续）。
-        //：关闭即回落 controls（下次打开从控制面进入）。
+        // 关闭即回落 controls（下次打开从控制面进入）。
         setExpandedView('controls');
         setDragOffsetY(0);
         setIsDragging(false);
@@ -212,7 +212,7 @@ export const ExpandedNowPlaying: React.FC = () => {
     );
 
     /**
-     * Escape 兜底（ 复验修复 + Blocking 3 收窄）：
+     * Escape 兜底（ 复验修复 + 收窄）：
      * RAC overlay 的 Escape 语义要求焦点位于 overlay 内；真实浏览器中，点击
      *「从头播放」等操作会让 busy 控件 disabled，浏览器随即把焦点移到 body
      *（标准行为），窗口期内 Escape 冒泡不经过 overlay → RAC handler 不触发

@@ -1,14 +1,14 @@
 /**
- * M7-01 NowPlaying UI Store（spec §4 / §4.1）。
+ * NowPlaying UI Store（spec §4 / §4.1）。
  *
  * Expanded 是否打开是纯 UI state，与 Playback Domain 彻底独立：
  * - isExpanded = UI state；isPlaying = Playback state，两者生命周期独立；
  * - 本 store 只存 isExpanded + returnFocusTarget（spec §4 允许的额外字段）；
- * - 绝不存 session/playback 派生（由调用方经 M5 selectors 读取）。
+ * - 绝不存 session/playback 派生（由调用方经 selectors 读取）。
  *
  * 打开/关闭一律不改变播放状态（spec §9：open ≠ play，close ≠ pause）。
- * 自动关闭唯一条件由 NowPlayingLayer 消费 M5 source/status 判定
- * （source == null 或 status == idle，spec §8），本 store 自身不订阅 M5。
+ * 自动关闭唯一条件由 NowPlayingLayer 消费 source/status 判定
+ * （source == null 或 status == idle），本 store 自身不订阅播放状态。
  */
 
 import { create } from 'zustand';

@@ -1,9 +1,9 @@
-//：任何用户可感知的故事播放都必须先有正式 PlaybackSession；
+// 任何用户可感知的故事播放都必须先有正式 PlaybackSession；
 // 唯一真实 UI 入口 StoryCard（Legacy 卡片，含 persisted audioUrl）：
 // 起播时 <audio> 真实出声，且同帧 MiniNowPlaying 可见
 //（Mini 显隐只派生自 Session：source !== null && status !== 'idle'）。
 // 不预置 Session（先清 Anchor 冷态），由真实点击驱动；retries=0，不合成媒体事件。
-//：Chat History Surface（打开历史 / 生成历史 / 回放此故事）已退役，
+// Chat History Surface（打开历史 / 生成历史 / 回放此故事）已退役，
 // 原「生成历史回放」用例随该入口一并移除；Work Session 覆盖仍由
 // canonical-work-playback 与 storycard-session-flow 承担。
 import { test, expect } from "../harness/fixtures";
@@ -102,7 +102,7 @@ async function generateStory(
     scenario: string,
     dbFile: string,
 ): Promise<{ prompt: string; workIds: number[] }> {
-    const prompt: string = `M9F01L3${scenario}${Date.now()}${Math.floor(Math.random() * 100000)}请讲一个动物朋友互相帮助的故事。`;
+    const prompt: string = `playback-journey-${scenario}${Date.now()}${Math.floor(Math.random() * 100000)}请讲一个动物朋友互相帮助的故事。`;
     const composer = page.getByPlaceholder("请输入内容...");
     await composer.fill(prompt);
     await page.getByRole("button", { name: "发送" }).click({ timeout: 15000 });

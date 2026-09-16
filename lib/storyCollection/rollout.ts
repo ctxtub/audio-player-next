@@ -22,7 +22,7 @@ function enabledUnlessExplicitlyFalse(value: string | undefined): boolean {
   return value !== 'false' && value !== '0';
 }
 
-/**：缺省关闭；仅显式 `'true'`/`'1'` 才开启（迁移期默认停用旧 History）。 */
+/** 缺省关闭；仅显式 `'true'`/`'1'` 才开启（迁移期默认停用旧 History）。 */
 function disabledUnlessExplicitlyTrue(value: string | undefined): boolean {
   return value === 'true' || value === '1';
 }

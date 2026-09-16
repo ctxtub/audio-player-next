@@ -66,7 +66,7 @@ async function trpcQuery(page: Page, path: string, input: unknown): Promise<unkn
 test("故事库完整生命周期旅程", async ({ page, harnessEnv }) => {
     test.setTimeout(300000);
 
-    // W36（T4R1）：404 默认拒绝——仅两处刻意 fail-closed 探测的时间窗内放行，
+    // 404 默认拒绝——仅两处刻意 fail-closed 探测的时间窗内放行，
     // 且末端以 response URL 白名单复核（仅 /api/trpc/collection.get）。
     let allowExpected404 = false;
     let deleteForeverRequestCount = 0;
@@ -80,12 +80,12 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv }) => {
     const pageErrors: string[] = [];
     // fail-closed 读路径（直接访问已删除集合 / 软删后重取）在刻意探测窗内产生
     // collection.get 404；窗口外任何 404 计入 consoleErrors（默认拒绝），末端再以
-    // response URL 白名单复核（§W36：时间窗 ∧ URL 白名单 双条件）。
+    // response URL 白名单复核（时间窗与 URL 白名单双条件）。
     const testStart = Date.now();
     const observed404s: Array<{ url: string; t: number }> = [];
     // 期望窗：step 绑定的真实触发点，open/close 为相对 testStart 的 ms。
     const windows: Array<{ step: string; open: number; close: number | null }> = [];
-    // 全量 collection.* 时间线（W41 取证，长期有效）：仅存诊断最小字段（过程名/ID 前缀/状态），
+    // 全量 collection.* 时间线（取证，长期有效）：仅存诊断最小字段（过程名/ID 前缀/状态），
     // 逐行打印而非整串 JSON，避免长串被截断而丢掉后半段时间线。
     type ColEntry = {
         dt: number;
@@ -189,7 +189,7 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv }) => {
     const username = `journey_user_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
     await ensureRegisteredByApi(page, harnessEnv.appUrl, username, "SecurePass123!");
 
-    // 期望窗原语（W41）：open 于真实触发点之前/之内，close 于触发后的重试尾巴落定之后。
+    // 期望窗原语（：open 于真实触发点之前/之内，close 于触发后的重试尾巴落定之后。
     const openExpected404Window = (step: string): void => {
         allowExpected404 = true;
         windows.push({ step, open: Date.now(), close: null });
@@ -231,7 +231,7 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv }) => {
         if (!created.id) throw new Error("no-conversation-id");
         await trpcMutate(page, "collection.promoteArtifact", {
             conversationId: created.id,
-            sourceMessageId: `t4-journey-${runKey}-${padded}`,
+            sourceMessageId: `library-journey-${runKey}-${padded}`,
             prompt: isTarget ? "勇敢小猫寻找魔法宝石的故事" : `关于宇宙深处探险的第${padded}段提示词`,
             storyText: isTarget
                 ? "从前在一座充满奇迹的森林边，有一只勇敢的小猫咪，它踏上了寻找神秘魔法宝石的历险旅程..."
@@ -339,7 +339,7 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv }) => {
     // 9. Move to Trash（从详情移入回收站，应离开详情）
     await page.getByTestId(`collection-link-${targetId}`).click();
     await page.waitForURL(`**/library/collections/${targetId}`, { timeout: 15000 });
-    // W41：软删除动作的真实触发点——详情页 `moveToTrash` 的 invalidateCollection 会
+    // 软删除动作的真实触发点——详情页 `moveToTrash` 的 invalidateCollection 会
     // 对刚被软删的集合重取详情（fail-closed → collection.get 404）。期望窗必须以该
     // 真实触发点开窗（删除点击之前），而非守着"不会发生请求"的静默区间。
     // 该重取属产品面次生瑕疵（软删后不应再发详情读），本轮窄修不改为产品行为，

@@ -114,7 +114,7 @@ model ChatMessage {
   id        Int     @id @default(autoincrement())
   userId    Int
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// 所属创作会话（M9-C1 expand：旧行为 NULL，backfill 后归属 legacy Conversation）
+  /// 所属创作会话（expand：旧行为 NULL，backfill 后归属 legacy Conversation）
   conversationId String?
   conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   /// 会话内顺序
@@ -155,10 +155,10 @@ model StoryWork {
   contentHash     String    @default("")
   /// 来源消息 ID（关联 ChatMessage.messageId，NULL 表示 legacy 数据）
   sourceMessageId String?
-  /// 所属作品集（M9-C1 expand：NULL 表示 legacy 未归属，backfill 后一 Work 一 Collection）
+  /// 所属作品集（expand：NULL 表示 legacy 未归属，backfill 后一 Work 一 Collection）
   collectionId    String?
   collection      StoryCollection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
-  /// 集合内稳定顺序（M9-C1 expand：NULL 表示 legacy；同集合唯一）
+  /// 集合内稳定顺序（expand：NULL 表示 legacy；同集合唯一）
   position        Int?
   /// 收藏时间（NULL 表示未收藏）
   favoritedAt     DateTime?
@@ -168,11 +168,11 @@ model StoryWork {
   updatedAt       DateTime  @default(now()) @updatedAt
   /// 每作品长期播放进度（per-Work 0/1；ownership 经本表 → User，不重复存 userId）
   progress        StoryPlaybackProgress?
-  /// M8 Canonical Audio Manifests（按 version 共存；旧 Work 无 Manifest = audio.status missing，不回填）
+  /// Canonical Audio Manifests（按 version 共存；旧 Work 无 Manifest = audio.status missing，不回填）
   audioManifests  StoryAudioManifest[]
-  /// M9-C1 T3 单轨资产（一 Work 一 canonical track；expand-only，旧 Segment 保留）
+  /// 单轨资产（一 Work 一 canonical track；expand-only，旧 Segment 保留）
   audioAssets     StoryAudioAsset[]
-  /// M9-C1 T3 秒级播放进度（per-Work 0/1）
+  /// 秒级播放进度（per-Work 0/1）
   audioProgress   StoryAudioProgress?
 
   @@unique([userId, sourceMessageId])
@@ -190,15 +190,15 @@ model UserConfig {
   id                    Int      @id @default(autoincrement())
   userId                Int      @unique
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// M7-03 默认睡眠定时分钟数（逻辑 rename；物理列仍为 playDurationMinutes，不做 SQLite rebuild；范围 10-120）
+  /// 默认睡眠定时分钟数（逻辑 rename；物理列仍为 playDurationMinutes，不做 SQLite rebuild；范围 10-120）
   defaultSleepTimerMinutes   Int      @default(30) @map("playDurationMinutes")
-  /// M7-03 默认睡眠定时开关（true=新 Session 默认 minutes 定时；false=新 Session 默认 off；默认 true 保持既有 30 分钟行为，§29.2）
+  /// 默认睡眠定时开关（true=新 Session 默认 minutes 定时；false=新 Session 默认 off；默认 true 保持既有 30 分钟行为，§29.2）
   defaultSleepTimerEnabled Boolean @default(true)
   /// TTS 音色 ID，空字符串表示使用系统默认
   voiceId               String   @default("")
   /// 播放速率，范围 0.25-4.0，默认 1.0
   speed                 Float    @default(1.0)
-  /// 是否在宽屏启用悬浮迷你播放器（M6 领域语义；false=wide-docked，物理列仍为 floatingPlayerEnabled，不做 migration）
+  /// 是否在宽屏启用悬浮迷你播放器（领域语义；false=wide-docked，物理列仍为 floatingPlayerEnabled，不做 migration）
   desktopFloatingPlayerEnabled Boolean  @default(true) @map("floatingPlayerEnabled")
   /// 主题模式：dark | light | system
   themeMode             String   @default("system")
@@ -212,15 +212,15 @@ model GuestConfig {
   id                    Int      @id @default(autoincrement())
   /// 具名访客标识符（格式如 g_1234567890abcdef...）
   guestId               String   @unique
-  /// M7-03 默认睡眠定时分钟数（逻辑 rename；物理列仍为 playDurationMinutes；范围 10-120）
+  /// 默认睡眠定时分钟数（逻辑 rename；物理列仍为 playDurationMinutes；范围 10-120）
   defaultSleepTimerMinutes   Int      @default(30) @map("playDurationMinutes")
-  /// M7-03 默认睡眠定时开关（默认 true 保持既有行为，§29.2）
+  /// 默认睡眠定时开关（默认 true 保持既有行为，§29.2）
   defaultSleepTimerEnabled Boolean @default(true)
   /// TTS 音色 ID，空字符串表示使用系统默认
   voiceId               String   @default("")
   /// 播放速率，范围 0.25-4.0，默认 1.0
   speed                 Float    @default(1.0)
-  /// 是否在宽屏启用悬浮迷你播放器（M6 领域语义；false=wide-docked，物理列仍为 floatingPlayerEnabled，不做 migration）
+  /// 是否在宽屏启用悬浮迷你播放器（领域语义；false=wide-docked，物理列仍为 floatingPlayerEnabled，不做 migration）
   desktopFloatingPlayerEnabled Boolean  @default(true) @map("floatingPlayerEnabled")
   /// 主题模式：dark | light | system
   themeMode             String   @default("system")
@@ -239,7 +239,7 @@ model GuestConfig {
 model GuestChatMessage {
   id        Int      @id @default(autoincrement())
   guestId   String
-  /// 所属访客创作会话（M9-C1 expand：旧行为 NULL）
+  /// 所属访客创作会话（expand：旧行为 NULL）
   conversationId String?
   conversation   GuestConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   position  Int
@@ -274,7 +274,7 @@ model GuestStoryWork {
   contentHash     String    @default("")
   /// 来源消息 ID
   sourceMessageId String?
-  /// 所属访客作品集（M9-C1 expand：NULL 表示 legacy 未归属）
+  /// 所属访客作品集（expand：NULL 表示 legacy 未归属）
   collectionId    String?
   collection      GuestStoryCollection? @relation(fields: [collectionId], references: [id], onDelete: Cascade)
   /// 集合内稳定顺序（同集合唯一）
@@ -287,11 +287,11 @@ model GuestStoryWork {
   updatedAt       DateTime  @updatedAt
   /// 每作品长期播放进度（per-Work 0/1；ownership 经本表 → guest，不重复存 guestId）
   progress        GuestStoryPlaybackProgress?
-  /// M8 Canonical Audio Manifests（Guest 侧，与 User 对称；旧 Work 无 Manifest = audio.status missing，不回填）
+  /// Canonical Audio Manifests（Guest 侧，与 User 对称；旧 Work 无 Manifest = audio.status missing，不回填）
   audioManifests  GuestStoryAudioManifest[]
-  /// M9-C1 T3 单轨资产（Guest 侧，与 User 对称）
+  /// 单轨资产（Guest 侧，与 User 对称）
   audioAssets     GuestStoryAudioAsset[]
-  /// M9-C1 T3 秒级播放进度（Guest 侧）
+  /// 秒级播放进度（Guest 侧）
   audioProgress   GuestStoryAudioProgress?
 
   @@unique([guestId, sourceMessageId])
@@ -322,7 +322,7 @@ model GuestPromptHistory {
 }
 
 /// 用户当前播放锚点（逻辑名 UserPlaybackAnchor，物理表仍为 UserPlaybackProgress；每用户 0/1）
-/// M5-02：逻辑 rename + sourceKind(@map sourceType) + anchorState；旧列/旧表全部保留，不做 SQLite rebuild。
+/// 逻辑 rename + sourceKind(@map sourceType) + anchorState；旧列/旧表全部保留，不做 SQLite rebuild。
 model UserPlaybackAnchor {
   id     Int  @id @default(autoincrement())
   userId Int  @unique
@@ -332,7 +332,7 @@ model UserPlaybackAnchor {
   sourceKind String @map("sourceType")
   /// 溯源唯一标识：draft 时为 ChatMessage.messageId，work 时为 String(StoryWork.id)；严禁 replay-text-* 临时 ID
   sourceId   String
-  /// 会话标识（可选；M5 起为 UUID v4，legacy null 由 getAnchor repair）
+  /// 会话标识（可选；起为 UUID v4，legacy null 由 getAnchor repair）
   sessionId  String?
   /// 锚点 resting state：ready|ended（运行态 playing/synthesizing/error 不持久化；读后进 ready/ended，不 autoplay）
   anchorState String @default("ready")
@@ -358,10 +358,10 @@ model UserPlaybackAnchor {
   /// 倒计时上下文：继承定时器剩余有效毫秒数
   remainingAllowedMs Int?
   totalAllowedMs     Int?
-  /// M7-03 Sleep Timer 三态：off|minutes|story_end（§22；story_end 仅 Work，§22.1）。
+  /// Sleep Timer 三态：off|minutes|story_end（§22；story_end 仅 Work，§22.1）。
   /// Legacy 行由 migration 按 remainingAllowedMs 回填（非 null→minutes，null→off，§23.1），不得只依赖列 default。
   sleepTimerMode       String @default("minutes")
-  /// Legacy compatibility; new domain logic不再读取（M5 起收敛为 continuationMode finite|extendable）
+  /// Legacy compatibility; new domain logic不再读取（起收敛为 continuationMode finite|extendable）
   isOneShot          Boolean @default(false)
 
   updatedAt DateTime @updatedAt
@@ -372,7 +372,7 @@ model UserPlaybackAnchor {
 }
 
 /// 访客当前播放锚点（逻辑名 GuestPlaybackAnchor，物理表仍为 GuestPlaybackProgress；每访客 0/1，30 天 GC 管辖）
-/// M5-02：与 User 对称设计；旧列/旧表全部保留。
+/// 与 User 对称设计；旧列/旧表全部保留。
 model GuestPlaybackAnchor {
   id      Int    @id @default(autoincrement())
   guestId String @unique
@@ -398,7 +398,7 @@ model GuestPlaybackAnchor {
 
   remainingAllowedMs Int?
   totalAllowedMs     Int?
-  /// M7-03 Sleep Timer 三态：off|minutes|story_end（§22；Guest 与 User 对称）
+  /// Sleep Timer 三态：off|minutes|story_end（§22；Guest 与 User 对称）
   sleepTimerMode       String @default("minutes")
   /// Legacy compatibility; new domain logic不再读取
   isOneShot          Boolean @default(false)
@@ -479,10 +479,10 @@ model StoryWorkMigration {
   @@map("StoryWorkMigration")
 }
 
-/// M8 Canonical Audio Manifest（User 侧，spec §5.1/§5.2；M8-01 expand-only：只建表，零历史回填）。
+/// Canonical Audio Manifest（User 侧，spec §5.1/§5.2；expand-only：只建表，零历史回填）。
 /// identity = contentHash + segmentationVersion + voiceId + ttsBackendId + ttsModel
 ///   + synthesisVersion + audioFormat + synthesisSpeed(=1.0 冻结)；用户 playbackRate/title/favorite 不进入。
-/// 旧 StoryWork 无 Manifest 行，M2 投影一律 audio.status=missing（spec §37）。
+/// 旧 StoryWork 无 Manifest 行，投影一律 audio.status=missing（spec §37）。
 model StoryAudioManifest {
   id Int @id @default(autoincrement())
 
@@ -534,7 +534,7 @@ model StoryAudioManifest {
   @@index([status, updatedAt])
 }
 
-/// M8 Canonical Audio Segment（User 侧，spec §6；text 为 frozen input，Manifest 创建时持久化）。
+/// Canonical Audio Segment（User 侧，spec §6；text 为 frozen input，Manifest 创建时持久化）。
 /// id 由 service 经 crypto.randomUUID() 显式生成（server-generated UUID，spec §6.1），不编码任何业务身份；
 /// storageKey 为 opaque asset key（story-audio/<uuid>.mp3），不编码 User/Guest/Work/title（spec §6.2/§6.3）。
 model StoryAudioSegment {
@@ -579,7 +579,7 @@ model StoryAudioSegment {
   @@index([leaseExpiresAt])
 }
 
-/// M8 Canonical Audio Manifest（Guest 侧，与 StoryAudioManifest 结构对称；ownership 经 GuestStoryWork → guest）。
+/// Canonical Audio Manifest（Guest 侧，与 StoryAudioManifest 结构对称；ownership 经 GuestStoryWork → guest）。
 model GuestStoryAudioManifest {
   id Int @id @default(autoincrement())
 
@@ -623,7 +623,7 @@ model GuestStoryAudioManifest {
   @@index([status, updatedAt])
 }
 
-/// M8 Canonical Audio Segment（Guest 侧，与 StoryAudioSegment 结构对称；注册迁移时 transfer ownership，object bytes 不动，spec §27）。
+/// Canonical Audio Segment（Guest 侧，与 StoryAudioSegment 结构对称；注册迁移时 transfer ownership，object bytes 不动，spec §27）。
 model GuestStoryAudioSegment {
   id String @id
 
@@ -660,7 +660,7 @@ model GuestStoryAudioSegment {
   @@index([leaseExpiresAt])
 }
 
-/// M8 Audio 对象删除 tombstone（spec §29；真删除工作流留 M8-05，本项只 expand 表结构）。
+/// Audio 对象删除 tombstone；本模型只扩展表结构，真删除由清理工作流处理。
 /// 永久删除 / Guest GC 先在同一 DB 事务内记 tombstone 再删 Work 行，外部清理成功后删 tombstone；
 /// 清理失败则保留 tombstone 供 startup / 机会式 retry，避免永久 orphan。
 model AudioStorageDeletion {
@@ -679,7 +679,7 @@ model AudioStorageDeletion {
   @@index([nextAttemptAt])
 }
 
-/// M9-C1 T3 StoryAudio 单轨资产（User 侧，spec §2/§4；expand-only：只加表，零历史回填）。
+/// StoryAudio 单轨资产（User 侧，spec §2/§4；expand-only：只加表，零历史回填）。
 /// 一 Work 一 canonical track：内部 chunk 合成后拼接为一个 storageKey 对象；identity =
 /// contentHash + voiceId + ttsProfileHash（provider/model/synthesisVersion/format 汇总）+ version。
 /// chunk 为内部临时对象（story-audio/chunks/<assetId>/<i>.mp3），无读取路由、不写进度、不刷新 TTL。
@@ -734,7 +734,7 @@ model StoryAudioAsset {
   @@index([leaseExpiresAt])
 }
 
-/// M9-C1 T3 StoryAudio 单轨资产（Guest 侧，与 StoryAudioAsset 结构对称）。
+/// StoryAudio 单轨资产（Guest 侧，与 StoryAudioAsset 结构对称）。
 model GuestStoryAudioAsset {
   id String @id
 
@@ -779,7 +779,7 @@ model GuestStoryAudioAsset {
   @@index([leaseExpiresAt])
 }
 
-/// M9-C1 T3 每 Work 秒级播放进度（User 侧，spec §4；positionMs 节流落库，服务端 sessionId + 单调守卫）。
+/// 每 Work 秒级播放进度（User 侧，spec §4；positionMs 节流落库，服务端 sessionId + 单调守卫）。
 model StoryAudioProgress {
   id Int @id @default(autoincrement())
 
@@ -799,7 +799,7 @@ model StoryAudioProgress {
   @@index([lastPlayedAt])
 }
 
-/// M9-C1 T3 每 Work 秒级播放进度（Guest 侧，与 StoryAudioProgress 对称）。
+/// 每 Work 秒级播放进度（Guest 侧，与 StoryAudioProgress 对称）。
 model GuestStoryAudioProgress {
   id Int @id @default(autoincrement())
 

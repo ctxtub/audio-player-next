@@ -191,7 +191,7 @@ export function normalizeDeletionCleanupLimit(limit?: number | null): number {
  * Both backends delete idempotently, so this path is a safety net for
  * drivers that surface typed/absent markers instead of silent success.
  *
- * Narrow classification (FIXUP): a bare HTTP 404 is NOT enough to
+ * Narrow classification (): a bare HTTP 404 is NOT enough to
  * declare the object gone. S3-compatible DeleteObject reports NoSuchBucket
  * (or a misconfigured bucket) as 404 as well, and clearing the tombstone on
  * that signal would orphan the canonical object once the bucket is fixed.

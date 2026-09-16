@@ -6,7 +6,7 @@
  * clearAnchor / promoteDraftToWork / getWorkProgressBatch
  * +  setSleepTimer。
  *
- *：旧 lib/client/playbackProgress.ts（getProgress / saveProgress /
+ * 旧 lib/client/playbackProgress.ts（getProgress / saveProgress /
  * clearProgress 包装）已删除；新客户端一律使用本正式暴露层。
  */
 

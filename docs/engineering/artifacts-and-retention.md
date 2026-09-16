@@ -11,11 +11,12 @@
 ## 仓库内长期资产
 
 ```text
-docs/specs/YYYY-MM-DD-<topic>.md       # 需求、方案、验收标准
-docs/plans/YYYY-MM-DD-<topic>.md       # 实施计划快照
-docs/changes/YYYY-MM-DD-<topic>.md     # 精炼结项
-docs/testing/**                        # 当前测试体系权威
+docs/specs/**      # 仍约束当前行为的需求与验收标准
+docs/archive/**    # 从已完成方案中提炼的长期决策
+docs/testing/**    # 当前测试体系权威
 ```
+
+临时实施计划、阶段报告和重复方案不长期保留。功能完成后，将仍有解释价值的内容合并到当前规范或精炼归档，其余删除。
 
 原始命令日志、截图、视频、数据库、副本、完整 transcript、port/PID 文件不得入库。
 
@@ -52,13 +53,10 @@ docs/testing/**                        # 当前测试体系权威
 
 Playwright attachment/output 统一放 `.e2e-results/playwright/`。历史默认目录 `/test-results/` 与 `/playwright-report/` 继续列入 `.gitignore`，防旧命令或第三方 reporter 污染工作区。
 
-## 规范落点索引
-
-
 ## 保留与清理
 
 - `.e2e-runtime/`：正常运行完成立即清理；BLOCKED 时仅保留无法安全清理的自有资源并报告。
 - PASS 原始证据：至少保留到独立验收和发布决策完成。
 - FAIL/CONCERN 证据：保留到问题关闭及下一轮验收完成。
-- 需要长期追溯的内容提炼为 `docs/changes/`；不要把整个本地证据目录提交。
+- 需要长期解释的内容提炼到当前规范或 `docs/archive/`；不要把整个本地证据目录提交。
 - 清理前核对 change-id、run-id、PID/端口所有权和完整路径；禁止模糊批量删除。

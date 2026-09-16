@@ -6,7 +6,7 @@ import { getSafeLocalStorage, isBrowserEnvironment } from '@/utils/storage';
 import type { VoiceOption } from '@/types/ttsGenerate';
 import { fetchAppConfig } from '@/lib/client/appConfig';
 import { DEFAULT_USER_CONFIG, type NormalizedUserConfigPatch } from '@/lib/trpc/schemas/config';
-// H-14：经命名空间调用用户配置客户端，使 require.cache 先占桩在静态导入后仍经属性查找命中
+// 经命名空间调用用户配置客户端，使 require.cache 先占桩在静态导入后仍经属性查找命中
 // （回应 R2“桩可能没拦截”：命名导入快照语义下事后变异可能失效，命名空间属性查找恒 live）。
 import * as userConfigClient from '@/lib/client/userConfig';
 import GlassToast from '@/components/ui/GlassToast';
@@ -110,7 +110,7 @@ const isValidConfig = (config: Partial<APIConfig> | undefined): config is APICon
     return false;
   }
 
-  // M7-03：新语义 defaultSleepTimerMinutes（10-120）为准；旧 playDuration 只读兼容。
+  // 新语义 defaultSleepTimerMinutes（10-120）为准；旧 playDuration 只读兼容。
   const rawMinutes =
     typeof config.defaultSleepTimerMinutes === 'number' && config.defaultSleepTimerMinutes > 0
       ? config.defaultSleepTimerMinutes
@@ -150,7 +150,7 @@ const isValidConfig = (config: Partial<APIConfig> | undefined): config is APICon
 
 /**
  * 合并新旧配置，确保字段合法。
- * M7-03：defaultSleepTimerMinutes/defaultSleepTimerEnabled 为准；
+ * defaultSleepTimerMinutes/defaultSleepTimerEnabled 为准；
  * playDuration 兼容别名写入时同步同值（保留一个发布周期，spec §30）。
  * @param base 当前配置。
  * @param partial 待合并的增量配置。
@@ -216,12 +216,12 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
   /** 防抖回写定时器与待写 patch 累积。 */
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingPatch: NormalizedUserConfigPatch = {};
-  /** H-14 单调保存序列：每次 update 新编辑自增，发送时捕获代次，旧回滚按代次丢弃。 */
+  /** 单调保存序列：每次 update 新编辑自增，发送时捕获代次，旧回滚按代次丢弃。 */
   let saveSeq = 0;
 
   /**
    * 将完整配置映射为可作为 patch 的形状。
-   * M7-03：只发新语义字段（playDuration 别名不再下行，避免双字段漂移）。
+   * 只发新语义字段（playDuration 别名不再下行，避免双字段漂移）。
    */
   const toPatch = (config: APIConfig): NormalizedUserConfigPatch => ({
     defaultSleepTimerMinutes: config.defaultSleepTimerMinutes,
@@ -234,7 +234,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
 
   /**
    * 防抖 500ms 将累积 patch 回写服务端，失败回滚到服务端值并提示。
-   * H-14：单调 saveSeq 守卫——发送捕获 seqAtSend，回滚仅当无新编辑（seq 未变）才应用；
+   * 单调 saveSeq 守卫——发送捕获 seqAtSend，回滚仅当无新编辑（seq 未变）才应用；
    * 在途/乱序旧回滚一律丢弃，新编辑不被旧回滚覆盖。
    */
   const scheduleSave = (patch: NormalizedUserConfigPatch) => {
@@ -249,13 +249,13 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
       userConfigClient.saveMyConfig(toSend).catch((error) => {
         console.warn('[configStore] saveMyConfig failed', error);
         GlassToast.show({ icon: 'fail', content: '配置同步失败，稍后重试' });
-        // H-14：保存失败回滚到服务端值（保留 toast，最小实现）。
+        // 保存失败回滚到服务端值（保留 toast，最小实现）。
         userConfigClient.fetchMyConfig()
           .then((server) => {
             if (epochAtSend !== accountEpoch) {
               return;
             }
-            // H-14 saveSeq：在途已有新编辑/新保存时丢弃旧回滚（乱序亦然）。
+            // saveSeq：在途已有新编辑/新保存时丢弃旧回滚（乱序亦然）。
             if (seqAtSend !== saveSeq) {
               return;
             }
@@ -373,7 +373,7 @@ const configStoreCreator: StateCreator<ConfigStore> = (set, get) => {
       return initializationPromise;
     },
     update: (partial) => {
-      // H-14：新编辑递增单调序列，作废在途旧回滚（旧回滚按 seqAtSend !== saveSeq 丢弃）。
+      // 新编辑递增单调序列，作废在途旧回滚（旧回滚按 seqAtSend !== saveSeq 丢弃）。
       saveSeq += 1;
       const current = get().apiConfig;
       const nextConfig = mergeConfig(current, partial);

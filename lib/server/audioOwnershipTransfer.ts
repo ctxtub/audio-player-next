@@ -26,7 +26,7 @@
  * - 禁止「User 已有 Manifest 就直接删 Guest」：User 已存在时必须先过
  *   isTransferEquivalent 等价门，冲突一律 fail-closed / CONFLICT，
  *   Guest/User audio rows 均不得被破坏，绝不删除任何 Object。
- * -  FIXUP active-lease runtime gate（独立于等价门，isTransferEquivalent
+ * -  active-lease runtime gate（独立于等价门，isTransferEquivalent
  *   的 canonical 定义不变、lease 仍属瞬态豁免）：destructive ownership cutover 前，
  *   Guest Segment status=preparing AND leaseId!=null AND leaseExpiresAt>now 即视为
  *   仍有 Guest worker ownership（该 worker 仍可能通过  pre-put fencing 并写
@@ -75,7 +75,7 @@ export type AudioOwnershipTransferTx = {
     guestStoryAudioSegment: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         deleteMany(args: any): Promise<any>;
-        //  FIXUP fencing 重读面（事务内 active-lease gate 用；可选以兼容最小 fake）。
+        //  fencing 重读面（事务内 active-lease gate 用；可选以兼容最小 fake）。
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         findFirst?(args: any): Promise<any>;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -233,7 +233,7 @@ function throwConflict(guestWorkId: number, userWorkId: number, detail: string):
 }
 
 /**
- *  FIXUP active-lease runtime gate（纯判定；独立于 isTransferEquivalent）。
+ *  active-lease runtime gate（纯判定；独立于 isTransferEquivalent）。
  *
  * 只要某个 Guest worker 仍可能通过  pre-put fencing 并写 object，
  * 就不能完成 Guest→User ownership cutover：
@@ -352,7 +352,7 @@ export async function transferGuestAudioOwnershipTx(
     })) as Array<Record<string, unknown> & { segments: Array<Record<string, unknown>> }>;
     if (guestManifests.length === 0) return { status: 'noop', manifestCount: 0 };
 
-    // FIXUP 快照预检：任一 Guest manifest 含 preparing+有效 lease 即 fail-closed，
+    // 快照预检：任一 Guest manifest 含 preparing+有效 lease 即 fail-closed，
     // 写前直接 CONFLICT（User rows 不创建；throw 由外层 $transaction 全回滚）。
     {
         const nowMs = Date.now();
@@ -376,7 +376,7 @@ export async function transferGuestAudioOwnershipTx(
         const guestSegments = Array.isArray(guestManifest.segments) ? guestManifest.segments : [];
         const guestVersion = guestManifest.version as number;
 
-        // FIXUP fencing 重读（与删除同事务、防 TOCTOU）：该 manifest 在本迭代内
+        // fencing 重读（与删除同事务、防 TOCTOU）：该 manifest 在本迭代内
         // 若有新 claim 的有效 lease，必须在任何写前 fail-closed。
         await assertNoActiveGuestLeaseFresh(
             tx,
@@ -447,7 +447,7 @@ export async function transferGuestAudioOwnershipTx(
                 });
             }
 
-            // FIXUP fencing 复检（与删除同事务）：create 与 delete 之间若有新 claim，
+            // fencing 复检（与删除同事务）：create 与 delete 之间若有新 claim，
             // 必须 fail-closed 回滚本次 create，绝不产生 zombie User lease。
             await assertNoActiveGuestLeaseFresh(
                 tx,
@@ -483,7 +483,7 @@ export async function transferGuestAudioOwnershipTx(
                 `user manifest v${guestVersion} exists with differing canonical identity/segments/storageKeys`
             );
         }
-        // FIXUP：即使等价门通过，active Guest lease 仍禁止删 Guest rows
+        // 即使等价门通过，active Guest lease 仍禁止删 Guest rows
         //（否则老 worker 的 pre-put renew 后 put 会覆盖同 key object，造成 canonical corruption）。
         await assertNoActiveGuestLeaseFresh(
             tx,

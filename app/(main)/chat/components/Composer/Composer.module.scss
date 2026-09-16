@@ -6,7 +6,7 @@
   gap: var(--space-3);
   width: 100%;
   padding: var(--space-3) var(--space-4);
-  /*：消费统一 BottomChrome 预留（Mini 出现时自动上移，不各自 hardcode Mini 高度）。 */
+  /* 消费统一 BottomChrome 预留（Mini 出现时自动上移，不各自 hardcode Mini 高度）。 */
   padding-bottom: calc(var(--space-3) + var(--bottom-chrome-safe-bottom, var(--tab-bar-safe-bottom)));
   background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
   backdrop-filter: var(--glass-blur);

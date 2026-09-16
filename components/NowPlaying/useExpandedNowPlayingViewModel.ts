@@ -53,7 +53,7 @@ export type { ExpandedPlaybackAction };
 export { deriveExpandedPlaybackAction };
 export { EXPANDED_TIMELINE_MODE };
 
-/** Expanded 段落定位（：当前段为最重要的作品级定位，spec §39）。 */
+/** Expanded 段落定位（当前段为最重要的作品级定位，spec §39）。 */
 export type ExpandedParagraphViewModel = {
     /** 1-based 当前段展示序号（钳制 1..total）。 */
     current: number;

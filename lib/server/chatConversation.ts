@@ -162,7 +162,7 @@ export const assertNoNewLegacyStoryCardWrites = (
 /**
  * DB 行 → 前端 DTO（parts JSON 解析，失败则忽略）。
  *
- *：导出供会话级读取（`lib/server/conversation.ts`）复用同一 DTO 映射，
+ * 导出供会话级读取（`lib/server/conversation.ts`）复用同一 DTO 映射，
  * 保证 legacy / conversation 两条读路径返回结构完全一致。
  */
 export const toChatMessageDto = (row: ChatMessageRow): ChatMessageDTO => {
@@ -202,7 +202,7 @@ export const getConversation = async (userId: number): Promise<ChatMessageDTO[]>
 /**
  * 以快照方式整条替换当前用户的会话（删旧 + 批量写新）。空数组即清空。
  * 提供 expectedMessageIds 时启用 stale-write 拒绝：库内现状与基线不一致即抛 CONFLICT。
- *：Legacy provenance guard 恒为 always-on（即使不传 options 也执行）；
+ * Legacy provenance guard 恒为 always-on（即使不传 options 也执行）；
  * 顺序冻结：load current → assertFreshBaseline → assertNoNewLegacyStoryCardWrites → replace，
  * stale baseline + 非法 legacy 仍先报 CONFLICT；写入时 Legacy audioUrl 统一 sanitize 为 ''。
  * @param userId 用户 ID。
@@ -215,7 +215,7 @@ export const saveConversation = async (
     options?: ConversationSaveOptions,
 ): Promise<void> => {
     await prisma.$transaction(async (tx) => {
-        //：guard 必须在 deleteMany 之前、与 replace 同一事务内完成；为此恒读基线行。
+        // guard 必须在 deleteMany 之前、与 replace 同一事务内完成；为此恒读基线行。
         const current = await tx.chatMessage.findMany({
             where: { userId },
             orderBy: { position: 'asc' },
@@ -254,7 +254,7 @@ const GUEST_CHAT_KEEP_LIMIT = 100;
 
 /**
  * 确保 parts 内所有 storyCard 的 audioUrl 均置空（不存音频二进制或临时 URL）。
- *：user / guest 两条保存路径语义收口，共用同一 sanitize（sanitize ≠ create，
+ * user / guest 两条保存路径语义收口，共用同一 sanitize（sanitize ≠ create，
  * 绝不据 content 构造新卡，仅对已存在的 Legacy 卡做 audioUrl 归一）。
  */
 export const sanitizePartsForWrite = (parts?: Array<Record<string, unknown>>): string | null => {
@@ -288,7 +288,7 @@ export const getConversationForSubject = async (
  * 以快照方式整条替换当前主体（用户或具名访客）的会话。
  * 访客限制最多保留最近 GUEST_CHAT_KEEP_LIMIT 条。
  * 提供 expectedMessageIds 时同样启用 stale-write 拒绝。
- *：与 user 路径共用同一 Legacy provenance guard（always-on）与同一
+ * 与 user 路径共用同一 Legacy provenance guard（always-on）与同一
  * sanitize 语义；顺序冻结：load current → baseline → provenance → replace。
  */
 export const saveConversationForSubject = async (
@@ -305,7 +305,7 @@ export const saveConversationForSubject = async (
         : messages;
 
     await prisma.$transaction(async (tx) => {
-        //：guard 必须在 deleteMany 之前、与 replace 同一事务内完成；为此恒读基线行。
+        // guard 必须在 deleteMany 之前、与 replace 同一事务内完成；为此恒读基线行。
         const current = await tx.guestChatMessage.findMany({
             where: { guestId: subject.id },
             orderBy: { position: 'asc' },

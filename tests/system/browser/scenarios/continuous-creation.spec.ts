@@ -1,9 +1,9 @@
-//：进入创作页连续创作默认开启；状态卡文案、开关 aria-checked 与剩余预算
+// 进入创作页连续创作默认开启；状态卡文案、开关 aria-checked 与剩余预算
 // 全部只读 continuousCreationStore（薄封装纯状态机），无手动干预。
 // 同时产出桌面 + 移动端视觉验收截图（/visual）。
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";
-import { captureT2Visual } from "./helpers/visual";
+import { captureJourneyVisual } from "./helpers/visual";
 
 test("连续创作默认开启且状态卡与开关同源", async ({ page, harnessEnv }) => {
     test.setTimeout(120000);
@@ -19,7 +19,7 @@ test("连续创作默认开启且状态卡与开关同源", async ({ page, harne
     await expect(page.getByTestId("continuous-collection-title")).toContainText("新作品集");
     await expect(page.getByTestId("continuous-remaining-budget")).toContainText("剩余");
 
-    await captureT2Visual(page, "continuous-creation-desktop");
+    await captureJourneyVisual(page, "continuous-creation-desktop");
 
     // 关闭：状态与开关同步为 disabled。
     await switchEl.click();
@@ -31,7 +31,7 @@ test("连续创作默认开启且状态卡与开关同源", async ({ page, harne
     await expect(switchEl).toHaveAttribute("aria-checked", "true");
     await expect(statusCard).toContainText("连续创作已开启");
 
-    await captureT2Visual(page, "continuous-creation-desktop-enabled");
+    await captureJourneyVisual(page, "continuous-creation-desktop-enabled");
 });
 
 test.describe("移动端视图", () => {
@@ -46,6 +46,6 @@ test.describe("移动端视图", () => {
         await expect(switchEl).toHaveAttribute("aria-checked", "true");
         await expect(page.getByTestId("continuous-status-card")).toContainText("连续创作已开启");
 
-        await captureT2Visual(page, "continuous-creation-mobile");
+        await captureJourneyVisual(page, "continuous-creation-mobile");
     });
 });

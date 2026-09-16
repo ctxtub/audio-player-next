@@ -84,7 +84,7 @@ export async function getConversationForSubject(
 /**
  * 读取指定会话的消息（仅本会话，按 position 升序）。
  *
- *：Chat 读路径的会话级实现——先断言会话归属（跨主体 NOT_FOUND，fail closed），
+ * Chat 读路径的会话级实现——先断言会话归属（跨主体 NOT_FOUND，fail closed），
  * 再按 `conversationId` 过滤，绝不返回其它会话的消息。
  *
  * @param subject 身份主体

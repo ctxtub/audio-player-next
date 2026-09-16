@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 
 /**   视觉验收截图输出目录（gitignored 证据域）。 */
-const T2_VISUAL_DIR = join(
+const JOURNEY_VISUAL_DIR = join(
     process.cwd(),
     ".e2e-results",
     "2026-09-15-story-collection-continuous-creation",
@@ -16,10 +16,10 @@ const T2_VISUAL_DIR = join(
  * @param page Playwright 页面
  * @param name 截图名（不含扩展名）
  */
-export async function captureT2Visual(page: Page, name: string): Promise<void> {
-    mkdirSync(T2_VISUAL_DIR, { recursive: true });
+export async function captureJourneyVisual(page: Page, name: string): Promise<void> {
+    mkdirSync(JOURNEY_VISUAL_DIR, { recursive: true });
     await page.screenshot({
-        path: join(T2_VISUAL_DIR, `${name}.png`),
+        path: join(JOURNEY_VISUAL_DIR, `${name}.png`),
         fullPage: true,
     });
 }

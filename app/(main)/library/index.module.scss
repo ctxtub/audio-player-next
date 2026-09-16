@@ -2,7 +2,7 @@
 
 .libraryPage {
   padding: var(--page-padding);
-  /*：直接消费 MainChrome 三占位变量（TabBar/Mini/gap），动态跟随 Mini 显隐；
+  /* 直接消费 MainChrome 三占位变量（TabBar/Mini/gap），动态跟随 Mini 显隐；
    * 回退链保证旧变量环境仍可用；预留走容器 padding，禁止末卡固定 margin。 */
   padding-bottom: calc(
     var(--main-tabbar-occupied-height, var(--bottom-chrome-safe-bottom, var(--tab-bar-safe-bottom, 80px))) +

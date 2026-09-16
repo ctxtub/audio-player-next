@@ -547,13 +547,13 @@ export function reportPlaybackPause(): void {
 }
 
 /**
- *  fixup（复审 Blocking 1 / §25.1）：Host 上报音频“实际推进”运行时信号
+ *  fixup（复审 / §25.1）：Host 上报音频“实际推进”运行时信号
  *（playing → true；waiting / stalled / pause / ended → false）。
  * 仅用于 sleep timer countdown 门使 buffering 不计入“再听 N 分钟”，不改变 Session 语义状态。
  */
 export function reportAudioActive(active: boolean): void {
   usePlaybackStore.getState().reportAudioActive(active);
-  //：同一 audio-active 信号驱动连续创作预算；动态 import 避免模块环。
+  // 同一 audio-active 信号驱动连续创作预算；动态 import 避免模块环。
   void import('./continuousCreationFlow')
     .then((flow) => flow.reportContinuousAudioActive(active))
     .catch(() => undefined);
@@ -662,7 +662,7 @@ export async function handleEnded(play: (audioUrl: string, messageId?: string) =
       return await session.handleParagraphEnded();
     }
     if (!shouldAllowAiContinuation(session.continuationMode)) {
-      //：finite 整轨结束 → 优先无缝续播连续创作已就绪的下一作品；
+      // finite 整轨结束 → 优先无缝续播连续创作已就绪的下一作品；
       // 无/过期则进入 waiting_next 并收尾（绝不复活旧结果）。
       const epoch = useContinuousCreationStore.getState().epoch;
       const { handleTrackEnded } = await import('@/app/services/continuousCreationFlow');

@@ -306,11 +306,11 @@ iOS 26 Liquid Glass 风格，使用更高强度的模糊 + 饱和度增强。
 | `--size-touch-target` | `44px` | 最小可点击区域（无障碍） |
 | `--size-button-height` | `48px` | 标准按钮高度 |
 | `--size-input-height` | `48px` | 标准输入框高度 |
-| `--size-disc` | `200px` | 播放器唱片尺寸（旧 Player 页遗留，M7 不再搬进 Expanded） |
+| `--size-disc` | `200px` | 播放器唱片尺寸（旧 Player 页遗留，不再搬进 Expanded） |
 | `--size-play-button` | `56px` | 播放按钮尺寸 |
-| `--size-now-playing-sheet-max-height` | `85vh` | Expanded Bottom Sheet 最大高度（M7） |
-| `--size-now-playing-panel-width` | `400px` | Expanded Side Panel 宽度（M7，`>=768`） |
-| `--size-now-playing-handle` | `36px` | Expanded Drag Handle 视觉宽度（M7，仅 `<768` 可见） |
+| `--size-now-playing-sheet-max-height` | `85vh` | Expanded Bottom Sheet 最大高度 |
+| `--size-now-playing-panel-width` | `400px` | Expanded Side Panel 宽度（`>=768`） |
+| `--size-now-playing-handle` | `36px` | Expanded Drag Handle 视觉宽度（仅 `<768` 可见） |
 
 ---
 
@@ -371,10 +371,10 @@ iOS 26 Liquid Glass 风格，使用更高强度的模糊 + 饱和度增强。
 | **User** | `var(--accent-primary)` | `var(--text-on-primary)` | `var(--radius-xl)` | `var(--space-3) var(--space-4)` |
 | **System** | `var(--bg-tertiary)` | `var(--text-secondary)` | `var(--radius-md)` | `var(--space-3)` |
 
-### 3.5 播放器 (AudioPlayer → M7 Expanded Now Playing 内播放控制规格）
+### 3.5 播放器 (AudioPlayer → Expanded Now Playing 内播放控制规格）
 
-> M7 起 `/player` 不再是视觉焦点（M9 退役）；本节由“页面播放器规格”调整为“Expanded Now Playing 内播放控制规格”。
-> 大型唱片（`--size-disc` 176–200px spinning disc / glow / vinyl）不作为 Expanded 迁移要求（M7-P06），使用克制 ambient / typography 表达，不挤压 timeline / controls / sleep timer / actions。
+> `/player` 不再是视觉焦点（已退役）；本节由“页面播放器规格”调整为“Expanded Now Playing 内播放控制规格”。
+> 大型唱片（`--size-disc` 176–200px spinning disc / glow / vinyl）不作为 Expanded 迁移要求；使用克制 ambient / typography 表达，不挤压 timeline / controls / sleep timer / actions。
 
 | 部件 | 规格 |
 |------|------|
@@ -411,9 +411,9 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 
 > 内容区通过 `padding-bottom: var(--tab-bar-safe-bottom)` 留出底部安全距离。Chat 页的 Composer 自行管理底部间距。
 
-### 3.7 Mini Now Playing — 胶囊风格（M6 收官；FloatingPlayer 仅留 deprecated 兼容 shim，M9 删除）
+### 3.7 Mini Now Playing — 胶囊风格
 
-全局迷你播放入口：是否存在由播放 Session 派生（`source 非空且 status 非 idle`），标题仅取 Session.title，睡眠预算字段不在 Mini 展示，粗进度为段落加权近似（不可 seek），主动作经 M5 Flow 委托。移动端与宽屏关闭态固定 TabBar 上方（不可拖），宽屏开启态为可拖悬浮（仅 Grip 绑定 `useDrag`，播放/元数据按钮不参与；位置 localStorage 持久化 + refresh restore，无值回默认右下，非法值容错）。
+全局迷你播放入口：是否存在由播放 Session 派生（`source 非空且 status 非 idle`），标题仅取 Session.title，睡眠预算字段不在 Mini 展示，粗进度为段落加权近似（不可 seek），主动作经 Flow 委托。移动端与宽屏关闭态固定 TabBar 上方（不可拖），宽屏开启态为可拖悬浮（仅 Grip 绑定 `useDrag`，播放/元数据按钮不参与；位置 localStorage 持久化 + refresh restore，无值回默认右下，非法值容错）。
 
 | 属性 | Token |
 |------|-------|
@@ -545,7 +545,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 | **关闭按钮** | `28px` 圆形, `bg: var(--bg-tertiary)`, `border: 0.5px solid var(--border-default)`, `color: var(--text-secondary)`, 图标 `16px` |
 | **内容区** | `flex: 1`, `overflow-y: auto`, `display: flex; flex-direction: column`（支持空状态居中） |
 
-### 3.20 Expanded Now Playing (M7)
+### 3.20 Expanded Now Playing
 
 全局播放详情浮层：`isExpanded` 为纯 UI state（`stores/nowPlayingUiStore`，不属于 route），经 `NowPlayingLayer` 挂载于 `MainChrome`（`Page + BottomChrome{Mini + TabBar} + NowPlayingLayer{Expanded}`）。`react-aria-components ModalOverlay/Modal/Dialog` 提供 modal semantics / focus containment / Escape / overlay semantics；打开/关闭一律不改变播放（`open ≠ play`，`close ≠ pause`，关闭后播放继续）。
 
@@ -555,7 +555,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 | **移动 Sheet（`<768`）** | `width: min(100%, 800px)`, `max-height: var(--size-now-playing-sheet-max-height)` = 85vh，底部弹出，`radius: var(--radius-xl) var(--radius-xl) 0 0`，`bg: var(--bg-elevated)` + `var(--glass-blur)`，`border: 0.5px solid var(--glass-border)`，`shadow: var(--glass-highlight), var(--shadow-xl)` |
 | **桌面 Panel（`>=768`）** | `width: var(--size-now-playing-panel-width)` = 400px（`max-width: calc(100vw - 32px)` 防溢出），右侧 anchored，全高（`100dvh`），`radius: var(--radius-xl) 0 0 var(--radius-xl)`，glass elevated，body 可滚动；仍为 modal（背景不可交互，V1 不做 persistent split pane） |
 | **Handle** | 顶部居中 `width: var(--size-now-playing-handle)` = 36px × `4px` bar，`radius: var(--radius-full)`，`bg: var(--border-strong)`；命中区 `min-height: var(--size-touch-target)`，仅 Handle 发起 drag dismiss（内容滚动 / Speed / Timer 与其不冲突）；桌面隐藏 |
-| **Header** | `padding: var(--space-2) var(--space-4) var(--space-3)`，标题 `size: var(--text-md)` + `weight: var(--weight-semibold)`，副标题 `size: var(--text-sm)` + `color: var(--text-secondary)`（`voice · 第 X / Y 段`，P3A 不伪装整篇） |
+| **Header** | `padding: var(--space-2) var(--space-4) var(--space-3)`，标题 `size: var(--text-md)` + `weight: var(--weight-semibold)`，副标题 `size: var(--text-sm)` + `color: var(--text-secondary)`（`voice · 第 X / Y 段`，不伪装整篇） |
 | **关闭按钮** | `var(--size-touch-target)` 热区，`radius: var(--radius-full)`，`bg: var(--bg-tertiary)`，图标 `16px`；打开后首个焦点落点（`autoFocus`），关闭后焦点返回 Mini Metadata trigger（或实际 trigger） |
 | **Body** | `padding: var(--space-4)`，`gap: var(--space-3)`，`overflow-y: auto`（`touch-action: pan-y`，滚动不触发 dismiss） |
 | **完成态** | `ended` 保持 open 并显示“播放完成”徽标（`bg: var(--accent-primary-subtle)`），关闭后 Mini 恢复 ended |
@@ -576,7 +576,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 
 ## 4. 页面布局规范
 
-### 4.1 全局布局（M7：MainChrome = Page + BottomChrome + NowPlayingLayer）
+### 4.1 全局布局（MainChrome = Page + BottomChrome + NowPlayingLayer）
 
 ```
 ┌─────────────────────────────┐
@@ -597,13 +597,13 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
   Expanded Now Playing     ← z-modal；<768 Bottom Sheet，>=768 Right Side Panel（NowPlayingLayer，全局 single instance，导航不卸载）
 ```
 
-### 4.2 Home 页布局（M7 收口：Page 不拥有播放器）
+### 4.2 Home 页布局（收口：Page 不拥有播放器）
 
 Home/Page 不拥有播放器；播放 presentation 统一由全局 Mini + Expanded 承担（见 4.1 全局布局与 3.20 Expanded Now Playing，本节不复制新结构）。
 
 ```
 ┌─────────────────────────────┐
-│     PlaybackStatusBoard     │  ← 顶部状态条（/player 遗留页内组件，M9 退役）
+│     PlaybackStatusBoard     │  ← 顶部状态条（/player 遗留页内组件，退役）
 ├─────────────────────────────┤
 │                             │
 │     GenerationPreview       │  ← 条件显示 (生成中)
@@ -615,7 +615,7 @@ Home/Page 不拥有播放器；播放 presentation 统一由全局 Mini + Expand
 └─────────────────────────────┘
 ```
 
-**状态切换（M7 后 Home 不设独立播放器焦点）：**
+**状态切换（Home 不设独立播放器焦点）：**
 - **空闲态**：InputStatusSection 为视觉焦点
 - **生成中**：GenerationPreview 展开，显示文字流 + 波形动画
 - **播放中**：无页内播放器焦点；播放由全局 Mini + Expanded 承载（见 4.1 / 3.20）
@@ -646,7 +646,7 @@ Home/Page 不拥有播放器；播放 presentation 统一由全局 Mini + Expand
 ├── section-gap ──────────────┤
 │     ThemeModeSection        │
 ├── section-gap ──────────────┤
-│     DefaultSleepTimerSection  │  ← 默认睡眠定时（M7-03 真实现状；10–120 step 10）
+│     DefaultSleepTimerSection  │  ← 默认睡眠定时（真实现状；10–120 step 10）
 ├── section-gap ──────────────┤
 │     SpeedConfigSection      │
 ├── section-gap ──────────────┤
@@ -688,11 +688,11 @@ Home/Page 不拥有播放器；播放 presentation 统一由全局 Mini + Expand
 |------------|-----|------|
 | `--breakpoint-sm` | `375px` | 小屏手机 |
 | `--breakpoint-md` | `428px` | 大屏手机 |
-| `--breakpoint-lg` | `768px` | 平板/桌面分界（M6 冻结：`<768` compact，`>=768` wide；与 `$breakpoint-lg` / `NOW_PLAYING_BREAKPOINT_PX` 三方同值，禁止第二边界） |
+| `--breakpoint-lg` | `768px` | 平板/桌面分界（冻结：`<768` compact，`>=768` wide；与 `$breakpoint-lg` / `NOW_PLAYING_BREAKPOINT_PX` 三方同值，禁止第二边界） |
 
 当前阶段只做 375–428px 适配。页面最大宽度 `480px`，居中展示。
 
-### 5.1 Mini Now Playing 三态（M6 收官）
+### 5.1 Mini Now Playing 三态
 
 | 视口 + 偏好 | 形态 | 位置 | 预留 |
 |-------------|------|------|------|
@@ -702,7 +702,7 @@ Home/Page 不拥有播放器；播放 presentation 统一由全局 Mini + Expand
 
 BottomChrome 统一承载 Mini slot + TabBar（`display: contents`，不引入额外布局盒）；内容区与 Composer 一律消费 `--bottom-chrome-safe-bottom`，禁止各自 hardcode Mini 高度。
 
-### 5.2 Expanded Now Playing 响应式（M7）
+### 5.2 Expanded Now Playing 响应式
 
 单一 Modal 语义，CSS 断点切换形态（JS 不重挂载，`resize` 时 `isExpanded` 不变，不关闭重开）：
 

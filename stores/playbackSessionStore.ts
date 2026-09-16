@@ -1,5 +1,5 @@
 /**
- * M5-09 PlaybackSessionStore（spec §10 / §25 Client Session SSOT）。
+ * PlaybackSessionStore（spec §10 / §25 Client Session SSOT）。
  *
  * 新客户端会话唯一事实源：server 四表 + Anchor DTO 为持久化 SSOT，
  * 本 store 为运行时 SSOT。Work 路径按 workId 经 library.get 精确 resolve
@@ -16,8 +16,8 @@
  * hydration 纪元：每次 init() 自增 epoch，过期异步 resolve 直接丢弃，
  * 不写回状态（防切源/TTS 晚到覆盖，见 spec §50 session guard）。
  *
- * M5-09 cutover：stores/accountSync 已切换到本 store；旧
- * stores/playbackProgressStore 已在 M9-03 删除，
+ * cutover：stores/accountSync 已切换到本 store；旧
+ * stores/playbackProgressStore 已在 删除，
  * 本文件绝不 import generationHistoryStore /
  * storyFlow / preloadStore（旧路径残留不得破坏新流程）。
  */
@@ -112,7 +112,7 @@ interface PlaybackSessionState {
   continuationMode: SessionContinuationMode;
   status: PlaybackSessionStatus;
   /**
-   * M7-03 当前 Session Sleep Timer 三态（spec §22；Anchor.sleepTimerMode 的运行时镜像）。
+   * 当前 Session Sleep Timer 三态（spec §22；Anchor.sleepTimerMode 的运行时镜像）。
    * minutes 预算本体在 Transport（remainingMs/totalAllowedMs）；本字段决定 countdown 门与 UI 展示。
    */
   sleepTimerMode: SleepTimerMode;
@@ -121,9 +121,9 @@ interface PlaybackSessionState {
   lastSavedKey: string | null;
   /** hydration 纪元（每次 init 自增，过期 resolve 丢弃）。 */
   hydrationEpoch: number;
-  /** T3 单轨服务端恢复位（positionMs；duration 已知后一次性 seek）。 */
+  /** 单轨服务端恢复位（positionMs；duration 已知后一次性 seek）。 */
   singleTrackResumePositionMs: number | null;
-  /** T3 单轨恢复位是否已应用（防重复 seek）。 */
+  /** 单轨恢复位是否已应用（防重复 seek）。 */
   singleTrackResumeSeekApplied: boolean;
 }
 
@@ -135,7 +135,7 @@ interface PlaybackSessionActions {
   /** 由 Anchor DTO 直接水合（init 内部与测试共用）。 */
   hydrateFromAnchor: (anchor: PlaybackAnchorDTO, deps?: SessionRehydrateDeps) => Promise<boolean>;
   /**
-   * M7-02 P3A 当前 Session 倍速（spec §20/§20.1 additive，无新 SSOT）。
+   * 当前 Session 倍速（spec §20/§20.1 additive，无新 SSOT）。
    * Session.speed + Transport.playbackRate + Anchor 持久化三同步；
    * 不写回 UserConfig 默认 speed；不触发新 TTS；不建 Expanded-local state。
    * 非法值（非有限/越界 0.25–4.0）直接忽略；无 source 时 no-op。
@@ -152,7 +152,7 @@ interface PlaybackSessionActions {
     remainingAllowedMs?: number | null;
     totalAllowedMs?: number | null;
     /**
-     * M7-03 当前 Session Timer 三态（缺省按 User Config 默认解析，§28；
+     * 当前 Session Timer 三态（缺省按 User Config 默认解析，§28；
      * 显式传入时与 remaining/total 一致性由调用方保证）。
      */
     sleepTimerMode?: SleepTimerMode;
@@ -173,14 +173,14 @@ interface PlaybackSessionActions {
     draftSnapshot?: { title: string; contentHash: string; totalParagraphs: number; voiceId: string };
   }) => Promise<void>;
   /**
-   * M7-03 当前 Session Sleep Timer 设置（spec §24，经 playback.setSleepTimer）。
+   * 当前 Session Sleep Timer 设置（spec §24，经 playback.setSleepTimer）。
    * 只改当前 Session Timer，不自动改 Settings 默认（§31.1）。
    * 成功后同步 Session.sleepTimerMode + Transport 三态/预算，并收敛 checkpoint；
    * stale（Session 已切换）时返回 false，不覆盖新 Session timer（§24.1）。
    */
   setSleepTimer: (mode: SleepTimerMode, minutes?: number) => Promise<boolean>;
   /**
-   * M7-03 Sleep Timer 到期承接（spec §26，由 Transport 到期回调经 flow 触发）。
+   * Sleep Timer 到期承接（spec §26，由 Transport 到期回调经 flow 触发）。
    * Transport 已 pause audio + 归一 off/null；此处置 Session paused + 持久化
    * checkpoint（显式携带 off/null）+ Toast。之后 Play 正常继续。
    */
@@ -190,12 +190,12 @@ interface PlaybackSessionActions {
   saveCheckpointDebounced: (options?: { forceReset?: boolean }) => void;
   saveCheckpointImmediate: (options?: { forceReset?: boolean }) => Promise<void>;
   /**
-   * T3 单轨：duration 已知（loadedmetadata/timeupdate）后把服务端 positionMs 应用到
+   * 单轨：duration 已知（loadedmetadata/timeupdate）后把服务端 positionMs 应用到
    * transport（仅一次；duration=0 时 no-op，等待元数据）。
    */
   applyPendingSingleTrackResume: (durationSeconds: number) => void;
   /**
-   * T3 单轨：把 transport 当前位置写入 server（client 侧 10s 节流 + 单调守卫；
+   * 单轨：把 transport 当前位置写入 server（client 侧 10s 节流 + 单调守卫；
    * `force` 用于暂停/完播等关键点，server 端仍做 clamp/单调/节流二次保证）。
    */
   persistSingleTrackProgress: (options?: { force?: boolean }) => Promise<void>;
@@ -218,10 +218,10 @@ export interface SessionRehydrateDeps {
   }>;
   ensureChatLoaded?: () => Promise<void>;
   /**
-   * M8-04 Work Manifest 只读投影（spec §23 Segmentation SSOT）。
+   * Work Manifest 只读投影（spec §23 Segmentation SSOT）。
    * 生产默认经 storyAudio.getPlaybackManifest；测试可注入 fake；
    * 正常返回 missing/segments=[] 表示真无 Manifest（回落本地切分合法）；
-   * fetch throws 表示 unknown（M8-04 FIXUP Blocking 2：canonical Work fail-closed，
+   * fetch throws 表示 unknown（canonical Work fail-closed，
    * 不得回落本地，不得进 ready，可 retry，不得删 Session/清 Anchor）。
    */
   getManifest?: (workId: number) => Promise<{
@@ -230,7 +230,7 @@ export interface SessionRehydrateDeps {
     segmentCount?: number;
   } | null>;
   /**
-   * M5-09 fixup canonical：Draft 快照解析（Modern first → Legacy fallback）。
+   * fixup canonical：Draft 快照解析（Modern first → Legacy fallback）。
    * 生产默认经 resolvePlaybackDraftSnapshot；测试可注入 fake snapshot。
    */
   findDraftSnapshot?: (messageId: string) => PlaybackDraftSnapshot | null;
@@ -271,7 +271,7 @@ let debounceSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let prefetchAbortController: AbortController | null = null;
 let initPromise: Promise<boolean> | null = null;
 let hydrationEpochCounter = 0;
-/** T3 单轨进度 client 侧节流/去重（server 端仍二次 clamp/单调/节流）。 */
+/** 单轨进度 client 侧节流/去重（server 端仍二次 clamp/单调/节流）。 */
 let lastSingleTrackPersistMs = 0;
 let lastSingleTrackPersistPositionMs = -1;
 
@@ -290,13 +290,13 @@ const abortPrefetch = () => {
 };
 
 /**
- * M8-04 canonical ensure 重试上限（spec §15.3 retryAfter 500ms 轮询）。
+ * canonical ensure 重试上限（spec §15.3 retryAfter 500ms 轮询）。
  * Lease TTL 60s，TTS 通常数秒；上限 20 次（约 10s）后按失败抛错，
  * 由 play/prefetch 按 error/静默路径处理，不无限等待。
  */
 const CANONICAL_ENSURE_MAX_ATTEMPTS = 20;
 
-/** 仅 blob: 才 revoke（canonical segment 与 T3 单轨 /api/audio/assets/* 永不 revoke）。 */
+/** 仅 blob: 才 revoke（canonical segment 与 单轨 /api/audio/assets/* 永不 revoke）。 */
 function revokeAudioUrlIfBlob(url: string | null): void {
   if (typeof url !== 'string' || url.length === 0) return;
   if (isCanonicalPlaybackUrl(url)) return;
@@ -328,7 +328,7 @@ function sleepMs(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * M8-04 Work Segment canonical 获取（含 preparing 轮询，不动 M5 stale 语义）。
+ * Work Segment canonical 获取（含 preparing 轮询，不动 stale 语义）。
  *
  * - ready → 返回 playbackUrl（/api/audio/segments/<id>，永不 revoke）；
  * - preparing → 按 retryAfterMs 等待后重试（上限内），abort/stale 由调用方判定；
@@ -340,14 +340,14 @@ async function fetchCanonicalAudioUrlWithRetry(
   sessionId: string,
   options?: { signal?: AbortSignal },
 ): Promise<string> {
-  // T3：单轨开关开启时整篇只物化一个 Asset，任意段落索引都返回同一 URL。
+  // 单轨开关开启时整篇只物化一个 Asset，任意段落索引都返回同一 URL。
   if (isSingleTrackAudioEnabled()) {
     let singleAttempts = 0;
     for (;;) {
       singleAttempts += 1;
       const output = await ensureCanonicalAsset({ workId, sessionId });
       if (output.status === 'ready') {
-        // T3：服务端 positionMs 作为待恢复位，等 duration 已知后一次性 seek。
+        // 服务端 positionMs 作为待恢复位，等 duration 已知后一次性 seek。
         try {
           usePlaybackSessionStore.setState({
             singleTrackResumePositionMs:
@@ -394,7 +394,7 @@ async function fetchCanonicalAudioUrlWithRetry(
 }
 
 /**
- * M5-09 fixup：Draft 快照默认解析——只消费 canonical resolver，不再理解 wire 结构。
+ * fixup：Draft 快照默认解析——只消费 canonical resolver，不再理解 wire 结构。
  * Modern-first 优先级与 Legacy 只读 fallback 均收敛在 Chat domain 层。
  */
 function defaultFindDraftSnapshot(messageId: string): PlaybackDraftSnapshot | null {
@@ -421,7 +421,7 @@ const defaultDeps: Required<SessionRehydrateDeps> = {
     await useChatStore.getState().initForUser();
   },
   getManifest: async (workId: number) => {
-    // M8-04 FIXUP Blocking 2：fetch throws 与 missing 必须区分。
+    // fetch throws 与 missing 必须区分。
     // missing（null/segments=[]）由 hydrate 回落本地；throws 直接抛由 hydrate fail-closed。
     const manifest = await fetchPlaybackManifest({ workId });
     if (!manifest) return null;
@@ -453,7 +453,7 @@ function resolveDeps(deps?: SessionRehydrateDeps): Required<SessionRehydrateDeps
 }
 
 /**
- * Draft 快照 canonical 消费（M5-09 fixup）：
+ * Draft 快照 canonical 消费（fixup）：
  * 显式注入 findDraftSnapshot 优先；仅注入旧 string 时做一次性适配；
  * 两者皆无注入时走默认 canonical resolver。Store 不再理解 wire 结构。
  */
@@ -550,7 +550,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         console.warn('[playbackSessionStore] draft chat load failed', err);
       }
       if (get().hydrationEpoch !== epochAtStart) return false;
-      // M5-09 fixup：只消费 canonical resolver 输出（snapshot），不解析 wire。
+      // fixup：只消费 canonical resolver 输出（snapshot），不解析 wire。
       const snapshot = resolveDraftSnapshotForHydrate(anchor.source.messageId, deps, d);
       if (!snapshot || typeof snapshot.storyText !== 'string' || snapshot.storyText.length === 0) {
         return dropDanglingAnchor(
@@ -601,7 +601,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const normalized = normalizeStoryText(storyText);
     const currentHash = computeStoryContentHash(normalized);
     const localParagraphs = segmentStoryText(normalized);
-    // M8-04 Segmentation SSOT（spec §23）+ FIXUP/FIXUP-2 Blocking：
+    // Segmentation SSOT（spec §23）+ /Blocking：
     // Work hydrate 始终读取 Manifest identity（与 CANONICAL_AUDIO flag 无关）：
     // Manifest 已存在 → Work 播放段落文本 SSOT = Manifest.segments[].text，
     // effectiveSegmentationVersion = manifest.segmentationVersion，
@@ -624,7 +624,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       try {
         manifest = await d.getManifest(anchor.source.workId);
       } catch (err) {
-        // FIXUP Blocking 2 / FIXUP-2：unknown ≠ missing，不得回落本地（flag 无关）。
+        // / unknown ≠ missing，不得回落本地（flag 无关）。
         console.warn('[playbackSessionStore] manifest read failed, fail-closed', err);
         if (get().hydrationEpoch !== epochAtStart) return false;
         set({ status: 'error' });
@@ -677,7 +677,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
     if (get().hydrationEpoch !== epochAtStart) return false;
 
-    // T3 单轨切曲 seam（真实路径）：覆盖 source 之前，先把「即将离开」的旧作品
+    // 单轨切曲 seam（真实路径）：覆盖 source 之前，先把「即将离开」的旧作品
     // positionMs 强制落库。beginPlayback / restart / 自动续写切 Work 均经 hydrateFromAnchor；
     // force 绕过 client 10s 节流，server clamp/单调/节流二次保证不变；
     // 初次水合（无旧 source）或 duration 未知时内部早退，幂等无害。
@@ -701,7 +701,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       speed: anchor.speed,
       continuationMode: rehydratedContinuationMode(),
       status: 'ready',
-      // M7-03：Anchor.sleepTimerMode 运行时镜像（off/minutes/story_end，§22/§23）。
+      // Anchor.sleepTimerMode 运行时镜像（off/minutes/story_end，§22/§23）。
       sleepTimerMode: anchor.sleepTimerMode,
       lastSavedKey: `${anchor.sessionId}:${position.nextParagraphIndex}`,
     });
@@ -717,7 +717,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         title,
         remainingMs: anchor.remainingAllowedMs ?? null,
         totalAllowedMs: anchor.totalAllowedMs ?? null,
-        // M7-03：Transport 三态与预算同源同步（countdown 门，§25）。
+        // Transport 三态与预算同源同步（countdown 门，§25）。
         sleepTimerMode: anchor.sleepTimerMode,
         isOneShot: true,
         currentParagraphIndex: position.nextParagraphIndex,
@@ -727,7 +727,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       console.warn('[playbackSessionStore] transport sync failed', err);
     }
 
-    // M7-02 P3A：rehydrate 即时同步 Transport.playbackRate = Anchor.speed
+    // rehydrate 即时同步 Transport.playbackRate = Anchor.speed
     //（无 isRehydratedReady 特殊分支，spec §61；只经 Transport，不碰 UserConfig）。
     try {
       const anchorSpeed = anchor.speed;
@@ -782,7 +782,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     abortPrefetch();
     clearDebounceTimer();
 
-    // M7-03 新 Session Timer（§28）：不继承旧 Session remaining；显式传入优先，
+    // 新 Session Timer（§28）：不继承旧 Session remaining；显式传入优先，
     // 缺省按 User Config 默认解析（enabled→minutes，否则 off）。
     // 兼容旧形态：仅传 remaining（无 mode）视为 minutes（Legacy 规则 §23.1）。
     const explicitMode =
@@ -815,7 +815,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
             })(),
           });
 
-    // T3 单轨切曲 seam：覆盖 source 之前，先把「即将离开」的旧作品 positionMs 强制落库
+    // 单轨切曲 seam：覆盖 source 之前，先把「即将离开」的旧作品 positionMs 强制落库
     //（force 绕过客户端 10s 节流；server clamp/单调/节流二次保证不变）。
     // 同一作品重水合时幂等无害；无 duration/无旧 source 时内部早退。
     void get().persistSingleTrackProgress({ force: true });
@@ -842,7 +842,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       prefetchingIndex: null,
     });
 
-    // M7-03：新会话 Transport Timer 同步（countdown 门与预算同源）。
+    // 新会话 Transport Timer 同步（countdown 门与预算同源）。
     try {
       usePlaybackStore.getState().setSleepTimerState(
         sessionTimer.mode,
@@ -863,7 +863,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       // transport 同步失败不阻断本地激活。
     }
 
-    // M7-02 P3A：新会话激活即时同步 Transport.playbackRate（只经 Transport，不碰 UserConfig）。
+    // 新会话激活即时同步 Transport.playbackRate（只经 Transport，不碰 UserConfig）。
     try {
       const activeSpeed = params.speed ?? 1.0;
       if (typeof activeSpeed === 'number' && Number.isFinite(activeSpeed)) {
@@ -879,7 +879,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     if (!state.source || state.paragraphs.length === 0) return;
     await usePlaybackStore.getState().ensureUnlocked();
     const playbackState = usePlaybackStore.getState();
-    // M7-03：回落预算只在 minutes 模式补齐（off/story_end 的 null 合法，不得复活 Timer；
+    // 回落预算只在 minutes 模式补齐（off/story_end 的 null 合法，不得复活 Timer；
     // ensureCountdownBudget 内部亦有同门，此处只做新语义字段读取）。
     if (
       state.sleepTimerMode === 'minutes' &&
@@ -897,7 +897,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         playbackState.ensureCountdownBudget(fallbackBudgetMs);
       }
     }
-    // M7-03：耗尽早退只适用于 minutes 模式（off/story_end 到期归一 null 后正常继续，§26）。
+    // 耗尽早退只适用于 minutes 模式（off/story_end 到期归一 null 后正常继续，§26）。
     if (state.sleepTimerMode === 'minutes') {
       const resumeBudgetMs = usePlaybackStore.getState().remainingMs;
       if (resumeBudgetMs !== null && resumeBudgetMs <= 0) return;
@@ -913,7 +913,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       return;
     }
     const paragraphBudgetMs = usePlaybackStore.getState().remainingMs;
-    // M7-03：耗尽守卫只适用于 minutes 模式（off/story_end null 合法，§26）。
+    // 耗尽守卫只适用于 minutes 模式（off/story_end null 合法，§26）。
     if (state.sleepTimerMode === 'minutes' && paragraphBudgetMs !== null && paragraphBudgetMs <= 0) {
       return;
     }
@@ -929,7 +929,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const voiceId = state.voiceId || useConfigStore.getState().apiConfig.voiceId;
     const speed = state.speed || useConfigStore.getState().apiConfig.speed;
 
-    // M8-04 Work Segment audio provider 替换（只替换 provider，不动 M5 identity）：
+    // Work Segment audio provider 替换（只替换 provider，不动 identity）：
     // Work + flag 开启 + 合法 sessionId → canonical（ensureSegment → ready playbackUrl）；
     // Draft / flag 关闭 / 非法 session → legacy ephemeral TTS。speed 永不进入 asset 身份。
     let useCanonical = false;
@@ -981,7 +981,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     }
 
     // §50 session guard：async 结果晚到必须检查 sessionId，不一致直接丢弃，绝不覆盖新会话。
-    // M8-04 stale：A ensure 慢、切到 B 后 A 资产可完成保留，但回客户端时 session 失配 → 绝不播放 A。
+    // stale：A ensure 慢、切到 B 后 A 资产可完成保留，但回客户端时 session 失配 → 绝不播放 A。
     if (get().sessionId !== originatingSessionId) {
       revokeAudioUrlIfBlob(audioUrl);
       return;
@@ -1014,14 +1014,14 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   prefetchNextParagraph: async (paragraphIndex) => {
     const state = get();
-    // T3 单轨：整篇已是一个 Asset，无“下一段”可预取（同一 URL 已缓存）。
+    // 单轨：整篇已是一个 Asset，无“下一段”可预取（同一 URL 已缓存）。
     if (isSingleTrackAudioEnabled()) return;
     if (paragraphIndex !== state.nextParagraphIndex + 1) return;
     if (paragraphIndex >= state.paragraphs.length) return;
     if (!usePlaybackStore.getState().isPlaying) return;
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
     const remainingMs = usePlaybackStore.getState().remainingMs;
-    // M7-03：预取预算门只适用于 minutes 模式（off/story_end null 合法，§26）。
+    // 预取预算门只适用于 minutes 模式（off/story_end null 合法，§26）。
     if (state.sleepTimerMode === 'minutes' && remainingMs !== null && remainingMs <= 0) return;
     if (state.prefetchingIndex === paragraphIndex) return;
 
@@ -1035,7 +1035,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const voiceId = state.voiceId || useConfigStore.getState().apiConfig.voiceId;
     const speed = state.speed || useConfigStore.getState().apiConfig.speed;
 
-    // M8-04 lookahead 仍=1（本函数仅被 next+1 调用，绝不首播全篇）：
+    // lookahead 仍=1（本函数仅被 next+1 调用，绝不首播全篇）：
     // Work + flag 开启 → ensure N+1；Draft/关闭 → legacy fetchAudio。
     let prefetchCanonical: { workId: number; sessionId: string } | null = null;
     try {
@@ -1076,7 +1076,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   handleParagraphEnded: async (): Promise<boolean> => {
     const state = get();
-    // T3 单轨：整篇是一条时间轴，audio ended 即整 Work 完播；绝不按段落推进导致整轨重放。
+    // 单轨：整篇是一条时间轴，audio ended 即整 Work 完播；绝不按段落推进导致整轨重放。
     if (isSingleTrackAudioEnabled()) {
       // 完播前强制落库最终 positionMs（server 端据此置 completedAt）。
       await get().persistSingleTrackProgress({ force: true });
@@ -1098,7 +1098,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       }
       return false;
     }
-    // M8-04 FIXUP-4 fail-closed（Manifest unknown → 绝不以 Draft 切分冒充 Work Manifest SSOT）：
+    // fail-closed（Manifest unknown → 绝不以 Draft 切分冒充 Work Manifest SSOT）：
     // status=error 时当前 Blob 可自然播完，到 ended 事件时停止：不推进 next、不 checkpoint、
     // 不 fetchAudio、不 ensureSegment、不清 Session；等 hydrate/retry 恢复可信 Manifest SSOT。
     if (state.status === 'error') return false;
@@ -1117,7 +1117,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     } catch (err) {
       console.warn('[playbackSessionStore] completeSession failed', err);
     }
-    // M7-03 §27：Work 完播（任意 timer 模式）Timer reset off；再次播放使用新默认配置
+    // §27：Work 完播（任意 timer 模式）Timer reset off；再次播放使用新默认配置
     //（server completeSession 已持久化 off/null；此处同步运行时镜像，不另发 checkpoint）。
     set({ sleepTimerMode: 'off' });
     try {
@@ -1132,7 +1132,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     abortPrefetch();
     set({ status: 'paused' });
     get().saveCheckpointDebounced({ forceReset: false });
-    // T3：暂停时强制落库单轨 positionMs（server 端 clamp/单调/节流仍生效）。
+    // 暂停时强制落库单轨 positionMs（server 端 clamp/单调/节流仍生效）。
     void get().persistSingleTrackProgress({ force: true });
   },
 
@@ -1185,7 +1185,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
   restart: async () => {
     const state = get();
     if (!state.source) return;
-    // M7-02 P3A 从头播放（spec §38/§38.1；复审 Blocking 1 收口为 server-authoritative）：
+    // 从头播放（spec §38/§38.1；复审 收口为 server-authoritative）：
     // restart 一律经 server beginSession mode=restart 建新会话（新 UUID + position 0；
     // Work 侧 completedAt 由 server 保留）。begin 失败时保持原 session 原样并向上抛错
     // （由调用方 Toast 呈现），绝不本地伪造 Session——无 server Anchor 的本地 UUID
@@ -1246,12 +1246,12 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const draftNext = state.nextParagraphIndex;
     const draftParagraphs = state.paragraphs;
     const anchor = await promoteDraftPlaybackToWork({ sessionId, workId });
-    // M8-04 FIXUP-3 Blocking（spec §23 Session.paragraphs[index]==Manifest.segments[index].text）：
+    // Blocking（spec §23 Session.paragraphs[index]==Manifest.segments[index].text）：
     // server promotion 已返回 Manifest 权威 Anchor（version=Manifest version、total=Manifest segmentCount）；
     // client 必须同步把 Session 后续 segment provider 切到目标 Work Manifest frozen segments：
     // Manifest exists → paragraphs=Manifest.segments[].text，version/count 取 Manifest 权威 pair
     //（与 server Anchor version/count 一致性校验，不一致记 warn 仍以 Manifest 为准）；
-    // Manifest missing（null/segments=[]）→ 保留既有 M5 promotion 行为（paragraphs 沿用 Draft）；
+    // Manifest missing（null/segments=[]）→ 保留既有 promotion 行为（paragraphs 沿用 Draft）；
     // Manifest read throws（unknown）→ fail-closed：不得偷偷把 Draft paragraphs 当 Work Manifest SSOT，
     // 须显式置 status error 并向上抛错（server Anchor 已切 Work，本地 source 亦切 Work 保持一致，
     // 但 paragraphs 不可信，须经 hydrate retry 恢复；当前 Blob 不打断）。
@@ -1340,7 +1340,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         effectiveTotalParagraphs = Math.max(1, paragraphs.length);
       }
     } else {
-      // Manifest missing → M5 行为：paragraphs 沿用 Draft，version/count 沿用 Anchor（无 Manifest 时 Anchor 即当前切分）。
+      // Manifest missing → 行为：paragraphs 沿用 Draft，version/count 沿用 Anchor（无 Manifest 时 Anchor 即当前切分）。
     }
     // server 已切换 source/title/hash/voiceId（sessionId 不变）；本地按 hash 取舍断点（基于 Manifest 权威 total 钳制）。
     const preserved = shouldPreserveDraftBreakpointOnPromote(draftHash, anchor.contentHash);
@@ -1359,7 +1359,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       voiceId: anchor.voiceId,
       speed: anchor.speed,
     });
-    // M8-04 Draft→Work promotion continuity（spec §22.4）：
+    // Draft→Work promotion continuity（spec §22.4）：
     // 当前正在播放的 Draft Blob（transport currentAudioUrl）不打断、不换音源；
     // 仅丢弃尚未播放的 Draft 预取（prefetched），下一次需要后续/重播 Work Segment
     // 时才走 canonical path。transport 侧不做任何 stop/pause。
@@ -1384,7 +1384,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
   beginPlayback: async (params) => {
     const sessionId = createPlaybackSessionId();
     const speed = params.speed ?? get().speed ?? 1.0;
-    // M7-03 新 Session Timer（§28/§62）：不继承旧 Session remaining，一律按 User Config
+    // 新 Session Timer（§28/§62）：不继承旧 Session remaining，一律按 User Config
     // 默认重新计算（enabled→minutes，否则 off）；server 显式持久化 mode。
     const defaultTimer = resolveDefaultSessionTimer({
       defaultEnabled: (() => {
@@ -1424,7 +1424,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     if (mode === 'minutes' && !(typeof minutes === 'number' && Number.isInteger(minutes) && minutes >= 10 && minutes <= 120)) {
       return false;
     }
-    // M7-02 复审约束：先取消尚未发射的 debounce checkpoint，防旧预算覆盖新 Timer。
+    // 复审约束：先取消尚未发射的 debounce checkpoint，防旧预算覆盖新 Timer。
     clearDebounceTimer();
     const sessionId = state.sessionId;
     let result: Awaited<ReturnType<typeof apiSetSleepTimer>>;
@@ -1491,9 +1491,9 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const state = get();
     if (!state.sessionId || !state.source) return;
     const playbackStore = usePlaybackStore.getState();
-    // Blocking 2（M7-02 复审）：dedupe key 必须覆盖 speed——同 paragraph 内改倍速
+    // 复审）：dedupe key 必须覆盖 speed——同 paragraph 内改倍速
     // 也必须真实落盘（否则 Session/Transport 已 1.5x 而 Anchor 仍旧值，刷新回退）。
-    // M7-03（评审约束 8）：dedupe key 必须覆盖 timer 持久语义——mode/remaining/total
+    // 评审约束 8）：dedupe key 必须覆盖 timer 持久语义——mode/remaining/total
     // 任一变化都必须真实落盘（否则「Timer change 被 dedupe」：Session/Transport 已 off
     // 而 Anchor 仍 minutes，刷新复活旧 Timer）。
     const saveKey = `${state.sessionId}:${state.nextParagraphIndex}:${state.speed}:${state.sleepTimerMode}:${playbackStore.remainingMs ?? 'null'}:${playbackStore.totalAllowedMs ?? 'null'}:${options?.forceReset ? 'force' : 'normal'}`;

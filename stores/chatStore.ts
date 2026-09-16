@@ -67,7 +67,7 @@ export const CHAT_PRELOAD_ORIGIN: ChatMessageOrigin = 'preload';
 /**
  * 判断是否为预载续写产生的用户指令泡（渲染与落库时需隐藏）。
  * 仅以 metadata.origin === 'preload' 为准；无标记（含重载恢复丢失 origin）一律视为人工消息，
- * 避免人工同文「请继续故事」被误判隐藏并在下次保存时从服务端删除（H-03-a）。
+ * 避免人工同文「请继续故事」被误判隐藏并在下次保存时从服务端删除。
  * 历史预载泡（修前落库的无标记指令泡）重载后一次性可见，为接受的 cosmetic 代价。
  * @param message 待判断的聊天消息。
  * @returns 预载指令泡返回 true，其余返回 false。
@@ -82,23 +82,23 @@ export const isPreloadUserMessage = (message: ChatMessage): boolean => {
 
 export type ChatStoreAction =
   // 用户触发
-  // M4-03 快照冻结：submit 可携带生成开始时的 prompt/voice 快照（chatFlow 显式传入）；
+  // 快照冻结：submit 可携带生成开始时的 prompt/voice 快照（chatFlow 显式传入）；
   // 缺省时 prompt 回退为本次 action.content，voice 回退为 undefined（由 chatFlow 负责传入真实快照）。
   | { type: 'user.submit'; content: string; origin?: ChatMessageOrigin; promptSnapshot?: string; voiceSnapshot?: string } // 提交新消息
-  // M4-03 快照冻结：retry 必须重建新 assistant/sourceMessageId，且新 attempt 携带本次实际使用的 prompt/voice 快照；
+  // 快照冻结：retry 必须重建新 assistant/sourceMessageId，且新 attempt 携带本次实际使用的 prompt/voice 快照；
   // 缺省时 prompt 回退为配对失败 user 内容，voice 回退为 undefined（由 chatFlow 负责传入真实快照）。
   | { type: 'user.retry'; promptSnapshot?: string; voiceSnapshot?: string }                   // 重试上一条失败消息
   // 流式更新
   | { type: 'stream.delta'; content: string; messageId?: string }          // 追加内容
   | { type: 'stream.intent'; intent: 'Story' | 'Chat' | 'Guidance'; messageId?: string } // 更新意图
-  | { type: 'stream.story_complete'; messageId: string; storyText?: string; title?: string } // 故事正文终端完成（M4-02）
+  | { type: 'stream.story_complete'; messageId: string; storyText?: string; title?: string } // 故事正文终端完成
   | { type: 'stream.finish'; payload?: ChatStreamDoneEvent; messageId?: string } // 普通对话或流传输完成
   | { type: 'stream.fail'; error?: string; messageId?: string }            // 失败
   | { type: 'stream.abort'; messageId?: string; reason?: string }          // 中断
-  // M4-04 promotion 编排回写（仅 orchestration 内部派发；归属校验失败一律 no-op）
+  // promotion 编排回写（仅 orchestration 内部派发；归属校验失败一律 no-op）
   | { type: 'promotion.resolved'; messageId: string; promotionToken: number; promotionEpoch: number; storyWorkId: number } // promotion 成功回写 ready
   | { type: 'promotion.rejected'; messageId: string; promotionToken: number; promotionEpoch: number; error?: string } // promotion 失败回写 promotion_failed
-  // M4-04 promotion 幂等重试（仅 promotion_failed 可重试；只重发入库写，不走 generation transport）
+  // promotion 幂等重试（仅 promotion_failed 可重试；只重发入库写，不走 generation transport）
   | { type: 'promotion.retry'; messageId: string }                         // 重试单条 Artifact 的 promotion
   | {
     type: 'summary.update';
@@ -154,7 +154,7 @@ type ChatStoreBaseState = {
   /** History UI 选择后的待发送提示词；瞬态、单 slot、不持久化。 */
   pendingAutoSend: string | null;
   /**
-   * 当前 active Conversation id（Conversation SSOT，M9-C1 T2）；
+   * 当前 active Conversation id（Conversation SSOT）；
    * null = 尚未建立会话（访客未登录首屏等）。
    */
   conversationId: string | null;
@@ -247,7 +247,7 @@ const mergeConversation = (
 };
 
 /**
- * M4-02 身份定位辅助：按 assistant message id 精确定位，不再以「最后一条」归属异步回调。
+ * 身份定位辅助：按 assistant message id 精确定位，不再以「最后一条」归属异步回调。
  * messageId 明确时严格按 id 查找；缺失时（legacy 兼容）才回退到最后一条 sending 助手消息。
  * @param messages 当前消息列表。
  * @param messageId 目标助手消息 id（attempt 身份）。
@@ -264,10 +264,10 @@ const findAssistantIndexById = (
 };
 
 /**
- * M4-02 fixup 身份定位辅助：按 assistant attempt 向前找其配对 user。
+ * fixup 身份定位辅助：按 assistant attempt 向前找其配对 user。
  * 从 assistantIndex 向前找最近一条 role==='user' 的 message，即该 assistant attempt 的 paired user。
  * 三个 terminal handler（finish/fail/abort）共用此唯一实现，只修改 paired user，
- * 旧 Attempt 的 terminal 事件不得污染其它 Attempt（E2E-08-02 冻结语义）。
+ * 旧 Attempt 的 terminal 事件不得污染其它 Attempt（冻结语义）。
  * @param messages 当前消息列表。
  * @param assistantIndex 目标助手消息下标（attempt 身份）。
  * @returns 配对 user 下标，未找到返回 -1。
@@ -312,16 +312,16 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   let userInitPromise: Promise<void> | null = null;
   /** 账号代次：reset 自增，作废在途 initForUser 的回写。 */
   let accountEpoch = 0;
-  /** H-15 基线：上次读取/落盘成功的 messageId 序列（内存，不持久化）。 */
+  /** 基线：上次读取/落盘成功的 messageId 序列（内存，不持久化）。 */
   let baselineMessageIds: string[] | undefined = undefined;
   /**
-   * M9-C1 T2 会话级保存代次：resetChat/reset 自增。
+   * 会话级保存代次：resetChat/reset 自增。
    * 防抖定时器捕获进入值，结算前若代次变化（会话已被强重置/登出）则丢弃该次快照，
    * 绝不把旧会话消息写入新会话。
    */
   let conversationSaveEpoch = 0;
   /**
-   * M4-04 promotion 编排瞬态守卫（客户端 async race guard，不进持久领域模型）：
+   * promotion 编排瞬态守卫（客户端 async race guard，不进持久领域模型）：
    * - promotionSeq：全局单调 promotionToken 计数器，每次 kick 自增；
    * - promotionEpoch：resetChat/reset/resetActiveSession 自增，旧 promotion resolve/reject 凭此 no-op；
    * - inflightPromotions：messageId → 在途 promotion 归属（同一 messageId 最多一个 in-flight create）；
@@ -339,9 +339,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   }[] = [];
 
   /**
-   * M4-04：登记一次 promotion kick（调用方已把 Artifact 置为 promoting）。
+   * 登记一次 promotion kick（调用方已把 Artifact 置为 promoting）。
    * 同一 messageId 已有在途 promotion 时拒绝登记（调用方不得重复 kick）。
-   * M9-C1 T2：kick 尽量冻结当前 conversationId；若此刻尚未就绪（init 在途/读失败），
+   * kick 尽量冻结当前 conversationId；若此刻尚未就绪（init 在途/读失败），
    * drain 时会 `ensureActiveConversation()` 补齐，保证会话级写路径不会静默不落库。
    */
   const enqueuePromotionKick = (
@@ -360,9 +360,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   };
 
   /**
-   * M4-04：drain 本次 dispatch 登记的 promotion kicks（dispatch 尾部调用，set() 之后）。
+   * drain 本次 dispatch 登记的 promotion kicks（dispatch 尾部调用，set() 之后）。
    * 异步 create 结算后一律经 promotion.resolved/rejected 回写，由归属校验决定生效或 no-op。
-   * M9-C1 T2：conversationId 缺失时先 ensureActiveConversation 补齐，再走唯一写入口。
+   * conversationId 缺失时先 ensureActiveConversation 补齐，再走唯一写入口。
    */
   const drainPromotionKicks = () => {
     if (pendingPromotionKicks.length === 0) {
@@ -396,7 +396,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   };
 
   /**
-   * M4-04：promotion 结果归属校验（stale 防线核心）。
+   * promotion 结果归属校验（stale 防线核心）。
    * 只有「epoch 未变 ＋ slot 仍属该 token ＋ 消息仍存在 ＋ 当前 Artifact 仍是该次
    * promotion 对应的 promoting generation（status==='promoting' 且 sourceMessageId 一致）」
    * 四项全过才允许写回；任一失败一律 no-op（拥有 slot 时顺手释放，避免泄漏）。
@@ -434,7 +434,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   };
 
   /**
-   * M4-04：作废全部在途 promotion（resetChat/reset/resetActiveSession 调用）。
+   * 作废全部在途 promotion（resetChat/reset/resetActiveSession 调用）。
    * 旧 resolve/reject 凭 epoch 失配 no-op；在途 slot 同步清空防泄漏。
    */
   const invalidateInflightPromotions = () => {
@@ -443,7 +443,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   };
 
   /**
-   * M4-04：将已完成的 Artifact 置为 promoting 并登记 async kick（story_complete 两分支共用）。
+   * 将已完成的 Artifact 置为 promoting 并登记 async kick（story_complete 两分支共用）。
    * beginPromotion 抛错时停留在 complete（不抛、不 kick）；kick 登记走在途去重，
    * 重复登记直接忽略（Artifact 已是 promoting，后续 duplicate 事件同样忽略）。
    */
@@ -517,15 +517,15 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       .catch(() => {});
   };
 
-  /** H-16 退出 flush 在途去重锁：beforeunload+pagehide 双触发共享同一次保存。 */
+  /** 退出 flush 在途去重锁：beforeunload+pagehide 双触发共享同一次保存。 */
   let flushInFlight: Promise<boolean> | null = null;
 
   /**
    * 取完成态消息构造保存快照（含 summary 锚点，便于恢复后压缩上下文；历史兼容卡音频置空不存）。
-   * M4-06 History persistence boundary：落盘前经 serializePartsForHistory 做
+   * History persistence boundary：落盘前经 serializePartsForHistory 做
    * history canonicalization（draft→interrupted、complete/promoting→promotion_failed，
    * stable exact；历史兼容卡音频清空保持）。serialize 为纯 clone，绝不 mutate
-   * live store：内存 promoting 仍保持 promoting，直到真实 M4-04 settlement 改它。
+   * live store：内存 promoting 仍保持 promoting，直到真实 settlement 改它。
    * @param messages 当前消息列表。
    */
   const toSnapshot = (messages: ChatMessage[]): ChatMessageInput[] =>
@@ -547,7 +547,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       });
 
   /**
-   * M9-C1 T2：把快照写入「当前会话」（会话级持久化唯一写路径）。
+   * 把快照写入「当前会话」（会话级持久化唯一写路径）。
    *
    * 身份缺失时先确保 active Conversation（首访/竞态兜底），保证写入总带 conversationId；
    * 不再存在按 Subject 全量替换的第二写路径。
@@ -583,7 +583,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       if (!state.syncEnabled) {
         return;
       }
-      // M9-C1 T2：强重置/登出已推进保存代次——旧快照不得写入新会话。
+      // 强重置/登出已推进保存代次——旧快照不得写入新会话。
       if (saveEpochAtSchedule !== conversationSaveEpoch) {
         return;
       }
@@ -591,14 +591,14 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       if (state.messages.some((message) => message.status === 'sending')) {
         return;
       }
-      // 中文注释：H-15 基线透传——保存时带上读取/落盘基线，成功后更新基线。
+      // 中文注释：基线透传——保存时带上读取/落盘基线，成功后更新基线。
       const snapshot = toSnapshot(state.messages);
       const baselineAtSend = baselineMessageIds;
       persistConversationSnapshot(snapshot, baselineAtSend).then(() => {
         baselineMessageIds = snapshot.map((message) => message.messageId);
         set({ saveError: null });
       }).catch((error) => {
-        // 中文注释：H-15 CONFLICT 不静默丢——置标记位＋toast＋initForUser 刷新。
+        // 中文注释：CONFLICT 不静默丢——置标记位＋toast＋initForUser 刷新。
         if (isConflictError(error)) {
           const reason = error instanceof Error ? error.message : String(error);
           set({ saveError: reason });
@@ -616,7 +616,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
 
   /**
    * 退出前同步落盘：取消防抖并立即保存已完结快照，失败置标记位。
-   * H-16：fetch keepalive 送达保障（仅浏览器分支包装底层 fetch，基线透传与 saveError 主逻辑不变）
+   * fetch keepalive 送达保障（仅浏览器分支包装底层 fetch，基线透传与 saveError 主逻辑不变）
    * ＋ in-flight 去重锁（双触发只存一次，结算后释放）。
    * @returns 保存是否执行且成功。
    */
@@ -633,7 +633,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       if (!state.syncEnabled) {
         return false;
       }
-      // H-16 keepalive：退出时浏览器可能取消异步请求，以 keepalive 语义透传底层 fetch。
+      // keepalive：退出时浏览器可能取消异步请求，以 keepalive 语义透传底层 fetch。
       // 仅浏览器环境（window 存在）包装 globalThis/window.fetch 并在 finally 还原；
       // Node/桩环境（无 window）直接走基线透传，桩拦截不受影响。
       const fetchScope = globalThis as unknown as Record<string, unknown>;
@@ -662,7 +662,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         }
       }
       try {
-        // 中文注释：H-15 基线透传——保存时带上读取/落盘基线，成功后更新基线。
+        // 中文注释：基线透传——保存时带上读取/落盘基线，成功后更新基线。
         const snapshot = toSnapshot(state.messages);
         const baselineAtSend = baselineMessageIds;
         await persistConversationSnapshot(snapshot, baselineAtSend);
@@ -670,7 +670,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         set({ saveError: null });
         return true;
       } catch (error) {
-        // 中文注释：H-15 CONFLICT 不静默丢——置标记位＋toast＋initForUser 刷新。
+        // 中文注释：CONFLICT 不静默丢——置标记位＋toast＋initForUser 刷新。
         if (isConflictError(error)) {
           const reason = error instanceof Error ? error.message : String(error);
           set({ saveError: reason });
@@ -739,9 +739,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             metadata: { origin: submitOrigin } as ChatMessage['metadata'],
           });
           const assistantBase = createAssistantPlaceholder();
-          // M4-02 冻结语义：assistant message 创建 → message.id = X → createDraftArtifact({ sourceMessageId: X })。
+          // 冻结语义：assistant message 创建 → message.id = X → createDraftArtifact({ sourceMessageId: X })。
           // 每个 attempt（assistant 消息）自带独立 draft，后续 chunk/complete 均按此 id 身份定位。
-          // M4-03 快照冻结：同一 draft 内冻结本次生成开始时的 prompt 与 voice 快照；
+          // 快照冻结：同一 draft 内冻结本次生成开始时的 prompt 与 voice 快照；
           // prompt 缺省回退为本次 action.content；voice 由 chatFlow 传入实际生成请求所用 voice，缺省为 undefined。
           // promotion 时严禁重读 Settings，只消费此处冻结值；本步不自动触发 promotion。
           const submitPromptSnapshot =
@@ -789,8 +789,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           // 但如果要保留历史（例如中间夹杂了其他），这里我们假设重试总是针对对话流的末尾
           // 为了安全，我们只处理末尾的情况。如果 lastIndex 不是倒数第一/第二，可能需要更复杂的逻辑。
           // 简化：追加一个新的助手占位
-          // M4-02：新 Attempt B 拥有全新 assistant id 与全新 draft；stale Attempt A 事件按旧 id 定位，绝不覆盖 B。
-          // M4-03 快照冻结：retry 重建新 assistant/sourceMessageId，但 prompt 与本次实际使用的 voice 快照必须正确进入新 attempt；
+          // 新 Attempt B 拥有全新 assistant id 与全新 draft；stale Attempt A 事件按旧 id 定位，绝不覆盖 B。
+          // 快照冻结：retry 重建新 assistant/sourceMessageId，但 prompt 与本次实际使用的 voice 快照必须正确进入新 attempt；
           // prompt 缺省回退为配对失败 user 内容，voice 由 chatFlow 传入本次实际生成所用 voice；绝不等到 promotion 时再读 setting store。
           // 本步不自动触发 promotion。
           const retryPairedContent =
@@ -821,7 +821,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           };
         }
         case 'stream.delta': {
-          // M4-02：按 attempt 身份定位；messageId 缺失时才回退最后一条 sending（legacy 兼容）。
+          // 按 attempt 身份定位；messageId 缺失时才回退最后一条 sending（legacy 兼容）。
           // stale/已清空（id 找不到）一律忽略，绝不复活、不污染其它 attempt。
           const targetIndex = findAssistantIndexById(messages, action.messageId);
           if (targetIndex === -1) return state;
@@ -869,11 +869,11 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           switch (action.intent) {
             case 'Story':
               agentType = 'story_agent';
-              // M4-02：Story 意图确保 Modern draft 存在；绝不再创建历史兼容卡。
+              // Story 意图确保 Modern draft 存在；绝不再创建历史兼容卡。
               {
                 const existing = getStoryArtifactPart(msg);
                 if (!existing) {
-                  // M4-09 containment：历史兼容卡只读保留，经 compatibility helper 判定，不直读 wire 结构。
+                  // containment：历史兼容卡只读保留，经 compatibility helper 判定，不直读 wire 结构。
                   const hasLegacyCard = hasLegacyStoryCard(msg.parts);
                   if (!hasLegacyCard) {
                     const draft = createDraftArtifact({
@@ -931,8 +931,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           return { messages };
         }
         case 'stream.story_complete': {
-          // M4-02 冻结语义：story_complete 仅表示故事正文 terminal（draft→complete）。
-          // M4-04 编排：complete 随后同步进入 promoting 并 kick 唯一 async promotion
+          // 冻结语义：story_complete 仅表示故事正文 terminal（draft→complete）。
+          // 编排：complete 随后同步进入 promoting 并 kick 唯一 async promotion
           // （complete → startPromotion() → promoteStoryArtifact()）；done 不再隐式 promotion。
           // 严格按 messageId 身份定位；找不到（stale/已清空）直接忽略，绝不复活。
           const targetIndex = messages.findIndex(
@@ -985,7 +985,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           return { messages };
         }
         case 'promotion.resolved': {
-          // M4-04：promotion 成功回写 ready（promoting → ready）。
+          // promotion 成功回写 ready（promoting → ready）。
           // 归属校验失败（stale/epoch 失配/消息已清/Artifact 已非该次 promoting）一律 no-op。
           const claimed = claimPromotionSlot(messages, action.messageId, action.promotionToken, action.promotionEpoch);
           if (!claimed) return state;
@@ -1001,7 +1001,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           return { messages };
         }
         case 'promotion.rejected': {
-          // M4-04：promotion 失败回写 promotion_failed（promoting → promotion_failed）。
+          // promotion 失败回写 promotion_failed（promoting → promotion_failed）。
           // 完整 storyText / sourceMessageId / prompt / voice 快照全保留；delivery 不动；
           // 不换 sourceMessageId、不重生成、不自动重试（重试只走 promotion.retry）。
           const claimed = claimPromotionSlot(messages, action.messageId, action.promotionToken, action.promotionEpoch);
@@ -1017,7 +1017,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           return { messages };
         }
         case 'promotion.retry': {
-          // M4-04：promotion_failed 幂等重试（promotion_failed → promoting ＋ 只重发入库写）。
+          // promotion_failed 幂等重试（promotion_failed → promoting ＋ 只重发入库写）。
           // 非 promotion_failed（promoting 在途/ready 终态/interrupted/draft/complete）一律忽略；
           // 同一 messageId 在途去重（快速双击只发一次）；绝不触达 generation transport。
           const targetIndex = messages.findIndex(
@@ -1040,9 +1040,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           return { messages };
         }
         case 'stream.finish': {
-          // M4-02：done 仅标记传输结束（sending→delivered），绝不隐式 complete/promotion/ready。
+          // done 仅标记传输结束（sending→delivered），绝不隐式 complete/promotion/ready。
           // story_complete→done 仍是同一个 complete；done→story_complete 仍可随后 complete（不因 done 提前制造 ready）。
-          // M4-02 fixup：只修改 paired user（assistantIndex 向前最近 user），旧 Attempt 不得污染其它 Attempt。
+          // fixup：只修改 paired user（assistantIndex 向前最近 user），旧 Attempt 不得污染其它 Attempt。
           const targetIndex = findAssistantIndexById(messages, action.messageId);
           if (targetIndex === -1) return state;
 
@@ -1056,7 +1056,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             },
           };
 
-          // M4-02 fixup：仅配对 user sending→delivered（共用 findUserIndexForAssistant）。
+          // fixup：仅配对 user sending→delivered（共用 findUserIndexForAssistant）。
           const pairedUserIndex = findUserIndexForAssistant(messages, targetIndex);
           if (pairedUserIndex !== -1 && messages[pairedUserIndex].status === 'sending') {
             messages[pairedUserIndex] = { ...messages[pairedUserIndex], status: 'delivered' };
@@ -1068,8 +1068,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           };
         }
         case 'stream.fail': {
-          // M4-02：error/abort → draft→interrupted，不出现 complete；按 id 定位，stale 直接忽略。
-          // M4-02 fixup：只修改 paired user（共用 findUserIndexForAssistant），旧 Attempt 不得污染其它 Attempt。
+          // error/abort → draft→interrupted，不出现 complete；按 id 定位，stale 直接忽略。
+          // fixup：只修改 paired user（共用 findUserIndexForAssistant），旧 Attempt 不得污染其它 Attempt。
           const targetIndex = findAssistantIndexById(messages, action.messageId);
           if (targetIndex !== -1) {
             const msg = messages[targetIndex];
@@ -1102,7 +1102,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           return { messages };
         }
         case 'stream.abort': {
-          // M4-02 fixup：只修改 paired user（共用 findUserIndexForAssistant），旧 Attempt 不得污染其它 Attempt。
+          // fixup：只修改 paired user（共用 findUserIndexForAssistant），旧 Attempt 不得污染其它 Attempt。
           const targetIndex = findAssistantIndexById(messages, action.messageId);
           if (targetIndex !== -1) {
             const msg = messages[targetIndex];
@@ -1170,7 +1170,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     });
     // 任一消息变更后调度防抖保存（内部按登录态/在途状态决定是否真正保存）
     scheduleSave();
-    // M4-04：drain 本次 dispatch 登记的 promotion kicks（set() 之后触发 async create）。
+    // drain 本次 dispatch 登记的 promotion kicks（set() 之后触发 async create）。
     drainPromotionKicks();
   },
 
@@ -1190,7 +1190,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
 
     // 确定普通消息的起始点：如果存在 Summary，则从 Summary 之后开始找；否则从头开始
     const normalMessagesStartIndex = summaryMsgIndex !== -1 ? summaryMsgIndex + 1 : 0;
-    // H-03-b：TRIGGER 计入排除预载指令泡（仅 origin === 'preload' 的 user 泡；预载故事助手卡仍计入/仍摘要）。
+    // TRIGGER 计入排除预载指令泡（仅 origin === 'preload' 的 user 泡；预载故事助手卡仍计入/仍摘要）。
     const normalMessages = messages.slice(normalMessagesStartIndex).filter(m =>
       ['user', 'assistant'].includes(m.role) && m.metadata?.agentType !== 'summary_agent' && !isPreloadUserMessage(m as ChatMessage)
     );
@@ -1238,7 +1238,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   resetActiveSession: () => {
     // 重置会话：移除所有处于 sending 状态的临时消息，
     // 通常在用户主动取消生成，或页面卸载时调用。
-    // M4-04：同步作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op）。
+    // 同步作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op）。
     invalidateInflightPromotions();
     set((state) => ({
       messages: state.messages.filter(m => m.status !== 'sending'),
@@ -1246,14 +1246,14 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     scheduleSave();
   },
   resetChat: () => {
-    // M4-04：清空作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op，绝不复活）。
+    // 清空作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op，绝不复活）。
     invalidateInflightPromotions();
-    // M9-C1 T2：强重置推进保存代次——任何在途防抖保存不得把旧会话快照写入新会话。
+    // 强重置推进保存代次——任何在途防抖保存不得把旧会话快照写入新会话。
     // 服务端旧会话消息保留（旧集合仍可回访），新会话由 startNewCreation 的 createNew 明确创建。
     conversationSaveEpoch += 1;
     set((state) => ({
       messages: [],
-      // M9-C1 T2：清空消息同时丢弃当前会话身份并递增代次。
+      // 清空消息同时丢弃当前会话身份并递增代次。
       conversationId: null,
       collectionId: null,
       collectionTitle: null,
@@ -1263,7 +1263,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   applyConversationIdentity: ({ conversationId, collectionId, collectionTitle }) => {
     const changed = get().conversationId !== conversationId;
     if (changed) {
-      // M9-C1 T2 修复轮 2：会话切换走 store 注册的切换钩子——真 abort 在途 next、
+      // 会话切换走 store 注册的切换钩子——真 abort 在途 next、
       // 清空 prepared/调度锁，并以新 collection identity 重新初始化预算；
       // 旧会话迟到回调凭 runToken + epoch 双重失配一律丢弃（绝不污染新会话）。
       useContinuousCreationStore.getState().switchCollection(collectionId);
@@ -1290,7 +1290,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     const epoch = accountEpoch; // 捕获进入代次
     const baselineIds = new Set(get().messages.map((message) => message.id)); // 进入时已有（访客/旧态）
     userInitPromise = (async () => {
-      // M9-C1 T2：创作页围绕当前集合运行——先确保 active Conversation，再按会话级读取消息。
+      // 创作页围绕当前集合运行——先确保 active Conversation，再按会话级读取消息。
       // 读路径不再走 subject 全量（legacy chat.getConversation），只返回当前会话的消息。
       const conversation = await ensureActiveConversation().catch(() => null);
       let dtos: ChatMessageDTO[] | null = null;
@@ -1317,7 +1317,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         });
         return;
       }
-      // M4-06 History rehydration boundary：只 normalize 服务端 fetch 结果。
+      // History rehydration boundary：只 normalize 服务端 fetch 结果。
       // server DTO 逐条经 rehydrateServerMessages 防御性恢复（transient 降级 +
       // 非法 storyArtifact part fail-closed + valid Artifact wins 同步 content）；
       // await 窗口内本地新增（appendedLocally）绝不进 normalization，否则会把真实
@@ -1327,14 +1327,14 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       const serverMessages: ChatMessage[] = rehydrateServerMessages(
         dtos as unknown as Parameters<typeof rehydrateServerMessages>[0],
       );
-      // 中文注释：H-15 读取成功记基线（内存，不持久化），供下次保存透传。
+      // 中文注释：读取成功记基线（内存，不持久化），供下次保存透传。
       baselineMessageIds = dtos.map((dto) => dto.messageId);
       // await 窗口内本地新增（非 baseline）的消息，需在恢复后保留（项 3）
       const appendedLocally = get().messages.filter(
         (message) => !baselineIds.has(message.id),
       );
       // 直接 set，不触发 scheduleSave，避免把恢复结果回写。
-      // M9-C1 T2：同步 active Conversation 身份（conversationId 变化即递增代次）。
+      // 同步 active Conversation 身份（conversationId 变化即递增代次）。
       set((state) => {
         const nextConversationId = conversation?.id ?? null;
         const changed = state.conversationId !== nextConversationId;
@@ -1360,11 +1360,11 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   },
   reset: () => {
     accountEpoch++; // 作废在途 initForUser 的回写
-    // M4-04：登出同步作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op）。
+    // 登出同步作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op）。
     invalidateInflightPromotions();
-    conversationSaveEpoch += 1; // M9-C1 T2：登出后旧快照不得写入任何新会话
+    conversationSaveEpoch += 1; // 登出后旧快照不得写入任何新会话
     userInitPromise = null; // 让重新登录能起新请求
-    baselineMessageIds = undefined; // 中文注释：H-15 登出清基线，避免跨账号透传。
+    baselineMessageIds = undefined; // 中文注释：登出清基线，避免跨账号透传。
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
@@ -1396,7 +1396,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       const messages = get().messages;
       for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
-        // M4-09 containment：故事存在性经 compatibility helper 判定（历史兼容卡或现代 Artifact 均视为故事消息）。
+        // containment：故事存在性经 compatibility helper 判定（历史兼容卡或现代 Artifact 均视为故事消息）。
         if (msg.role === 'assistant' && hasAnyStoryPart(msg.parts)) {
           return msg.id === id;
         }
@@ -1411,7 +1411,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         return null;
       }
 
-      // M4-09 containment：经 compatibility helper 查找下一个可播放历史兼容卡；
+      // containment：经 compatibility helper 查找下一个可播放历史兼容卡；
       // 现代 Artifact 天然不参加该 selector，行为冻结，不升级为 StoryWork 播放。
       for (let i = currentIndex + 1; i < messages.length; i++) {
         const msg = messages[i];
@@ -1441,7 +1441,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         ? messages.slice(lastSummaryIndex)
         : messages;
 
-      // H-03-b：历史轮次排预载指令泡，本轮保留供续写触发。
+      // 历史轮次排预载指令泡，本轮保留供续写触发。
       // 仅最后一条 user（本轮触发，含预载“请继续故事”）原样保留，其余历史 isPreloadUserMessage 一律过滤；
       // 预载故事助手卡不受影响（仍进上下文/仍可摘要）。
       let lastUserIndex = -1;
@@ -1472,7 +1472,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     },
     hasStoryMessages: (excludeMessageId) => {
       const messages = get().messages;
-      // M4-09 containment：故事内容存在性经 compatibility helper 判定（历史兼容卡或非空正文现代 Artifact）。
+      // containment：故事内容存在性经 compatibility helper 判定（历史兼容卡或非空正文现代 Artifact）。
       const isStoryMsg = (msg: (typeof messages)[number]) =>
         msg.role === 'assistant' && hasStoryContent(msg.parts);
       const targetIndex = excludeMessageId

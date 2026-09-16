@@ -1,8 +1,8 @@
-//：Prompt/Generation History 前后端退役；创作页不得再暴露任何旧 History 入口，
+// Prompt/Generation History 前后端退役；创作页不得再暴露任何旧 History 入口，
 // 原「清空」按钮文案切换为「新建创作」。
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";
-import { captureT2Visual } from "./helpers/visual";
+import { captureJourneyVisual } from "./helpers/visual";
 
 test("创作页不再暴露旧 History 入口", async ({ page, harnessEnv }) => {
     test.setTimeout(120000);
@@ -24,7 +24,7 @@ test("创作页不再暴露旧 History 入口", async ({ page, harnessEnv }) => 
     // 连续创作状态卡（新增）存在，证明创作页已围绕当前集合运行。
     await expect(page.getByTestId("continuous-status-card")).toBeVisible();
 
-    await captureT2Visual(page, "history-retired-desktop");
+    await captureJourneyVisual(page, "history-retired-desktop");
 });
 
 test.describe("移动端视图", () => {
@@ -37,6 +37,6 @@ test.describe("移动端视图", () => {
         await expect(page.getByRole("button", { name: "新建创作" })).toBeVisible({
             timeout: 30000,
         });
-        await captureT2Visual(page, "history-retired-mobile");
+        await captureJourneyVisual(page, "history-retired-mobile");
     });
 });

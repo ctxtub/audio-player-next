@@ -1,5 +1,5 @@
 /**
- * M8-05-04 Production Closure：Next 15 server instrumentation hook。
+ * Production Closure：Next 15 server instrumentation hook。
  *
  * 启动时跑一次有界 due-tombstone 清理（复用冻结的 cleanupAudioStorageDeletions
  * 引擎，经 `lib/server/audioStorageStartup.ts` 可测函数）。
@@ -22,7 +22,7 @@ export async function register(): Promise<void> {
   try {
     const mod = await import('./lib/server/audioStorageStartup');
     void mod.runStartupAudioDeletionCleanup();
-    // T3：单轨资产 30 天滑动 GC 启动触发（同一薄钩子，fire-and-forget，失败不崩）。
+    // 单轨资产 30 天滑动 GC 启动触发（同一薄钩子，fire-and-forget，失败不崩）。
     void mod.runStartupStoryAudioAssetGc();
   } catch (err) {
     try {

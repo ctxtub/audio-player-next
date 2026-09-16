@@ -54,7 +54,7 @@ export type TextPart = {
 
 /**
  * 故事卡片片段（Legacy），用于故事生成消息，包含故事文本与音频地址。
- * M4-08 cutover：Legacy read compatibility only——作为向后兼容输入保留（decode/render/play/read
+ * cutover：Legacy read compatibility only——作为向后兼容输入保留（decode/render/play/read
  * 与 extractTextFromParts 上下文），新链路请使用 StoryArtifactPart；任何新的 storyCard 产生
  * 均被服务端 provenance guard（incoming ⊆ persisted）拒绝，绝不转换、不 promotion、不回填。
  */
@@ -68,7 +68,7 @@ export type StoryCardPart = {
 };
 
 /**
- * 故事 Artifact 片段（M4-01），接入具备完整生命周期的 Story Artifact。
+ * 故事 Artifact 片段，接入具备完整生命周期的 Story Artifact。
  */
 export type StoryArtifactPart = {
   /** 片段类型标识。 */

@@ -45,7 +45,7 @@ const defaultSuggestions: HeaderSuggestion[] = [
 /**
  * 聊天页面布局组件，组织连续创作状态卡、消息区与输入区。
  *
- *：History Surface 已退役；「清空」升级为唯一「新建创作」强重置入口。
+ * History Surface 已退役；「清空」升级为唯一「新建创作」强重置入口。
  * @returns 布局结构 JSX。
  */
 const ChatLayout: React.FC<ChatLayoutProps> = () => {
@@ -64,7 +64,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     [messages],
   );
 
-  //：有集合但标题未知时补拉集合标题（创作页围绕当前集合运行）。
+  // 有集合但标题未知时补拉集合标题（创作页围绕当前集合运行）。
   useEffect(() => {
     if (!collectionId || collectionTitle) {
       return;

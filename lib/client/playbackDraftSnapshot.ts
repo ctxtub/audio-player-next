@@ -1,5 +1,5 @@
 /**
- *  fixup：Draft rehydrate canonical resolver（评审 Blocking 1）。
+ *  fixup：Draft rehydrate canonical resolver（评审 。
  *
  * Chat domain / compatibility 层唯一 canonical 入口：Chat 消息按 messageId
  * 解析为 Draft 快照（storyText + 可选 title/voiceId/contentHash）。

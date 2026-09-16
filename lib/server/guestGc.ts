@@ -21,17 +21,17 @@ export interface PurgeResult {
     storyWorksDeleted?: number;
     promptsDeleted: number;
     playbackProgressDeleted: number;
-    /**：被清理的空作品集数 */
+    /** 被清理的空作品集数 */
     collectionsDeleted?: number;
-    /**：被清理的空会话数 */
+    /** 被清理的空会话数 */
     conversationsDeleted?: number;
 }
 
 /**
  * 清理指定截止时间前未更新的访客数据（默认 30 天前）。
- *：Anchor delegate 逻辑 rename（物理表不变）；Guest Work Progress 以 Work FK cascade 为主，
+ * Anchor delegate 逻辑 rename（物理表不变）；Guest Work Progress 以 Work FK cascade 为主，
  * 随 GuestStoryWork 物理删除级联清理，此处无需额外 deleteMany（保持既有 GC 语义不变）。
- *：Guest Work 物理删除经 executeStoryWorkPhysicalDelete 统一 seam 自动获得
+ * Guest Work 物理删除经 executeStoryWorkPhysicalDelete 统一 seam 自动获得
  * audio-aware lifecycle（事务内 tombstone + commit 后 best-effort cleanup）；此处严禁复制
  * Audio GC 实现（不得直调 storage.delete / tombstone 表），回归由 audio-lifecycle-delete 套件锁定。
  */
@@ -50,7 +50,7 @@ export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeRes
         prisma.guestPlaybackAnchor.deleteMany({ where: { updatedAt: { lt: threshold } } }),
     ]);
 
-    //：仅清理无存活成员的空集合 / 空会话，避免 Cascade 误删未过期 Work。
+    // 仅清理无存活成员的空集合 / 空会话，避免 Cascade 误删未过期 Work。
     const collections = await prisma.guestStoryCollection.deleteMany({
         where: {
             updatedAt: { lt: threshold },

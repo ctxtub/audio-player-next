@@ -2,7 +2,7 @@
  * 账号数据同步机制：三块上云数据（应用配置 / 单会话聊天 / 播放会话）
  * 「登录初始化 + 登出清理」编排的唯一事实源。
  *
- * M9-C1 T2：Prompt/Generation History 已前后端退役，不再参与账号同步。
+ * Prompt/Generation History 已前后端退役，不再参与账号同步。
  *
  * - 登录/访客初始化由 AccountSyncProvider 调度（带渲染门）。
  * - 登出/会话失效清理键于 authStore 的 isLogin 下降沿自动触发（401/会话过期复用，零额外接线）。
@@ -47,7 +47,7 @@ const participants: AccountSyncParticipant[] = [
     reset: () => useChatStore.getState().reset(),
   },
   {
-    // M9-03：只 init PlaybackSessionStore（新 SSOT）；旧 playbackProgressStore 已删除，
+    // 只 init PlaybackSessionStore（新 SSOT）；旧 playbackProgressStore 已删除，
     // 历史 local 进度自然失效，不重新成为 SSOT，不增 fallback。
     name: 'playbackSession',
     initForUser: () => usePlaybackSessionStore.getState().initForUser().then(() => {}),
@@ -58,7 +58,7 @@ const participants: AccountSyncParticipant[] = [
     },
   },
   {
-    // M9-C1 T2 评审闭合（item 4）：登出必须真正取消在途 next job 并清空连续创作状态，
+    // 评审闭合（：登出必须真正取消在途 next job 并清空连续创作状态，
     // 旧会话迟到结果不得复活自动续播。
     name: 'continuousCreation',
     initForUser: async () => {},
@@ -71,7 +71,7 @@ const participants: AccountSyncParticipant[] = [
 ];
 
 /**
- * H-06 登出停声时序探针的播放快照（卸载瞬间采样，纯观测）。
+ * 登出停声时序探针的播放快照（卸载瞬间采样，纯观测）。
  */
 export type LogoutProbePlaybackSnapshot = {
   /** 采样瞬间是否处于播放中。 */
@@ -83,7 +83,7 @@ export type LogoutProbePlaybackSnapshot = {
 };
 
 /**
- * H-06 登出停声时序探针的一次采样（reset 链前后各一次快照，纯观测）。
+ * 登出停声时序探针的一次采样（reset 链前后各一次快照，纯观测）。
  */
 export type LogoutProbeSample = {
   /** 采样时间戳（毫秒）。 */
@@ -174,8 +174,8 @@ export function initAccountForGuest(): void {
 
 /**
  * 登出/会话失效/身份切换：同步清理所有块（清本地 + 关同步）。
- * H-06 探针仅在前后采样播放快照并记录参与序列，不改任何清理行为。
- * H-06 follow-up：try/finally 永不阻断登出——单块 reset 抛错仅告警并继续其余块，
+ * 探针仅在前后采样播放快照并记录参与序列，不改任何清理行为。
+ * follow-up：try/finally 永不阻断登出——单块 reset 抛错仅告警并继续其余块，
  * 探针采样与记录包在 finally/内层 try/catch，任何探针异常不外抛阻断登出。
  */
 export function resetAccountData(): void {

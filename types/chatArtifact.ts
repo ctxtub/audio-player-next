@@ -1,5 +1,5 @@
 /**
- * Chat Artifact 域契约类型定义（M4-01）。
+ * Chat Artifact 域契约类型定义。
  *
  * 核心设计：
  * 1. 彻底将 Message delivery 传输状态（ChatMessageDeliveryStatus）与 Artifact lifecycle 解耦。
@@ -33,7 +33,7 @@ export interface BaseChatArtifact {
   readonly artifactType: 'story';
   /**
    * 产生该 Artifact 的 assistant message id (msg.id)。
-   * 与 M2 [userId/guestId, sourceMessageId] 幂等键对齐。
+   * 与 [userId/guestId, sourceMessageId] 幂等键对齐。
    */
   readonly sourceMessageId: string;
   /** 故事正文文本。 */

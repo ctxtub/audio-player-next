@@ -594,7 +594,7 @@ async function ensureGuestManifest(
 // Manifest 状态刷新（DB 侧聚合；短 DB transaction 内读+写原子完成，永不跨 TTS）
 // ============================================================================
 //
-// FIXUP Blocking1（ 复审）：读取 segments → derive → Manifest update 必须在同一短
+//  复审）：读取 segments → derive → Manifest update 必须在同一短
 // transaction 内完成。内部无 TTS/storage/network（纯 DB 读+单写），不违反 §15.2。
 // SQLite 写事务把不同 completion 的 aggregate commit 顺序序列化；后完成的 refresh
 // 看到最新状态，旧 snapshot 不能覆盖新状态（杜绝 ready → preparing 回退）。
@@ -1022,7 +1022,7 @@ async function ensureUserSegment(
   const checksum = computeAudioChecksum(audioBytes);
   const byteLength = audioBytes.byteLength;
 
-  // FIXUP Blocking2 ①：storage.put 之前原子 renew lease ownership（fencing）。
+  // ①：storage.put 之前原子 renew lease ownership（fencing）。
   // lease 过期≠旧 Node 已死：若已被他人接管（leaseId 已换），count=0 → 丢弃本次
   // bytes、不写 object、不改 DB，返回 preparing/RETRY。renew 成功才 put。
   // 有效 lease 内仍为同一 key 覆盖写（spec §18）；② put 后仍保留 WHERE leaseId
@@ -1295,7 +1295,7 @@ async function ensureGuestSegment(
   const checksum = computeAudioChecksum(audioBytes);
   const byteLength = audioBytes.byteLength;
 
-  // FIXUP Blocking2 ①（Guest 对称）：put 前原子 renew fencing；② put 后 WHERE leaseId CAS 保留。
+  // ①（Guest 对称）：put 前原子 renew fencing；② put 后 WHERE leaseId CAS 保留。
   const renewAt = deps.now();
   const renewed = await prisma.guestStoryAudioSegment.updateMany({
     where: { id: segment.id, leaseId, status: 'preparing' },
@@ -1414,7 +1414,7 @@ export type PlaybackManifestDTO = {
   singleTrack?: StoryAudioAssetDTO | null;
 };
 
-/**：单轨投影 → 旧 PlaybackManifestDTO 形状（segments 空 + singleTrack）。 */
+/** 单轨投影 → 旧 PlaybackManifestDTO 形状（segments 空 + singleTrack）。 */
 async function getSingleTrackPlaybackManifest(
   subject: Subject,
   input: GetPlaybackManifestInput
@@ -1470,7 +1470,7 @@ export async function getPlaybackManifestForSubject(
   subject: Subject,
   input: GetPlaybackManifestInput
 ): Promise<PlaybackManifestDTO> {
-  //：开关开启时改走单轨投影（segments 为空 + singleTrack，保证只暴露一条时间轴）。
+  // 开关开启时改走单轨投影（segments 为空 + singleTrack，保证只暴露一条时间轴）。
   if (isSingleTrackServerEnabled()) {
     return getSingleTrackPlaybackManifest(subject, input);
   }

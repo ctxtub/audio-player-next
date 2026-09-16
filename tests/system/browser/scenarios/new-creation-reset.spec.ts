@@ -1,4 +1,4 @@
-//：创作页「新建创作」是唯一强重置入口（原「清空」）。
+// 创作页「新建创作」是唯一强重置入口（原「清空」）。
 // 空会话点击后 Chat 归 idle、active Conversation identity 切换，且连续创作恢复默认开启。
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";

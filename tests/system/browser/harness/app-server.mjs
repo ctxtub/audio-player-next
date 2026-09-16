@@ -173,7 +173,7 @@ export function assertArchivePreconditions({ expectedSha, cwd } = {}) {
 }
 
 /**
- * 快照 ready 标记中的 probe 开启令牌（ fixup-2）。
+ * 快照 ready 标记中的 probe 开启令牌（ 。
  * 无此令牌的旧快照一律视为不可复用并重建（防无 probe 构建被复用导致 A/B 场景取不到探针）。
  */
 export const PROBE_BUILD_TOKEN = 'probe=e2e-playback-v1';
@@ -233,7 +233,7 @@ function runInSnapshot(snapshotDir, bin, args, env) {
  * WS4：取锁之前 fast-path 先验守卫、取锁之后锁内复验守卫 + ready marker（防 TOCTOU）；
  * 脏树即使快照已就绪也拒绝复用。快照键为 full SHA（目录名透传 short/full 均兼容，
  * marker 与日志记 full）；sha 缺失/'unknown' 直接抛 BLOCKED，不得回退缓存。
- *  fixup-2：缓存复用要求 marker 含 probe 开启令牌（旧构建无 probe，一律重建）。
+ *  缓存复用要求 marker 含 probe 开启令牌（旧构建无 probe，一律重建）。
  * @param sha commit SHA（full；short 透传仅作目录兼容）
  * @param env 合成环境（含 SESSION_SECRET/OPENAI_*，DATABASE_URL 另行按库覆写）
  * @param opts 选项 { cwd?, snapshotBase? }（测试注入用；缺省仓库根与运行时 snapshots）
@@ -249,7 +249,7 @@ export async function ensureSnapshot(sha, env, opts = {}) {
     assertArchivePreconditions({ cwd: root });
     const snapshotDir = join(snapshotsBase, sha);
     const readyMarker = join(snapshotDir, '.snapshot-ready');
-    // 中文注释： fixup-2——仅复用含 probe 开启令牌的快照；旧格式 marker（无令牌，
+    // 中文注释： ——仅复用含 probe 开启令牌的快照；旧格式 marker（无令牌，
     // 构建物无 probe）一律重建，防 A/B 场景取不到探针。
     if (isSnapshotReady(readyMarker)) return snapshotDir;
     const lockDir = join(snapshotsBase, `${sha}.lock`);
@@ -293,9 +293,9 @@ export async function ensureSnapshot(sha, env, opts = {}) {
 
 /**
  * 构造快照子进程合成环境（隔离库 + 合成 secret + 全合成假上游）。
- *  fixup-2：统一注入 probe 显式开启信号（构建时内联进 client/server 产物，
+ *  统一注入 probe 显式开启信号（构建时内联进 client/server 产物，
  * 运行时同样可见）；缺省 ambient 即使含该变量亦被覆盖为开启（harness 内恒开）。
- *：统一注入 canonical 音频本地存储（driver=local + 可写独立根；缺省
+ * 统一注入 canonical 音频本地存储（driver=local + 可写独立根；缺省
  * `/app/audio` 在开发机/CI 均不可写，ensureSegment 会 AUDIO_STORAGE_FAILED）。
  * 音频根取隔离库同目录下 `audio/`（与隔离库同生命周期；storageKey 全 UUID，
  * 跨 run 无碰撞；legacy TTS 不经此存储，其他 spec 行为不变）。
@@ -322,7 +322,7 @@ export function buildSnapshotEnv(dbFile, mockBaseUrl) {
         ]),
         AUDIO_STORAGE_DRIVER: 'local',
         AUDIO_LOCAL_ROOT: join(dirname(dbFile), 'audio'),
-        //：browser 套件内单轨服务端路径需真实开启；生产由部署 env 显式置位（默认关）。
+        // browser 套件内单轨服务端路径需真实开启；生产由部署 env 显式置位（默认关）。
         // 既有 canonical segment spec 不改走单轨（客户端 provider 由各自 browser flag 选择）。
         SINGLE_TRACK_AUDIO_ENABLED: '1',
     };

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Collection 卡片（：故事库顶层恒为集合）。
+ * Collection 卡片（故事库顶层恒为集合）。
  *
  * - active/favorites 视图：标题为详情链接（/library/collections/{id}）；
  * - trash 视图：标题纯静态文本（零详情入口，防探测），仅恢复/永久删除；

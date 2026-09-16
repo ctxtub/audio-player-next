@@ -97,7 +97,7 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
         return `${currentText.slice(0, PREVIEW_MAX_LENGTH)}...`;
     }, [isGenerating, needsTruncation, currentText]);
 
-    /** 处理播放按钮点击（：唯一正式入口 playStoryCard；
+    /** 处理播放按钮点击（唯一正式入口 playStoryCard；
      * 组件只交稳定 identity + 卡片上下文，不再自维护 resume/audioUrl/playStoryText
      * 播放决策。Legacy part.audioUrl 在此面被有意忽略（无 segment identity，
      * 不得当 paragraph 0 播放；identity/segmentation 正确 > 复用旧音频缓存）。 */

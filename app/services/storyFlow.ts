@@ -1,5 +1,5 @@
 /**
- *：故事生成流程兼容层。
+ * 故事生成流程兼容层。
  *
  * 播放 session / preload / ended 编排已迁出至
  * `app/services/playbackSessionFlow.ts` + `stores/playbackSessionStore.ts`。
@@ -172,7 +172,7 @@ export const updatePlaybackProgress = (payload: { currentTime: number; duration:
 /**
  * 完整重置故事播放链路，清空播放与连续创作运行时。
  *
- *：「新建创作」的强重置入口是 `app/services/startNewCreation.ts`；
+ * 「新建创作」的强重置入口是 `app/services/startNewCreation.ts`；
  * 本函数仅在旧调用点保留，负责停声 + 清运行时，不递增 epoch/不改预算快照。
  */
 export const resetStoryFlow = () => {

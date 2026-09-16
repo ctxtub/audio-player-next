@@ -4,7 +4,7 @@
  * 唯一的 promotion 通道：CompleteChatArtifact → Promotion Adapter → collection.promoteArtifact(...) → StoryWorkDetailDTO。
  * 本步仍然不要自动触发 promotion（orchestration 留）；adapter 只负责 I/O。
  *
- *：写路径切到 `collection.promoteArtifact`（Artifact → Collection/Work 唯一
+ * 写路径切到 `collection.promoteArtifact`（Artifact → Collection/Work 唯一
  * router 写入口），必须携带当前 `conversationId`；不再走 `library.create`（后者不建集合）。
  *
  * 薄层契约：
@@ -50,7 +50,7 @@ export type PromotionCreateFn = (input: CollectionPromoteInput) => Promise<Story
 
 /**
  * promotion 依赖注入（测试用隔离桩；生产默认走 frozen collection.promoteArtifact）。
- *：`conversationId` 为会话级 promotion 归属证据，缺失即 fail-fast。
+ * `conversationId` 为会话级 promotion 归属证据，缺失即 fail-fast。
  */
 export interface PromotionAdapterDeps {
   readonly create?: PromotionCreateFn;

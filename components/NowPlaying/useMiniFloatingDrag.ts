@@ -2,7 +2,7 @@
 
 /**
  *  MiniNowPlaying Wide Floating 拖拽 hook（spec §18）
- * +  desktop floating 位置持久化（评审 Blocking 1）。
+ * +  desktop floating 位置持久化（评审 。
  *
  * 冻结契约：
  * - 仅 wide-floating 生效（enabled=false 时不绑定手势、不输出坐标）；
@@ -13,7 +13,7 @@
  *   Playback Button 与 Metadata（open expanded）按钮均不参与 drag；
  * - drag 期间/结束 clamp 到 viewport 内；drag end 吸附 nearest 水平 edge，垂直保留；
  * - 监听 window.resize + visualViewport.resize → re-clamp 现有位置防出界；
- * - 位置 localStorage 持久化 + refresh restore（FIXUP）：
+ * - 位置 localStorage 持久化 + refresh restore（：
  *   position 变更时同步持久化（key 见 MINI_FLOATING_POSITION_STORAGE_KEY）；
  *   初始化时读取持久化值并 clamp 到当前 viewport（防跨屏/缩窗出界）；
  *   无持久化值/解析失败/非法值 → fallback 默认右下（pos=null，绝不 throw）；

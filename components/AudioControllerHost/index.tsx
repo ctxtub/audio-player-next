@@ -141,7 +141,7 @@ const AudioControllerHost: React.FC = () => {
 
       await handleUnlock();
 
-      //：Host 不再做 Preload/Chat 领域判断（§26.1）。
+      // Host 不再做 Preload/Chat 领域判断（§26.1）。
       // 预载锁与最新消息匹配由 PlaybackSessionFlow 统一决策，此处只做 transport 同步。
       // 同步当前播放地址到 Store，确保 StoryCard UI 状态正确
       // 使用 syncPlaybackState 避免递归调用 play
@@ -238,7 +238,7 @@ const AudioControllerHost: React.FC = () => {
       setPlaybackRate: handleSetPlaybackRate,
     };
     registerAudioController(controller);
-    //：Transport 到期回调注册（pause audio 后经 Flow 做 checkpoint + Toast，§26）。
+    // Transport 到期回调注册（pause audio 后经 Flow 做 checkpoint + Toast，§26）。
     registerSleepTimerExpiryHandler();
     return () => {
       registerAudioController(null);
@@ -291,7 +291,7 @@ const AudioControllerHost: React.FC = () => {
       }
       const currentTime = audioEl.currentTime;
       const duration = Number.isFinite(audioEl.duration) ? audioEl.duration : 0;
-      //：near-end / 预载决策下沉 flow，Host 只上报 timeupdate。
+      // near-end / 预载决策下沉 flow，Host 只上报 timeupdate。
       reportTimeUpdate({ currentTime, duration, hasTriggeredPreload });
     };
 
@@ -309,7 +309,7 @@ const AudioControllerHost: React.FC = () => {
       if (endedGuardRef.current.shouldSkipEnded()) {
         return;
       }
-      //：segment / continuation / checkpoint 由 flow 决定，Host 只报告 ended。
+      // segment / continuation / checkpoint 由 flow 决定，Host 只报告 ended。
       reportPlaybackPause();
       reportAudioActive(false);
       try {
@@ -320,7 +320,7 @@ const AudioControllerHost: React.FC = () => {
       }
     };
 
-    //  fixup（复审 Blocking 1 / §25.1）：buffering 生命周期 → Transport.audioActive。
+    //  fixup（复审 / §25.1）：buffering 生命周期 → Transport.audioActive。
     // playing（实际推进中）→ true；waiting/stalled（网络等待）→ false；pause → false。
     // 仅用于 sleep timer countdown 门；不映射为 Session 语义状态（waiting ≠ 用户暂停）。
     const handleAudioPlaying = () => {

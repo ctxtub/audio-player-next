@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * M7-01 MainChrome（M6 §15/§16/§30 + M7 spec §5 Global Layer）。
+ *  MainChrome（ §15/§16/§30 +  spec §5 Global Layer）。
  *
  * 结构：
  * ```text
@@ -13,13 +13,13 @@
  * └── NowPlayingLayer (Expanded；页面导航不卸载，与 Audio Host 同 Global Layer)
  * ```
  *
- * M5 owner 说明：AudioControllerHost 不在本组件内挂载，仍由
+ *  owner 说明：AudioControllerHost 不在本组件内挂载，仍由
  * app/(main)/layout.tsx 与 MainChrome 平级挂载为唯一全局 owner，
  * 跨 /chat /library /setting 不重复挂载、不重复 beginSession。
  * 本组件只读 Session 派生显隐/预留 + UI isExpanded suppress Mini，
  * 不 mutation PlaybackSessionStore.sessionId/status/source/continuationMode，
  * 不 clear Session、不 pause、不改 Anchor、不写第二套显隐标记。
- * Expanded open/close 一律不触发 play/pause/new Session（M7 §9）。
+ * Expanded open/close 一律不触发 play/pause/new Session（ §9）。
  */
 
 import React from 'react';
@@ -38,7 +38,7 @@ export type MainChromeProps = {
 /**
  * 主应用 Chrome：统一底部预留 + Mini slot + TabBar。
  * hasDockedMini 才给 .app 叠加 appWithDockedNowPlaying
- * （无 session / keyboard 抑制 / floating 时不保留幽灵空间）。
+ *（无 session / keyboard 抑制 / floating 时不保留幽灵空间）。
  */
 export const MainChrome: React.FC<MainChromeProps> = ({ children }) => {
     const state = useMainChromeState();

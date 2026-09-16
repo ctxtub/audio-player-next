@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * M6-03 MainChrome 状态 hook（spec §15/§16/§30）。
+ *  MainChrome 状态 hook（spec §15/§16/§30）。
  *
  * 纯派生见 ./visibility.ts（单测直引纯层，不触 store）。
  * 本文件只做 selector 派生，不 mutation
  * PlaybackSessionStore.sessionId/status/source/continuationMode，
  * 不 clear Session、不 pause、不写 Anchor、不写第二套显隐标记
- * （M5 owner 边界：动作一律走 playbackSessionFlow，见 MiniNowPlaying）。
+ *（ owner 边界：动作一律走 playbackSessionFlow，见 MiniNowPlaying）。
  */
 
 import { useNowPlayingLayoutMode } from '@/components/NowPlaying/useNowPlayingLayoutMode';
@@ -32,7 +32,7 @@ export type MainChromeState = MainChromeVisibility & {
     layoutMode: MiniNowPlayingLayoutMode;
     /** 软键盘原始信号（透传，供调试与单测mock对齐）。 */
     isKeyboardOpen: boolean;
-    /** Expanded 开关透传（供 data-expanded 打点，M7-01）。 */
+    /** Expanded 开关透传（供 data-expanded 打点，）。 */
     isExpanded: boolean;
 };
 
@@ -41,7 +41,7 @@ export type MainChromeState = MainChromeVisibility & {
  * - source/status 仅订阅（不 set）；
  * - desktopFloatingPlayerEnabled 只决定 layoutMode，不决定存在性；
  * - keyboard 只决定 visibility（纯隐藏，播放/Anchor 不动）；
- * - isExpanded 只 suppress Mini presentation（M7-01，不改变 Session/Transport）。
+ * - isExpanded 只 suppress Mini presentation（，不改变 Session/Transport）。
  */
 export const useMainChromeState = (): MainChromeState => {
     const source = usePlaybackSessionStore((state) => state.source);

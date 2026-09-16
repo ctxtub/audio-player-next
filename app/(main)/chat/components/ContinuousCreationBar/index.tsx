@@ -19,7 +19,7 @@ export type ContinuousCreationBarProps = {
 };
 
 /**
- * M9-C1 T2 连续创作状态卡。
+ *   连续创作状态卡。
  *
  * 与编排同源：开关、状态文案与剩余预算全部只读 `continuousCreationStore`（薄封装纯状态机），
  * 组件自身不推导状态、不做 IO。开关带可访问名称。

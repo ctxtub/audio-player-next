@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * M6 Mini Now Playing — 软键盘 detector（M6-01 foundation）。
+ *  Mini Now Playing — 软键盘 detector（ foundation）。
  *
  * 只验证 detector 能力（open/closed 可独立测试），本项不负责 Mini 显隐。
  * 后续 Slice 的 Mini 可见性公式（compact + keyboard open → suppressed）消费此 hook，
@@ -10,7 +10,7 @@
  * 检测策略（与 spec §17.2 对齐）：
  * - 优先：visualViewport 高度明显小于 layout 高度 + 可编辑元素聚焦；
  * - 退化：不支持 visualViewport 的浏览器，compact 下可编辑聚焦即视为 open
- *  （宁可短暂隐藏 Mini，也不要遮挡输入）。
+ *（宁可短暂隐藏 Mini，也不要遮挡输入）。
  */
 
 import { useEffect, useState } from 'react';

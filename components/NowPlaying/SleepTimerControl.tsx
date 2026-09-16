@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * M7-03 SleepTimerControl（spec §31.1/§32 Expanded 快捷 Timer）。
+ *  SleepTimerControl（spec §31.1/§32 Expanded 快捷 Timer）。
  *
  * - 快捷选项：关闭 / 10 / 20 / 30 / 60 / 自定义（10–120，step 10）/
  *   本故事结束后（仅 Work；Draft 不显示该选项，§22.1）；
@@ -12,7 +12,7 @@
  * - 展示（§32）：off → “睡眠定时 · 关闭”；minutes → “MM:SS 后暂停”；
  *   story_end → “本故事结束后”；
  * - 弹层为 Dialog 内联展开（不 portal 到 overlay DOM 外），Escape 关闭菜单时
- *   stopPropagation（焦点在菜单内，RAC Dialog 不应同时关闭；M7-02 复审约束 9
+ *   stopPropagation（焦点在菜单内，RAC Dialog 不应同时关闭； 复审约束 9
  *   的内联形态——无外部 portal 即无 Escape ownership 争议）。
  */
 
@@ -133,7 +133,7 @@ export const SleepTimerControl: React.FC<SleepTimerControlProps> = ({
         [onSelect]
     );
 
-    // Escape 所有权（M7-02 复审约束 9 的内联形态实现）：
+    // Escape 所有权（ 复审约束 9 的内联形态实现）：
     // RAC overlay 把 Escape 挂在祖先 overlay 元素的冒泡监听上；菜单打开时本组件
     // 在 document 捕获阶段先消费 Escape（preventDefault + stopPropagation），事件
     // 不再下行至目标与任何冒泡监听（RAC overlay 亦收不到），只关菜单不关 Expanded。

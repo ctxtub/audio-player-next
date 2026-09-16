@@ -43,7 +43,7 @@ function formatDuration(ms?: number | null): string | null {
 }
 
 /**
- * 故事库作品卡片组件（M3-05 生命周期交互接入）
+ * 故事库作品卡片组件（ 生命周期交互接入）
  *
  * 核心契约：
  * 1. active / favorites 视图：标题渲染为 Link 跳转 /library/[id]；

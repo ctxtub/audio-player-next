@@ -1,5 +1,5 @@
 /**
- * StoryCollection 可重复 backfill（change-id 2026-09-15-story-collection-continuous-creation T1）。
+ * StoryCollection 可重复 backfill（change-id 2026-09-15-story-collection-continuous-creation）。
  *
  * expand → backfill 阶段的数据搬运：
  * 1. 现有 Chat 快照进入一个 legacy Conversation（每主体一个，确定性 id，可重复执行）；
@@ -40,7 +40,7 @@ const emptyCounts = (): StoryCollectionBackfillCounts => ({
 });
 
 /**
- * M9-C1 Blocker 2：legacy Chat 存在重复 messageId 时的 fail-closed 错误。
+ *  Blocker 2：legacy Chat 存在重复 messageId 时的 fail-closed 错误。
  *
  * 携带脱敏计数（重复的 owner×messageId 组数）；调用方在任何写入前抛出，保证该 Subject 零写入。
  */
@@ -133,7 +133,7 @@ export async function runStoryCollectionBackfill(): Promise<StoryCollectionBackf
     guestIds.add(row.guestId);
   }
 
-  // M9-C1 Blocker 2：全局 fail-closed 前置扫描——任一主体存在重复 legacy messageId
+  //  Blocker 2：全局 fail-closed 前置扫描——任一主体存在重复 legacy messageId
   // 即在任何写入之前中止（而非写一半后第二轮才撞 unique）。
   for (const user of users) {
     await assertNoDuplicateLegacyMessageIds({ type: 'user', id: user.id });
@@ -167,7 +167,7 @@ function mergeCounts(
 async function backfillUser(userId: number): Promise<StoryCollectionBackfillCounts> {
   const counts = emptyCounts();
 
-  // M9-C1 Blocker 2：写入前 fail-closed（重复 legacy messageId → 本 Subject 零写入）。
+  //  Blocker 2：写入前 fail-closed（重复 legacy messageId → 本 Subject 零写入）。
   await assertNoDuplicateLegacyMessageIds({ type: 'user', id: userId });
 
   // 1. 现有 Chat 快照 → legacy Conversation（仅处理尚未归属会话的消息）
@@ -292,7 +292,7 @@ async function backfillUser(userId: number): Promise<StoryCollectionBackfillCoun
 async function backfillGuest(guestId: string): Promise<StoryCollectionBackfillCounts> {
   const counts = emptyCounts();
 
-  // M9-C1 Blocker 2：写入前 fail-closed（重复 legacy messageId → 本 Subject 零写入）。
+  //  Blocker 2：写入前 fail-closed（重复 legacy messageId → 本 Subject 零写入）。
   await assertNoDuplicateLegacyMessageIds({ type: 'guest', id: guestId });
 
   const unassignedMessages = await prisma.guestChatMessage.findMany({
@@ -416,7 +416,7 @@ async function backfillGuest(guestId: string): Promise<StoryCollectionBackfillCo
   return counts;
 }
 
-/** 迁移守恒证据快照（只读；用于 evidence 脚本与测试）。 */
+/** 迁移守恒只读快照。 */
 export type StoryCollectionMigrationState = {
   userConversations: number;
   guestConversations: number;
@@ -430,7 +430,7 @@ export type StoryCollectionMigrationState = {
   guestWorksOrphaned: number;
   userWorksPositionless: number;
   guestWorksPositionless: number;
-  /** M9-C1 Blocker 2：尚未归属会话的 legacy Chat 中重复 messageId 组数（脱敏计数）。 */
+  /**  Blocker 2：尚未归属会话的 legacy Chat 中重复 messageId 组数（脱敏计数）。 */
   duplicateLegacyMessageIds: number;
 };
 

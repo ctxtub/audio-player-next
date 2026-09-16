@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * M7-02 useExpandedPlaybackControls（spec §16 Playback Controls Facade）。
+ *  useExpandedPlaybackControls（spec §16 Playback Controls Facade）。
  *
  * Expanded 唯一播放操作入口：
  * ```ts
@@ -14,12 +14,12 @@
  *   setPlaybackRate(rate)
  * }
  * ```
- * - 全部走 M5 ownership（flow/Transport command → Session + AudioControllerHost）；
+ * - 全部走  ownership（flow/Transport command → Session + AudioControllerHost）；
  * - UI 不得直接 set Session 字段或操作 <audio>（本 hook 不 import 任何 store 写面 /
- *   audioController / M8.ensureSegment；只委托 playbackSessionFlow）；
- * - P3B 再增加 seekStoryPosition(ms)（本轮不提供，避免 UI 层散落跨域操作）。
+ *   audioController / .ensureSegment；只委托 playbackSessionFlow）；
+ * -  再增加 seekStoryPosition(ms)（本轮不提供，避免 UI 层散落跨域操作）。
  *
- * M7-03 P3C 增补（spec §24/§31.1 additive）：
+ *   增补（spec §24/§31.1 additive）：
  * - setSleepTimer(mode, minutes?)：当前 Session Timer 设置（只改当前 Session，
  *   不自动改 Settings 默认；stale/非法返回 false，由本 hook Toast 呈现）。
  *
@@ -56,7 +56,7 @@ export type ExpandedPlaybackControls = {
     /** 当前 Session 倍速（七档；不写回 UserConfig，不触发新 TTS）。 */
     setPlaybackRate: (rate: number) => void;
     /**
-     * M7-03 当前 Session Sleep Timer（spec §24/§31.1）。
+     *  当前 Session Sleep Timer（spec §24/§31.1）。
      * 只改当前 Session Timer，不自动改 Settings 默认。
      */
     setSleepTimer: (selection: SleepTimerSelection) => void;

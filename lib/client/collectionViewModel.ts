@@ -1,5 +1,5 @@
 /**
- * Collection Library ViewModel 纯函数（M9-C1 T4）。
+ * Collection Library ViewModel 纯函数（）。
  *
  * 职责：集合无限分页打平 + id 防重、成员 position 顺序校验、回收站可达性、
  * 末卡定位。绝不触碰网络与 React Query 缓存（UI 层组装）。

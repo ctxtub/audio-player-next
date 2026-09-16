@@ -1,7 +1,7 @@
 /**
  * Library (StoryWork) tRPC 路由模块
  *
- * 冻结 M2-06 公开 API，向客户端与 M3 Facade 暴露 8 个统一 Procedure：
+ * 冻结  公开 API，向客户端与  Facade 暴露 8 个统一 Procedure：
  * - list: 游标分页查询故事列表（active/favorites/trash 视图 + 搜索）
  * - get: 单个故事详情查询
  * - create: 故事创作入库与来源消息幂等防重

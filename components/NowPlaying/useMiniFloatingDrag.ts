@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * M6-04 MiniNowPlaying Wide Floating 拖拽 hook（spec §18）
- * + M6-04-FIXUP desktop floating 位置持久化（评审 Blocking 1）。
+ *  MiniNowPlaying Wide Floating 拖拽 hook（spec §18）
+ * +  desktop floating 位置持久化（评审 Blocking 1）。
  *
  * 冻结契约：
  * - 仅 wide-floating 生效（enabled=false 时不绑定手势、不输出坐标）；
@@ -25,7 +25,7 @@
  * Responsive 切换（spec §49/C）：pos 在 hook 内跨 mode 保留，但调用方仅在
  * wide-floating 时应用为 left/top；docked/compact 时不输出内联坐标，
  * 故旧 floating 坐标不参与 mobile layout；回 wide 时恢复合法位置
- * （resize repair 已 re-clamp，超界不会残留；持久化值同样 clamp 后恢复）。
+ *（resize repair 已 re-clamp，超界不会残留；持久化值同样 clamp 后恢复）。
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -254,7 +254,7 @@ export const useMiniFloatingDrag = (enabled: boolean): MiniFloatingDrag => {
             }
             const movement = state.movement ?? [0, 0];
             // 首帧捕获起点：已有坐标即起点；否则以当前面板 rect 为视觉起点
-            // （默认 CSS 右下 → left/top 的一次性转换，不依赖固定像素）。
+            //（默认 CSS 右下 → left/top 的一次性转换，不依赖固定像素）。
             let start = state.memo;
             if (state.first || !start) {
                 const cur = positionRef.current;

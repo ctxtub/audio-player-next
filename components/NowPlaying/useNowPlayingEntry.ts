@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * M7-01 NowPlaying Entry Facade（M7 spec §6 / §6.1，M9-04 closure 现状）。
+ *  NowPlaying Entry Facade（ spec §6 / §6.1， closure 现状）。
  *
  * Mini 只调用 openDetails()/openExpanded()，不直接感知路由/Expanded 形态。
- * M7 正式语义：openDetails/openExpanded → nowPlayingUiStore.openExpanded()
- * （Expanded 不属于 route，URL 不变；Mini Component 零改动，spec §6）。
+ *  正式语义：openDetails/openExpanded → nowPlayingUiStore.openExpanded()
+ *（Expanded 不属于 route，URL 不变；Mini Component 零改动，spec §6）。
  *
- * M9-04：M6 legacy 兼容符号已随旧播放器产品入口退役删除；本文件仅保留
- * M7 正式入口（useNowPlayingEntry / createExpandedNowPlayingEntryController /
+ *： legacy 兼容符号已随旧播放器产品入口退役删除；本文件仅保留
+ *  正式入口（useNowPlayingEntry / createExpandedNowPlayingEntryController /
  * NowPlayingEntryController 类型，Mini 消费）。
  */
 
@@ -16,16 +16,16 @@ import { useCallback, useMemo } from 'react';
 
 import { useNowPlayingUiStore } from '@/stores/nowPlayingUiStore';
 
-/** NowPlaying 入口控制器（M7：Expanded UI）。 */
+/** NowPlaying 入口控制器（：Expanded UI）。 */
 export type NowPlayingEntryController = {
-    /** 打开详情（M7 → Expanded UI open，URL 不变；透传触发元素供焦点返回）。 */
+    /** 打开详情（ → Expanded UI open，URL 不变；透传触发元素供焦点返回）。 */
     openDetails: (target?: HTMLElement | null) => void;
     /** 打开 Expanded（与 openDetails 同义，满足命名迁移契约）。 */
     openExpanded: (target?: HTMLElement | null) => void;
 };
 
 /**
- * 纯工厂（M7，可独立测试）：给定 UI open 构造控制器。
+ * 纯工厂（，可独立测试）：给定 UI open 构造控制器。
  * openDetails/openExpanded 均委托同一 UI open，不触路由/播放。
  */
 export const createExpandedNowPlayingEntryController = (

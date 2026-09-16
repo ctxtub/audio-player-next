@@ -131,16 +131,12 @@ yarn dev
 测试分层、影响判断和完整完成门见 [AGENTS.md](AGENTS.md) 与 [测试体系入口](docs/testing/README.md)。至少运行：
 
 ```bash
-yarn test:static
-yarn lint
-yarn tsc --noEmit --incremental false
-yarn test:unit
-yarn test:integration
+yarn test:fast
 yarn build
 git diff --check
 ```
 
-浏览器可观察行为另须运行 `yarn test:browser`；修改测试工具或 workflow 时另须运行 `yarn test:tooling`（smoke 为环境手诊入口、不属产品 coverage、不作为完成条件：`yarn test:browser:diagnostics`）。
+用户视角浏览器验证只在准备交付的最后阶段运行 `yarn test:delivery-journeys`。CI 不运行产品测试或浏览器模拟。
 
 ## 贡献指南
 

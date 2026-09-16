@@ -1,5 +1,5 @@
 /**
- * M9-C1 T3 StoryAudio 单轨资产纯领域层（spec §4）。
+ *   StoryAudio 单轨资产纯领域层（spec §4）。
  *
  * 只放类型、常量与纯函数：identity、内部 chunk 计划与校验、拼接、30 天滑动 TTL、
  * positionMs clamp/节流决策。不触 DB、不调 TTS、不读 storage，可被 server/测试共用。

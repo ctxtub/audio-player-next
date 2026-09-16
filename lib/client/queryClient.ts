@@ -18,7 +18,7 @@ export function computeIdentityFingerprint(input: IdentityFingerprintInput): str
 
 /**
  * 身份切换时清空整个 QueryClient。
- * 
+ *
  * 核心安全机制：
  * 1. 首先调用 cancelQueries()，立即同步标记并取消所有在途查询，中止 fetcher/retryer；
  * 2. 调用 clear()，彻底清空 QueryCache 与 MutationCache；

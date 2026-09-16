@@ -225,7 +225,7 @@ export const resetCache = (): void => {
 /** OpenAI TTS 支持的语音类型。 */
 type OpenAIVoice = "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer";
 
-/** Canonical 合成输入（M8-03 spec §9/§16：frozen text + Manifest authoritative profile）。 */
+/** Canonical 合成输入（ spec §9/§16：frozen text + Manifest authoritative profile）。 */
 export type SynthesizeSpeechWithProfileInput = {
     /** 冻结段文本（Manifest Segment.text，不接受客户端重算） */
     text: string;
@@ -265,7 +265,7 @@ export const resetSynthesizeSpeechWithProfileForTests = (): void => {
 };
 
 /**
- * Canonical 文本转语音（M8-03 真实合成入口；spec §9/§16）。
+ * Canonical 文本转语音（ 真实合成入口；spec §9/§16）。
  *
  * 由 storyAudio 服务以 frozen Segment text + Manifest 冻结 profile 调用：
  * speed 恒 1.0、format 恒 mp3；用户倍速/title/favorite 永不进入。
@@ -329,7 +329,7 @@ export const synthesizeSpeechWithProfile = async (
 /**
  * 使用 OpenAI TTS 执行文本转语音。
  *
- * Draft compatibility wrapper（M8-03 spec §9/§22.3）：Draft 瞬态播放继续经此入口，
+ * Draft compatibility wrapper（ spec §9/§22.3）：Draft 瞬态播放继续经此入口，
  * 内部委托 synthesizeSpeechWithProfile（model 取当前部署配置；canonical Manifest
  * 绝不经此 wrapper，始终以冻结 model 直调 WithProfile，保证 old Manifest 未生成段仍用旧 model）。
  *

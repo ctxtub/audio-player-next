@@ -1,5 +1,5 @@
 /**
- * M9-C1 T3 StoryAudio 单轨资产服务（User/Guest 双主体）。
+ *   StoryAudio 单轨资产服务（User/Guest 双主体）。
  *
  * 链路（spec §3/§4）：
  * ```text
@@ -65,16 +65,16 @@ import {
 /** 单轨资产世代（V1 内容不可改，正常恒 1）。 */
 export const STORY_AUDIO_ASSET_VERSION = 1;
 
-/** 合成租约 TTL（与 M8 同口径）。 */
+/** 合成租约 TTL（与  同口径）。 */
 export const STORY_AUDIO_ASSET_LEASE_TTL_MS = 60_000;
 
 /** 竞态重试提示（客户端轮询间隔）。 */
 export const STORY_AUDIO_ASSET_RETRY_AFTER_MS = 500;
 
-/** 机会式单轨 GC 最小触发间隔（避免每请求全表扫描；与 M8 tombstone 清理同口径低频）。 */
+/** 机会式单轨 GC 最小触发间隔（避免每请求全表扫描；与  tombstone 清理同口径低频）。 */
 export const STORY_AUDIO_ASSET_GC_MIN_INTERVAL_MS = 5 * 60 * 1000;
 
-/** 「正在播放」判定窗口：近期（窗口内）有未完成进度写入的 Work 视为播放中，GC 跳过。 */
+/**「正在播放」判定窗口：近期（窗口内）有未完成进度写入的 Work 视为播放中，GC 跳过。 */
 export const STORY_AUDIO_ASSET_PLAYING_WINDOW_MS = 5 * 60 * 1000;
 
 /** 服务依赖（与 StoryAudioDeps 同形，便于在 ensureSegment 入口透传注入）。 */
@@ -886,7 +886,7 @@ export function getStoryAudioAssetGcLastRunMsForTests(): number | null {
   return storyAudioAssetGcLastRunMs;
 }
 
-/** 「正在播放」Work id 集合（近期未完成进度的 Work；User/Guest 分别按各自表构建避免 id 碰撞）。 */
+/**「正在播放」Work id 集合（近期未完成进度的 Work；User/Guest 分别按各自表构建避免 id 碰撞）。 */
 async function playingWorkIdsForScope(
   scope: 'user' | 'guest',
   now: Date,

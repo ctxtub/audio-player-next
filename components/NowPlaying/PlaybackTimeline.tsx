@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * M7-02 PlaybackTimeline（spec §17 P3A 当前 Segment timeline）。
+ *  PlaybackTimeline（spec §17  当前 Segment timeline）。
  *
- * P3A 严格为当前 Segment（不是整篇 duration）：
- * - timeline.mode 恒为 'segment'（M8 前不展示假整篇 duration，spec §68）；
- * - 数据仅取 M5 Transport currentTime/duration（段内位置），段落 identity
- *   （nextParagraphIndex）绝不进入本组件；
+ *  严格为当前 Segment（不是整篇 duration）：
+ * - timeline.mode 恒为 'segment'（ 前不展示假整篇 duration，spec §68）；
+ * - 数据仅取  Transport currentTime/duration（段内位置），段落 identity
+ *（nextParagraphIndex）绝不进入本组件；
  * - UI 必须明确“本段”，如「本段 01:24 / 02:16」+「第 4 / 12 段」（后者由
  *   ParagraphStatus 负责，本组件只渲染时间轴本体 + 本段标签）。
  * - 点击 seek（§17.1）：pointer / trackWidth * duration → onSeek；
@@ -19,7 +19,7 @@
 
 import React, { useCallback } from 'react';
 
-/** P3A timeline 固定模式（M8 前恒 segment，不伪装整篇）。 */
+/**  timeline 固定模式（ 前恒 segment，不伪装整篇）。 */
 export const EXPANDED_TIMELINE_MODE = 'segment' as const;
 
 /** 键盘步进（秒，spec §17.2 ±5s）。 */

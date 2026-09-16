@@ -46,7 +46,7 @@
   width: 100%;
 }
 
-/* History 触发入口：Composer leftSlot 唯一历史按钮（M4-07） */
+/* History 触发入口：Composer leftSlot 唯一历史按钮（） */
 .historyTrigger {
   flex-shrink: 0;
   font-size: var(--text-sm);
@@ -61,7 +61,7 @@
   transition: var(--transition-colors);
 }
 
-/* Chat-owned History Surface 容器：bounded overlay，不进 MessageArea、不改路由（M4-07） */
+/* Chat-owned History Surface 容器：bounded overlay，不进 MessageArea、不改路由（） */
 .historyOverlay {
   position: fixed;
   inset: 0;

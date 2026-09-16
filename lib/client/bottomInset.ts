@@ -1,5 +1,5 @@
 /**
- * 底部 Chrome 占位纯函数（M9-C1 T4）。
+ * 底部 Chrome 占位纯函数（）。
  *
  * 与 styles/app.module.scss 的 .app 变量赋值保持同构：
  * - 无 docked Mini：mini/gap 均为 0；

@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * M6-02 MiniNowPlaying 正式实现（spec §2.3/§3/§4/§5/§6/§9/§10/§11/§24/§33）
- * + M6-04 Wide Floating（spec §18/§19）。
+ *  MiniNowPlaying 正式实现（spec §2.3/§3/§4/§5/§6/§9/§10/§11/§24/§33）
+ * +  Wide Floating（spec §18/§19）。
  *
  * 语义冻结：
  * - 显隐只派生：source 非空且 status 非 idle（PlaybackSessionStore.current session）。
@@ -10,9 +10,9 @@
  * - title 仅取 Session.title；position 仅取 Session 语义位置；
  *   播放/暂停与当前段时间进度仅取 playbackStore Transport（播放标记/当前时间/总时长）；
  *   睡眠预算字段不在 Mini 展示。
- * - 动作一律走 M5 PlaybackSessionFlow（pausePlayback/resumePlayback/restartPlayback），
+ * - 动作一律走  PlaybackSessionFlow（pausePlayback/resumePlayback/restartPlayback），
  *   不直调 AudioControllerHost，不知晓水合技术状态。
- * - Metadata 点击经 useNowPlayingEntry → /player（M6 兼容，M7 只换 facade）。
+ * - Metadata 点击经 useNowPlayingEntry → /player（ 兼容， 只换 facade）。
  * - Draft / Work 不做视觉分叉（§33）。
  * - Wide Floating（§18）：viewport>=768 且 desktopFloatingPlayerEnabled=true →
  *   wide-floating（position:fixed、width:var(--size-mini-now-playing-wide)、
@@ -47,7 +47,7 @@ import { useNowPlayingLayoutMode } from './useNowPlayingLayoutMode';
 import styles from './MiniNowPlaying.module.scss';
 
 /**
- * Mini 主动作 → M5 Flow 委托（spec §10/§11）。
+ * Mini 主动作 →  Flow 委托（spec §10/§11）。
  * playing → pausePlayback；ready/paused → resumePlayback；
  * ended → restartPlayback；error → resumePlayback（retry/resume path）；
  * synthesizing → disabled（按钮置灰，不触发）。
@@ -80,7 +80,7 @@ const useMiniPrimaryAction = (primaryAction: 'play' | 'pause' | 'restart' | 'ret
 };
 
 /**
- * Global Mini Now Playing（M6-04 收官 + FIXUP：FloatingPlayer 仅留 deprecated 兼容 shim，正式命名唯一）。
+ * Global Mini Now Playing（ 收官 + FIXUP：FloatingPlayer 仅留 deprecated 兼容 shim，正式命名唯一）。
  * 无 current session → 返回 null（不渲染）；config 只决定 layoutMode，不决定存在性。
  * Wide Floating 坐标仅在 wide-floating + 已拖拽时以内联 left/top 应用；
  * docked/compact 一律走 CSS 默认（旧 floating 坐标不残留，跨 768 往返合法）。
@@ -105,7 +105,7 @@ export const MiniNowPlaying: React.FC = () => {
 
     const layoutMode = useNowPlayingLayoutMode(desktopFloatingPlayerEnabled);
     const { openDetails } = useNowPlayingEntry();
-    // M6-04 floating drag：hook 恒挂载（跨 mode 保留内存坐标），手势仅 floating 生效。
+    //  floating drag：hook 恒挂载（跨 mode 保留内存坐标），手势仅 floating 生效。
     const isFloating = layoutMode === 'wide-floating';
     const floating = useMiniFloatingDrag(isFloating);
 

@@ -1,7 +1,7 @@
 /**
  * Library (StoryWork) Mutations
  *
- * M3-05 统一列表生命周期变更模块：
+ *  统一列表生命周期变更模块：
  * 统一管理乐观缓存补丁 (optimistic cache patch)、局部逆向回滚 (journal inverse patch)、
  * 服务端 DTO 对齐 (server reconciliation) 与查询失效 (invalidation)。
  *
@@ -274,7 +274,7 @@ export function determineListMutationAction(
 }
 
 /**
- * M2 冻结作品列表稳定排序比较器 (Deterministic Stable Sort Comparator)
+ *  冻结作品列表稳定排序比较器 (Deterministic Stable Sort Comparator)
  * - active / favorites: createdAt DESC, id DESC
  * - trash: deletedAt DESC, id DESC
  */
@@ -435,7 +435,7 @@ export function applyOptimisticMutationToQueries(
 /**
  * 执行局部逆向回滚补丁 (Mutation-local Inverse Patch)：
  * - 仅恢复被本 mutation 修改过的特定 item；
- * - 恢复 removed 项时基于 M2 冻结比较器（createdAt/deletedAt DESC, id DESC）执行稳定排序；
+ * - 恢复 removed 项时基于  冻结比较器（createdAt/deletedAt DESC, id DESC）执行稳定排序；
  * - 绝不覆盖 mutation 期间并发产生的其他项变更；
  * - 绝不改动 pageParams / nextCursor / hasMore。
  */

@@ -1,5 +1,5 @@
 /**
- * Chat Artifact History 编解码 / 恢复边界（M4-06）。
+ * Chat Artifact History 编解码 / 恢复边界（）。
  *
  * 职责：History persistence boundary —— 哪些 Artifact 状态可跨进程持久、
  * reload 后如何安全降级、历史脏数据如何 fail-closed；恢复过程纯读零副作用。
@@ -8,7 +8,7 @@
  * 1. 纯函数：无视图框架、无状态库、无 network、无作品库直调、无 generation
  *    transport、无播放、不读配置、不产生 promotion 令牌、不 dispatch。
  *    只做 validate → canonicalize → clone。
- * 2. Live 状态机（M4-01 ALLOWED_TRANSITIONS）继续冻结——本模块是独立的
+ * 2. Live 状态机（ ALLOWED_TRANSITIONS）继续冻结——本模块是独立的
  *    projection / recovery boundary，不改状态机本身，不扩展 live transition。
  * 3. 进程边界恢复规则（冻结）：
  *    - draft → interrupted（原 stream transport 已不存在，不可假装继续生成）
@@ -315,7 +315,7 @@ export function rehydratePartsFromHistory(
  * - 仅 normalize 服务端历史；调用方必须只对 fetch 结果调用，绝不对
  *   await-window 本地消息调用（见 chatStore.initForUser 接线）。
  * - 合法 Modern StoryArtifact：message.content 统一为 artifact.storyText
- *  （M4-02 withArtifact 在 live path 已保证同步；M4-05 Artifact 自身是 UI source
+ *（ withArtifact 在 live path 已保证同步； Artifact 自身是 UI source
  *   of truth；此处是 valid Artifact wins，不是 content 修 Artifact）。
  * - 非法 Artifact：保留原 content，丢 part（fail-closed，不 create、不 promotion、
  *   不 crash 整会话、不删整条 message）。

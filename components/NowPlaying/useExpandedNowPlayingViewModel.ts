@@ -1,32 +1,32 @@
 'use client';
 
 /**
- * M7-01 Expanded ViewModel（spec §14 P3A 基础切面）。
+ *  Expanded ViewModel（spec §14  基础切面）。
  *
- * M7-01 只落地 Header/Surface 所需最小派生（title / voice / paragraph /
+ *  只落地 Header/Surface 所需最小派生（title / voice / paragraph /
  * sessionStatus / source / transport 段进度 + 完成态），不复制 Store：
  * - title → PlaybackSessionStore.title（空回退“正在播放”，与 Mini 同公式）；
  * - voiceLabel → Session.voiceId 经 config voiceOptions lookup，
  *   找不到直接显示 voiceId，再 fallback“AI 语音”（spec §15）；
- * - paragraph → Session.nextParagraphIndex/totalParagraphs（P3A 段定位）；
- * - timeline P3A segment 形态与 sleepTimer/rate/actions 留给 M7-B/C/D，
+ * - paragraph → Session.nextParagraphIndex/totalParagraphs（ 段定位）；
+ * - timeline  segment 形态与 sleepTimer/rate/actions 留给 /C/D，
  *   本文件不引入第二套播放状态。
  *
- * M7-02 P3A 增补（spec §14/§16/§17/§20/§39 additive，不破 M7-01 字段）：
+ *   增补（spec §14/§16/§17/§20/§39 additive，不破  字段）：
  * - timeline 恒 segment（当前 Segment，不伪装整篇，spec §17/§68）；
  * - playbackRate = Session.speed（当前 Session 级，spec §20.1）；
  * - primaryAction/canRestart/isPlaying（与 Mini 同映射，Mini/Expanded 同 Session 即时同步）。
  *
- * M7-03 P3C 增补（spec §22/§32 additive，不破 M7-01/M7-02 字段）：
+ *   增补（spec §22/§32 additive，不破 / 字段）：
  * - sleepTimer = Session.sleepTimerMode + Transport.remainingMs + isWork
- *  （story_end 选项门；展示见 SleepTimerControl）。
+ *（story_end 选项门；展示见 SleepTimerControl）。
  *
- * M7-04-01 Work 查看正文增补（spec §33-§34 additive，不破既有字段）：
+ *  Work 查看正文增补（spec §33-§34 additive，不破既有字段）：
  * - canViewStory/viewStoryTarget = source.workId 直接派生（`/library/${workId}`），
  *   Draft/空 source 一律隐藏（绝不拼凑目标）；同 Detail 去重由调用方经
  *   isSameLibraryDetail 判定（只 close，不重复 push）。
  *
- * M7-04-02 Draft Transcript 增补（spec §35/§72 additive，不破既有字段）：
+ *  Draft Transcript 增补（spec §35/§72 additive，不破既有字段）：
  * - transcriptText/canViewTranscript = Draft source + Session.storyText
  *   直接派生（只读原文；无正文/Work/空/idle 一律隐藏，fail-closed）；
  *   controls ↔ transcript 切换由 Expanded 局部 useState 持有，不进
@@ -53,7 +53,7 @@ export type { ExpandedPlaybackAction };
 export { deriveExpandedPlaybackAction };
 export { EXPANDED_TIMELINE_MODE };
 
-/** Expanded 段落定位（P3A：当前段为最重要的作品级定位，spec §39）。 */
+/** Expanded 段落定位（：当前段为最重要的作品级定位，spec §39）。 */
 export type ExpandedParagraphViewModel = {
     /** 1-based 当前段展示序号（钳制 1..total）。 */
     current: number;
@@ -61,16 +61,16 @@ export type ExpandedParagraphViewModel = {
     total: number;
 };
 
-/** Expanded Transport 快照（P3A 当前 Segment 进度，不伪装整篇）。 */
+/** Expanded Transport 快照（ 当前 Segment 进度，不伪装整篇）。 */
 export type ExpandedTransportViewModel = {
     isPlaying: boolean;
     currentTime: number;
     duration: number;
 };
 
-/** M7-01 Expanded ViewModel（Header/Surface 最小集 + M7-02 P3A 增补）。 */
+/**  Expanded ViewModel（Header/Surface 最小集 +   增补）。 */
 export type ExpandedNowPlayingViewModel = {
-    /** M7-04-02 当前 Session id（transcript 局部 view 重置键；promotion 同 id 保持打开）。 */
+    /**  当前 Session id（transcript 局部 view 重置键；promotion 同 id 保持打开）。 */
     sessionId: string | null;
     /** 是否存在可展示 session（source 非空且 status 非 idle）。 */
     hasSession: boolean;
@@ -78,39 +78,39 @@ export type ExpandedNowPlayingViewModel = {
     title: string;
     /** 语音标签（Session.voiceId → lookup → fallback）。 */
     voiceLabel: string;
-    /** M5 Session 状态原样透传（pause/ended/error 均不自动关闭，spec §8）。 */
+    /**  Session 状态原样透传（pause/ended/error 均不自动关闭，spec §8）。 */
     sessionStatus: PlaybackSessionStatus;
-    /** M5 source 原样透传（null → Layer 自动关闭）。 */
+    /**  source 原样透传（null → Layer 自动关闭）。 */
     source: PlaybackSourceRef | null;
     /** 段落定位。 */
     paragraph: ExpandedParagraphViewModel;
-    /** P3A 当前段进度。 */
+    /**  当前段进度。 */
     transport: ExpandedTransportViewModel;
     /** 是否为完成态（status == ended，spec §8 保留展示）。 */
     isEnded: boolean;
-    /** M7-02 P3A timeline（恒 segment，不伪装整篇）。 */
+    /**   timeline（恒 segment，不伪装整篇）。 */
     timeline: ExpandedTimelineViewModel;
-    /** M7-02 当前 Session 倍速（Session.speed，spec §20.1）。 */
+    /**  当前 Session 倍速（Session.speed，spec §20.1）。 */
     playbackRate: number;
-    /** M7-02 主动作（与 Mini 同映射）。 */
+    /**  主动作（与 Mini 同映射）。 */
     primaryAction: ExpandedPlaybackAction;
-    /** M7-02 是否可从头播放（hasSession 即 true）。 */
+    /**  是否可从头播放（hasSession 即 true）。 */
     canRestart: boolean;
-    /** M7-02 Transport 是否正在播放（Mini/Expanded 同源即时同步）。 */
+    /**  Transport 是否正在播放（Mini/Expanded 同源即时同步）。 */
     isPlaying: boolean;
-    /** M7-03 当前 Session Sleep Timer（mode+remaining+isWork，spec §32）。 */
+    /**  当前 Session Sleep Timer（mode+remaining+isWork，spec §32）。 */
     sleepTimer: ExpandedSleepTimerViewModel;
-    /** M7-04-01 是否展示查看正文（Work 合法目标存在，spec §34）。 */
+    /**  是否展示查看正文（Work 合法目标存在，spec §34）。 */
     canViewStory: boolean;
-    /** M7-04-01 查看正文 Library 目标（source.workId 直接派生；其余 null）。 */
+    /**  查看正文 Library 目标（source.workId 直接派生；其余 null）。 */
     viewStoryTarget: string | null;
-    /** M7-04-02 是否展示 Draft 查看正文入口（Draft + storyText 可用，spec §35）。 */
+    /**  是否展示 Draft 查看正文入口（Draft + storyText 可用，spec §35）。 */
     canViewTranscript: boolean;
-    /** M7-04-02 Draft 只读正文（Session.storyText 原文；不可用时 null，promotion 后仍展示）。 */
+    /**  Draft 只读正文（Session.storyText 原文；不可用时 null，promotion 后仍展示）。 */
     transcriptText: string | null;
 };
 
-/** M7-03 Expanded SleepTimer ViewModel（spec §32；纯展示派生，不复制 Timer 状态）。 */
+/**  Expanded SleepTimer ViewModel（spec §32；纯展示派生，不复制 Timer 状态）。 */
 export type ExpandedSleepTimerViewModel = {
     /** 当前三态（Session.sleepTimerMode）。 */
     mode: SleepTimerMode;
@@ -119,7 +119,7 @@ export type ExpandedSleepTimerViewModel = {
     /** 是否为 Work（story_end 选项门，§22.1）。 */
     isWork: boolean;
 };
-/** M7-02 P3A timeline ViewModel（恒 segment）。 */
+/**   timeline ViewModel（恒 segment）。 */
 export type ExpandedTimelineViewModel = {
     mode: typeof EXPANDED_TIMELINE_MODE;
     /** 段内当前时间（秒，已消毒 >=0）。 */
@@ -136,13 +136,13 @@ export type ExpandedSessionSnapshot = {
     voiceId: string;
     nextParagraphIndex: number;
     totalParagraphs: number;
-    /** M7-04-02 当前 Session id（缺省 null，保持旧调用兼容）。 */
+    /**  当前 Session id（缺省 null，保持旧调用兼容）。 */
     sessionId?: string | null;
-    /** M7-02 当前 Session 倍速（缺省 1.0，保持 M7-01 调用兼容）。 */
+    /**  当前 Session 倍速（缺省 1.0，保持  调用兼容）。 */
     speed?: number;
-    /** M7-03 当前 Session Sleep Timer 三态（缺省 off，保持旧调用兼容）。 */
+    /**  当前 Session Sleep Timer 三态（缺省 off，保持旧调用兼容）。 */
     sleepTimerMode?: SleepTimerMode;
-    /** M7-04-02 当前 Session 正文（缺省空，保持旧调用兼容；唯一来源 Session.storyText）。 */
+    /**  当前 Session 正文（缺省空，保持旧调用兼容；唯一来源 Session.storyText）。 */
     storyText?: string;
 };
 
@@ -151,9 +151,9 @@ export type ExpandedTransportSnapshot = {
     isPlaying: boolean;
     currentTime: number;
     duration: number;
-    /** M7-02 Transport.playbackRate（纯函数回退用，缺省 1.0，保持三参兼容）。 */
+    /**  Transport.playbackRate（纯函数回退用，缺省 1.0，保持三参兼容）。 */
     playbackRate?: number;
-    /** M7-03 Transport.remainingMs（minutes 剩余；缺省 null，保持旧调用兼容）。 */
+    /**  Transport.remainingMs（minutes 剩余；缺省 null，保持旧调用兼容）。 */
     remainingMs?: number | null;
 };
 
@@ -208,7 +208,7 @@ export const deriveExpandedTitle = (title: string): string => {
 };
 
 /**
- * M7-02 纯函数：P3A timeline 派生（恒 segment，消毒 currentTime/duration）。
+ *  纯函数： timeline 派生（恒 segment，消毒 currentTime/duration）。
  * duration 非有限/<=0 → 0（fail-safe）；currentTime 钳制 [0, duration]。
  */
 export const deriveExpandedTimeline = (
@@ -227,7 +227,7 @@ export const deriveExpandedTimeline = (
 };
 
 /**
- * M7-02 纯函数：当前 Session 倍速派生（spec §20.1）。
+ *  纯函数：当前 Session 倍速派生（spec §20.1）。
  * Session.speed 优先（0.25–4.0 有限值）；非法时回退 Transport.playbackRate；
  * 再非法回退 1.0。不读 UserConfig（Expanded 仅当前 Session）。
  */
@@ -242,7 +242,7 @@ export const deriveExpandedPlaybackRate = (sessionSpeed: unknown, transportRate:
 };
 
 /**
- * M7-02 纯函数：是否可从头播放（有可展示 session 即 true，spec §38）。
+ *  纯函数：是否可从头播放（有可展示 session 即 true，spec §38）。
  */
 export const deriveExpandedCanRestart = (
     source: PlaybackSourceRef | null,
@@ -250,7 +250,7 @@ export const deriveExpandedCanRestart = (
 ): boolean => source !== null && status !== 'idle';
 
 /**
- * M7-03 纯函数：SleepTimer ViewModel 派生（spec §22/§32）。
+ *  纯函数：SleepTimer ViewModel 派生（spec §22/§32）。
  * mode 非法 → off（fail-closed）；remaining 非正/非法 → null（off/story_end 恒 null）。
  */
 export const deriveExpandedSleepTimer = (
@@ -270,7 +270,7 @@ export const deriveExpandedSleepTimer = (
 };
 
 /**
- * M7-04-01 纯函数：查看正文 Library 目标派生（spec §34）。
+ *  纯函数：查看正文 Library 目标派生（spec §34）。
  * 唯一合法派生点：source.workId 直接消费（`resolveWorkLibraryTarget` 经
  * isValidWorkId 校验）；Draft/空/非法一律 null。
  */
@@ -279,7 +279,7 @@ export const deriveWorkLibraryTarget = (
 ): string | null => resolveWorkLibraryTarget(source);
 
 /**
- * M7-04-01 纯函数：是否展示查看正文（spec §34）。
+ *  纯函数：是否展示查看正文（spec §34）。
  * 有可展示会话（source 非空且 status 非 idle）且目标合法即 true。
  */
 export const deriveExpandedCanViewStory = (
@@ -293,7 +293,7 @@ export const deriveExpandedCanViewStory = (
 };
 
 /**
- * M7-04-02 纯函数：Draft 只读正文派生（spec §35）。
+ *  纯函数：Draft 只读正文派生（spec §35）。
  * 唯一来源 Session.storyText；Work/空/idle/无正文一律 null（fail-closed）。
  */
 export const deriveDraftTranscriptText = (
@@ -303,7 +303,7 @@ export const deriveDraftTranscriptText = (
 ): string | null => resolveDraftTranscriptText(source, storyText, status);
 
 /**
- * M7-04-02 纯函数：Transcript 展示文本派生（§35.1 promotion 容忍）。
+ *  纯函数：Transcript 展示文本派生（§35.1 promotion 容忍）。
  * 有可展示会话且正文可用即返回原文（不分 Draft/Work），供已打开的
  * transcript 在 promotion 后继续展示；入口可见性仍由 Draft-only 判定把关。
  */
@@ -314,7 +314,7 @@ export const deriveTranscriptDisplayText = (
 ): string | null => resolveTranscriptDisplayText(source, storyText, status);
 
 /**
- * M7-04-02 纯函数：是否展示 Draft 查看正文入口（spec §35）。
+ *  纯函数：是否展示 Draft 查看正文入口（spec §35）。
  * 有可展示 Draft 会话且正文可用即 true。
  */
 export const deriveExpandedCanViewTranscript = (
@@ -377,8 +377,8 @@ export const deriveExpandedNowPlayingViewModel = (
 };
 
 /**
- * Hook：订阅 M5 Session + Transport + Config voiceOptions，派生 ViewModel。
- * 只读订阅，不 mutation 任何 store（M5 ownership 边界）。
+ * Hook：订阅  Session + Transport + Config voiceOptions，派生 ViewModel。
+ * 只读订阅，不 mutation 任何 store（ ownership 边界）。
  */
 export const useExpandedNowPlayingViewModel = (): ExpandedNowPlayingViewModel => {
     const source = usePlaybackSessionStore((state) => state.source);

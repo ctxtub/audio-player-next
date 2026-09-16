@@ -1,19 +1,19 @@
 /**
- * M6 Mini Now Playing — Responsive & Keyboard Foundation 类型（M6-01）。
+ *  Mini Now Playing — Responsive & Keyboard Foundation 类型（）。
  *
  * 本项只落地契约类型与 detector 能力，不负责 Mini 显隐/渲染/MainChrome 结构。
  * - LayoutMode 派生：viewport <768 → compact-docked；>=768 + pref → wide-floating/wide-docked。
  * - Keyboard：移动端软键盘 open 时 compact Mini 抑制（抑制逻辑归后续 Slice，本项只提供 detector）。
  */
 
-/** M6 冻结断点（px）：mobile/docked <768；desktop >=768。SCSS $breakpoint-lg 同值。 */
+/**  冻结断点（px）：mobile/docked <768；desktop >=768。SCSS $breakpoint-lg 同值。 */
 export const NOW_PLAYING_BREAKPOINT_PX = 768;
 
 /** Viewport 粗模式：compact（<768）/ wide（>=768）。 */
 export type NowPlayingViewportMode = 'compact' | 'wide';
 
 /**
- * Mini 布局模式（M6 正式三态）：
+ * Mini 布局模式（ 正式三态）：
  * - compact-docked：移动端固定 TabBar 上方，不可拖动；
  * - wide-docked：桌面偏好关闭，固定 TabBar 上方，不可拖动；
  * - wide-floating：桌面偏好开启，可拖动悬浮。
@@ -39,8 +39,8 @@ export type SoftKeyboardSignal = {
 };
 
 /* ------------------------------------------------------------------ */
-/* M6-02 MiniNowPlaying Semantic Core（spec §3/§4/§5/§6/§9/§10/§33）。  */
-/* 本节只加 presentation ViewModel 语义，不改 M6-01 断点/键盘契约。      */
+/*  MiniNowPlaying Semantic Core（spec §3/§4/§5/§6/§9/§10/§33）。  */
+/* 本节只加 presentation ViewModel 语义，不改  断点/键盘契约。      */
 /* ViewModel 为纯 UI 表达：绝不进入 PlaybackSessionStore / playbackStore */
 /* / Prisma；数据来源冻结见 deriveMiniNowPlayingViewModel.ts。          */
 /* ------------------------------------------------------------------ */
@@ -65,7 +65,7 @@ export type MiniNowPlayingStatus =
 export type MiniPlaybackAction = 'play' | 'pause' | 'restart' | 'retry' | 'disabled';
 
 /**
- * Mini Session 快照（M6-02 冻结来源：仅 PlaybackSessionStore.current session）。
+ * Mini Session 快照（ 冻结来源：仅 PlaybackSessionStore.current session）。
  * - title 仅取 Session.title（spec §5）；
  * - position 仅取 Session 语义位置（spec §4/§8）；
  * - source/status/sessionId 仅取 Session（spec §2.3/§30）。
@@ -74,7 +74,7 @@ export type MiniPlaybackAction = 'play' | 'pause' | 'restart' | 'retry' | 'disab
 export type MiniSessionSnapshot = {
     /** 当前 session source（null 表示无可展示 session）。 */
     source: { kind: 'draft' | 'work' } | null;
-    /** Session 状态（含 M5 全量，derive 内映射为 ViewModel 六态）。 */
+    /** Session 状态（含  全量，derive 内映射为 ViewModel 六态）。 */
     status:
         | 'idle'
         | 'hydrating'
@@ -84,7 +84,7 @@ export type MiniSessionSnapshot = {
         | 'paused'
         | 'ended'
         | 'error';
-    /** Session 标题（M2 StoryWork.title 或 Draft 快照 title）。 */
+    /** Session 标题（ StoryWork.title 或 Draft 快照 title）。 */
     title: string;
     /** 已完成段落下标（初始 -1）。 */
     lastCompletedParagraphIndex: number;
@@ -95,7 +95,7 @@ export type MiniSessionSnapshot = {
 };
 
 /**
- * Mini Transport 快照（M6-02 冻结来源：仅 playbackStore / Transport）。
+ * Mini Transport 快照（ 冻结来源：仅 playbackStore / Transport）。
  * 只含播放/暂停与当前段时间进度；remainingMs 不在 Mini 展示（spec §7）。
  */
 export type MiniTransportSnapshot = {
@@ -113,7 +113,7 @@ export type MiniTransportSnapshot = {
  * coarseProgress 为 paragraph-weighted 近似（spec §8.1），不可 seek，不展示精确时间/百分比。
  */
 export type MiniNowPlayingViewModel = {
-    /** 是否渲染 Mini（hasNowPlaying；M6-02 不含键盘/Expanded 抑制，那是 M6-03）。 */
+    /** 是否渲染 Mini（hasNowPlaying； 不含键盘/Expanded 抑制，那是）。 */
     visible: boolean;
     /** 一级标题：Session.title（空时回退“正在播放”）。 */
     title: string;
@@ -125,28 +125,28 @@ export type MiniNowPlayingViewModel = {
     coarseProgress: number | null;
     /** 主动作（spec §10 deriveMiniPlaybackAction）。 */
     primaryAction: MiniPlaybackAction;
-    /** 布局形态三态（M6-01 契约；config 只影响此字段，不影响 visible）。 */
+    /** 布局形态三态（ 契约；config 只影响此字段，不影响 visible）。 */
     layoutMode: MiniNowPlayingLayoutMode;
 };
 
 /* ------------------------------------------------------------------ */
-/* M7-02 Expanded P3A Playback Capabilities（spec §16/§17/§20/§39）。   */
-/* 本节只加 P3A 类型契约，不改 M6/M7-01 既有类型；SSOT 仍在 M5。        */
-/* - Title/Voice/Play/Pause 一律走 M5 ownership（UI→flow→Session+Host）；*/
+/*  Expanded  Playback Capabilities（spec §16/§17/§20/§39）。   */
+/* 本节只加  类型契约，不改 / 既有类型；SSOT 仍在。        */
+/* - Title/Voice/Play/Pause 一律走  ownership（UI→flow→Session+Host）；*/
 /* - Timeline 恒 segment（当前 Segment，不伪装整篇）；                  */
 /* - 两种 position 严格区分：paragraph identity → Session，段内         */
 /*   currentTime/duration → Transport；                                 */
-/* - 明确无上一段/下一段（spec §40），无 story-level timeline（M8 P3B）。*/
+/* - 明确无上一段/下一段（spec §40），无 story-level timeline（）。*/
 /* ------------------------------------------------------------------ */
 
-/** M7-02 P3A timeline 固定模式（M8 前恒 segment）。 */
+/**   timeline 固定模式（ 前恒 segment）。 */
 export type ExpandedTimelineMode = 'segment';
 
-/** M7-02 P3A 键盘步进（秒，spec §17.2 ±5s）。 */
+/**   键盘步进（秒，spec §17.2 ±5s）。 */
 export const EXPANDED_SEEK_STEP_SECONDS = 5;
 
-/** M7-02 七档倍速值（spec §20，与旧 AudioPlayer 一致）。 */
+/**  七档倍速值（spec §20，与旧 AudioPlayer 一致）。 */
 export const EXPANDED_SUPPORTED_PLAYBACK_RATES = [0.8, 0.9, 0.95, 1.0, 1.05, 1.1, 1.5] as const;
 
-/** M7-02 七档倍速值类型。 */
+/**  七档倍速值类型。 */
 export type ExpandedSupportedPlaybackRate = (typeof EXPANDED_SUPPORTED_PLAYBACK_RATES)[number];

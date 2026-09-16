@@ -6,7 +6,7 @@
   gap: var(--space-3);
   width: 100%;
   padding: var(--space-3) var(--space-4);
-  /* M6-03：消费统一 BottomChrome 预留（Mini 出现时自动上移，不各自 hardcode Mini 高度）。 */
+  /*：消费统一 BottomChrome 预留（Mini 出现时自动上移，不各自 hardcode Mini 高度）。 */
   padding-bottom: calc(var(--space-3) + var(--bottom-chrome-safe-bottom, var(--tab-bar-safe-bottom)));
   background: color-mix(in srgb, var(--bg-secondary) 85%, transparent);
   backdrop-filter: var(--glass-blur);
@@ -76,7 +76,7 @@
 }
 
 .clearButton {
-  /* M9-C1 T2 评审闭合：按钮文案「新建创作」（4 个 CJK 字符）必须单行完整显示，
+  /*   评审闭合：按钮文案「新建创作」（4 个 CJK 字符）必须单行完整显示，
      不得因固定 52px 宽而折成两行。宽度自适应、最小 52px、禁止换行、内边距撑开。 */
   width: auto;
   min-width: 52px;

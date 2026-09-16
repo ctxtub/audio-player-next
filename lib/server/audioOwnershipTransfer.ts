@@ -1,5 +1,5 @@
 /**
- * M8-05-03 Guest → User Canonical Audio Ownership Transfer（spec §27 / Validation §58）。
+ *  Guest → User Canonical Audio Ownership Transfer（spec §27 / Validation §58）。
  *
  * transfer，不 duplicate reference：注册时只转移 DB ownership，不复制 object、不重新 TTS。
  * Guest Work 35 → mapped User Work 481，同一 DB transaction 内：
@@ -12,7 +12,7 @@
  * Object bytes 完全不动（§27.1）。
  *
  * 为什么删除 Guest audio rows（§27.2）：若两侧同时引用相同 storageKey，
- * 未来 Guest GC 会 delete object 误伤 User。Guest StoryWork 文本仍按 M2
+ * 未来 Guest GC 会 delete object 误伤 User。Guest StoryWork 文本仍按
  * 保留至 Guest GC，但 Guest Audio 投影回到 missing（可重新生成自己的 audio）。
  *
  * 硬边界（unit 静态 oracle 锁定）：
@@ -21,15 +21,15 @@
  * - 全程不变量：storage.put = 0、storage.delete = 0、storage copy = 0、
  *   TTS = 0、tombstone = 0（ownership move ≠ object lifecycle delete）。
  * - 禁止因 Guest→User ID 改变而 rename/copy object；禁止新建 storageKey
- *   （不调 buildSegmentStorageKey / randomUUID 新 key；Segment.id 复用 Guest 原 id，
+ *（不调 buildSegmentStorageKey / randomUUID 新 key；Segment.id 复用 Guest 原 id，
  *   storageKey 逐行原样搬运）。
  * - 禁止「User 已有 Manifest 就直接删 Guest」：User 已存在时必须先过
  *   isTransferEquivalent 等价门，冲突一律 fail-closed / CONFLICT，
  *   Guest/User audio rows 均不得被破坏，绝不删除任何 Object。
- * - M8-05-03 FIXUP active-lease runtime gate（独立于等价门，isTransferEquivalent
+ * -  FIXUP active-lease runtime gate（独立于等价门，isTransferEquivalent
  *   的 canonical 定义不变、lease 仍属瞬态豁免）：destructive ownership cutover 前，
  *   Guest Segment status=preparing AND leaseId!=null AND leaseExpiresAt>now 即视为
- *   仍有 Guest worker ownership（该 worker 仍可能通过 M8-03 pre-put fencing 并写
+ *   仍有 Guest worker ownership（该 worker 仍可能通过  pre-put fencing 并写
  *   object），禁止删除 Guest Audio rows，fail-closed / retryable CONFLICT，
  *   整个 registration creative transaction rollback。过期 lease / 无 lease 的
  *   preparing 仍允许迁移（已无合法活 worker），迁移后由 User ensure 正常 reclaim。
@@ -48,11 +48,11 @@
  *   audioFormat / segmentCount / readySegmentCount / totalDurationMs /
  *   totalByteLength / lastErrorCode / supersededAt。
  *   排除：id / storyWorkId / createdAt / updatedAt / readyAt
- *   （ready/创建墙钟差异不污染 canonical 身份；supersededAt 保留以捕捉世代差异）。
+ *（ready/创建墙钟差异不污染 canonical 身份；supersededAt 保留以捕捉世代差异）。
  * - Segment 逐 index 比对：segmentIndex / text / textHash / status /
  *   storageKey / contentType / byteLength / durationMs / audioChecksum /
  *   lastErrorCode。排除：id（opaque）/ manifestId / leaseId / leaseExpiresAt
- *   （并发瞬态）/ attemptCount（运维计数）/ readyAt / createdAt / updatedAt。
+ *（并发瞬态）/ attemptCount（运维计数）/ readyAt / createdAt / updatedAt。
  * - 顺序无关：按 segmentIndex 排序后比对；长度不等即不等价。
  */
 
@@ -63,7 +63,7 @@ import { TRPCError } from '@trpc/server';
  *
  * Loose any 入参是有意的：具体 Prisma delegate 泛型在 fake 下不可名，
  * 窄 fake 面与具体 delegate 在严格逆变下互不兼容；loose args 保持双向可赋值
- * （先例：lib/server/audioStorageCleanup.ts AudioDeletionTx）。
+ *（先例：lib/server/audioStorageCleanup.ts AudioDeletionTx）。
  */
 export type AudioOwnershipTransferTx = {
     guestStoryAudioManifest: {
@@ -75,7 +75,7 @@ export type AudioOwnershipTransferTx = {
     guestStoryAudioSegment: {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         deleteMany(args: any): Promise<any>;
-        // M8-05-03 FIXUP fencing 重读面（事务内 active-lease gate 用；可选以兼容最小 fake）。
+        //  FIXUP fencing 重读面（事务内 active-lease gate 用；可选以兼容最小 fake）。
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         findFirst?(args: any): Promise<any>;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -233,9 +233,9 @@ function throwConflict(guestWorkId: number, userWorkId: number, detail: string):
 }
 
 /**
- * M8-05-03 FIXUP active-lease runtime gate（纯判定；独立于 isTransferEquivalent）。
+ *  FIXUP active-lease runtime gate（纯判定；独立于 isTransferEquivalent）。
  *
- * 只要某个 Guest worker 仍可能通过 M8-03 pre-put fencing 并写 object，
+ * 只要某个 Guest worker 仍可能通过  pre-put fencing 并写 object，
  * 就不能完成 Guest→User ownership cutover：
  *   status === 'preparing' AND leaseId != null/'' AND leaseExpiresAt > now
  * 即视为仍有 Guest worker ownership。过期 lease / 无 lease 的 preparing

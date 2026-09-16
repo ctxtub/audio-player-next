@@ -71,7 +71,7 @@ storyAudio.ensure({ workId, sessionId }) / getProjection
 GET /api/audio/assets/:assetId
 ```
 
-`collection.promoteArtifact` 即 §1「Promotion Service 是 Artifact → Collection/Work 唯一写入口」的唯一 router procedure；M9-C1 T1 落实后补录，消除文档与实现的字面差。
+`collection.promoteArtifact` 是 Artifact → Collection/Work 的唯一写入口。
 
 `conversation.createNew(expectedOldId)` 关闭旧 active Conversation 并创建新 UUID，不删除旧 Collection。Collection list 返回轻量 Summary；详情按 Work position 返回成员。搜索命中 Work 时仍按 Collection 去重。
 
@@ -154,24 +154,16 @@ remaining=0 → ended_budget
 
 生产 backfill、contract migration、物理删除分开发版且另需授权。
 
-## 8. 测试与完成门
+## 8. 验证与完成门
 
-- L1：标题、DTO/cursor、continuous state machine/预算/lookahead、asset identity/TTL/progress、bottom inset。
-- L2：User/Guest ownership、首作并发晋升、backfill、chunk 合并单 Asset、lease/stale/GC、createNew guard、集合级联。
-- L3：同会话多 Work 单 Collection；一 Work 一 timeline；连续创作默认开并到预算耗尽；新建创作强重置；Mini 安全区；History 消失。
-
-每个场景先写 `docs/e2e` 并登记 Catalog；先 RED 后 GREEN。最终门：
+开发阶段按改动风险做局部检查，不建立分层测试或用例目录。功能收口运行：
 
 ```bash
-yarn test:catalog
-yarn lint
-yarn tsc --noEmit --incremental false
-yarn test:unit
-yarn test:integration
-yarn test:tooling
-yarn test:browser
+yarn test:fast
 yarn build
 git diff --check
 ```
+
+准备交付时，再通过真实 UI 验证同会话作品归集、单作品单音频、连续创作至预算耗尽、新建创作强重置、迷你播放器安全区和历史入口退役。
 
 回滚点保留在 read switch 与 AudioAsset feature flag；contract migration 最后执行。本任务测试严禁生产端口和共享数据库。

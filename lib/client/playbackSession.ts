@@ -1,12 +1,12 @@
 /**
- * 播放会话客户端（M5-04 正式暴露层，spec §34）。
+ * 播放会话客户端（ 正式暴露层，spec §34）。
  *
  * 包装 Session procedures：
  * getAnchor / beginSession / saveCheckpoint / completeSession /
  * clearAnchor / promoteDraftToWork / getWorkProgressBatch
- * + M7-03 setSleepTimer。
+ * +  setSleepTimer。
  *
- * M9-03：旧 lib/client/playbackProgress.ts（getProgress / saveProgress /
+ *：旧 lib/client/playbackProgress.ts（getProgress / saveProgress /
  * clearProgress 包装）已删除；新客户端一律使用本正式暴露层。
  */
 
@@ -47,7 +47,7 @@ export const savePlaybackCheckpoint = async (
 };
 
 /**
- * M7-03 playback.setSleepTimer：当前 Session Timer 设置（spec §24）。
+ *  playback.setSleepTimer：当前 Session Timer 设置（spec §24）。
  * stale → {accepted:false, reason:'STALE_SESSION'}（绝不覆盖新 Session timer）。
  */
 export const setSleepTimer = async (input: SetSleepTimerInput): Promise<SetSleepTimerResult> => {
@@ -75,7 +75,7 @@ export const promoteDraftPlaybackToWork = async (
   return trpc.playback.promoteDraftToWork.mutate(input);
 };
 
-/** §22 playback.getWorkProgressBatch：M3 消费的 Work 进度批量视图。 */
+/** §22 playback.getWorkProgressBatch： 消费的 Work 进度批量视图。 */
 export const getWorkPlaybackProgressBatch = async (
   input: GetWorkPlaybackProgressBatchInput,
 ): Promise<GetWorkPlaybackProgressBatchOutput> => {

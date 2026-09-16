@@ -16,7 +16,7 @@ export interface LibraryUnavailableProps {
  *
  * 规范要求：
  * NOT_FOUND / UNAUTHORIZED / foreign-owned work / trashed work / 不存在的 work ——
- * 客户端展示完全相同，保持 M2 刻意设计的不可区分性，彻底杜绝侧信道探测。
+ * 客户端展示完全相同，保持  刻意设计的不可区分性，彻底杜绝侧信道探测。
  */
 export function isUnavailableError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
@@ -55,7 +55,7 @@ export function isUnavailableError(error: unknown): boolean {
 }
 
 /**
- * 故事库统一不可用状态展示组件（M3-06）
+ * 故事库统一不可用状态展示组件（）
  *
  * 核心安全与隐私原则：
  * 针对 NOT_FOUND、UNAUTHORIZED、跨主体 (foreign-owned)、回收站中 (trashed) 以及不存在的作品，

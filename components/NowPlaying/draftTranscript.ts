@@ -1,7 +1,7 @@
 /**
- * M7-04-02 Draft Transcript 纯 helper（spec §35 / §35.1 / §72）。
+ *  Draft Transcript 纯 helper（spec §35 / §35.1 / §72）。
  *
- * - 数据唯一来源：M5 Session.storyText（本文件不读任何 store，只收参判定）；
+ * - 数据唯一来源： Session.storyText（本文件不读任何 store，只收参判定）；
  * - Draft「查看正文」绝不生成 /library/[fake-id]（Draft 无 StoryWork.id，
  *   本文件不拼凑任何 Library 目标；Work 导航仍归 workViewStoryNavigation）；
  * - controls ↔ transcript 切换是 Expanded 内部局部 view state（调用方

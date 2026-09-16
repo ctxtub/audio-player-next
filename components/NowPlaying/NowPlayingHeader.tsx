@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * M7-01 NowPlayingHeader（spec §3/§10/§11 基础 presentation）
- * + M7-02 Title/Voice 扩展（spec §14/§15：title ← Session.title，
+ *  NowPlayingHeader（spec §3/§10/§11 基础 presentation）
+ * +  Title/Voice 扩展（spec §14/§15：title ← Session.title，
  *   voice ← Session.voiceId 经 voiceOptions lookup；Work 不再错读全局 Config voiceId）。
  *
  * 纯展示组件：只收 props，不读任何 store / Session / Transport。
  * - Drag Handle：移动端 Bottom Sheet 唯一拖拽发起点（spec §10.2），
  *   桌面 Side Panel 下经 CSS 隐藏（仍保留 DOM 供一致性打点，aria-hidden）。
- * - 标题区：title + voice · 段落二级文案（P3A 明确“本段/第 X/Y 段”，不伪装整篇）。
+ * - 标题区：title + voice · 段落二级文案（ 明确“本段/第 X/Y 段”，不伪装整篇）。
  * - 关闭按钮：Expanded 打开时首个焦点目标（spec §42），Escape/backdrop/swipe
  *   之外的显式关闭入口；点击只关闭 UI，不暂停播放（spec §9）。
  */

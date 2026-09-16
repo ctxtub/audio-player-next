@@ -15,7 +15,7 @@ import {
 import styles from './index.module.scss';
 
 /**
- * 故事库主页列表视图组件（M9-C1 T4：顶层恒为 Collection）。
+ * 故事库主页列表视图组件（：顶层恒为 Collection）。
  *
  * 核心数据链契约：
  * 1. useLibraryFilters() -> 获得 canonical { view, q } 及 draftQ / 视图操作；

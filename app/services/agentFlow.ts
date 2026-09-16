@@ -16,7 +16,7 @@ export interface AgentStreamCallbacks {
      */
     onIntentDetected?: (intent: "Story" | "Chat" | "Guidance") => void;
     /**
-     * 故事正文生成完成 (M4-02 显式 story_complete 事件)。
+     * 故事正文生成完成 (显式 story_complete 事件)。
      */
     onStoryComplete?: (storyText: string) => void;
     /**

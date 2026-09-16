@@ -1,12 +1,9 @@
-// case_id: story-playback-global-controls-reachable
-// journey: playback-kernel
-// legacy_aliases: [E2E-03-13, M9-F01]
-// M9-F01：任何用户可感知的故事播放都必须先有正式 PlaybackSession；
+//：任何用户可感知的故事播放都必须先有正式 PlaybackSession；
 // 唯一真实 UI 入口 StoryCard（Legacy 卡片，含 persisted audioUrl）：
 // 起播时 <audio> 真实出声，且同帧 MiniNowPlaying 可见
-// （Mini 显隐只派生自 Session：source !== null && status !== 'idle'）。
+//（Mini 显隐只派生自 Session：source !== null && status !== 'idle'）。
 // 不预置 Session（先清 Anchor 冷态），由真实点击驱动；retries=0，不合成媒体事件。
-// M9-C1 T2：Chat History Surface（打开历史 / 生成历史 / 回放此故事）已退役，
+//：Chat History Surface（打开历史 / 生成历史 / 回放此故事）已退役，
 // 原「生成历史回放」用例随该入口一并移除；Work Session 覆盖仍由
 // canonical-work-playback 与 storycard-session-flow 承担。
 import { test, expect } from "../harness/fixtures";
@@ -135,14 +132,12 @@ async function detachClient(page: import("@playwright/test").Page): Promise<void
     await page.waitForTimeout(2000);
 }
 
-test("M9-F01 故事卡播放（Legacy audioUrl 两种形态）全局控制同帧可达", async ({ page, harnessEnv, evidence }) => {
+test("故事卡播放后全局控制立即可用", async ({ page, harnessEnv }) => {
     test.setTimeout(180000);
-    const recorder = evidence as unknown as { step: (name: string, detail?: unknown) => void };
     const dbFile: string = resolveIsolationDbPath(harnessEnv.runId);
 
     await ensureGuestByApi(page, harnessEnv.appUrl);
     const { prompt } = await generateStory(page, "卡片", dbFile);
-    recorder.step("真实创作完成", { prompt });
 
     // 中文注释：先离开页面让客户端静止，再植入“旧历史卡”（服务端 guard 禁止新增
     // legacy storyCard 写入，故只经隔离库直写模拟旧数据）并清 Anchor（冷态无 Session）。
@@ -150,7 +145,6 @@ test("M9-F01 故事卡播放（Legacy audioUrl 两种形态）全局控制同帧
         await detachClient(page);
         const storyText: string = seedLegacyStoryCardPartsByPrompt(dbFile, prompt, audioUrl);
         deleteGuestPlaybackAnchorByPrompt(dbFile, prompt);
-        recorder.step("植入 Legacy 卡片并清 Anchor", { audioUrl, storyLength: storyText.length });
 
         await page.goto(`${harnessEnv.appUrl}/chat`, { waitUntil: "networkidle", timeout: 60000 });
         await page.waitForTimeout(2000);
@@ -175,14 +169,12 @@ test("M9-F01 故事卡播放（Legacy audioUrl 两种形态）全局控制同帧
         // 绝不能是那个 legacy URL。
         expect(frame.src).not.toContain("legacy.example.com");
         expect(/^(blob:|data:audio\/)/.test(frame.src), `frame=${JSON.stringify(frame)}`).toBe(true);
-        recorder.step("卡片起播同帧快照", { audioUrl, ...frame });
 
         // 中文注释：真 server Anchor 身份 = draft/该消息（证明点击建立了正式 Session）。
         await expect.poll(() => safeAnchorKind(dbFile, prompt), { timeout: 15000 }).toBe("draft");
         const anchor = safeAnchor(dbFile, prompt);
         expect(anchor?.sourceId.length).toBeGreaterThan(0);
         expect(anchor?.sourceId).not.toContain("legacy.example.com");
-        recorder.step("Anchor 身份", { audioUrl, anchor });
     }
     // 中文注释：播放结束前不断言方向键行为；本用例只负责全局控制入口可达。
     await page.waitForTimeout(1000);

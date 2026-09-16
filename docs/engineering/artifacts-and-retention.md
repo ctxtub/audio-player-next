@@ -14,7 +14,6 @@
 docs/specs/YYYY-MM-DD-<topic>.md       # 需求、方案、验收标准
 docs/plans/YYYY-MM-DD-<topic>.md       # 实施计划快照
 docs/changes/YYYY-MM-DD-<topic>.md     # 精炼结项
-docs/archive/<topic>/<date>/           # 标明历史状态的原始重要材料
 docs/testing/**                        # 当前测试体系权威
 ```
 
@@ -55,8 +54,6 @@ Playwright attachment/output 统一放 `.e2e-results/playwright/`。历史默认
 
 ## 规范落点索引
 
-- CI 工件清单（白名单/黑名单/脱敏规则与 `retention-days` 指针）：[`docs/testing/execution/evidence.md`](../testing/execution/evidence.md) §6。
-- 前代调度政策历史（非现行规范，仅追溯）：[`docs/archive/governance-hardening-20260910/`](../archive/governance-hardening-20260910/README.md)。
 
 ## 保留与清理
 

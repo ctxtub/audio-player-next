@@ -2,7 +2,7 @@
  * 访客创作数据迁移服务
  *
  * 仅在注册时，将具名访客的聊天记录与生成历史原子级迁移至新用户。
- * M9-C1 T2：Prompt History 已前后端退役，不再迁移（见下方步骤 3）。
+ *：Prompt History 已前后端退役，不再迁移（见下方步骤 3）。
  */
 
 import { TRPCError } from '@trpc/server';
@@ -16,14 +16,14 @@ import { deriveDeterministicId } from '@/lib/storyCollection/identity';
 export interface MigrationResult {
     messagesMigrated: number;
     generationsMigrated: number;
-    /** @deprecated M9-C1 T2：Prompt History 已退役，恒为 0（字段保留兼容观测）。 */
+    /** @deprecated：Prompt History 已退役，恒为 0（字段保留兼容观测）。 */
     promptsMigrated: number;
     storyWorkIdMap: Map<number, number>;
 }
 
 /**
  * 将指定 guestId 的全部创作记录（聊天、作品历史）拷贝至指定用户。
- * M9-C1 T2：提示词历史不再迁移（退役）。
+ *：提示词历史不再迁移（退役）。
  * 保留访客原表记录供回滚/审计，由 30 天 GC 自然清理。
  *
  * 关键约束：
@@ -37,7 +37,7 @@ export async function migrateGuestCreativeRecordsToUser(
     guestId: string,
     userId: number
 ): Promise<MigrationResult> {
-    // 0. M9-C1 会话 / 作品集迁移（确定性 id + upsert，幂等；只搬运归属，Guest 原行保留给 GC）。
+    // 0.  会话 / 作品集迁移（确定性 id + upsert，幂等；只搬运归属，Guest 原行保留给 GC）。
     const guestConversations = await prisma.guestConversation.findMany({ where: { guestId } });
     const conversationIdMap = new Map<string, string>();
     for (const gc of guestConversations) {
@@ -149,7 +149,7 @@ export async function migrateGuestCreativeRecordsToUser(
             }
 
             for (const g of guestStoryWorks) {
-                // 若已迁移，直接复用既有映射（M8-05-03：同事务内幂等补转 audio ownership；
+                // 若已迁移，直接复用既有映射（：同事务内幂等补转 audio ownership；
                 // Guest Manifest 已清则 no-op，等价已存在则清 Guest rows，冲突则整事务 CONFLICT 回滚）
                 if (existingMap.has(g.id)) {
                     storyWorkIdMap.set(g.id, existingMap.get(g.id)!);
@@ -181,7 +181,7 @@ export async function migrateGuestCreativeRecordsToUser(
                                 userStoryWorkId: existing.id,
                             },
                         });
-                        // M8-05-03：复用既有 User Work 时同事务 transfer audio
+                        //：复用既有 User Work 时同事务 transfer audio
                         //（User Manifest 缺席→transfer；等价→幂等清 Guest；冲突→CONFLICT 全回滚）
                         await transferGuestAudioOwnershipTx(tx, g.id, existing.id);
                         continue;
@@ -234,7 +234,7 @@ export async function migrateGuestCreativeRecordsToUser(
                     },
                 });
 
-                // M8-05-03：同一 DB transaction 内 transfer audio ownership
+                //：同一 DB transaction 内 transfer audio ownership
                 //（Guest Manifest→User Manifest(storyWorkId=created.id)，storageKey 不变，
                 // 随后删 Guest Segment/Manifest rows；object/TTS/tombstone 零触达）
                 await transferGuestAudioOwnershipTx(tx, g.id, created.id);
@@ -242,7 +242,7 @@ export async function migrateGuestCreativeRecordsToUser(
         }, { timeout: 30000 });
     }
 
-    // 3. M9-C1 T2：Prompt History 前后端退役，注册迁移不再复制访客提示词历史。
+    // 3.：Prompt History 前后端退役，注册迁移不再复制访客提示词历史。
     //    Guest 原行保留给 30 天 GC 自然清理；promptsMigrated 恒为 0（字段保留以兼容调用方与观测）。
     const promptsMigrated = 0;
 
@@ -255,9 +255,9 @@ export async function migrateGuestCreativeRecordsToUser(
 }
 
 /**
- * 将指定 guestId 的播放状态迁移至指定用户（Anchor + Per-Work Progress，M5-08 §31）。
+ * 将指定 guestId 的播放状态迁移至指定用户（Anchor + Per-Work Progress， §31）。
  *
- * M5-08 copy/remap 语义（同一浏览器身 subject 键切换，不算跨人 merge，M2 no-leak 保持）：
+ *  copy/remap 语义（同一浏览器身 subject 键切换，不算跨人 merge， no-leak 保持）：
  * 成功迁移的部分以单事务完成 User 侧 upsert/create/idempotent merge（Anchor 先 Progress 后，
  * 每 workId 保持配对）；未映射部分逐项跳过（Guest 行保留，GC 兜底），绝不产生悬空 User 状态。
  * §31.4 GuestStoryPlaybackProgress remap 后 Guest 原记录保留到 Guest GC（GC 删过期
@@ -266,14 +266,14 @@ export async function migrateGuestCreativeRecordsToUser(
  * Guest Progress 由 Guest GC 负责最终删除（§47：登录既有账号仍不触发任何迁移/删除，见 login 不调本函数）。
  *
  * - sessionId 原样沿用（不改 session 键域，只改 subject 键；null 由 getAnchor §33 repair）。
- * - M5-03 canonical 锁定：读兼容四值（chat|generation|draft|work，经 canonicalizeSourceKind
+ * -  canonical 锁定：读兼容四值（chat|generation|draft|work，经 canonicalizeSourceKind
  *   收敛；未知 kind 直接 fail-closed），新写只落 canonical draft|work。
  * - Draft Anchor：messageId 原样迁移（chat migration 保持 messageId，§31.1），但
  *   replay-text-* 瞬态 ID 拒绝迁移（fail-closed）。
  * - Work Anchor：借本次 ID map 映射 guestStoryWorkId → userStoryWorkId（§31.2）；
  *   找不到对应映射时 drop Anchor（fail closed，不产生悬空断点，§31.3）。
  * - work sourceId 须为 canonical 十进制 positive int 文本
- *   （String(Number(sourceId)) === sourceId 且 safe int 且 > 0；"001"/"1.5"/"1e3" 等一律拒绝），
+ *（String(Number(sourceId)) === sourceId 且 safe int 且 > 0；"001"/"1.5"/"1e3" 等一律拒绝），
  *   非 canonical 一律 fail-closed（不映射、不落库）。
  * - Per-Work Progress（§31.4）：全部 GuestStoryPlaybackProgress 按同一 map 逐行 remap；
  *   User 侧已有同 work 进度时不覆盖，按 max(next) 合并（mergeRemappedWorkProgress）。

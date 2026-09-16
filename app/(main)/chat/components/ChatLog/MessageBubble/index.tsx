@@ -55,7 +55,7 @@ const roleBubbleClassMap: Record<ChatMessageRole, string> = {
 };
 
 /**
- * 角色对应的默认展示信息，避免缺失头像或昵称。 
+ * 角色对应的默认展示信息，避免缺失头像或昵称。
  */
 const fallbackPersonaMap: Record<ChatMessageRole, { name: string; avatar: StaticImageData }> = {
   assistant: { name: 'Agent助手', avatar: avatarAssistant },
@@ -67,7 +67,7 @@ const fallbackPersonaMap: Record<ChatMessageRole, { name: string; avatar: Static
 };
 
 /**
- * 判断角色是否需要隐藏头像展示。 
+ * 判断角色是否需要隐藏头像展示。
  * @param role 当前消息角色。
  */
 const shouldHideAvatar = (role: ChatMessageRole) =>

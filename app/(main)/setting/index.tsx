@@ -54,7 +54,7 @@ const ConfigPage: React.FC = () => {
   }, [apiConfig.voiceId, isConfigLoaded, voiceOptions]);
 
   /**
-   * M7-03 默认睡眠定时分钟数（新语义字段；旧 playDuration 别名同值保留）。
+   *  默认睡眠定时分钟数（新语义字段；旧 playDuration 别名同值保留）。
    */
   const defaultSleepTimerMinutes = useMemo(
     () => apiConfig.defaultSleepTimerMinutes,
@@ -62,7 +62,7 @@ const ConfigPage: React.FC = () => {
   );
 
   /**
-   * M7-03 默认睡眠定时开关。
+   *  默认睡眠定时开关。
    */
   const defaultSleepTimerEnabled = useMemo(
     () => apiConfig.defaultSleepTimerEnabled,
@@ -96,7 +96,7 @@ const ConfigPage: React.FC = () => {
   );
 
   /**
-   * 是否在宽屏启用悬浮迷你播放器（M6 语义；移动端始终 docked）。
+   * 是否在宽屏启用悬浮迷你播放器（ 语义；移动端始终 docked）。
    */
   const isDesktopFloatingPlayerEnabled = useMemo(
     () => apiConfig.desktopFloatingPlayerEnabled,

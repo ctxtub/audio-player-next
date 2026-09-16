@@ -1,14 +1,14 @@
 /**
- * M8-05-04 Production Closure：启动时有界 due-tombstone 清理（可测核心）。
+ *  Production Closure：启动时有界 due-tombstone 清理（可测核心）。
  *
  * 本模块是 `instrumentation.ts` register() 钩子的唯一可测实现：
- * 复用冻结的 `cleanupAudioStorageDeletions`（M8-05-01 引擎），单次消费有界
- * （DEFAULT 上限钳制），失败永不抛（返回零结果 + 日志），保证启动清理失败
+ * 复用冻结的 `cleanupAudioStorageDeletions`（ 引擎），单次消费有界
+ *（DEFAULT 上限钳制），失败永不抛（返回零结果 + 日志），保证启动清理失败
  * 不得崩服务。
  *
  * 约束：
  * - 不新增 lifecycle runner：不碰 `scripts/docker-start.sh`；
- * - 不改 canonicalFlag 语义、不触 M7 P3B、不做 schema 变更。
+ * - 不改 canonicalFlag 语义、不触、不做 schema 变更。
  */
 
 import {
@@ -82,7 +82,7 @@ export async function runStartupAudioDeletionCleanup(
 }
 
 /**
- * T3 单轨资产 30 天滑动 GC 启动触发（薄包装，动态 import 避免启动模块静态拉入 DB/存储）。
+ *  单轨资产 30 天滑动 GC 启动触发（薄包装，动态 import 避免启动模块静态拉入 DB/存储）。
  *
  * 无节流跑一次有界清扫；任何失败吞错（启动清理失败不得崩服务）。
  */

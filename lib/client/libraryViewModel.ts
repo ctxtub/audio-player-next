@@ -6,8 +6,8 @@ import type {
 /**
  * 故事库列表项展示模型（ViewModel）
  *
- * 封装稳定 DTO，并预留注入播放进度（M5）的缝隙。
- * M3 阶段 progress 注入恒为 null；M5 将根据 storyId 批量装配进度投影，无需重写 Query 或缓存。
+ * 封装稳定 DTO，并预留注入播放进度（）的缝隙。
+ *  阶段 progress 注入恒为 null； 将根据 storyId 批量装配进度投影，无需重写 Query 或缓存。
  */
 export type LibraryItemViewModel<TProgress = null> = StoryWorkSummaryDTO & {
   progress: TProgress | null;
@@ -25,7 +25,7 @@ export type LibraryDetailViewModel<TProgress = null> = StoryWorkDetailDTO & {
  *
  * 保障输出契约：
  * 1. 严格保持作品核心身份与元数据（id, title, excerpt, voiceId, contentHash, favoritedAt, deletedAt, createdAt, updatedAt）；
- * 2. 严格保持 audio 投影结构（audio.status, audio.durationMs，为 M8 音频合成预留）；
+ * 2. 严格保持 audio 投影结构（audio.status, audio.durationMs，为  音频合成预留）；
  * 3. 严格注入 progress 投影（无进度时为 null）。
  */
 export function composeLibraryItemViewModel<TProgress = null>(
@@ -54,7 +54,7 @@ export function composeLibraryDetailViewModel<TProgress = null>(
 }
 
 /**
- * 批量合成作品列表项 ViewModel（方便列表视图与 M5 批量进度投影合成）
+ * 批量合成作品列表项 ViewModel（方便列表视图与  批量进度投影合成）
  */
 export function composeLibraryItemListViewModel<TProgress = null>(
   stories: StoryWorkSummaryDTO[],

@@ -1,5 +1,5 @@
 /**
- * Conversation / StoryCollection 身份生成（change-id 2026-09-15-story-collection-continuous-creation T1）。
+ * Conversation / StoryCollection 身份生成（change-id 2026-09-15-story-collection-continuous-creation）。
  *
  * - 实时创建使用随机 UUID v4；
  * - backfill 与注册迁移使用确定性 UUID v5 形态，保证可重复执行不产生重复行（幂等）。

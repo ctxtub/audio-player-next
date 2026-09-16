@@ -1,9 +1,9 @@
 /**
- * M8 Canonical Audio storyAudio Router（spec §20/§21/§26；M8-03）。
+ *  Canonical Audio storyAudio Router（spec §20/§21/§26；）。
  *
  * - 输入严格 `{ workId, segmentIndex, sessionId }`（ensure）/ `{ workId }`（get）：
  *   不接 client 的 text/audio/profile/storageKey；Canonical input 全由 server 推导。
- * - 不切 M5 正式 Work playback（M8-04 才接 playback source；本项仅提供 ensure + 投影）。
+ * - 不切  正式 Work playback（ 才接 playback source；本项仅提供 ensure + 投影）。
  * - 错误以稳定 domain code 为 message（WORK_NOT_FOUND / WORK_UNAVAILABLE /
  *   INVALID_SEGMENT / AUDIO_SYNTHESIS_FAILED / AUDIO_STORAGE_FAILED /
  *   AUDIO_PROFILE_UNAVAILABLE），不暴露 Provider 原始报文。
@@ -84,7 +84,7 @@ export const storyAudioRouter = router({
     }),
 
   /**
-   * T3 单轨 ensure（`{ workId, sessionId }`，无 segmentIndex）。
+   *  单轨 ensure（`{ workId, sessionId }`，无 segmentIndex）。
    * 整篇长文内部 chunk 合成后拼接为一个 canonical 对象。
    */
   ensure: guardedProcedure
@@ -113,7 +113,7 @@ export const storyAudioRouter = router({
     }),
 
   /**
-   * T3 单轨投影（只读；无资产 → missing 空投影）。
+   *  单轨投影（只读；无资产 → missing 空投影）。
    */
   getProjection: guardedProcedure
     .input(getPlaybackManifestInputSchema)
@@ -123,7 +123,7 @@ export const storyAudioRouter = router({
     }),
 
   /**
-   * T3 秒级进度的写入口（服务端 clamp + 单调守卫 + 节流决策）。
+   *  秒级进度的写入口（服务端 clamp + 单调守卫 + 节流决策）。
    */
   saveProgress: guardedProcedure
     .input(saveStoryAudioProgressInputSchema)

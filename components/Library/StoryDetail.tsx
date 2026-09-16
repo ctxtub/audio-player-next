@@ -54,13 +54,13 @@ function formatDateTime(isoString: string): string {
 }
 
 /**
- * 故事作品详情展示与变更组件（M3-07 / 纯展示与事件驱动组件）
+ * 故事作品详情展示与变更组件（ / 纯展示与事件驱动组件）
  *
  * 核心边界规范：
  * 1. 仅暴露 Rename / Favorite / Move to Trash 事件入口，mutation ownership 全归属 Page；
  * 2. 严禁暴露 Restore / Permanent Delete（回收站作品不可进入详情）；
  * 3. 字段保真：严格仅读取 StoryWorkDetail 已有字段，绝不跨越读取生成历史、播放进度或音频内部表；
- * 4. 播放进度缝隙：严格保持 work.progress === null（等待 M5 进度系统接入）。
+ * 4. 播放进度缝隙：严格保持 work.progress === null（等待  进度系统接入）。
  */
 export const StoryDetail: React.FC<StoryDetailProps> = ({
   work,

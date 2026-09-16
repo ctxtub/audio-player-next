@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * M7-02 PlaybackControls（spec §16 Playback Controls Facade 消费端 + §41 Keyboard）。
+ *  PlaybackControls（spec §16 Playback Controls Facade 消费端 + §41 Keyboard）。
  *
- * - Play / Pause / 从头播放全部走 M5 ownership（父级经
+ * - Play / Pause / 从头播放全部走  ownership（父级经
  *   useExpandedPlaybackControls 传入回调，本组件不直调 flow/store/audio）；
  * - 段内 ±5s 为当前 Segment seek（Transport 段内位置），不是段落跳转；
  * - 明确不新增「上一段/下一段」段落跳转（spec §40 拒绝；本文件不得出现

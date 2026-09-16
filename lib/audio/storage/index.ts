@@ -1,5 +1,5 @@
 /**
- * M8 Canonical Audio Storage 装配入口（spec §3/§3.1；M8-02）。
+ *  Canonical Audio Storage 装配入口（spec §3/§3.1；）。
  *
  * 按 `AUDIO_STORAGE_DRIVER=s3|local` 二选一装配 canonical backend；
  * 不是 local+S3 双写，不做 Hot Cache（spec §2.3/§2.4）。

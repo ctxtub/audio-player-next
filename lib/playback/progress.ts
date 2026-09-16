@@ -1,9 +1,9 @@
 /**
- * M5-01 Work Playback Progress / Continuation 纯领域契约
+ *  Work Playback Progress / Continuation 纯领域契约
  *（spec §3.4 / §7 / §7.1 / §11 / §12 / §37）
  *
  * - Server 不额外存易漂移的 status 字段，Work 状态一律由 Progress 推导（§7）。
- * - progress 为 paragraph-level，不伪装秒级精度；duration 加权留给 M8（§7.1）。
+ * - progress 为 paragraph-level，不伪装秒级精度；duration 加权留给（§7.1）。
  * - isOneShot 收敛为 PlaybackContinuationMode finite|extendable（§11）；
  *   所有持久化 Anchor 重水合后一律视为 finite（§12 安全边界）。
  * - contentHash / segmentation 唯一 SSOT 为 utils/segmentation.ts：
@@ -33,12 +33,12 @@ export type WorkPlaybackState = 'not_started' | 'in_progress' | 'completed';
 /** 续写模式（§11）：当前内容播完后是否允许向 AI 请求新故事内容。 */
 export type PlaybackContinuationMode = 'finite' | 'extendable';
 
-/** Work 进度位置（纯数据：秒级 offset 不在 M5 记录，见 §6.3）。 */
+/** Work 进度位置（纯数据：秒级 offset 不在  记录，见 §6.3）。 */
 export interface WorkPlaybackPosition {
   lastCompletedParagraphIndex: number;
   nextParagraphIndex: number;
   totalParagraphs: number;
-  /** 历史上至少完整听完过一次的时间；重播保留，位置重置（§8 产品拍板 M5-P01）。 */
+  /** 历史上至少完整听完过一次的时间；重播保留，位置重置（§8 产品拍板）。 */
   completedAt: string | null;
 }
 
@@ -128,7 +128,7 @@ export function rehydratedContinuationMode(): PlaybackContinuationMode {
 /**
  * 新域 → 旧物理列兼容写（§11.1）：
  * continuationMode === finite → old isOneShot = true；
- * extendable → false。M9 前旧列保留，新域不再读取它。
+ * extendable → false。 前旧列保留，新域不再读取它。
  * 反向（old → new）为有损映射，故此处有意不提供，避免把历史歧义编码进新契约。
  */
 export function continuationModeToLegacyIsOneShot(mode: PlaybackContinuationMode): boolean {
@@ -136,7 +136,7 @@ export function continuationModeToLegacyIsOneShot(mode: PlaybackContinuationMode
 }
 
 /**
- * M5-08 Subject remap 可迁移进度形状（spec §31.4，纯数据，不触库）。
+ *  Subject remap 可迁移进度形状（spec §31.4，纯数据，不触库）。
  * completedAt / lastPlayedAt 为 ISO 字符串或 null（DB Date 的传输形）。
  */
 export interface RemappableWorkProgress {
@@ -167,11 +167,11 @@ const laterPlayedAt = (a: string | null, b: string | null): string | null => {
 };
 
 /**
- * M5-08 Subject remap 进度合并（spec §31.4 + 任务 4g，纯函数，不触库）。
+ *  Subject remap 进度合并（spec §31.4 + 任务 4g，纯函数，不触库）。
  *
  * User 侧已有同 work 进度时不覆盖：取 newer/更完整者（按 max(nextParagraphIndex)，
  * 持平取 User 既有 existing，register 重试幂等）；位置五元组
- * （contentHash/segmentationVersion/last/next/total）整体取胜者，
+ *（contentHash/segmentationVersion/last/next/total）整体取胜者，
  * 不跨行拼凑；completedAt 取首个非空（首完保留，与 §41 complete 幂等一致）；
  * lastPlayedAt 取更晚者。
  */

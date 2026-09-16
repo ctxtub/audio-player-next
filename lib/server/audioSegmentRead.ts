@@ -1,12 +1,12 @@
 /**
- * M8 Canonical Audio 授权读取服务（spec §19/§19.1；M8-02）。
+ *  Canonical Audio 授权读取服务（spec §19/§19.1；）。
  *
  * 流程：resolve Subject → Segment（User/Guest 对称）→ Manifest → StoryWork
  * ownership 校验 → 允许才读。只做“读取已有资产”：
- * - Trash Work 的已有 ready asset 仍允许读取（M5 当前 Session 可继续语义）；
+ * - Trash Work 的已有 ready asset 仍允许读取（ 当前 Session 可继续语义）；
  * - Permanent deleted（row 不存在）→ 404；
- * - 非 ready（missing/preparing/failed）→ 404（生成归 M8-03，本项不 synthesize、
- *   不更新 segment ready、不接 M5）。
+ * - 非 ready（missing/preparing/failed）→ 404（生成归，本项不 synthesize、
+ *   不更新 segment ready、不接）。
  *
  * 本模块只做 ownership 与 ready 门禁，不触 bytes（bytes 由 storage backend 经
  * route 传输；storageKey 不作为 DTO/API 字段暴露，客户端不构造、不持久化

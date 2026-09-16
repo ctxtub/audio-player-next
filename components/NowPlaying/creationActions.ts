@@ -1,14 +1,14 @@
 /**
- * M7-04-03 Creation Actions Boundary 纯 helper（spec §36/§36.2/§37/§75/M7-P07）。
+ *  Creation Actions Boundary 纯 helper（spec §36/§36.2/§37/§75/）。
  *
  * - Draft「返回创作」（§37）：Draft 本身属于 Chat；Expanded 显示「返回创作」
- *   （不是「继续创作」）；点击 = closeExpanded() + router.push('/chat')，
+ *（不是「继续创作」）；点击 = closeExpanded() + router.push('/chat')，
  *   绝不自动发送新 Prompt（无 send 调用、无预填即发、无消息追加）。
- * - Work「继续创作」（§36/§36.2/M7-P07）：只允许消费 M4
- *   `continueFromStoryWork(workId): Promise<void>` 契约（行为归 M4：
+ * - Work「继续创作」（§36/§36.2/）：只允许消费
+ *   `continueFromStoryWork(workId): Promise<void>` 契约（行为归：
  *   resolve StoryWork → 建上下文 → 回 /chat → 启动流程）；当前仓库该契约
  *   不存在（src grep 空）→ 按 §36.2 隐藏 CTA（fail-closed，绝不伪造
- *   continuation）；一旦 M4 additive contract 落地，直接开启本文件判定
+ *   continuation）；一旦  additive contract 落地，直接开启本文件判定
  *   + Actions/Expanded 预留缝合即可，不需改播放架构。
  * - §36.3：不暂停当前播放（本轮 CTA 隐藏，实现时遵循不暂停原则）。
  * - 本文件不读任何 store，不触路由实例，不改播放状态，不拼装任何
@@ -25,7 +25,7 @@ export const BACK_TO_CREATION_LABEL = '返回创作';
 /** Draft 返回创作按钮 testid（与查看正文/继续创作独立，行为经父级统一处理）。 */
 export const EXPANDED_BACK_TO_CREATION_BUTTON_TESTID = 'expanded-back-to-creation-button';
 
-/** Work 继续创作按钮文案（spec §36：M4 契约落地后开启；本轮隐藏）。 */
+/** Work 继续创作按钮文案（spec §36： 契约落地后开启；本轮隐藏）。 */
 export const CONTINUE_CREATION_LABEL = '继续创作';
 
 /** Work 继续创作按钮 testid（本轮隐藏 fail-closed；additive-ready 预留）。 */
@@ -56,11 +56,11 @@ export const shouldShowDraftBackToCreation = (
 };
 
 /**
- * 纯函数：是否应展示 Work 继续创作（spec §36.2/M7-P07 fail-closed）。
+ * 纯函数：是否应展示 Work 继续创作（spec §36.2/ fail-closed）。
  *
- * 正式依赖 M4 `continueFromStoryWork(workId): Promise<void>`；当前仓库该契约
+ * 正式依赖  `continueFromStoryWork(workId): Promise<void>`；当前仓库该契约
  * 未实现（src 无此导出，grep 空），故恒返回 false（隐藏 CTA，而不伪造
- * continuation）。一旦 M4 additive contract 落地，将本函数体替换为
+ * continuation）。一旦  additive contract 落地，将本函数体替换为
  * Work 合法目标校验 + 契约可用性判定即可，Actions/Expanded 预留分支
  * 无需改播放架构（§36.2 additive-ready）。
  */
@@ -127,7 +127,7 @@ export type WorkContinueCreationDecisionInput = {
 export type WorkContinueCreationDecision = {
     /** 是否展示继续创作（本轮恒 false）。 */
     visible: boolean;
-    /** 延续目标（本轮恒 null：行为归 M4，不在 M7 拼装）。 */
+    /** 延续目标（本轮恒 null：行为归，不在  拼装）。 */
     target: string | null;
     /** 是否需要推进 continuation（本轮恒 false）。 */
     shouldPush: boolean;
@@ -135,8 +135,8 @@ export type WorkContinueCreationDecision = {
 
 /**
  * 纯函数：Work 继续创作总决策（本轮恒隐藏，fail-closed）。
- * M4 契约落地后在此返回真实可见性/目标，调用方经预留 onContinueCreation
- * 委托 M4 契约（M7 不拼 Prompt、不暂停播放，§36.3）。
+ *  契约落地后在此返回真实可见性/目标，调用方经预留 onContinueCreation
+ * 委托  契约（ 不拼 Prompt、不暂停播放，§36.3）。
  */
 export const decideWorkContinueCreation = (
     _input: WorkContinueCreationDecisionInput

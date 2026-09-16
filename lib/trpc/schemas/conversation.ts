@@ -1,5 +1,5 @@
 /**
- * Conversation 相关 Zod Schemas 与 DTO（change-id 2026-09-15-story-collection-continuous-creation T1）。
+ * Conversation 相关 Zod Schemas 与 DTO（change-id 2026-09-15-story-collection-continuous-creation）。
  *
  * 会话是创作上下文；一个 Conversation 至多一个 StoryCollection。
  */

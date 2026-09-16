@@ -59,7 +59,7 @@ export interface LibraryUndoProviderProps {
 }
 
 /**
- * 故事库全局撤销能力提供者（M3-05）
+ * 故事库全局撤销能力提供者（）
  *
  * 挂载于 app/(main)/library/layout.tsx，为 /library 与 /library/[id] 提供共享的瞬时撤销生命周期。
  *

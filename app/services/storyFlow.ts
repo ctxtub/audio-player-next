@@ -1,13 +1,13 @@
 /**
- * M9-C1 T2：故事生成流程兼容层。
+ *：故事生成流程兼容层。
  *
  * 播放 session / preload / ended 编排已迁出至
  * `app/services/playbackSessionFlow.ts` + `stores/playbackSessionStore.ts`。
- * 旧 `stores/preloadStore` + `AUTO_CONTINUE_PROMPT` 续写链已在 T2 删除，
+ * 旧 `stores/preloadStore` + `AUTO_CONTINUE_PROMPT` 续写链已在  删除，
  * near-end / ended 的下一作品编排改由 `app/services/continuousCreationFlow.ts`
- * （连续创作状态机：调度窗、lookahead=1、预算、epoch 守卫）承担。
+ *（连续创作状态机：调度窗、lookahead=1、预算、epoch 守卫）承担。
  *
- * M5-10 收敛（§27/§28/§50）：
+ *  收敛（§27/§28/§50）：
  * - continuation 唯一门在 PlaybackSessionFlow（continuationMode==='extendable'）；
  *   本文件首部的 session ownership 早退保证：只要 Session SSOT 持有 source 且
  *   finite，会话外的任何直接调用也不得触发 AI 续写。
@@ -34,7 +34,7 @@ type PlayableSegment = {
 };
 
 /**
- * Session ownership 早退（M5-10 §27/§28）：
+ * Session ownership 早退（ §27/§28）：
  * Session SSOT 持有 source 且 finite 时，播放编排归 PlaybackSessionFlow 独占，
  * legacy 续写链不得以任何理由触发 AI continuation（也不得 reset 会话 transport）。
  * 仅无 session，或 extendable 尾段经 flow 显式委托，才允许继续 legacy 判定。
@@ -64,12 +64,12 @@ const currentRemainingTrackMs = (): number => {
 /**
  * 音频即将结束时触发连续创作调度：进入调度窗且状态机允许时请求下一作品。
  *
- * @deprecated M5-10：续写决策唯一门仍在 PlaybackSessionFlow（§28）；
+ * @deprecated：续写决策唯一门仍在 PlaybackSessionFlow（§28）；
  * 本函数仅为无 session legacy 音频的传输锁保留，首部 session ownership
  * 早退保证 finite 会话永不进入旧判定。
  */
 export const handleNearEnd = async (): Promise<void> => {
-  // M5-10 §27/§28：Session SSOT 持有 finite 会话时直接让路。
+  //  §27/§28：Session SSOT 持有 finite 会话时直接让路。
   if (shouldYieldToPlaybackSession()) {
     return;
   }
@@ -94,13 +94,13 @@ export const handleNearEnd = async (): Promise<void> => {
 /**
  * 音频播放结束回调：优先消费连续创作已就绪的下一作品，否则按 legacy 段落推进。
  *
- * @deprecated M5-10：续写决策唯一门仍在 PlaybackSessionFlow（§28）。
+ * @deprecated：续写决策唯一门仍在 PlaybackSessionFlow（§28）。
  * 本函数仅为无 session legacy 音频的兼容实现；首部 session ownership 早退
  * 保证 finite 会话永不进入旧判定，且绝不 reset 会话 transport。
  * @returns 成功获取到的播放段落；若无需继续播放则返回 null
  */
 export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
-  // M5-10 §27/§28：Session SSOT 持有 finite 会话时直接让路（bare null，不 reset）。
+  //  §27/§28：Session SSOT 持有 finite 会话时直接让路（bare null，不 reset）。
   if (shouldYieldToPlaybackSession()) {
     return null;
   }
@@ -172,7 +172,7 @@ export const updatePlaybackProgress = (payload: { currentTime: number; duration:
 /**
  * 完整重置故事播放链路，清空播放与连续创作运行时。
  *
- * M9-C1 T2：「新建创作」的强重置入口是 `app/services/startNewCreation.ts`；
+ *：「新建创作」的强重置入口是 `app/services/startNewCreation.ts`；
  * 本函数仅在旧调用点保留，负责停声 + 清运行时，不递增 epoch/不改预算快照。
  */
 export const resetStoryFlow = () => {

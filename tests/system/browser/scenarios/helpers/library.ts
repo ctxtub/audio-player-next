@@ -69,7 +69,7 @@ export async function createStoryWorkByPage(
 }
 
 /**
- * 批量在当前浏览器会话中创建作品（用于验证分页、列表筛选等 L3 场景）。
+ * 批量在当前浏览器会话中创建作品（用于验证分页、列表筛选等  场景）。
  *
  * @param page Playwright 页面
  * @param items 作品列表

@@ -1,5 +1,5 @@
 /**
- * Conversation 服务层（change-id 2026-09-15-story-collection-continuous-creation T1）。
+ * Conversation 服务层（change-id 2026-09-15-story-collection-continuous-creation）。
  *
  * 会话是创作上下文，一个 Conversation 至多一个 StoryCollection（产品 §1 约束 1）。
  * 本服务提供 getActive / get / createNew / saveSnapshot / close，User / Guest 严格对称。
@@ -84,7 +84,7 @@ export async function getConversationForSubject(
 /**
  * 读取指定会话的消息（仅本会话，按 position 升序）。
  *
- * M9-C1 T2：Chat 读路径的会话级实现——先断言会话归属（跨主体 NOT_FOUND，fail closed），
+ *：Chat 读路径的会话级实现——先断言会话归属（跨主体 NOT_FOUND，fail closed），
  * 再按 `conversationId` 过滤，绝不返回其它会话的消息。
  *
  * @param subject 身份主体

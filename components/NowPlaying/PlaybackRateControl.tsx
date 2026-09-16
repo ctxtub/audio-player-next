@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * M7-02 PlaybackRateControl（spec §20/§20.1 当前 Session 级倍速）。
+ *  PlaybackRateControl（spec §20/§20.1 当前 Session 级倍速）。
  *
  * - 七档冻结（与旧 AudioPlayer 一致，先不改用户行为）：0.8 / 0.9 / 0.95 / 1.0 /
  *   1.05 / 1.1 / 1.5；
@@ -9,7 +9,7 @@
  *   本组件不建 Expanded-local speed state；
  * - 选择经 onSelect → facade.setPlaybackRate → Session.speed +
  *   Transport.playbackRate + Anchor 持久化；不写回 UserConfig 默认 speed；
- *   不触发新 TTS（只调 <audio>.playbackRate，M8 Canonical TTS speed=1.0）。
+ *   不触发新 TTS（只调 <audio>.playbackRate， Canonical TTS speed=1.0）。
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';

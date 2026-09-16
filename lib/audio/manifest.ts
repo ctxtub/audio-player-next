@@ -1,5 +1,5 @@
 /**
- * M8 Canonical Audio Manifest identity 组合逻辑（spec §5.2/§7–§9；M8-01 纯领域层）。
+ *  Canonical Audio Manifest identity 组合逻辑（spec §5.2/§7–§9； 纯领域层）。
  *
  * 只放类型与纯函数，不计算真实 bytes、不触 DB、不调用 TTS。
  * Segment text 冻结：Manifest 创建时持久化 segmentIndex/text/textHash/storageKey，
@@ -171,7 +171,7 @@ export function isCanonicalAudioFormat(format: string): boolean {
 }
 
 /**
- * Manifest 状态派生输入（纯函数；spec §12.2，M8-03）。
+ * Manifest 状态派生输入（纯函数；spec §12.2，）。
  *
  * - ready：readySegmentCount == segmentCount 且全部 durationMs != null；
  * - preparing：至少一个 canonical Segment lease 有效（调用方判定）；

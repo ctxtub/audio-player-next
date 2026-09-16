@@ -1,5 +1,5 @@
 /**
- * Collection Library React Query 层（M9-C1 T4）。
+ * Collection Library React Query 层（）。
  *
  * 镜像 libraryQueries 的 key 规范与 cursor 契约：
  * - cursor 只作 pageParam，绝不写入 query key；

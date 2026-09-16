@@ -1,14 +1,14 @@
 /**
- * Chat Promotion Orchestration（M4-04）。
+ * Chat Promotion Orchestration（）。
  *
  * 薄编排层：complete → startPromotion() → promoteStoryArtifact() → ready / promotion_failed。
  * 本模块只做「状态机推进（纯函数）＋ 唯一 I/O 通道调用」，不持有任何归属守卫状态：
- * stale 归属（assistant message id ＋ 瞬态 token / epoch / 在途去重）
+ * stale 归属（assistant message id＋ 瞬态 token / epoch / 在途去重）
  * 由调用方（stores/chatStore 闭包瞬态守卫）持有，token 绝不进入持久领域模型。
  *
  * 契约：
  * 1. 状态机推进只用 lib/client/chatArtifactState 纯函数（startPromotion / markPromotionSuccess / markPromotionFailed）。
- * 2. I/O 只走 lib/client/storyArtifactPromotion.promoteStoryArtifact（M4-03 唯一通道），
+ * 2. I/O 只走 lib/client/storyArtifactPromotion.promoteStoryArtifact（ 唯一通道），
  *    不直调门面 create，不 import server/Prisma/raw trpc，不碰 generation transport。
  * 3. 缺省 create 走 adapter 缺省（冻结门面）；测试经 setPromotionCreateOverride 注入隔离桩。
  * 4. 错误原样上抛（尤其 CONFLICT）：不包装、不换 sourceMessageId、不触发重生成，由调用方落为 promotion_failed。
@@ -34,7 +34,7 @@ import type { StoryWorkDetailDTO } from '@/lib/trpc/schemas/library';
 
 /**
  * 可作为 promotion 源的 Artifact（初次 complete / 重试源 promotion_failed）。
- * 注意：promoting 快照本身不可再传 adapter（M4-03 fail-fast），调用方须同时保留本源快照。
+ * 注意：promoting 快照本身不可再传 adapter（ fail-fast），调用方须同时保留本源快照。
  */
 export type PromotionSourceArtifact =
   | CompleteChatArtifact

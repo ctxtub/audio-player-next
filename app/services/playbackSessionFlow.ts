@@ -1,5 +1,5 @@
 /**
- * M5-10 PlaybackSessionFlow（spec §27，M5 收官运行时编排唯一入口）。
+ *  PlaybackSessionFlow（spec §27， 收官运行时编排唯一入口）。
  *
  * Audio 事件 → 播放决策的唯一编排层：
  * beginPlayback / resumePlayback / playParagraph / handleNearEnd /
@@ -19,14 +19,14 @@
  * stores/playbackSessionStore 以 originatingSessionId 校验后才 play()，
  * 失配直接 revoke blob / discard；legacy 合成路径见 storyFlow 同名守卫。
  *
- * M8-04 Work canonical read（spec §22–§23）：本 flow 不直接选音源，
+ *  Work canonical read（spec §22–§23）：本 flow 不直接选音源，
  * 仅经 store.playParagraph/prefetchNextParagraph 委托（lookahead 仍=1）；
  * store 内 Work+flag 开启 → ensureSegment → ready playbackUrl，
  * stale（sessionId 失配）绝不播放 A；Draft 恒旧路径；promotion 不打断当前 Blob。
  *
  * storyFlow.ts 回到故事生成流程兼容层；其中播放 session / preload / ended
  * 逻辑已迁出，此处为过渡期唯一兼容 fallback：无 session 的 legacy 音频
- *（未经理 Session SSOT 的旧 oneShot 链）仍委托 storyFlow 处理，M9 删除。
+ *（未经理 Session SSOT 的旧 oneShot 链）仍委托 storyFlow 处理， 删除。
  * extendable 会话尾段是唯一允许回退 legacy AI 续写链的例外（§28）。
  */
 
@@ -122,7 +122,7 @@ export async function restartPlayback(): Promise<void> {
 }
 
 /**
- * M9-F01 StoryCard / History 用户播放入口（Active Playback Session Visibility Closure）。
+ *  StoryCard / History 用户播放入口（Active Playback Session Visibility Closure）。
  *
  * 全局 invariant：任何用户可感知的故事播放开始时，都必须已经存在正式
  * Playback Session（`Transport.play()` 被调用时 `source !== null &&
@@ -131,7 +131,7 @@ export async function restartPlayback(): Promise<void> {
  * 播放决策（Transport 仍是正式底层 API，仅由 Session/Flow 调用）。
  *
  * Legacy `part.audioUrl` 在此面被有意忽略：它没有 segment identity
- * （segmentIndex / textHash / segmentationVersion），无法证明代表整篇还是某
+ *（segmentIndex / textHash / segmentationVersion），无法证明代表整篇还是某
  * 正式 paragraph；若当 paragraph 0 播放，整篇播完后 Session 会继续推进
  * paragraph 1 造成重复播放。正确优先级：Session identity / segmentation
  * 正确 > 复用旧音频缓存（未来复用需另立 audio→segment identity 契约）。
@@ -143,13 +143,13 @@ export type StoryCardPlayInput = {
   messageId: string;
   /** 卡片自带正文（仅当 canonical resolver 取不到快照时 fallback）。 */
   storyText?: string;
-  /** 卡片/Artifact 自带标题（可选；缺省按 §M9-F01 首行规则派生）。 */
+  /** 卡片/Artifact 自带标题（可选；缺省按 § 首行规则派生）。 */
   title?: string;
   /** 卡片自带 voice（可选；缺省用当前配置）。 */
   voiceId?: string;
 };
 
-/** Draft begin 所需集中式 metadata（§M9-F01：Flow/domain helper 唯一构造点）。 */
+/** Draft begin 所需集中式 metadata（§：Flow/domain helper 唯一构造点）。 */
 export type StoryCardDraftMetadata = {
   source: Extract<PlaybackSourceRef, { kind: 'draft' }>;
   /** 规范化后正文（hash/切分严格基于此串）。 */
@@ -181,7 +181,7 @@ function pickNonEmptyString(value: unknown): string | null {
 }
 
 /**
- * 集中构造 Draft begin metadata（M9-F01 唯一构造点；StoryCard/ChatLayout 不得各自定义）。
+ * 集中构造 Draft begin metadata（ 唯一构造点；StoryCard/ChatLayout 不得各自定义）。
  * @returns 合法 metadata；任何非法输入（坏 messageId / 无可用正文 / 空切分）一律 null（fail-closed）。
  */
 export function buildStoryCardDraftMetadata(input: StoryCardPlayInput): StoryCardDraftMetadata | null {
@@ -261,12 +261,12 @@ function isSameSource(
 }
 
 /**
- * 用户播放入口串行临界区 + 请求代（M9-F01 §50 竞态收口）。
+ * 用户播放入口串行临界区 + 请求代（ §50 竞态收口）。
  *
  * 为什么需要：`beginPlayback` 内部会 `hydrateFromAnchor` 并直接 `set(source)`，
  * 而 store 的水合是「最后写入者胜出」。若两次 begin 并发，旧请求的晚到 hydrate
  * 可能覆盖新请求的 source（用户点了 A 再点 B，结果 A 出声）。因此所有
- * 「决策 + begin」经同一串行链执行，并以单调递增的请求代判定最新意图：
+ *「决策 + begin」经同一串行链执行，并以单调递增的请求代判定最新意图：
  * 只有最新代可以 begin；begin 之后若代已过期，旧请求立即 abort（不 play）。
  * 这样最终 source/播放属于最后一次用户操作，且不会出现双路 begin 抢写。
  *
@@ -319,7 +319,7 @@ async function playPlanned(planned: PlannedPlay): Promise<void> {
 }
 
 /**
- * StoryCard 正式播放入口（M9-F01 唯一 StoryCard 播放决策面）。
+ * StoryCard 正式播放入口（ 唯一 StoryCard 播放决策面）。
  *
  * - 当前 Session 就是该 Draft 且 Transport 正在出声 → 正式 pause；
  * - 就是该 Draft 且 `ended`（或 next 越界） → 正式 restart（新 sessionId）；
@@ -367,12 +367,12 @@ export async function playStoryCard(input: StoryCardPlayInput): Promise<void> {
 }
 
 /**
- * Generation History 正式回放入口（M9-F01）。
+ * Generation History 正式回放入口（）。
  *
  * History 底层即 StoryWork（DTO `record.id` = Work identity），回放走正式
  * Work Session：`source = {kind:'work', workId: record.id}`，经 Work
- * begin/restart/play 路径 + M5/M8 正式 provider，finite（不触发 AI continuation）。
- * 不得伪造 transient Draft，不得修改 M5 source union。
+ * begin/restart/play 路径 + / 正式 provider，finite（不触发 AI continuation）。
+ * 不得伪造 transient Draft，不得修改  source union。
  */
 export async function playWorkFromHistory(workId: number): Promise<void> {
   if (!isValidWorkId(workId)) return;
@@ -412,7 +412,7 @@ export async function playWorkFromHistory(workId: number): Promise<void> {
 }
 
 /**
- * 生成完成后 autoplay 正式入口（M9-F01）。
+ * 生成完成后 autoplay 正式入口（）。
  * 恒 fresh-restart 建 Draft Session 再从 `paragraphs[0]` 起播（旧整篇 blob 不得
  * 当 paragraph 播放，由调用方吊销）。transport 可能残留旧轨道，故恒 explicit。
  */
@@ -439,7 +439,7 @@ export async function autoplayDraftStory(input: StoryCardPlayInput): Promise<voi
 }
 
 /**
- * M7-02 P3A 当前 Segment seek（spec §17/§17.1/§17.3 additive，无新 SSOT）。
+ *   当前 Segment seek（spec §17/§17.1/§17.3 additive，无新 SSOT）。
  * 只动 Transport 段内 currentTime（经 AudioControllerHost 唯一 audio owner），
  * 不改变 Session sessionId/source/paragraph identity，不落 checkpoint。
  * 全 clamp + duration=0/unknown fail-safe（no-op 返回 false）。
@@ -457,7 +457,7 @@ export function seekCurrentSegment(targetSeconds: number): boolean {
 }
 
 /**
- * M7-02 P3A 相对 seek（keyboard ±5s，spec §17.2）。
+ *   相对 seek（keyboard ±5s，spec §17.2）。
  * currentTime + delta 后走同一 clamp/fail-safe；不改变 Session identity。
  * @param deltaSeconds 相对秒数（+5/-5）
  * @returns 是否实际发起 seek
@@ -471,7 +471,7 @@ export function seekRelative(deltaSeconds: number): boolean {
 }
 
 /**
- * M7-02 P3A 当前 Session 倍速（spec §20/§20.1 additive，无新 SSOT）。
+ *   当前 Session 倍速（spec §20/§20.1 additive，无新 SSOT）。
  * Session.speed + Transport.playbackRate + Anchor 持久化三同步；
  * 不写回 UserConfig 默认 speed；不触发新 TTS（只调 <audio>.playbackRate）。
  * @param rate 目标倍速（旧七档之一；越界/非法直接 no-op）
@@ -481,7 +481,7 @@ export async function setPlaybackRate(rate: number): Promise<void> {
 }
 
 /**
- * M7-03 P3C 当前 Session Sleep Timer 设置（spec §24 additive，无新 SSOT）。
+ *   当前 Session Sleep Timer 设置（spec §24 additive，无新 SSOT）。
  * 只改当前 Session Timer（经 playback.setSleepTimer 独立持久化），不自动改
  * Settings 默认（§31.1）；stale（Session 已切换）返回 false（§24.1）。
  * UI 只经此入口，不得直接操作 <audio> / Session 字段（评审约束 10）。
@@ -494,7 +494,7 @@ export async function setSleepTimer(mode: SleepTimerMode, minutes?: number): Pro
 }
 
 /**
- * M7-03 Sleep Timer 到期承接（spec §26）。
+ *  Sleep Timer 到期承接（spec §26）。
  * Transport 到期已 pause audio + 归一 off/null；此处承接 Session paused +
  * checkpoint 持久化 + Toast。Session 保留 paused，之后 Play 正常继续。
  */
@@ -503,7 +503,7 @@ export async function handleSleepTimerExpired(): Promise<void> {
 }
 
 /**
- * M7-03 到期回调注册（AudioControllerHost 挂载时调用，卸载时传 null 解除）。
+ *  到期回调注册（AudioControllerHost 挂载时调用，卸载时传 null 解除）。
  * Transport 到期（非 minutes 不触发）经此回调进入 Flow 编排，
  * Transport 本身不 import Session（防循环依赖）。
  */
@@ -529,8 +529,8 @@ export function stopPlayback(): void {
 
 /**
  * §27 规范名别名（与 spec 动词一致；pausePlayback / restartPlayback /
- * stopPlayback 保留供 Host 等既有调用方，M9 再收敛命名）。
- * M7-02 增补 restartCurrentSession（spec §47/M7 对 M5 additive contract 命名统一，
+ * stopPlayback 保留供 Host 等既有调用方， 再收敛命名）。
+ *  增补 restartCurrentSession（spec §47/ 对  additive contract 命名统一，
  * 同一 restart 实现，不新增重复状态）。
  */
 export { pausePlayback as pause, restartPlayback as restart, stopPlayback as stop };
@@ -547,13 +547,13 @@ export function reportPlaybackPause(): void {
 }
 
 /**
- * M7-03 fixup（复审 Blocking 1 / §25.1）：Host 上报音频“实际推进”运行时信号
- * （playing → true；waiting / stalled / pause / ended → false）。
+ *  fixup（复审 Blocking 1 / §25.1）：Host 上报音频“实际推进”运行时信号
+ *（playing → true；waiting / stalled / pause / ended → false）。
  * 仅用于 sleep timer countdown 门使 buffering 不计入“再听 N 分钟”，不改变 Session 语义状态。
  */
 export function reportAudioActive(active: boolean): void {
   usePlaybackStore.getState().reportAudioActive(active);
-  // M9-C1 T2：同一 audio-active 信号驱动连续创作预算；动态 import 避免模块环。
+  //：同一 audio-active 信号驱动连续创作预算；动态 import 避免模块环。
   void import('./continuousCreationFlow')
     .then((flow) => flow.reportContinuousAudioActive(active))
     .catch(() => undefined);
@@ -562,21 +562,21 @@ export function reportAudioActive(active: boolean): void {
 /** 播放进度推进（供 timeupdate/loadedmetadata 复用）。 */
 export function reportProgress(payload: { currentTime: number; duration: number }): void {
   usePlaybackStore.getState().updateProgress(payload);
-  // T3 单轨：duration 已知后一次性应用服务端恢复位（内部 duration>0 守卫 + 幂等）。
+  //  单轨：duration 已知后一次性应用服务端恢复位（内部 duration>0 守卫 + 幂等）。
   usePlaybackSessionStore.getState().applyPendingSingleTrackResume(payload.duration);
-  // T3 单轨：常规 timeupdate 机会式落库（client 10s 节流；暂停/完播走 force）。
+  //  单轨：常规 timeupdate 机会式落库（client 10s 节流；暂停/完播走 force）。
   void usePlaybackSessionStore.getState().persistSingleTrackProgress();
 }
 
 /**
  * near-end 预载决策（§27/§28）：
  * - 有 session source：finite 一律仅段落级推进，绝不走聊天续写（§28 唯一门）；
- *   仅 extendable 允许回退 legacy AI 续写链（过渡期，M9 删除）；
- * - 无 session（legacy 音频）：委托 storyFlow.handleNearEnd 兼容（M9 删除）。
+ *   仅 extendable 允许回退 legacy AI 续写链（过渡期， 删除）；
+ * - 无 session（legacy 音频）：委托 storyFlow.handleNearEnd 兼容（ 删除）。
  */
 export async function handleNearEnd(): Promise<void> {
   const session = usePlaybackSessionStore.getState();
-  // §28 唯一门：有 session 且 finite → 不续写聊天；M9-C1 T2 改为走连续创作
+  // §28 唯一门：有 session 且 finite → 不续写聊天；  改为走连续创作
   // 预生成下一作品（lookahead=1，窗口/预算/开关由状态机守卫）。
   if (
     session.source &&
@@ -588,7 +588,7 @@ export async function handleNearEnd(): Promise<void> {
     return;
   }
   // 到达此处仅两种情形：无 session 的 legacy 音频，或 extendable 会话尾段
-  //（唯一允许 AI continuation 的例外）；二者皆走 legacy 聊天续写链（M9 删除）。
+  //（唯一允许 AI continuation 的例外）；二者皆走 legacy 聊天续写链（ 删除）。
   const { handleNearEnd: legacyNearEnd } = await import('@/app/services/storyFlow');
   await legacyNearEnd();
 }
@@ -621,7 +621,7 @@ export function reportTimeUpdate(payload: {
     return;
   }
   if (session.source && session.totalParagraphs > 0) {
-    // 有 session 的尾段/单段：§28 唯一门——finite 不续写聊天；M9-C1 T2 改为
+    // 有 session 的尾段/单段：§28 唯一门——finite 不续写聊天；  改为
     // 触发连续创作预生成（lookahead=1，状态机自守卫；未进窗/已有 next job 则 no-op）。
     if (!shouldAllowAiContinuation(session.continuationMode)) {
       payload.hasTriggeredPreload.current = true;
@@ -644,7 +644,7 @@ export function reportTimeUpdate(payload: {
 /**
  * ended 决策（§27/§28）：
  * - 有 session source：非尾段一律走段落推进；尾段 finite 直接收尾
- *  （播完现有 paragraphs → ended，严禁聊天续写），仅 extendable 尾段允许
+ *（播完现有 paragraphs → ended，严禁聊天续写），仅 extendable 尾段允许
  *   先试 legacy AI 续写链，取不到新段才收尾；
  * - 无 session（legacy 音频）：委托 storyFlow.handleSegmentEnded 兼容，返回可播段则由调用方播放。
  * @param play 播放函数（Host 传入的 transport play，用于 legacy fallback 段播放）
@@ -653,7 +653,7 @@ export function reportTimeUpdate(payload: {
 export async function handleEnded(play: (audioUrl: string, messageId?: string) => Promise<void>): Promise<boolean> {
   const session = usePlaybackSessionStore.getState();
   if (session.source && session.totalParagraphs > 0) {
-    // T3 单轨：整轨只有一个 Asset，任意物理 ended 都代表「整 track 播完」，
+    //  单轨：整轨只有一个 Asset，任意物理 ended 都代表「整 track 播完」，
     // 必须走尾段分支（先试连续创作下一 Work，再整 Work 完播），不得按段落推进。
     const singleTrack = isSingleTrackAudioEnabled();
     const atTail = singleTrack || session.nextParagraphIndex + 1 >= session.totalParagraphs;
@@ -662,7 +662,7 @@ export async function handleEnded(play: (audioUrl: string, messageId?: string) =
       return await session.handleParagraphEnded();
     }
     if (!shouldAllowAiContinuation(session.continuationMode)) {
-      // M9-C1 T2：finite 整轨结束 → 优先无缝续播连续创作已就绪的下一作品；
+      //：finite 整轨结束 → 优先无缝续播连续创作已就绪的下一作品；
       // 无/过期则进入 waiting_next 并收尾（绝不复活旧结果）。
       const epoch = useContinuousCreationStore.getState().epoch;
       const { handleTrackEnded } = await import('@/app/services/continuousCreationFlow');

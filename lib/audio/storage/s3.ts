@@ -1,11 +1,11 @@
 /**
- * M8 Canonical Audio S3-compatible 后端（spec §2.2/§19.3；M8-02）。
+ *  Canonical Audio S3-compatible 后端（spec §2.2/§19.3；）。
  *
  * - Bucket 恒为 private（禁止公开 ACL，spec §3）；读取 = 短时签名 URL，
  *   App Node 不代理实际音频流量（route 收到 redirect 后返回 307）。
  * - Range 由对象存储原生处理：`resolveRead` 忽略 Range 头，直接签发 GET URL。
  * - 本文件是全仓唯一允许直接 import S3 SDK 的生产模块
- *  （由单测静态守卫锁定；测试经 `S3Driver` 缝注入 fake，不触 SDK/网络/MinIO）。
+ *（由单测静态守卫锁定；测试经 `S3Driver` 缝注入 fake，不触 SDK/网络/MinIO）。
  */
 
 import {

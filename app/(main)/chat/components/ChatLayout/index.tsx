@@ -19,7 +19,7 @@ import styles from './index.module.scss';
 import type { ChatLayoutProps } from './types';
 
 /**
- * 推荐提问按钮的配置项定义，包含展示文案与发送内容。 
+ * 推荐提问按钮的配置项定义，包含展示文案与发送内容。
  */
 type HeaderSuggestion = {
   /** 唯一标识，便于渲染列表时追踪。 */
@@ -31,7 +31,7 @@ type HeaderSuggestion = {
 };
 
 /**
- * 默认推荐提问列表，提供多题材故事引导。 
+ * 默认推荐提问列表，提供多题材故事引导。
  */
 const defaultSuggestions: HeaderSuggestion[] = [
   { id: 'story-space', label: '星际冒险', value: '请讲一个温柔的星际冒险睡前故事。' },
@@ -45,14 +45,14 @@ const defaultSuggestions: HeaderSuggestion[] = [
 /**
  * 聊天页面布局组件，组织连续创作状态卡、消息区与输入区。
  *
- * M9-C1 T2：History Surface 已退役；「清空」升级为唯一「新建创作」强重置入口。
+ *：History Surface 已退役；「清空」升级为唯一「新建创作」强重置入口。
  * @returns 布局结构 JSX。
  */
 const ChatLayout: React.FC<ChatLayoutProps> = () => {
   const messages = useChatStore((state) => state.messages);
   const inputValue = useChatStore((state) => state.inputValue);
   const setInputValue = useChatStore((state) => state.setInputValue);
-  /** 单槽位待发送提示词（推荐提问在生成中排队用；M9-C1 T2 起不再服务 History）。 */
+  /** 单槽位待发送提示词（推荐提问在生成中排队用；  起不再服务 History）。 */
   const pendingAutoSend = useChatStore((state) => state.pendingAutoSend);
   /** 当前 active Conversation 对应的集合标题（创作页围绕当前集合运行）。 */
   const collectionTitle = useChatStore((state) => state.collectionTitle);
@@ -64,7 +64,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     [messages],
   );
 
-  // M9-C1 T2：有集合但标题未知时补拉集合标题（创作页围绕当前集合运行）。
+  //：有集合但标题未知时补拉集合标题（创作页围绕当前集合运行）。
   useEffect(() => {
     if (!collectionId || collectionTitle) {
       return;
@@ -147,7 +147,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
   ]);
 
   /**
-   * 输入框内容变化时同步到 store，便于外部组件访问。 
+   * 输入框内容变化时同步到 store，便于外部组件访问。
    * @param next 最新的输入内容。
    */
   const handleInputChange = useCallback(
@@ -193,7 +193,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
       return;
     }
     try {
-      // M9-C1 T2 评审闭合：重试前抢占在途/就绪的下一作品，避免 abort 后旧预载
+      //   评审闭合：重试前抢占在途/就绪的下一作品，避免 abort 后旧预载
       // 的失败被误记为连续创作 error，且旧结果不得复活。
       preemptContinuousCreationForUserInput();
       await retryChatStream();

@@ -26,7 +26,7 @@ export interface RouterLike {
 }
 
 /**
- * 规整搜索词（与 M2 领域契约完全一致，确保 canonical q）
+ * 规整搜索词（与  领域契约完全一致，确保 canonical q）
  *
  * 规则：
  * 1. null / undefined -> undefined；

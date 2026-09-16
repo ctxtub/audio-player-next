@@ -6,10 +6,7 @@
 **变更标识**：`2026-09-15-conversation-story-collection-product-adjustment`
 **覆盖范围**：创作首页、故事库、作品集详情、Global Now Playing、音频缓存、续播预加载反馈与 Legacy History 退役
 
-> 本文是对 `2026-09-11-product-upgrade-story-library-now-playing.md` 的增量修订。
-> 已发布的 M2 / M4 / M5 / M8 文档仍是当时实现快照；本文确认后，再以新的
-> e2e 场景、领域设计和实施计划替换其中“一个 StoryWork 独立占据故事库”和
-> “Modern Artifact 无播放”的旧产品假设。
+> 本文取代更早实现快照中的旧产品假设，是本轮产品调整的现行依据。
 
 ## 0. 调整结论
 
@@ -198,7 +195,7 @@ Prompt History 与 Generation History 是旧的过渡模型：前者保存可再
 4. 删除把 legacy generation record 解析为播放源或 Draft Session 的兼容路径。
 5. 数据库旧表/字段采用单独 migration 方案安全退役；先证明有效内容已属于 StoryCollection/StoryWork，再删除结构，不允许误删当前作品资产。
 6. 清理浏览器 localStorage / IndexedDB 中的旧 history key；清理必须幂等、主体安全，且不得误清当前 Conversation、作品集或播放进度。
-7. 更新 README、e2e、Catalog 与代码静态守卫，防止旧命名和入口回流。
+7. 更新产品说明和代码入口，防止旧命名和旧交互回流。
 
 ### 4.3 旧数据处理原则
 
@@ -444,7 +441,7 @@ queued → generating_text → preparing_audio → ready
 
 ## 10. 验收口径
 
-后续进入实施时，至少把以下行为写入 `docs/e2e` 并登记 Catalog：
+准备交付时，至少通过真实 UI 验证以下行为：
 
 1. 同一 Conversation 连续生成三条完整作品，故事库只出现一个 StoryCollection，详情包含三条有稳定顺序的 StoryWork。
 2. 新建 Conversation 后生成作品，创建另一个 StoryCollection；两个会话的作品绝不串集。
@@ -471,12 +468,12 @@ queued → generating_text → preparing_audio → ready
 
 | 现有模块 | 需要修订的旧假设 | 新方向 |
 | --- | --- | --- |
-| M2 StoryWork | StoryWork 是故事库顶层资产；无 `sourceConversationId` | 引入稳定 Conversation / StoryCollection identity，StoryWork 从属于集合 |
-| M3 Library | 列表、搜索、收藏、删除以 StoryWork 为单位 | 顶层切换为 StoryCollection，详情管理集内 StoryWork |
-| M4 Chat Artifact | Modern Artifact 无播放；ready 后“查看作品” | 完整 Artifact 卡原位可播放；移除逐条作品库入口 |
-| M5 Playback | Work 内以 paragraph/segment 推进并持久化段落边界 | 播放源仍是 Work，但一条 Work 只有一条用户可感知 track；续播模型需重做 |
-| M6 / M7 Now Playing | 主标题可直接使用 Work title | 主标题统一为 Collection title，副标题表达当前 Work |
-| M8 Canonical Audio | 一个 Manifest 下持久化多个可独立读取的 AudioSegment | 对客户端收敛为一个 canonical StoryAudio，并增加整条音频 30 天滑动回收契约 |
+| 作品数据 | StoryWork 是故事库顶层资产；无 `sourceConversationId` | 引入稳定 Conversation / StoryCollection identity，StoryWork 从属于集合 |
+| 故事库 | 列表、搜索、收藏、删除以 StoryWork 为单位 | 顶层切换为 StoryCollection，详情管理集内 StoryWork |
+| 创作卡片 | 完整作品无播放；完成后显示“查看作品” | 完整作品卡原位可播放；移除逐条作品库入口 |
+| 播放进度 | Work 内以 paragraph/segment 推进并持久化段落边界 | 播放源仍是 Work，但一条 Work 只有一条用户可感知 track；续播模型需重做 |
+| 正在播放 | 主标题可直接使用 Work title | 主标题统一为 Collection title，副标题表达当前 Work |
+| 音频资产 | 一个 Manifest 下持久化多个可独立读取的 AudioSegment | 对客户端收敛为一个 canonical StoryAudio，并增加整条音频 30 天滑动回收契约 |
 | Legacy History | Prompt / Generation History 仍有 store、API、同步与兼容恢复职责 | 产品、数据与代码完整退役，以 Conversation / Collection / Work 为唯一事实源 |
 | Chat reset | “清除”可能同时暗示删消息、删资产或清输入 | 改为“新建创作”；历史资产保留，但当前创作、预加载与播放运行态全部中断并归零 |
 | Library layout | 列表底部只考虑 TabBar，Mini 出现时可能遮挡尾部内容 | 滚动容器动态消费 Mini + TabBar + safe area 的共享占位 |
@@ -493,4 +490,4 @@ queued → generating_text → preparing_audio → ready
 - 单条作品的复杂版本树；
 - 旧 StoryWork 数据迁移时如何聚合集合（需单独 migration/backfill 方案）。
 
-当前产品裁决是：**一会话一作品集、一条作品 Message 一条音频 track、作品按完成时间稳定追加、30 天音频滑动缓存、正文资产不随音频过期；连续创作在新建创作时默认开启，继承设置页当时配置的默认播放时长，并持续到有效播放预算耗尽。** 整体产品方案完成确认后，再进入领域模型、e2e oracle、Catalog 与分阶段实施计划。
+当前产品裁决是：**一会话一作品集、一条作品 Message 一条音频 track、作品按完成时间稳定追加、30 天音频滑动缓存、正文资产不随音频过期；连续创作在新建创作时默认开启，继承设置页当时配置的默认播放时长，并持续到有效播放预算耗尽。** 整体产品方案完成确认后，再进入领域模型、技术实现与交付验收。

@@ -1,5 +1,5 @@
 /**
- * StoryCollection 相关 Zod Schemas 与 DTO 定义（change-id 2026-09-15-story-collection-continuous-creation T1）。
+ * StoryCollection 相关 Zod Schemas 与 DTO 定义（change-id 2026-09-15-story-collection-continuous-creation）。
  *
  * 集合是故事库第一层实体（产品 §3.3）；详情按 Work position 返回成员。
  */

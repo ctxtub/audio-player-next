@@ -1,7 +1,7 @@
 /**
  * StoryWork 领域共享常量定义
  *
- * 冻结 M2/M3/M4 共享的纯领域常量：分页上下限、标题/摘要长度限制、视图与游标协议、缺省投影等。
+ * 冻结 // 共享的纯领域常量：分页上下限、标题/摘要长度限制、视图与游标协议、缺省投影等。
  */
 
 /** 列表分页默认单页条数 */
@@ -58,7 +58,7 @@ export const LIBRARY_VIEWS = ['active', 'favorites', 'trash'] as const;
 /** 游标版本协议号 */
 export const LIBRARY_CURSOR_VERSION = 1;
 
-/** 缺省音频投影（M2 阶段统一下发，M8 后仅替换真实状态与时长，保持结构稳定） */
+/** 缺省音频投影（ 阶段统一下发， 后仅替换真实状态与时长，保持结构稳定） */
 export const DEFAULT_AUDIO_PROJECTION = {
   status: 'missing',
   durationMs: null,

@@ -1,5 +1,5 @@
 /**
- * M8 Canonical Audio 授权读取路由（spec §19/§19.1–§19.3；M8-02）。
+ *  Canonical Audio 授权读取路由（spec §19/§19.1–§19.3；）。
  *
  * ```text
  * GET /api/audio/segments/:segmentId
@@ -78,7 +78,7 @@ export async function GET(
   }
 
   // 中文注释：DB ready 但 object 缺失视为 corruption → 404，且不改写任何 DB 状态
-  //（M8-02 只读已有资产；recovery 留 M8-03）。
+  //（ 只读已有资产；recovery 留）。
   // getMetadata 抛错 = 存储故障（非 corruption）→ 500，不得降级为 404（spec §45）。
   let meta;
   try {

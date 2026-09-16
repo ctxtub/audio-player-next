@@ -1,4 +1,4 @@
-// M9-C1 StoryCollection 可重复 backfill 证据脚本（change-id 2026-09-15-story-collection-continuous-creation T1）。
+// StoryCollection 可重复执行的数据回填脚本。
 // 用法（必须先在隔离库上完成 migrate deploy）：
 //   DATABASE_URL="file:$PWD/.e2e-runtime/test-db/manual/backfill.db" node scripts/backfill-story-collections.mjs
 // 安全：仅允许 .e2e-runtime/ 下的隔离库；拒绝生产 app.db 与共享 prisma/dev.db。输出为脱敏计数，不含用户数据。

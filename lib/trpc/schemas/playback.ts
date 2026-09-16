@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { STALE_SESSION } from '@/lib/playback/session';
 
 /**
- * M5-03 reader 兼容：DB canonical 为 draft|work（§5.3 / §32 Step 2 已迁移），
+ *  reader 兼容：DB canonical 为 draft|work（§5.3 / §32 Step 2 已迁移），
  * 但读路径（DTO 输出 + input 兼容）仍接受四值 chat|generation|draft|work
  * 至少一个兼容周期（对齐 lib/playback/legacy.ts canonicalizeSourceKind）。
  * 未知 kind 由 server canonicalize 侧 fail-closed，不在此静默丢弃。
@@ -12,8 +12,8 @@ export const playbackSourceTypeSchema = z.enum(['chat', 'generation', 'draft', '
 export type PlaybackSourceType = z.infer<typeof playbackSourceTypeSchema>;
 
 /**
- * M5-03 new writer canonical 锁定点（文档锚）：server 落库只写 draft|work。
- * 本 schema 仅作类型标注与未来收紧入口；M9-03 起旧 CRUD 已删，
+ *  new writer canonical 锁定点（文档锚）：server 落库只写 draft|work。
+ * 本 schema 仅作类型标注与未来收紧入口； 起旧 CRUD 已删，
  * canonical 收敛统一在 lib/server/playbackSession.ts + unifiedMigration.ts
  * 经 canonicalizeSourceKind 落库前完成（旧值透传兼容，新值原样，绝不存 chat|generation）。
  */
@@ -21,9 +21,9 @@ export const playbackCanonicalSourceTypeSchema = z.enum(['draft', 'work']);
 export type PlaybackCanonicalSourceType = z.infer<typeof playbackCanonicalSourceTypeSchema>;
 
 /**
- * M5-01 identity invariant 的 Session API 继承点（评审 Blocking 1 锁死）：
+ *  identity invariant 的 Session API 继承点（评审 Blocking 1 锁死）：
  * Session API 的全部 sessionId 输入/输出必须为 UUID v4 + RFC variant
- *（M5-01 lib/playback/session.ts isValidPlaybackSessionId 契约），
+ *（ lib/playback/session.ts isValidPlaybackSessionId 契约），
  * nil UUID / v1 / v7 / 坏 variant 一律拒绝。
  * 集中单一定義：六处（AnchorDTO + begin/save/complete/clear/promote）
  * 统一复用本导出，禁止各自复制 regex / z.string().uuid()。
@@ -31,24 +31,24 @@ export type PlaybackCanonicalSourceType = z.infer<typeof playbackCanonicalSource
 export const playbackSessionIdSchema = z.uuidv4();
 export type PlaybackSessionId = z.infer<typeof playbackSessionIdSchema>;
 
-/* M9-03：旧 getProgress/saveProgress/clearProgress 专用 DTO/Input 已删除
+/*：旧 getProgress/saveProgress/clearProgress 专用 DTO/Input 已删除
  *（PlaybackProgressDTO / SavePlaybackProgressInput，无合法 consumer）。
  * DB canonical reader 兼容（chat|generation → draft|work）仍由
  * playbackSourceTypeSchema + lib/playback/legacy.ts 承载，不在此动。
  */
 
 /* ------------------------------------------------------------------ */
-/* M5-04 Playback Session API 契约冻结（spec §13 / §14）。               */
+/*  Playback Session API 契约冻结（spec §13 / §14）。               */
 /*                                                                     */
 /* - Source schema 严格按 §13.1（discriminatedUnion draft/work）。       */
 /* - Anchor DTO 严格按 §13.2（14 字段；绝不含 storyText / audioUrl /     */
 /*   currentTime / isPlaying，也不含旧 CRUD 形态的 sourceType /          */
 /*   sourceId / isOneShot）。                                           */
-/* - WorkProgress DTO 严格按 §13.3（M3 只消费此 View DTO）。             */
+/* - WorkProgress DTO 严格按 §13.3（ 只消费此 View DTO）。             */
 /* - 上方 legacy 四值 parser（chat|generation|draft|work）原样保留作      */
 /*   DB canonical reader 兼容；旧 getProgress/saveProgress/clearProgress */
-/*   专用 DTO/Input 已在 M9-03 删除（无合法 consumer）。                 */
-/* - 本项只冻结 surface；完整业务实现按 M5-05+ 推进。                    */
+/*   专用 DTO/Input 已在  删除（无合法 consumer）。                 */
+/* - 本项只冻结 surface；完整业务实现按 + 推进。                    */
 /* ------------------------------------------------------------------ */
 
 /**
@@ -73,9 +73,9 @@ export const playbackAnchorStateSchema = z.enum(['ready', 'ended']);
 export type PlaybackAnchorState = z.infer<typeof playbackAnchorStateSchema>;
 
 /**
- * M7-03 Sleep Timer 三态（spec §22）：off（不限制）| minutes（播放 N 分钟后暂停）|
+ *  Sleep Timer 三态（spec §22）：off（不限制）| minutes（播放 N 分钟后暂停）|
  * story_end（当前 Work 完播停止）。story_end 仅 Work（§22.1/§24）。
- * （前置声明：AnchorDTO / begin / checkpoint / setSleepTimer 共用。）
+ *（前置声明：AnchorDTO / begin / checkpoint / setSleepTimer 共用。）
  */
 export const sleepTimerModeSchema = z.enum(['off', 'minutes', 'story_end']);
 export type SleepTimerMode = z.infer<typeof sleepTimerModeSchema>;
@@ -107,7 +107,7 @@ export const playbackAnchorDTOSchema = z.object({
   totalAllowedMs: z.number().int().min(0).nullable(),
 
   /**
-   * M7-03 Sleep Timer 三态（spec §23 M5 Anchor 增补）。
+   *  Sleep Timer 三态（spec §23  Anchor 增补）。
    * Legacy 行由 migration + getAnchor repair 按 remainingAllowedMs 回填
    *（非 null→minutes，null→off，§23.1），新写入一律显式。
    */
@@ -122,10 +122,10 @@ export type PlaybackAnchorDTO = z.infer<typeof playbackAnchorDTOSchema>;
 export const workPlaybackStateSchema = z.enum(['not_started', 'in_progress', 'completed']);
 export type WorkPlaybackState = z.infer<typeof workPlaybackStateSchema>;
 
-/* ---------------- M7-03 playback.setSleepTimer（spec §24 / §24.1） ---------------- */
+/* ----------------  playback.setSleepTimer（spec §24 / §24.1） ---------------- */
 
 /**
- * §13.3 WorkPlaybackProgressDTO（M3 只消费此 View DTO）。
+ * §13.3 WorkPlaybackProgressDTO（ 只消费此 View DTO）。
  */
 export const workPlaybackProgressDTOSchema = z.object({
   workId: z.number().int().positive(),
@@ -168,7 +168,7 @@ export const beginPlaybackSessionInputSchema = z.object({
   totalAllowedMs: z.number().int().min(0).nullable().optional(),
 
   /**
-   * M7-03 Sleep Timer 三态（spec §23；可选以兼容旧客户端 begin）。
+   *  Sleep Timer 三态（spec §23；可选以兼容旧客户端 begin）。
    * 缺省时 server 按 Legacy 规则派生（remaining!=null→minutes，否则 off，§23.1）。
    */
   sleepTimerMode: sleepTimerModeSchema.optional(),
@@ -189,7 +189,7 @@ export type BeginPlaybackSessionInput = z.infer<typeof beginPlaybackSessionInput
 /**
  * §17 playback.saveCheckpoint 输入。
  * 不再由客户端发送 source / title：当前 Source 由 Anchor.sessionId 决定。
- * M7-03：增补可选 sleepTimerMode（缺省保持 Anchor 现值，旧客户端不覆盖 Timer；
+ *：增补可选 sleepTimerMode（缺省保持 Anchor 现值，旧客户端不覆盖 Timer；
  * 到期/切换/off 等 Timer 变更必须显式携带，否则会被 dedupe 语义吞掉）。
  */
 export const savePlaybackCheckpointInputSchema = z.object({
@@ -261,7 +261,7 @@ export const promoteDraftPlaybackToWorkInputSchema = z.object({
 
 export type PromoteDraftPlaybackToWorkInput = z.infer<typeof promoteDraftPlaybackToWorkInputSchema>;
 
-/* ---------------- M7-03 playback.setSleepTimer（spec §24 / §24.1） ---------------- */
+/* ----------------  playback.setSleepTimer（spec §24 / §24.1） ---------------- */
 
 /**
  * setSleepTimer 输入（spec §24）：

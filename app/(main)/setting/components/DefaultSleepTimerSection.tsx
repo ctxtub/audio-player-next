@@ -10,7 +10,7 @@ import {
 import styles from '../index.module.scss';
 
 /**
- * M7-03 默认睡眠定时配置模块的入参（spec §29/§31 取代旧“播放时长”）。
+ *  默认睡眠定时配置模块的入参（spec §29/§31 取代旧“播放时长”）。
  */
 interface DefaultSleepTimerSectionProps {
     /** 新 Session 是否默认启用睡眠定时（false=默认 off）。 */

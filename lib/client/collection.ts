@@ -1,5 +1,5 @@
 /**
- * StoryCollection 客户端门面（change-id 2026-09-15-story-collection-continuous-creation T1）。
+ * StoryCollection 客户端门面（change-id 2026-09-15-story-collection-continuous-creation）。
  *
  * 仅通过类型安全 tRPC Client 调用 collection Router；不含任何 server-internal 细节。
  */

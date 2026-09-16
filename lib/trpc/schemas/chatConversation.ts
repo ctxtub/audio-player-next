@@ -22,7 +22,7 @@ export const chatMessageInputSchema = z.object({
 /** 保存整条会话的入参（快照 replace）。 */
 export const saveConversationInputSchema = z.object({
     messages: z.array(chatMessageInputSchema).max(200),
-    /** H-15 基线：读取快照时的 messageId 序列，提供即启用 stale-write 拒绝，缺省兼容旧调用。 */
+    /**  基线：读取快照时的 messageId 序列，提供即启用 stale-write 拒绝，缺省兼容旧调用。 */
     baseMessageIds: z.array(z.string().min(1)).max(200).optional(),
 });
 

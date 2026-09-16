@@ -1,5 +1,5 @@
 /**
- * M5-09 Client Rehydrate 纯领域 helpers（spec §25.3 / §25.4 / §25.5）。
+ *  Client Rehydrate 纯领域 helpers（spec §25.3 / §25.4 / §25.5）。
  *
  * 本文件为纯领域层：无 DB / store / API / Prisma 依赖。
  * 统一 SSOT 为 utils/segmentation.ts（normalizeStoryText /
@@ -25,7 +25,7 @@ export interface RehydratedPositionInput {
   savedSegmentationVersion: string;
   currentContentHash: string;
   /**
-   * M8-04 FIXUP（Blocking 1）：Manifest 权威的当前切分版本。
+   *  FIXUP（Blocking 1）：Manifest 权威的当前切分版本。
    * 有 Manifest → manifest.segmentationVersion；无 → SEGMENTATION_VERSION。
    * 调用方传入，helper 内部不得读全局常量（v1→v2 时旧合法 Manifest 不得误判 drift）。
    */
@@ -53,7 +53,7 @@ function clampNext(next: unknown, total: number): number {
   if (typeof next !== 'number' || !Number.isFinite(next)) return 0;
   const floored = Math.floor(next);
   if (floored < 0) return 0;
-  // M9-03：越界钳制到最后一合法段，避免 next >= total 的脏读直接越界（§25.3 保留行为）。
+  //：越界钳制到最后一合法段，避免 next >= total 的脏读直接越界（§25.3 保留行为）。
   if (floored >= total) return Math.max(0, total - 1);
   return floored;
 }
@@ -67,12 +67,12 @@ function clampLast(last: unknown, total: number): number {
 }
 
 /**
- * 重水合位置决策（§25.3 纯函数，保留 M2 已有逻辑）：
+ * 重水合位置决策（§25.3 纯函数，保留  已有逻辑）：
  * currentHash != savedHash OR savedVersion != currentSegmentationVersion
  * → reset paragraph 0（next=0/last=-1/drifted=true）；
  * 否则沿用 saved 位置（越界钳制，不抛错）。
  *
- * M8-04 FIXUP（Blocking 1）：currentSegmentationVersion 由调用方传入
+ *  FIXUP（Blocking 1）：currentSegmentationVersion 由调用方传入
  * effectiveSegmentationVersion（Manifest 权威），helper 内部不读全局常量。
  */
 export function decideRehydratedPosition(input: RehydratedPositionInput): RehydratedPosition {

@@ -32,7 +32,7 @@ import path from 'node:path';
 
 const ROOT = process.cwd();
 const WORKFLOW_DIR = path.join(ROOT, '.github', 'workflows');
-const LOCK_PATH = path.join(ROOT, 'tests', 'tooling', 'ci', 'action-pins.lock.json');
+const LOCK_PATH = path.join(ROOT, '.github', 'action-pins.lock.json');
 // 注意：此处不能用 /g 正则逐行 exec —— lastIndex 会跨行泄漏导致后续行全部误判。
 const PIN_RE = /uses:\s*([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)@([0-9a-f]{40})\s*#\s*(v[\w.\-]+)/;
 const USES_AT_RE = /uses:\s*[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@/;

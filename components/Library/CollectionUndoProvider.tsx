@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Collection 全局撤销提供者（M9-C1 T4）。
+ * Collection 全局撤销提供者（）。
  *
  * 与 LibraryUndoProvider（Work 级）同构的集合级瞬时撤销生命周期：
  * 1. move pending 时点 Undo：串行 await movePromise → then restoreCollection(id)；

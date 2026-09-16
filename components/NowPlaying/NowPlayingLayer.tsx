@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * M7-01 NowPlayingLayer（spec §5 Global Layer + §8 自动关闭 + §42 Focus Return）。
+ *  NowPlayingLayer（spec §5 Global Layer + §8 自动关闭 + §42 Focus Return）。
  *
- * 结构（M7）：
+ * 结构（）：
  * ```text
  * MainChrome
  * ├── Page
@@ -12,10 +12,10 @@
  * ```
  *
  * 职责：
- * - 订阅 isExpanded（UI）+ source/status（M5 Session），唯一自动关闭条件：
+ * - 订阅 isExpanded（UI）+ source/status（ Session），唯一自动关闭条件：
  *   source == null 或 status == idle（spec §8；logout/切账号/删 Work/clear 覆盖）；
  *   pause / ended / error / synthesizing / 普通 route change 均不自动关闭
- *   （spec §44：Expanded 不属于 route，导航后保持 open）。
+ *（spec §44：Expanded 不属于 route，导航后保持 open）。
  * - 关闭后焦点返回：优先 returnFocusTarget（实际 trigger），若已 detached
  *   回退 Mini Metadata trigger（spec §42）；打开时焦点由 Dialog/关闭按钮承接。
  * - 本层不改变 Session/Transport（不 play/pause/new Session，不 clear）。

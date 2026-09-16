@@ -1,5 +1,5 @@
 /**
- * M9-C1 T3 StoryAudio 单轨资产授权读取路由（spec §3/§4）。
+ *   StoryAudio 单轨资产授权读取路由（spec §3/§4）。
  *
  * ```text
  * GET /api/audio/assets/:assetId

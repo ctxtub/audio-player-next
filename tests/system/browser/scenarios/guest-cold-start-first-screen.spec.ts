@@ -1,6 +1,3 @@
-// case_id: guest-cold-start-first-screen
-// journey: smoke-baseline
-// legacy_aliases: [E2E-01-01]
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -9,7 +6,7 @@ import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";
 
 /**
- * 访客冷启动首屏渲染（E2E-01-01，L3 真场景）。
+ * 访客冷启动首屏渲染（真场景）。
  *
  * oracle（spec 01 + catalog first-screen-renders[ui] / audio-paused-on-entry[audio]）：
  * 1. 打开 `/` 经 middleware 落到 `/auth`（无凭证合规中间态），走访客入口后落在 `/chat`；
@@ -23,14 +20,10 @@ import { ensureGuestByApi } from "./helpers/auth";
  * WebKit 在 http harness 内拒收 Secure cookie 致 UI 访客键落盘失败（Chromium 放行
  * localhost 例外）——此为平台传输限制，非产品语义。访客入口点击本身双浏览器如实执行；
  * 若落地 /chat 被平台弹回（仅 WebKit），按仓库既定 helpers/auth 模式经真实 API 播种
- * 身份传输通道（不自造令牌），之后全部 oracle 断言双浏览器一致执行。
+ * 身份传输通道（不自造令�），之后全部 oracle 断言双浏览器一致执行。
  */
-test("访客冷启动首屏渲染", async ({ page, harnessEnv, evidence }) => {
+test("访客冷启动首屏渲染", async ({ page, harnessEnv }) => {
     test.setTimeout(180000);
-    /** 证据记录器（fixtures 自动挂载，显式取用以记录外部时间线）。 */
-    const recorder = evidence as unknown as {
-        step: (name: string, detail?: unknown) => void;
-    };
     /** console error 与 pageerror 收集（终态须为零）。 */
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
@@ -129,35 +122,28 @@ test("访客冷启动首屏渲染", async ({ page, harnessEnv, evidence }) => {
         // 按 helpers/auth 既定模式经真实 API 补种身份传输通道，不自造令牌。
         await ensureGuestByApi(page, harnessEnv.appUrl);
         redirectChain.push(`api-seeded:${page.url()}`);
-        recorder.step("访客入口平台补偿", "ui-click-bounced-api-seeded");
     }
     expect(page.url()).toContain("/chat");
-    recorder.step("重定向链", redirectChain);
 
     // 中文注释：首访 onboarding 如出现则关闭（出现与否记证据；精确一次语义由 L1 覆盖）。
     await page.waitForTimeout(1200);
     const startBtn = page.getByRole("button", { name: "开始体验" });
     if ((await startBtn.count()) > 0) {
         await startBtn.first().click({ timeout: 10000 });
-        recorder.step("onboarding", "shown+dismissed");
     } else {
-        recorder.step("onboarding", "not-shown");
     }
     await page.waitForTimeout(1500);
 
     // 中文注释：首屏四件套①空态文案②输入框③TabBar④六故事引导。
     const bodyText: string = await page.locator("body").innerText();
     expect(bodyText).toContain("暂未开始任何对话");
-    recorder.step("空态文案", "暂未开始任何对话");
     await expect(page.getByRole("textbox").first()).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole("tablist", { name: "主导航" })).toBeVisible({ timeout: 15000 });
     const tabNames: string[] = await page.getByRole("tab").allInnerTexts();
     expect(tabNames).toEqual(expect.arrayContaining(["创作", "故事库", "设置"]));
-    recorder.step("底部TabBar", tabNames);
     for (const name of ["星际冒险", "动物好朋友", "奇幻学徒记", "谜案侦探团", "深海探险家", "森林守护队"]) {
         await expect(page.getByRole("button", { name })).toBeVisible({ timeout: 15000 });
     }
-    recorder.step("HeaderArea建议项", "6故事引导齐");
 
     // 中文注释：常驻 audio 存在且暂停（进入时不得自播）。
     await expect(page.locator("audio")).toBeAttached({ timeout: 30000 });
@@ -169,7 +155,6 @@ test("访客冷启动首屏渲染", async ({ page, harnessEnv, evidence }) => {
         return { exists: true, paused: a.paused };
     });
     expect(audioState).toEqual({ exists: true, paused: true });
-    recorder.step("进入时音频暂停", audioState);
 
     // 中文注释：无 JS 错误横幅（启发式全局横幅）。
     await expect(page.getByText(/出错|加载失败|网络错误/)).toHaveCount(0);
@@ -186,19 +171,16 @@ test("访客冷启动首屏渲染", async ({ page, harnessEnv, evidence }) => {
         return { exists: true, paused: a.paused };
     });
     expect(audioState2).toEqual({ exists: true, paused: true });
-    recorder.step("重载后音频仍暂停", audioState2);
 
     // 中文注释：console 零错（未捕获异常与 pageerror 双零）。
     expect(consoleErrors).toEqual([]);
     expect(pageErrors).toEqual([]);
-    recorder.step("console零错", { consoleErrors: 0, pageErrors: 0 });
 
     // 中文注释：关键 trpc 200（config.get 与 auth.profile 至少各一次成功；先收敛悬空收集）。
     const trpcCalls = await Promise.all(trpcPending);
     const okUrls: string[] = trpcCalls.filter((c) => c.ok).map((c) => c.url);
     expect(okUrls.some((u) => u.includes("config"))).toBe(true);
     expect(okUrls.some((u) => u.includes("auth"))).toBe(true);
-    recorder.step("关键trpc成功", trpcCalls);
 
     // 中文注释：四表零脏行（delta：本用例未新增任何脏行；绝对值记证据）。
     // 读库 30s 兜底：隔离库直读必须秒回，超时即大声失败（防 180s 全局超时掩盖根因）。
@@ -219,5 +201,4 @@ test("访客冷启动首屏渲染", async ({ page, harnessEnv, evidence }) => {
         GuestPromptHistory: 0,
         GuestPlaybackProgress: 0,
     });
-    recorder.step("四表零脏行", { before: dbBefore, after: dbAfter, delta: dbDelta });
 });

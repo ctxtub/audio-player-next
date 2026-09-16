@@ -25,7 +25,7 @@ const normalizeError = (error: unknown): Error => {
 let globalAbortController: AbortController | null = null;
 
 /**
- * M9-C1 T2 评审闭合：聊天流运行代次。
+ *   评审闭合：聊天流运行代次。
  *
  * 每次新开流或显式中止自增。`onComplete` 的异步 autoplay IIFE 在落盘 await 后会
  * 复核代次：若期间发生 abort/新建创作/登出，则放弃起播，旧故事绝不复活。
@@ -34,7 +34,7 @@ let streamSeq = 0;
 
 /**
  * 执行一次聊天流式调用，根据流事件更新 store。
- * M4-02：全链路按 assistantMessageId（attempt 身份）定位 Artifact；
+ *：全链路按 assistantMessageId（attempt 身份）定位 Artifact；
  * story_complete 仅完成正文（draft→complete），done 仅标记 delivered，音频仅瞬态播放不写入消息。
  * @param context 即将发送给后端的对话上下文。
  * @param assistantMessageId 本次 attempt 的助手消息 id（sourceMessageId 同值）。
@@ -64,7 +64,7 @@ const executeChatStream = async (
   }));
 
   try {
-    // 瞬态音频 Blob（仅用于播放，不写入 Chat 消息/Artifact；M4-02 起消息层 audioUrl write = 0）。
+    // 瞬态音频 Blob（仅用于播放，不写入 Chat 消息/Artifact； 起消息层 audioUrl write = 0）。
     let pendingAudioBlob: string = '';
     let generatedContent: string = '';
 
@@ -73,7 +73,7 @@ const executeChatStream = async (
     generationStore.setPhase('generating_text');
 
     // 获取当前配置
-    // M4-03 快照冻结：实际生成请求所使用的 voice 即 frozenVoiceId（由 begin/retry 在 dispatch 前单次捕获并同时写入 draft）；
+    //  快照冻结：实际生成请求所使用的 voice 即 frozenVoiceId（由 begin/retry 在 dispatch 前单次捕获并同时写入 draft）；
     // 此处优先使用传入快照，缺省才回读 Settings，确保 draft 冻结值与真实请求用值恒等，且 promotion 绝不重读 Settings。
     const { speed } = useConfigStore.getState().apiConfig;
     const voiceId = typeof frozenVoiceId === 'string' ? frozenVoiceId : useConfigStore.getState().apiConfig.voiceId;
@@ -90,7 +90,7 @@ const executeChatStream = async (
         onTextDelta: (delta) => {
           // 同步更新 UI 状态
           generationStore.appendText(delta);
-          // M4-02：按 attempt 身份追加（draft→draft），stale 直接忽略。
+          //：按 attempt 身份追加（draft→draft），stale 直接忽略。
           useChatStore.getState().dispatch({ type: 'stream.delta', content: delta, messageId: assistantMessageId });
           // 累积生成内容
           generatedContent += delta;
@@ -102,7 +102,7 @@ const executeChatStream = async (
           useChatStore.getState().dispatch({ type: 'stream.intent', intent, messageId: assistantMessageId });
         },
         onStoryComplete: (storyText) => {
-          // M4-02 冻结语义：故事正文 terminal → draft→complete（仅正文，不触达音频/promotion）。
+          //  冻结语义：故事正文 terminal → draft→complete（仅正文，不触达音频/promotion）。
           generatedContent = storyText;
           useChatStore.getState().dispatch({
             type: 'stream.story_complete',
@@ -117,7 +117,7 @@ const executeChatStream = async (
           pendingAudioBlob = url;
         },
         onComplete: () => {
-          // M4-02：done 仅标记传输结束，绝不隐式 promotion；音频仅在消息仍存在时瞬态播放。
+          //：done 仅标记传输结束，绝不隐式 promotion；音频仅在消息仍存在时瞬态播放。
           generationStore.setPhase('ready');
 
           if (!streamErrored) {
@@ -137,7 +137,7 @@ const executeChatStream = async (
                 .getState()
                 .selectors.hasStoryMessages(assistantMessageId);
               if (!existingStories) {
-                // M9-F01：autoplay 经正式 Draft Session（先落盘保证 ChatMessage 行存在，
+                //：autoplay 经正式 Draft Session（先落盘保证 ChatMessage 行存在，
                 // 再 begin+provider 起播；旧整篇 blob 无 segment identity 不得当 paragraph
                 // 播放，一律吊销丢弃）。失败则 fail-closed 静默（聊天持久化本身亦已失败）。
                 // onComplete 是同步回调，落盘/起播链经 async IIFE 串行，不阻塞流收尾。
@@ -147,7 +147,7 @@ const executeChatStream = async (
                   } catch {
                     // 落盘失败不阻断 begin 尝试（行可能已存在）；begin 侧自行 fail-closed。
                   }
-                  // M9-C1 T2 评审闭合：落盘 await 期间若发生 abort/新流/强重置（代次变化）
+                  //   评审闭合：落盘 await 期间若发生 abort/新流/强重置（代次变化）
                   // 或消息已被清空，则绝不复活旧故事起播，仅吊销 Blob。
                   const revoked = () => {
                     try {
@@ -199,7 +199,7 @@ const executeChatStream = async (
   } catch (error) {
     globalAbortController = null;
     if (error instanceof DOMException && error.name === 'AbortError') {
-      // M4-02：abort 按身份中断 draft→interrupted，不复活、不污染其它 attempt。
+      //：abort 按身份中断 draft→interrupted，不复活、不污染其它 attempt。
       useChatStore.getState().dispatch({ type: 'stream.abort', messageId: assistantMessageId, reason: 'aborted' });
 
       throw error;
@@ -225,7 +225,7 @@ export const beginChatStream = async (
   content: string,
   options?: { origin?: ChatMessageOrigin },
 ): Promise<{ messageId: string; audioUrl: string; content: string }> => {
-  // M4-03 快照冻结：在生成开始前单次捕获实际请求所用 voice，并与 prompt 一同冻结进 draft；
+  //  快照冻结：在生成开始前单次捕获实际请求所用 voice，并与 prompt 一同冻结进 draft；
   // 同一快照透传给 executeChatStream，确保 draft 冻结值与真实请求用值恒等；promotion 严禁重读 Settings。
   const frozenVoiceId = useConfigStore.getState().apiConfig.voiceId;
   // 1. 提交用户消息（含本次 prompt/voice 快照）
@@ -256,7 +256,7 @@ export const beginChatStream = async (
 };
 
 /**
- * M9-C1 T2：新建创作强重置时中止在途聊天流。
+ *：新建创作强重置时中止在途聊天流。
  *
  * 仅中止当前 transport；epoch 递增由调用方先行完成，旧回调凭 epoch no-op，
  * 因此本函数不额外处理 stale 回写。
@@ -278,7 +278,7 @@ export const retryChatStream = async (): Promise<void> => {
     throw new Error('当前没有需要重试的消息');
   }
 
-  // M4-03 快照冻结：retry 重建新 assistant/sourceMessageId，但本次实际使用的 prompt/voice 必须进入新 attempt；
+  //  快照冻结：retry 重建新 assistant/sourceMessageId，但本次实际使用的 prompt/voice 必须进入新 attempt；
   // voice 在 dispatch 前单次捕获，prompt 取配对失败 user 内容（与 chatStore 回退一致），二者显式传入，不等 promotion 时再读 store。
   const failedMessages = useChatStore.getState().messages;
   const lastFailedUser = [...failedMessages]

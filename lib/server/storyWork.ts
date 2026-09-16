@@ -74,9 +74,9 @@ export type StoryWorkSummaryRow = {
 /**
  * DB 摘要行 → 前端 Summary DTO
  *
- * M8-04 Library audio projection（spec §12.4/§24）：调用方可传入已查到的
+ *  Library audio projection（spec §12.4/§24）：调用方可传入已查到的
  * Manifest 投影；缺省（mutations/新作品无 Manifest）仍为 missing/null，
- * DTO 结构恒定，M3 无需处理 null vs missing 双语义。
+ * DTO 结构恒定， 无需处理 null vs missing 双语义。
  */
 export const toSummaryDto = (
   row: StoryWorkSummaryRow,
@@ -117,7 +117,7 @@ export const toDetailDto = (
 });
 
 /**
- * M8-04 Manifest 行 → Library audio 投影（spec §12.4 纯函数）。
+ *  Manifest 行 → Library audio 投影（spec §12.4 纯函数）。
  *
  * - status = Manifest.status（missing/preparing/ready/failed）；
  * - durationMs = status==='ready' ? totalDurationMs : null（partial 不暴露）；
@@ -140,7 +140,7 @@ export function toAudioProjectionFromManifest(
 }
 
 /**
- * M8-04 按主体批量读取 Manifest 投影（Library list/get 读路径用）。
+ *  按主体批量读取 Manifest 投影（Library list/get 读路径用）。
  *
  * User → StoryAudioManifest(storyWorkId in ids)；Guest → GuestStoryAudioManifest。
  * 无 Manifest 的 workId 缺席 Map，调用方回落 missing。失败不抛（调用方回落 missing）。
@@ -178,8 +178,8 @@ export async function getAudioProjectionsForSubject(
 
 /**
  * Legacy 元数据懒修补（Lazy Backfill）：
- * M2-01 引入 title/excerpt/contentHash 后，历史行可能未填充上述字段。
- * 首次读取当前 Subject 时发现未填充数据，立即使用 M2-02 派生算法补齐并持久化。
+ *  引入 title/excerpt/contentHash 后，历史行可能未填充上述字段。
+ * 首次读取当前 Subject 时发现未填充数据，立即使用  派生算法补齐并持久化。
  * 严格限制在当前 Subject 范围内，绝不跨 Subject；已修复行二次读取不触发写操作。
  *
  * @returns 修复的记录条数
@@ -423,7 +423,7 @@ export async function listStoryWorksForSubject(
   // 6. hasMore 必须唯一从 nextCursor 派生（严禁独立计算）
   const hasMore = nextCursor !== null;
 
-  // M8-04 Library audio projection enrichment（spec §12.4/§24）：
+  //  Library audio projection enrichment（spec §12.4/§24）：
   // 批量读本页 Manifest（无则 missing），DTO 结构恒定。
   const audioMap = await getAudioProjectionsForSubject(
     subject,
@@ -492,16 +492,16 @@ export async function getStoryWorkForSubject(
     });
   }
 
-  // M8-04 Library audio projection（spec §12.4）：单条按需 enrichment，无则 missing。
+  //  Library audio projection（spec §12.4）：单条按需 enrichment，无则 missing。
   const audioMap = await getAudioProjectionsForSubject(subject, [row.id]);
   return toDetailDto(row, audioMap.get(row.id) ?? createMissingAudioProjection());
 }
 
 /**
- * M5-08 Work Trash 状态判定（spec §29.1 / §29.2，产品拍板 M5-P03）。
+ *  Work Trash 状态判定（spec §29.1 / §29.2，产品拍板）。
  *
  * 仅读取 deletedAt 存在信号（select id，不取 title/storyText/voiceId/contentHash），
- * 不重算任何元数据、不触 legacy DTO（§36 边界：M5 不得重算 title/hash）。
+ * 不重算任何元数据、不触 legacy DTO（§36 边界： 不得重算 title/hash）。
  * missing / foreign / 非法 id 一律返回 false（与 getStoryWorkForSubject 的统一
  * NOT_FOUND 不可区分面一致，调用方按 fail-closed 处理）。
  *
@@ -530,11 +530,11 @@ export async function isStoryWorkTrashedForSubject(
 }
 
 /**
- * 故事作品入库（Library Create，M2-04）
+ * 故事作品入库（Library Create，）
  *
- * M4 将来调用的正式资产创建服务，负责：
+ *  将来调用的正式资产创建服务，负责：
  * 1. 严格校验输入（prompt、storyText、voiceId?、sourceMessageId?、explicit title?）；
- * 2. 文本规范化与元数据派生：统一由 Server 调用 M2-02 canonical 算法生成
+ * 2. 文本规范化与元数据派生：统一由 Server 调用  canonical 算法生成
  *    resolveStoryTitle / buildStoryExcerpt / computeStoryContentHash，绝不信任调用方传入的 hash/excerpt；
  * 3. 来源消息幂等处理（sourceMessageId 非 null 时）：
  *    - 同 Subject + 同 sourceMessageId + contentHash 一致 → 返回已有 Work（不 INSERT、不新增行）；
@@ -739,7 +739,7 @@ export interface StoryWorkMutationTestHooks {
   /** 在执行原子 SQL 写操作（updateMany / deleteMany）前执行的钩子 */
   __testBeforeMutationHook?: () => Promise<void> | void;
   /**
-   * M8-05-02 事务内失败 oracle（仅测试用）：在同一 DB 事务内 tombstone 已记、
+   *  事务内失败 oracle（仅测试用）：在同一 DB 事务内 tombstone 已记、
    * Work 尚未物理删除时执行；抛错即整事务回滚（Work/Manifest/Segment 全留、
    * tombstone 不残留）。生产调用方严禁传入。
    */
@@ -747,7 +747,7 @@ export interface StoryWorkMutationTestHooks {
 }
 
 /**
- * 重命名故事作品（M2-05）
+ * 重命名故事作品（）
  *
  * 严格语义：
  * 1. 仅更新 title 字段（+ updatedAt）；
@@ -861,7 +861,7 @@ export async function renameStoryWorkForSubject(
 }
 
 /**
- * 设置故事作品收藏状态（M2-05）
+ * 设置故事作品收藏状态（）
  *
  * 严格语义：
  * 1. favoritedAt 为收藏状态唯一 truth（null=未收藏；非 null=已收藏）；不得引入第二个布尔字段；
@@ -1048,7 +1048,7 @@ export async function setStoryWorkFavoriteForSubject(
 }
 
 /**
- * 将故事作品移入回收站（软删除，M2-05）
+ * 将故事作品移入回收站（软删除，）
  *
  * 严格语义：
  * 1. 仅写入 deletedAt = now()，严禁物理删除，数据行必须保留；
@@ -1158,7 +1158,7 @@ export async function trashStoryWorkForSubject(
 }
 
 /**
- * 从回收站恢复故事作品（M2-05）
+ * 从回收站恢复故事作品（）
  *
  * 严格语义：
  * 1. 仅清空 deletedAt = null，作品重回 active 状态；
@@ -1323,11 +1323,11 @@ export type PhysicalDeleteStoryWorkOptions =
     };
 
 /**
- * M8-05-02 FIXUP：survivor stale-tombstone 收敛窄 helper（fail-closed）。
+ *  FIXUP：survivor stale-tombstone 收敛窄 helper（fail-closed）。
  *
  * 背景（Blocker 反例链）：事务内 restore 竞态可致 Work B 存活；若 B.storageKey 的
  * tombstone prune 失败被吞（旧 best-effort catch），事务照常 commit → tombstone
- * 持久化残留 → 下一次 bounded cleanup（M8-05-01 冻结引擎不检查 key 是否被 live
+ * 持久化残留 → 下一次 bounded cleanup（ 冻结引擎不检查 key 是否被 live
  * Segment 引用，直接 storage.delete(key)）会删除存活 Work 的 canonical object →
  * Canonical corruption（DB Segment=ready / Object=gone）。
  *
@@ -1351,7 +1351,7 @@ export function computeCommittedAudioKeys(allKeys: string[], survivorKeys: strin
  * 成功时存活 key 的 tombstone 在事务内被删（与外层事务同原子）；失败时 throw
  * 由 Prisma $transaction 回滚整个事务，调用方不得吞错。
  *
- * 注：入参仅需 deleteMany 窄面（不复用 M8-05-01 冻结的 AudioDeletionTx，
+ * 注：入参仅需 deleteMany 窄面（不复用  冻结的 AudioDeletionTx，
  * 后者无 deleteMany；冻结文件不动，此处本地声明以保持单向依赖）。
  */
 export type SurvivorPruneTx = {
@@ -1372,7 +1372,7 @@ export async function pruneSurvivorAudioTombstones(
 }
 
 /**
- * M9-C1 Blocker 1：trash 物理删除的事务内核结果。
+ *  Blocker 1：trash 物理删除的事务内核结果。
  *
  * `remainingIds` 为删除后仍存活的行（restore 竞态 survivor），供 collection seam
  * 判定「是否允许继续删除 Collection」；单 Work primitive 只消费 committedKeys/deletedCount。
@@ -1436,7 +1436,7 @@ async function deleteUserTrashWorksInTx(
       });
       allKeys = segments.map((s) => s.storageKey);
     }
-    // T3：单轨 Asset 对象同批 tombstone（DB 行随 cascade 消失；旧 Segment 表不物理删除）。
+    //：单轨 Asset 对象同批 tombstone（DB 行随 cascade 消失；旧 Segment 表不物理删除）。
     const assets = await tx.storyAudioAsset.findMany({
       where: { storyWorkId: { in: matchedIds } },
       select: { storageKey: true },
@@ -1460,7 +1460,7 @@ async function deleteUserTrashWorksInTx(
   if (deletedCount >= matchedIds.length) {
     return { committedKeys: allKeys, deletedCount, remainingIds: [] };
   }
-  // 竞态收敛（M8-05-02 FIXUP fail-closed）：事务内 find 与 delete 之间 restore 导致部分行
+  // 竞态收敛（ FIXUP fail-closed）：事务内 find 与 delete 之间 restore 导致部分行
   // 未删时，存活行不得被 tombstone 误清；prune 失败即 throw → 全事务 rollback。
   const survivors = await tx.storyWork.findMany({
     where: { id: { in: matchedIds } },
@@ -1578,27 +1578,27 @@ async function deleteGuestTrashWorksInTx(
 }
 
 /**
- * StoryWork 物理删除唯一合法底层执行点（Server-Internal Primitive / M8 Audio Seam 唯一挂载点）
+ * StoryWork 物理删除唯一合法底层执行点（Server-Internal Primitive /  Audio Seam 唯一挂载点）
  *
  * 架构说明与安全约束：
  * 1. 物理删除唯一执行点：无论是用户主动永久删除、定时回收站清理（purgeExpiredUserTrash），
  *    还是访客数据 GC（purgeExpiredGuestData），对 User/Guest 作品资产的物理删除都必须统一通过本 primitive 执行，
  *    严禁在其他模块直接裸调 prisma.storyWork.delete/deleteMany 或 prisma.guestStoryWork.delete/deleteMany。
- * 2. M8-05-02 Audio-aware Physical Delete（spec §28.4/§29/§30）：
+ * 2.  Audio-aware Physical Delete（spec §28.4/§29/§30）：
  *    同一 DB transaction 内完成「收集 Segment storageKey → UPSERT AudioStorageDeletion
- *    （同 key 幂等）→ DELETE StoryWork/GuestStoryWork（Manifest/Segment 靠 FK cascade）
+ *（同 key 幂等）→ DELETE StoryWork/GuestStoryWork（Manifest/Segment 靠 FK cascade）
  *    → survivor 收敛（pruneSurvivorAudioTombstones，fail-closed）」；
  *    COMMIT 后 best-effort 调用 05-01 冻结引擎 cleanupAudioStorageKeys 本批 tombstones。
  *    Storage cleanup 失败不得 rollback 已完成的永久删除；失败由 tombstone retry 接管。
  *    禁止先 delete Work → commit → 再查 storageKey（届时 key 已随 cascade 消失）。
- *    Survivor 收敛失败必须 throw → 全事务 rollback（M8-05-02 FIXUP）：
- *    M8-05-01 冻结引擎不检查 key 是否被 live Segment 引用，stale-tombstone 残留
+ *    Survivor 收敛失败必须 throw → 全事务 rollback（ FIXUP）：
+ *     冻结引擎不检查 key 是否被 live Segment 引用，stale-tombstone 残留
  *    会致 bounded cleanup 误删存活 Work 的 canonical object，故事务内 prune 不得 best-effort。
  * 3. 安全规则与显式 Discriminated Contract：
  *    - User 物理删除只能来自 Trash（deletedAt IS NOT NULL）；
  *    - Guest manual delete 只能来自 Trash（deletedAt IS NOT NULL）；
  *    - Guest retention GC 严格按 updatedAt < threshold 清理；
- *    三者最终都经此同一 M8 tombstone seam 唯一挂载点执行。
+ *    三者最终都经此同一  tombstone seam 唯一挂载点执行。
  *    contract 保持窄契约，绝不接受任意自由 Prisma where，杜绝退化为危险的通用 delete helper。
  * 4. Trash / Restore 零 Audio side effect：本 primitive 之外的 trash/restore 仅写 deletedAt，
  *    不记 tombstone、不调 TTS、不碰 Manifest/Segment/Object（spec §28.2/§28.3，Validation §59）。
@@ -1721,7 +1721,7 @@ export async function executeStoryWorkPhysicalDelete(
         ...survivorRetentionAssets.map((a: { storageKey: string }) => a.storageKey),
       ];
       if (survivorKeys.length > 0) {
-        // M8-05-02 FIXUP fail-closed：prune 失败即 throw → 全事务 rollback。
+        //  FIXUP fail-closed：prune 失败即 throw → 全事务 rollback。
         await pruneSurvivorAudioTombstones(tx as unknown as SurvivorPruneTx, survivorKeys);
         committedKeys = computeCommittedAudioKeys(allKeys, survivorKeys);
       } else {
@@ -1742,10 +1742,10 @@ export async function executeStoryWorkPhysicalDelete(
 }
 
 /**
- * M9-C1 Blocker 1：集合永久删除的 collection-aware physical-delete seam。
+ *  Blocker 1：集合永久删除的 collection-aware physical-delete seam。
  *
  * 唯一语义：在同一 DB 原子边界内完成
- * 「重验 Collection 仍属当前主体且仍在 trash → 固定全部成员 → audio tombstone →
+ *「重验 Collection 仍属当前主体且仍在 trash → 固定全部成员 → audio tombstone →
  *   删除全部成员（经 deleteUserTrashWorksInTx / deleteGuestTrashWorksInTx，禁止第二套裸删除）→
  *   确认无 survivor → 才删除 Collection」。
  *
@@ -1852,9 +1852,9 @@ export async function executeStoryCollectionPhysicalDelete(
  *
  * 严格语义：
  * 1. 仅允许目标处于回收站（deletedAt !== null）；对 active 作品调用明确以 CONFLICT 拒绝；
- * 2. 物理删除通过统一底层 primitive executeStoryWorkPhysicalDelete 执行（作为 M8 音频清理的唯一 Service Seam 挂载点）；
- *    - 架构说明（M8 Audio Seam）：
- *      永久删除统一收敛于 executeStoryWorkPhysicalDelete，后续 M8 将在基底 primitive 内使用 DB 事务
+ * 2. 物理删除通过统一底层 primitive executeStoryWorkPhysicalDelete 执行（作为  音频清理的唯一 Service Seam 挂载点）；
+ *    - 架构说明（ Audio Seam）：
+ *      永久删除统一收敛于 executeStoryWorkPhysicalDelete，后续  将在基底 primitive 内使用 DB 事务
  *      完成 Audio tombstone 记录与 Work 物理删除，并在 DB 事务提交后触发外部异步对象存储音频文件清理。
  * 3. 并发原子性：在底层 primitive 施加 deletedAt IS NOT NULL 谓词，杜绝 TOCTOU 竞态；
  * 4. 不存在或属于其他主体的作品统一抛出 NOT_FOUND；

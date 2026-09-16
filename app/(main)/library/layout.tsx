@@ -3,7 +3,7 @@ import LibraryUndoProvider from '@/components/Library/LibraryUndoProvider';
 import CollectionUndoProvider from '@/components/Library/CollectionUndoProvider';
 
 /**
- * 故事库全局布局组件（M3-05，M9-C1 T4 扩展集合级 Undo）
+ * 故事库全局布局组件（，  扩展集合级 Undo）
  *
  * 核心设计原则：
  * 1. /library、/library/[id] 与 /library/collections/[id] 共享同一 Library layout；

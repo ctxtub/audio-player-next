@@ -1,5 +1,5 @@
 /**
- * M8 Canonical Audio MP3 duration 解析（spec §17；M8-03）。
+ *  Canonical Audio MP3 duration 解析（spec §17；）。
  *
  * Server-side 纯 Node 解析生成后 MP3 的 duration，不引入 ffmpeg/ffprobe
  *（Docker 轻量 Node Alpine 保持，spec §17），亦不新增外部 metadata 依赖：
@@ -9,7 +9,7 @@
  * - 输出：整数毫秒（四舍五入）；无有效帧时抛 Mp3DurationParseError。
  * - Manifest 仅当全部 Segment ready 且都有 duration 才 ready（spec §17.1）：
  *   未获得 duration 不得标 ready，由调用方（lib/server/storyAudio.ts）fail-closed。
- * - 只是可信 metadata；不得顺手实现 story-level timeline（M8-03 禁项）。
+ * - 只是可信 metadata；不得顺手实现 story-level timeline（ 禁项）。
  */
 
 const MPEG1_SAMPLE_RATES = [44100, 48000, 32000, 0];

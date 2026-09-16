@@ -1,9 +1,6 @@
-// case_id: continuous-creation-default-on
-// journey: story-collection-continuous
-// legacy_aliases: [E2E-10-05]
-// M9-C1 T2：进入创作页连续创作默认开启；状态卡文案、开关 aria-checked 与剩余预算
+//：进入创作页连续创作默认开启；状态卡文案、开关 aria-checked 与剩余预算
 // 全部只读 continuousCreationStore（薄封装纯状态机），无手动干预。
-// 同时产出桌面 + 移动端视觉验收截图（T2/visual）。
+// 同时产出桌面 + 移动端视觉验收截图（/visual）。
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";
 import { captureT2Visual } from "./helpers/visual";

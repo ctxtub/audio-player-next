@@ -3,7 +3,7 @@
  *
  * 清理 30 天未更新的访客配置、聊天消息、生成历史、提示词历史、会话与空作品集。
  *
- * M9-C1（change-id 2026-09-15-story-collection-continuous-creation T1）：
+ *（change-id 2026-09-15-story-collection-continuous-creation）：
  * - 作品仍统一经 executeStoryWorkPhysicalDelete（audio-aware seam）；
  * - 集合 / 会话按 GC 清理时只删「无存活成员」的行，绝不触发 Cascade 误删未过期 Work：
  *   先删 Work（retention）→ 再删空 GuestStoryCollection → 最后删空 GuestConversation。
@@ -21,17 +21,17 @@ export interface PurgeResult {
     storyWorksDeleted?: number;
     promptsDeleted: number;
     playbackProgressDeleted: number;
-    /** M9-C1：被清理的空作品集数 */
+    /**：被清理的空作品集数 */
     collectionsDeleted?: number;
-    /** M9-C1：被清理的空会话数 */
+    /**：被清理的空会话数 */
     conversationsDeleted?: number;
 }
 
 /**
  * 清理指定截止时间前未更新的访客数据（默认 30 天前）。
- * M5-02：Anchor delegate 逻辑 rename（物理表不变）；Guest Work Progress 以 Work FK cascade 为主，
+ *：Anchor delegate 逻辑 rename（物理表不变）；Guest Work Progress 以 Work FK cascade 为主，
  * 随 GuestStoryWork 物理删除级联清理，此处无需额外 deleteMany（保持既有 GC 语义不变）。
- * M8-05-02：Guest Work 物理删除经 executeStoryWorkPhysicalDelete 统一 seam 自动获得
+ *：Guest Work 物理删除经 executeStoryWorkPhysicalDelete 统一 seam 自动获得
  * audio-aware lifecycle（事务内 tombstone + commit 后 best-effort cleanup）；此处严禁复制
  * Audio GC 实现（不得直调 storage.delete / tombstone 表），回归由 audio-lifecycle-delete 套件锁定。
  */
@@ -50,7 +50,7 @@ export async function purgeExpiredGuestData(cutoffDate?: Date): Promise<PurgeRes
         prisma.guestPlaybackAnchor.deleteMany({ where: { updatedAt: { lt: threshold } } }),
     ]);
 
-    // M9-C1：仅清理无存活成员的空集合 / 空会话，避免 Cascade 误删未过期 Work。
+    //：仅清理无存活成员的空集合 / 空会话，避免 Cascade 误删未过期 Work。
     const collections = await prisma.guestStoryCollection.deleteMany({
         where: {
             updatedAt: { lt: threshold },

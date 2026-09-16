@@ -39,7 +39,7 @@ export interface UseLibraryFiltersResult {
 }
 
 /**
- * 故事库 URL 视图与搜索状态管理 Hook (M3-03)
+ * 故事库 URL 视图与搜索状态管理 Hook ()
  *
  * 核心契约：
  * 1. 严格单向数据源：input draft -> 300ms debounce -> URL q (canonical) -> queryKey 变更；

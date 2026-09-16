@@ -37,7 +37,7 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
     // 存在性判定永不读 Transport，只看 Session；播放决策永不直调 Transport）。
     const isPlaybackPlaying = usePlaybackStore((state) => state.isPlaying);
 
-    // 订阅断点续播状态（M9-03 fixup：经 M5 Session SSOT；Draft 按 messageId 匹配，
+    // 订阅断点续播状态（ fixup：经  Session SSOT；Draft 按 messageId 匹配，
     // Work 经 library 精确 resolve，不走旧 progress store / generationHistory 最近 N 条）。
     // 合法未完成断点：next > 0 AND next < total（ended 后 next==total 不得再显示续播；
     // UI 判定与 action 判定同源共用 isThisCardResumePoint）。
@@ -97,7 +97,7 @@ const StoryCardPartRenderer: FC<PartRendererProps<StoryCardPart>> = ({
         return `${currentText.slice(0, PREVIEW_MAX_LENGTH)}...`;
     }, [isGenerating, needsTruncation, currentText]);
 
-    /** 处理播放按钮点击（M9-F01：唯一正式入口 playStoryCard；
+    /** 处理播放按钮点击（：唯一正式入口 playStoryCard；
      * 组件只交稳定 identity + 卡片上下文，不再自维护 resume/audioUrl/playStoryText
      * 播放决策。Legacy part.audioUrl 在此面被有意忽略（无 segment identity，
      * 不得当 paragraph 0 播放；identity/segmentation 正确 > 复用旧音频缓存）。 */

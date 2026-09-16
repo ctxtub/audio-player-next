@@ -1,12 +1,12 @@
 /**
- * M6-02 MiniNowPlaying ViewModel 纯派生（spec §2.3/§3/§4/§5/§6/§8.1/§10/§30/§33）。
+ *  MiniNowPlaying ViewModel 纯派生（spec §2.3/§3/§4/§5/§6/§8.1/§10/§30/§33）。
  *
  * 冻结数据来源：
  * - title → PlaybackSessionStore.session.title（空回退“正在播放”，spec §5）；
  * - session status/source/position → PlaybackSessionStore（spec §4）；
  * - 播放/暂停与当前段时间进度 → playbackStore / Transport（currentTime/duration/isPlaying）；
  * - remainingMs → Mini 不展示（spec §7，本文件绝不读取该字段）；
- * - layoutMode → 调用方传入（M6-01 三态契约），只决定形态，不决定存在性。
+ * - layoutMode → 调用方传入（ 三态契约），只决定形态，不决定存在性。
  *
  * 本文件为纯函数层：不 import 任何 store / Prisma / router /
  * legacy playbackProgressStore / GenerationHistory / StoryCard。
@@ -34,17 +34,17 @@ export type {
 export { MINI_NOW_PLAYING_FALLBACK_TITLE };
 
 /**
- * 显隐派生（spec §2.3/§30 M6-02 切面）：
+ * 显隐派生（spec §2.3/§30  切面）：
  * hasNowPlaying = source !== null && status !== 'idle'。
  * config.desktopFloatingPlayerEnabled 不进入此公式（只影响 layoutMode）。
- * 键盘/Expanded 抑制归 M6-03 App Chrome，本纯函数不引入。
+ * 键盘/Expanded 抑制归  App Chrome，本纯函数不引入。
  */
 export const hasMiniNowPlaying = (session: MiniSessionSnapshot): boolean =>
     session.source !== null && session.status !== 'idle';
 
 /**
  * 标题派生（spec §5）：title = Session.title；空/全空白回退“正在播放”。
- * 不允许 prompt.slice / 读取 M2 / 展示 remainingMs / 段落文案上移为标题。
+ * 不允许 prompt.slice / 读取  / 展示 remainingMs / 段落文案上移为标题。
  */
 export const deriveMiniTitle = (session: MiniSessionSnapshot): string => {
     const raw = typeof session.title === 'string' ? session.title.trim() : '';
@@ -53,7 +53,7 @@ export const deriveMiniTitle = (session: MiniSessionSnapshot): string => {
 
 /**
  * Session 状态 → ViewModel 六态映射（spec §3）。
- * hydrating（M5 水合中）映射为 synthesizing（Loading/disabled）；
+ * hydrating（ 水合中）映射为 synthesizing（Loading/disabled）；
  * idle 仅占位映射为 ready（visible=false 时不渲染，值不进入 DOM）。
  */
 export const mapSessionStatusToMiniStatus = (

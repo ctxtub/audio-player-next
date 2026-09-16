@@ -1,13 +1,13 @@
 /**
- * M9-C1 T3 单轨音频（StoryAudio single-track）Feature Flag。
+ *   单轨音频（StoryAudio single-track）Feature Flag。
  *
- * 最终双 flag 契约（T3-r2 真去耦后，spec §7）：
+ * 最终双 flag 契约（-r2 真去耦后，spec §7）：
  * - **server 单轨授权**只认运行时 `SINGLE_TRACK_AUDIO_ENABLED === '1'`
- *   （见 `isSingleTrackServerEnabled`）。公开变量 `NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED`
+ *（见 `isSingleTrackServerEnabled`）。公开变量 `NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED`
  *   会被构建期内联、客户端可见，**绝不作为服务端授权依据**；仅置公开变量时，
  *   `storyAudio.ensure` / `getProjection` / `saveProgress`、
  *   `GET /api/audio/assets/:assetId`、`getPlaybackManifest` 单轨投影一律拒绝
- *   （`SINGLE_TRACK_AUDIO_DISABLED` / 读取 404），**不产生任何单轨流量**。
+ *（`SINGLE_TRACK_AUDIO_DISABLED` / 读取 404），**不产生任何单轨流量**。
  *   `ensureSegment` 恒为旧多段 canonical 路径，**不被单轨 flag 劫持**。
  * - **client provider 选择**（Work 播放是否走单轨资产）只认构建期内联
  *   `NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED === '1'`（或 E2E

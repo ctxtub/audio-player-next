@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * M6 Mini Now Playing — Responsive Hook（M6-01 foundation）。
+ *  Mini Now Playing — Responsive Hook（ foundation）。
  *
  * 冻结契约：mobile/docked <768px；desktop >=768px。
  * 同一契约来源：SCSS styles/tokens/_breakpoints.scss 的 $breakpoint-lg

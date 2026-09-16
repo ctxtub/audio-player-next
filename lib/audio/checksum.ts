@@ -1,5 +1,5 @@
 /**
- * M8 Canonical Audio 纯哈希函数（spec §6.5/§6.6；M8-01 纯领域层）。
+ *  Canonical Audio 纯哈希函数（spec §6.5/§6.6； 纯领域层）。
  *
  * 严格区分两种哈希，用途绝不混用：
  * - contentHash / textHash：正文身份，沿用既有 computeStoryContentHash（FNV 短哈希），

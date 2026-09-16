@@ -1,5 +1,5 @@
 /**
- * Collection Mutations（M9-C1 T4）。
+ * Collection Mutations（）。
  *
  * 集合级重命名/收藏/软删除/恢复/永久删除：
  * - 乐观补丁作用于全部集合列表无限缓存 + 对应详情缓存；

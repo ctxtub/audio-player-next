@@ -3,7 +3,7 @@ import Link from 'next/link';
 import styles from './index.module.scss';
 
 /**
- * 故事未找到或 ID 结构校验不通过时的 Not Found 界面（M1-02 骨架）。
+ * 故事未找到或 ID 结构校验不通过时的 Not Found 界面（ 骨架）。
  * 当 id 校验不通过（如 0, -1, foo, 1.2）或作品不存在时由 notFound() 触发。
  * 遵循 Spec 4.5 与统一布局原则：直接处于 (main) 共享 Layout 内。
  */

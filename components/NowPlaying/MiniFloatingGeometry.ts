@@ -1,5 +1,5 @@
 /**
- * M6-04 MiniNowPlaying Wide Floating 几何纯函数（spec §18.3/§18.4）。
+ *  MiniNowPlaying Wide Floating 几何纯函数（spec §18.3/§18.4）。
  *
  * 职责：
  * - drag 期间/结束 clamp 到 viewport 内；

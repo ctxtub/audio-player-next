@@ -1,8 +1,8 @@
 /**
- * M9-C1 T2：唯一 `startNewCreation()` 强重置入口。
+ *：唯一 `startNewCreation()` 强重置入口。
  *
  * 契约：`docs/specs/2026-09-15-story-collection-continuous-creation-technical-design.md` §5「新建创作」
- * 与 `docs/e2e/10-会话与作品集连续创作/07-新建创作强重置.md`。
+ * 用户触发后必须中止旧生成、停止播放并恢复创作初始状态。
  *
  * 顺序（不得拆散、不得各自 abort）：
  *   确认 → epoch++ → abort generation → pause/unload + clear Session/Anchor →
@@ -62,7 +62,7 @@ export async function startNewCreation(
   options: StartNewCreationOptions = {},
 ): Promise<StartNewCreationResult> {
   const currentEpoch = useContinuousCreationStore.getState().epoch;
-  // M9-C1 T2（评审闭合项 3）：在重置前捕获当前会话 id，作为旧会话校验值传给 createNew。
+  //（评审闭合项 3）：在重置前捕获当前会话 id，作为旧会话校验值传给 createNew。
   // 多标签页/竞态下服务端凭它与真实 active 比对，不匹配即 CONFLICT，绝不静默覆盖。
   const capturedOldConversationId = useChatStore.getState().conversationId ?? undefined;
 
@@ -119,7 +119,7 @@ export async function startNewCreation(
 
   // 8) 连续创作默认开启 + 预算快照（epoch 已递增，旧回调不会写回）
   if (conversationId !== null) {
-    // M9-C1 T2：创作页围绕新 active Conversation 运行（identity 读路径）。
+    //：创作页围绕新 active Conversation 运行（identity 读路径）。
     useChatStore.getState().applyConversationIdentity({
       conversationId,
       collectionId,

@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * M7-04-02 TranscriptView（spec §35 只读正文面 / §72 验证）。
+ *  TranscriptView（spec §35 只读正文面 / §72 验证）。
  *
- * - 只读展示：数据唯一来源为父级传入的 M5 Session.storyText（经
+ * - 只读展示：数据唯一来源为父级传入的  Session.storyText（经
  *   ViewModel.transcriptText 派生）；本组件不读任何 store，不直调
  *   Flow/路由/<audio>/Session 字段；
  * - 无编辑面：无 textarea/input/contentEditable（架构守卫锁定）；
@@ -11,7 +11,7 @@
  *   不拼凑任何 Library 目标；
  * - §35.1 promotion：transcript 保持打开由父级局部 view state 保证；
  *   promotion 后父级传入 onOpenWorkDetail（复用 Work 先关后导 handler）
- *   时才展示「打开作品详情」入口，否则不展示（不越界进 M4 流程）。
+ *   时才展示「打开作品详情」入口，否则不展示（不越界进  流程）。
  */
 
 import React from 'react';
@@ -29,7 +29,7 @@ import {
 
 /** TranscriptView props（全部受控，父级经 ViewModel + 回调传入）。 */
 export type TranscriptViewProps = {
-    /** 只读正文（M5 Session.storyText 原文；null/空 → 空态）。 */
+    /** 只读正文（ Session.storyText 原文；null/空 → 空态）。 */
     storyText: string | null;
     /** 返回控制回调（父级：只切局部 view → controls，不改 Session/Transport）。 */
     onBack: () => void;

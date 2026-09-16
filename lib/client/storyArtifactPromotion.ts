@@ -1,10 +1,10 @@
 /**
- * StoryWork Promotion Adapter（M4-03）。
+ * StoryWork Promotion Adapter（）。
  *
  * 唯一的 promotion 通道：CompleteChatArtifact → Promotion Adapter → collection.promoteArtifact(...) → StoryWorkDetailDTO。
- * 本步仍然不要自动触发 promotion（orchestration 留 M4-04）；adapter 只负责 I/O。
+ * 本步仍然不要自动触发 promotion（orchestration 留）；adapter 只负责 I/O。
  *
- * M9-C1 T2：写路径切到 `collection.promoteArtifact`（Artifact → Collection/Work 唯一
+ *：写路径切到 `collection.promoteArtifact`（Artifact → Collection/Work 唯一
  * router 写入口），必须携带当前 `conversationId`；不再走 `library.create`（后者不建集合）。
  *
  * 薄层契约：
@@ -17,7 +17,7 @@
  * 4. 同 sourceMessageId + 不同 storyText 的 CONFLICT 原样向上暴露；不吞错、不自动换 sourceMessageId。
  * 5. promotion 时严禁重新读取当前 Settings；只消费 Artifact 生成开始时冻结的 prompt/voiceId 快照。
  * 6. 只能消费 frozen collection client；严禁 import server/Prisma/raw trpc。
- * 7. 不负责把 Artifact 改成 promoting/ready/failed——那是 M4-04 orchestration 的职责。
+ * 7. 不负责把 Artifact 改成 promoting/ready/failed——那是  orchestration 的职责。
  */
 
 import type {
@@ -32,7 +32,7 @@ import { promoteArtifact } from '@/lib/client/collection';
 /**
  * 可 promotion 的 Artifact 狭窄类型：仅 complete 与 promotion_failed，
  * 且必须携带生成开始时冻结的 mandatory prompt snapshot（非空字符串）。
- * M4-01 Artifact contract 里 prompt 是 optional，缺 snapshot 的合法状态机
+ *  Artifact contract 里 prompt 是 optional，缺 snapshot 的合法状态机
  * 对象必须在此 fail-fast，绝不触达 collection.promoteArtifact。
  */
 export type PromotableChatArtifact = (
@@ -50,7 +50,7 @@ export type PromotionCreateFn = (input: CollectionPromoteInput) => Promise<Story
 
 /**
  * promotion 依赖注入（测试用隔离桩；生产默认走 frozen collection.promoteArtifact）。
- * M9-C1 T2：`conversationId` 为会话级 promotion 归属证据，缺失即 fail-fast。
+ *：`conversationId` 为会话级 promotion 归属证据，缺失即 fail-fast。
  */
 export interface PromotionAdapterDeps {
   readonly create?: PromotionCreateFn;
@@ -136,7 +136,7 @@ export function buildPromotionInput(
 /**
  * 将 Complete / PromotionFailed Artifact 提升为 StoryWork。
  * 薄 I/O：门控 → 构造 frozen input（含会话归属）→ 透传 collection.promoteArtifact；
- * 错误原样上抛。M9-C1 T2：这是 Artifact → Collection/Work 的唯一写路径。
+ * 错误原样上抛。：这是 Artifact → Collection/Work 的唯一写路径。
  *
  * @param artifact 必须为 complete（初次）或 promotion_failed（幂等重试源）。
  * @param deps 可选注入的 create 实现与当前 conversationId。

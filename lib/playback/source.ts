@@ -1,5 +1,5 @@
 /**
- * M5-01 Playback Identity 纯领域契约：PlaybackSourceRef（spec §3）
+ *  Playback Identity 纯领域契约：PlaybackSourceRef（spec §3）
  *
  * 业务层唯一合法的播放来源标识。不再使用弱类型：
  * `{ sourceType: string; sourceId: string }`，
@@ -7,7 +7,7 @@
  *
  * - Draft：尚未拥有稳定 StoryWork identity 的 Chat Story Artifact，
  *   identity 为 ChatMessage.messageId；不拥有长期 Per-Work Progress（§3.2）。
- * - Work：M2 已持久化完成的 StoryWork，identity 为 StoryWork.id（§3.3）。
+ * - Work： 已持久化完成的 StoryWork，identity 为 StoryWork.id（§3.3）。
  *   title / storyText / voiceId / contentHash 全部以 StoryWork 为准，
  *   播放层不得再用 prompt.slice / '音频故事' / '作品回放' 推导 identity。
  *
@@ -139,7 +139,7 @@ export function playbackSourceKey(source: PlaybackSourceRef): string {
  * 持久化对序列化：映射到 Anchor 列对（sourceKind / sourceId）。
  * work 侧 `String(workId)` 是此处唯一的合法字符串化点；
  * draft 侧 sourceId 即 messageId 原样。
- * 注意：本函数只做纯序列化，不触及 Prisma schema（M5-02+ 才动库）。
+ * 注意：本函数只做纯序列化，不触及 Prisma schema（+ 才动库）。
  */
 export function serializePlaybackSource(source: PlaybackSourceRef): {
   kind: PlaybackSourceKind;

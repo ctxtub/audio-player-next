@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * M7-01 ExpandedNowPlaying（spec §10/§11 基础 Surface + §42 Focus + §9 关闭语义）
- * + M7-02 P3A Playback Capabilities（spec §16/§17/§20/§38/§39 additive）。
+ *  ExpandedNowPlaying（spec §10/§11 基础 Surface + §42 Focus + §9 关闭语义）
+ * +   Playback Capabilities（spec §16/§17/§20/§38/§39 additive）。
  *
  * 职责：
  * - Modal Bottom Sheet（<768）/ Modal Right Side Panel（>=768）单一语义，
@@ -13,44 +13,44 @@
  * - 移动 drag dismiss 只能由顶部 Handle 发起（spec §10.2），内容区滚动不触发；
  * - Header：title ← Session.title（空回退“正在播放”），voice ← Session.voiceId
  *   经 voiceOptions lookup（找不到显示 voiceId，再回退 AI 语音，spec §15）；
- * - P3A 播放能力（本轮新增，经 useExpandedPlaybackControls facade 消费 M5）：
+ * -  播放能力（本轮新增，经 useExpandedPlaybackControls facade 消费）：
  *   当前 Segment timeline（本段，不伪装整篇）/ click+keyboard seek 全 clamp /
  *   Play-Pause-从头播放 / 七档 Session 级倍速 / 段落 badge；明确无上一段/
- *   下一段（spec §40），无 story-level timeline（M8 P3B）。
+ *   下一段（spec §40），无 story-level timeline（）。
  *
- * M5 ownership 边界：
+ *  ownership 边界：
  * - 本文件只读 ViewModel + UI Store 关闭动作 + facade 回调；
  * - 不直调 playbackSessionFlow / AudioControllerHost / playbackStore 写面 /
  *   <audio> / Session 字段（全部经 facade → flow → Session+Host）；
  * - 不建 Expanded-local speed state；不写回 UserConfig；不触 StoryWork/progress identity。
  *
- * M7-04-01 Work 查看正文（spec §33-§34 / §44 additive）：
+ *  Work 查看正文（spec §33-§34 / §44 additive）：
  * - Work source 即展示「查看正文」（目标 = ViewModel.viewStoryTarget，
  *   由 source.workId 直接派生）；Draft/空 source 不展示；
  * - 点击顺序固定：closeExpanded() 先行 → 已在同一 /library/[workId] 则止步，
  *   否则 router.push(target)；全程不改播放状态（播放继续）。
  *
- * M7-04-02 Draft Transcript（spec §35 / §35.1 / §72 additive）：
+ *  Draft Transcript（spec §35 / §35.1 / §72 additive）：
  * - Draft source（含可用 storyText）即经 Actions 展示同文案「查看正文」
- *   （独立 testid，Transcript 口）；点击只切 Expanded 内部局部 view state
+ *（独立 testid，Transcript 口）；点击只切 Expanded 内部局部 view state
  *   controls → transcript，不导航（URL 不变）、不拼凑 /library/[fake-id]、
  *   不写 global UI Store（nowPlayingUiStore 无新增字段）；
- * - TranscriptView 只读展示 ViewModel.transcriptText（= M5 Session.storyText
+ * - TranscriptView 只读展示 ViewModel.transcriptText（=  Session.storyText
  *   原文）；返回控制只切回 controls，不改 Session/Transport/Audio；
  * - promotion（source 切 work，sessionId 不变）不强制关闭 transcript
- *   （局部 view 只按 sessionId 与 Expanded 开关重置）；promotion 后
+ *（局部 view 只按 sessionId 与 Expanded 开关重置）；promotion 后
  *   viewStoryTarget 非空时 transcript 内展示「打开作品详情」入口（复用
- *   handleViewStory 同一路由出口；M4 真实 promotion 触发面在 Expanded 外，
+ *   handleViewStory 同一路由出口； 真实 promotion 触发面在 Expanded 外，
  *   本文件只保证不强制关闭 + 入口复用，不越界）。
  *
- * M7-04-03 Creation Actions Boundary（spec §36/§36.2/§37/§75/M7-P07 additive）：
+ *  Creation Actions Boundary（spec §36/§36.2/§37/§75/ additive）：
  * - Draft「返回创作」（§37）：Draft 面经 Actions 与「查看正文」同容器并存
- *   （独立 testid）；点击 = handleBackToCreation（closeExpanded 先行 →
+ *（独立 testid）；点击 = handleBackToCreation（closeExpanded 先行 →
  *   router.push('/chat')），绝不自动发送新 Prompt（无 send 调用、无预填
  *   即发、无消息追加），播放继续（不 pause，会话/进度/音频宿主全不变）；
- * - Work「继续创作」（§36.2/M7-P07）：只消费 M4 `continueFromStoryWork`
+ * - Work「继续创作」（§36.2/）：只消费  `continueFromStoryWork`
  *   契约；契约未落地前隐藏 CTA（fail-closed，本文件不装配 continuation
- *   Prompt、不直调任何 continuation，不暂停播放 §36.3）；M4 落地后经预留
+ *   Prompt、不直调任何 continuation，不暂停播放 §36.3）； 落地后经预留
  *   onContinueCreation 缝合即可，不改播放架构。
  */
 
@@ -100,7 +100,7 @@ const prefersReducedMotion = (): boolean => {
     return false;
 };
 
-/** 组装二级文案：voice · 第 X / Y 段（P3A 明确段定位，不伪装整篇）。 */
+/** 组装二级文案：voice · 第 X / Y 段（ 明确段定位，不伪装整篇）。 */
 export const formatExpandedSubtitle = (
     voiceLabel: string,
     current: number,
@@ -115,15 +115,15 @@ export const ExpandedNowPlaying: React.FC = () => {
     const isExpanded = useNowPlayingUiStore((state) => state.isExpanded);
     const closeExpanded = useNowPlayingUiStore((state) => state.closeExpanded);
     const viewModel = useExpandedNowPlayingViewModel();
-    // M7-02 P3A facade：唯一播放写面（UI→flow→Session+Host；本文件不直调 store/audio）。
+    //   facade：唯一播放写面（UI→flow→Session+Host；本文件不直调 store/audio）。
     const controls = useExpandedPlaybackControls();
-    // M7-04-01 内容导航路由（查看正文 push 唯一来源；播放写面仍走 facade）。
+    //  内容导航路由（查看正文 push 唯一来源；播放写面仍走 facade）。
     const router = useRouter();
     const pathname = usePathname();
 
     const [dragOffsetY, setDragOffsetY] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
-    // M7-04-02 Expanded 内部局部 view state（spec §35：不进 global UI Store；
+    //  Expanded 内部局部 view state（spec §35：不进 global UI Store；
     // 只按 sessionId 与 Expanded 开关重置，promotion 同 sessionId 保持打开）。
     const [expandedView, setExpandedView] = useState<ExpandedLocalView>('controls');
     const dragOffsetRef = useRef(0);
@@ -135,7 +135,7 @@ export const ExpandedNowPlaying: React.FC = () => {
 
     const handleClose = useCallback(() => {
         // 只关闭 UI，不暂停/不 clear Session（spec §9：播放继续）。
-        // M7-04-02：关闭即回落 controls（下次打开从控制面进入）。
+        //：关闭即回落 controls（下次打开从控制面进入）。
         setExpandedView('controls');
         setDragOffsetY(0);
         setIsDragging(false);
@@ -143,7 +143,7 @@ export const ExpandedNowPlaying: React.FC = () => {
     }, [closeExpanded]);
 
     /**
-     * M7-04-01 查看正文（spec §34 / §44）：
+     *  查看正文（spec §34 / §44）：
      * closeExpanded() 先行 → 同 Detail 去重（只 close）→ 否则 push 目标。
      * 只动 UI 开关与路由，不触播放状态（播放继续，不 pause）。
      */
@@ -160,9 +160,9 @@ export const ExpandedNowPlaying: React.FC = () => {
     }, [viewModel.viewStoryTarget, handleClose, pathname, router]);
 
     /**
-     * M7-04-02 Draft 查看正文 → transcript（spec §35/§72）：
+     *  Draft 查看正文 → transcript（spec §35/§72）：
      * 只切 Expanded 内部局部 view（controls → transcript），不导航
-     * （URL 不变）、不拼凑 /library 目标、不改 Session/Transport/Audio、
+     *（URL 不变）、不拼凑 /library 目标、不改 Session/Transport/Audio、
      * 不写 global UI Store。
      */
     const handleViewTranscript = useCallback(() => {
@@ -170,7 +170,7 @@ export const ExpandedNowPlaying: React.FC = () => {
     }, []);
 
     /**
-     * M7-04-02 返回控制（spec §72）：
+     *  返回控制（spec §72）：
      * 只切回 controls，不改变 Session（sessionId/status/source 全不动）。
      */
     const handleBackToControls = useCallback(() => {
@@ -178,9 +178,9 @@ export const ExpandedNowPlaying: React.FC = () => {
     }, []);
 
     /**
-     * M7-04-03 Draft 返回创作（spec §37 / §44）：
+     *  Draft 返回创作（spec §37 / §44）：
      * closeExpanded() 先行 → router.push('/chat')；绝不自动发送新 Prompt
-     * （无 send 调用、无预填即发、无消息追加），播放继续（不 pause，
+     *（无 send 调用、无预填即发、无消息追加），播放继续（不 pause，
      * 不改 Session/Transport/Audio，只动 UI 开关与路由）。
      */
     const handleBackToCreation = useCallback(() => {
@@ -188,7 +188,7 @@ export const ExpandedNowPlaying: React.FC = () => {
         router.push(CHAT_ROUTE);
     }, [handleClose, router]);
 
-    // M7-04-02 局部 view 重置（只按 sessionId 与 Expanded 开关）：
+    //  局部 view 重置（只按 sessionId 与 Expanded 开关）：
     // - 新 Session（sessionId 变化）→ 回落 controls；
     // - promotion（source 切 work 但 sessionId 不变）→ 保持 transcript 打开（§35.1）；
     // - Expanded 关闭 → 回落 controls（下次打开从控制面进入）。
@@ -212,10 +212,10 @@ export const ExpandedNowPlaying: React.FC = () => {
     );
 
     /**
-     * Escape 兜底（M7-02 复验修复 + Blocking 3 收窄）：
+     * Escape 兜底（ 复验修复 + Blocking 3 收窄）：
      * RAC overlay 的 Escape 语义要求焦点位于 overlay 内；真实浏览器中，点击
-     * 「从头播放」等操作会让 busy 控件 disabled，浏览器随即把焦点移到 body
-     * （标准行为），窗口期内 Escape 冒泡不经过 overlay → RAC handler 不触发
+     *「从头播放」等操作会让 busy 控件 disabled，浏览器随即把焦点移到 body
+     *（标准行为），窗口期内 Escape 冒泡不经过 overlay → RAC handler 不触发
      * → 面板无法关闭。
      * 本监听为纯兜底且必须收窄为「焦点确实不在 Expanded overlay 内」才接管：
      * - RAC 已处理（焦点在 overlay 内）时事件已 preventDefault → 让行；
@@ -297,7 +297,7 @@ export const ExpandedNowPlaying: React.FC = () => {
             ? { transform: `translateY(${dragOffsetY}px)` }
             : undefined;
 
-    // M7-04-02 transcript 是否展示「打开作品详情」（§35.1：仅 promotion 后
+    //  transcript 是否展示「打开作品详情」（§35.1：仅 promotion 后
     // viewStoryTarget 非空时展示，复用同一 handleViewStory 路由出口）。
     const transcriptOpenDetail =
         expandedView === 'transcript' && viewModel.viewStoryTarget !== null
@@ -345,7 +345,7 @@ export const ExpandedNowPlaying: React.FC = () => {
                             // 此处不 spread 任何 drag 绑定，仅 Handle 可发起。
                         >
                             {expandedView === 'transcript' ? (
-                                /* M7-04-02 Draft Transcript 只读面（spec §35/§72：
+                                /*  Draft Transcript 只读面（spec §35/§72：
                                    与 controls 互斥的 Expanded-local view：
                                    transcript open 时 controls 元素完全不渲染；
                                    内容 = Session.storyText 原文；返回控制只切局部 view；
@@ -373,19 +373,19 @@ export const ExpandedNowPlaying: React.FC = () => {
                             >
                                 {`第 ${viewModel.paragraph.current} / ${viewModel.paragraph.total} 段`}
                             </div>
-                            {/* M7-02 P3A 段落 badge（spec §39，与 Mini 同公式的结构化表达）。 */}
+                            {/*   段落 badge（spec §39，与 Mini 同公式的结构化表达）。 */}
                             <ParagraphStatus
                                 current={viewModel.paragraph.current}
                                 total={viewModel.paragraph.total}
                             />
-                            {/* M7-02 P3A 当前 Segment timeline（本段，不伪装整篇，spec §17/§68）。 */}
+                            {/*   当前 Segment timeline（本段，不伪装整篇，spec §17/§68）。 */}
                             <PlaybackTimeline
                                 currentTime={viewModel.timeline.currentTime}
                                 duration={viewModel.timeline.duration}
                                 onSeek={controls.seekCurrentSegment}
                                 disabled={!viewModel.hasSession}
                             />
-                            {/* M7-02 P3A 播放控制（Play/Pause/±5s/从头播放；无上一段/下一段，spec §40）。 */}
+                            {/*   播放控制（Play/Pause/±5s/从头播放；无上一段/下一段，spec §40）。 */}
                             <PlaybackControls
                                 primaryAction={viewModel.primaryAction}
                                 canRestart={viewModel.canRestart}
@@ -399,13 +399,13 @@ export const ExpandedNowPlaying: React.FC = () => {
                                     controls.seekRelative(EXPANDED_TIMELINE_KEYBOARD_STEP_SECONDS)
                                 }
                             />
-                            {/* M7-02 P3A Session 级倍速（七档，不写回 UserConfig，不触发新 TTS）。 */}
+                            {/*   Session 级倍速（七档，不写回 UserConfig，不触发新 TTS）。 */}
                             <PlaybackRateControl
                                 currentRate={viewModel.playbackRate}
                                 onSelect={controls.setPlaybackRate}
                                 disabled={!viewModel.hasSession}
                             />
-                            {/* M7-03 P3C Expanded 快捷 Timer（spec §31.1/§32：只改当前 Session，不改 Settings 默认）。 */}
+                            {/*   Expanded 快捷 Timer（spec §31.1/§32：只改当前 Session，不改 Settings 默认）。 */}
                             <SleepTimerControl
                                 mode={viewModel.sleepTimer.mode}
                                 remainingMs={viewModel.sleepTimer.remainingMs}
@@ -413,10 +413,10 @@ export const ExpandedNowPlaying: React.FC = () => {
                                 onSelect={controls.setSleepTimer}
                                 disabled={!viewModel.hasSession}
                             />
-                            {/* M7-04-01 Work 查看正文（spec §34：Work 导航口冻结）+
-                                M7-04-02 Draft 查看正文（spec §35：Transcript 口，
+                            {/*  Work 查看正文（spec §34：Work 导航口冻结）+
+                                 Draft 查看正文（spec §35：Transcript 口，
                                 同文案独立 testid，点击只切局部 view，不导航）+
-                                M7-04-03 Draft 返回创作（spec §37：与查看正文同容器
+                                 Draft 返回创作（spec §37：与查看正文同容器
                                 并存，独立 testid，点击先关后导 /chat，零自动发送）/
                                 Work 继续创作隐藏（spec §36.2 fail-closed：本文件不传
                                 onContinueCreation，不拼 continuation Prompt）。

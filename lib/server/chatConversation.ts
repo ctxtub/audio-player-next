@@ -4,7 +4,7 @@
  * 单会话快照存取：getConversation 读取按 position 排序的消息；saveConversation 以事务
  * 删旧 + 批量写新（整条替换），parts 以 JSON 存取。
  *
- * M4-08 Legacy StoryCard Cutover（只读切换 / 新写封禁）：
+ *  Legacy StoryCard Cutover（只读切换 / 新写封禁）：
  * Modern runtime 只产 storyArtifact；已持久化的 storyCard 可继续 decode/render/play/read
  * 并随快照原样续存（compatibility preservation），但服务端以 persisted provenance 为依据，
  * 永久拒绝任何此前不存在、被篡改或被复制扩增的 StoryCard（legacy origination）。
@@ -54,11 +54,11 @@ type ChatMessageRow = {
 };
 
 /**
- * M4-08 Legacy provenance guard 的拒绝文案（内部错误描述，不构成公共 API 契约；
+ *  Legacy provenance guard 的拒绝文案（内部错误描述，不构成公共 API 契约；
  * 调用方仅依赖错误码：BAD_REQUEST 表示 Legacy 新写，CONFLICT 表示基线 stale）。
  */
 const LEGACY_CUTOVER_REJECT_MESSAGE =
-    'Legacy StoryCard 新写已被禁止（M4-08 cutover：只允许原样续存既有历史）';
+    'Legacy StoryCard 新写已被禁止（ cutover：只允许原样续存既有历史）';
 
 /** Provenance 比较的最小输入形态（DB 行的 parts 为 JSON 字符串；incoming 为已解析数组）。 */
 type LegacyProvenanceEntry = {
@@ -70,8 +70,8 @@ type LegacyProvenanceEntry = {
  * Legacy provenance fingerprint 计数（multiset）。
  * identity 为真正 tuple (messageId, storyText)：外层按 messageId 分桶、内层按
  * storyText 计数，不做任何字符串拼接（messageId / storyText 均可合法包含 \u0000，
- * 拼接 key 存在可构造碰撞，M4-08 fixup 改为嵌套 Map 消除歧义）。
- * audioUrl 显式不参与（audioUrl 是非持久字段：M4-06 起 save 侧统一置空，
+ * 拼接 key 存在可构造碰撞， fixup 改为嵌套 Map 消除歧义）。
+ * audioUrl 显式不参与（audioUrl 是非持久字段： 起 save 侧统一置空，
  * 新旧 ''/temp-url 视为同一张卡）。
  * 非 storyCard part 一律忽略；storyText 非字符串时按其 JSON 形态计入（仍受 subset 约束）。
  */
@@ -128,12 +128,12 @@ const collectLegacyFingerprintCounts = (
 };
 
 /**
- * M4-08 Legacy provenance guard（纯函数，无副作用，不读库不写库）。
+ *  Legacy provenance guard（纯函数，无副作用，不读库不写库）。
  *
  * 断言 incoming 快照中的 Legacy StoryCard multiset 是已持久化集合的子集：
  * 允许删除 Legacy（incoming 为空或减少）、允许原样保留（含 audioUrl ''/temp 差异）；
  * 禁止引入（新 messageId 带卡）、禁止复制扩增（同卡 count 变大）、禁止改造
- * （同 messageId 下 storyText 变化视为新卡）。
+ *（同 messageId 下 storyText 变化视为新卡）。
  *
  * @param currentRows 事务内读取的当前 DB 行（含 messageId + parts JSON）。
  * @param incomingMessages 本次待保存的快照。
@@ -162,7 +162,7 @@ export const assertNoNewLegacyStoryCardWrites = (
 /**
  * DB 行 → 前端 DTO（parts JSON 解析，失败则忽略）。
  *
- * M9-C1 T2：导出供会话级读取（`lib/server/conversation.ts`）复用同一 DTO 映射，
+ *：导出供会话级读取（`lib/server/conversation.ts`）复用同一 DTO 映射，
  * 保证 legacy / conversation 两条读路径返回结构完全一致。
  */
 export const toChatMessageDto = (row: ChatMessageRow): ChatMessageDTO => {
@@ -202,7 +202,7 @@ export const getConversation = async (userId: number): Promise<ChatMessageDTO[]>
 /**
  * 以快照方式整条替换当前用户的会话（删旧 + 批量写新）。空数组即清空。
  * 提供 expectedMessageIds 时启用 stale-write 拒绝：库内现状与基线不一致即抛 CONFLICT。
- * M4-08：Legacy provenance guard 恒为 always-on（即使不传 options 也执行）；
+ *：Legacy provenance guard 恒为 always-on（即使不传 options 也执行）；
  * 顺序冻结：load current → assertFreshBaseline → assertNoNewLegacyStoryCardWrites → replace，
  * stale baseline + 非法 legacy 仍先报 CONFLICT；写入时 Legacy audioUrl 统一 sanitize 为 ''。
  * @param userId 用户 ID。
@@ -215,7 +215,7 @@ export const saveConversation = async (
     options?: ConversationSaveOptions,
 ): Promise<void> => {
     await prisma.$transaction(async (tx) => {
-        // M4-08：guard 必须在 deleteMany 之前、与 replace 同一事务内完成；为此恒读基线行。
+        //：guard 必须在 deleteMany 之前、与 replace 同一事务内完成；为此恒读基线行。
         const current = await tx.chatMessage.findMany({
             where: { userId },
             orderBy: { position: 'asc' },
@@ -254,7 +254,7 @@ const GUEST_CHAT_KEEP_LIMIT = 100;
 
 /**
  * 确保 parts 内所有 storyCard 的 audioUrl 均置空（不存音频二进制或临时 URL）。
- * M4-08：user / guest 两条保存路径语义收口，共用同一 sanitize（sanitize ≠ create，
+ *：user / guest 两条保存路径语义收口，共用同一 sanitize（sanitize ≠ create，
  * 绝不据 content 构造新卡，仅对已存在的 Legacy 卡做 audioUrl 归一）。
  */
 export const sanitizePartsForWrite = (parts?: Array<Record<string, unknown>>): string | null => {
@@ -288,7 +288,7 @@ export const getConversationForSubject = async (
  * 以快照方式整条替换当前主体（用户或具名访客）的会话。
  * 访客限制最多保留最近 GUEST_CHAT_KEEP_LIMIT 条。
  * 提供 expectedMessageIds 时同样启用 stale-write 拒绝。
- * M4-08：与 user 路径共用同一 Legacy provenance guard（always-on）与同一
+ *：与 user 路径共用同一 Legacy provenance guard（always-on）与同一
  * sanitize 语义；顺序冻结：load current → baseline → provenance → replace。
  */
 export const saveConversationForSubject = async (
@@ -305,7 +305,7 @@ export const saveConversationForSubject = async (
         : messages;
 
     await prisma.$transaction(async (tx) => {
-        // M4-08：guard 必须在 deleteMany 之前、与 replace 同一事务内完成；为此恒读基线行。
+        //：guard 必须在 deleteMany 之前、与 replace 同一事务内完成；为此恒读基线行。
         const current = await tx.guestChatMessage.findMany({
             where: { guestId: subject.id },
             orderBy: { position: 'asc' },

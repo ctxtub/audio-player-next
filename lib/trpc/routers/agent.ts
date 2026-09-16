@@ -71,7 +71,7 @@ export const agentRouter = router({
                         }
                     }
 
-                    // on_chain_end: StoryAgent 故事文本完成 (M4-02 显式 story_complete 事件)
+                    // on_chain_end: StoryAgent 故事文本完成 (显式 story_complete 事件)
                     if (event.event === "on_chain_end" && event.name === "StoryAgent") {
                         const output = event.data.output as { messages?: Array<{ content?: unknown }> } | undefined;
                         const outputMessages = output?.messages;

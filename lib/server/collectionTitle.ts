@@ -1,5 +1,5 @@
 /**
- * AI 集合标题生成（change-id 2026-09-15-story-collection-continuous-creation T1）。
+ * AI 集合标题生成（change-id 2026-09-15-story-collection-continuous-creation）。
  *
  * 首作建集时在事务外短超时生成标题；失败/超时绝不阻断入库（产品 §2.2）。
  * 默认生成器调用 Chat Completion；测试经 options.generate 注入确定性实现，绝不触网。

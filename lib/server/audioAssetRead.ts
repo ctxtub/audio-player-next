@@ -1,12 +1,12 @@
 /**
- * M9-C1 T3 单轨资产授权读取服务（spec §3/§4）。
+ *   单轨资产授权读取服务（spec §3/§4）。
  *
  * 流程：resolve Subject → StoryAudioAsset（User/Guest 对称）→ Work ownership 校验
  * → ready 门禁 → 允许才读。只做“读取已有资产”，不 synthesize、不写进度。
  *
  * 内部 chunk 防御：chunk 为 `story-audio/chunks/<assetId>/<i>.mp3` 对象，**没有独立
  * 路由**；本函数只接受 Asset 公开 id（UUID），任何 chunk 路径串都查不到行 → 404。
- * Trash Work 的已有 ready asset 仍允许读取（与 M8 §19.1 一致）。
+ * Trash Work 的已有 ready asset 仍允许读取（与  §19.1 一致）。
  */
 
 import { prisma } from '@/lib/db';
@@ -63,7 +63,7 @@ export async function resolveReadableAudioAssetForSubject(
   subject: Subject | null,
   assetId: string,
 ): Promise<ReadableAudioAsset> {
-  // T3 去耦：服务端单轨 flag 关闭 → 读取路由一律 404（不产生单轨流量，fail closed）。
+  //  去耦：服务端单轨 flag 关闭 → 读取路由一律 404（不产生单轨流量，fail closed）。
   if (!isSingleTrackServerEnabled()) {
     throw new AudioAssetAccessError(404, 'ASSET_NOT_FOUND');
   }

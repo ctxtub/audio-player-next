@@ -1,5 +1,5 @@
 /**
- * M5-01 Playback Session 纯领域契约（spec §4 / §4.1）
+ *  Playback Session 纯领域契约（spec §4 / §4.1）
  *
  * sessionId 不再等于 messageId，而是真正的 Playback Session identity：
  * `crypto.randomUUID()`，每次“开始新 Work / 从头播放 / 切换 Source”创建新值；
@@ -39,7 +39,7 @@ export function isValidPlaybackSessionId(value: unknown): value is string {
 
 /**
  * 会话修复（§33 纯逻辑部分）：合法则原样返回，否则生成新 UUID。
- * 物理写回由 M5-05 服务端完成，本函数不触库。
+ * 物理写回由  服务端完成，本函数不触库。
  */
 export function ensurePlaybackSessionId(value: unknown): string {
   if (isValidPlaybackSessionId(value)) return value;

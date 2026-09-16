@@ -1,8 +1,8 @@
 /**
- * M6-03 MainChrome 可见性纯派生（spec §30）。
+ *  MainChrome 可见性纯派生（spec §30）。
  *
  * 纯函数层：不 import 任何 store / router / DOM / GlassToast，
- * 只依赖 M6-02 同一 hasNowPlaying 公式，保证 reservation 与 slot 同源。
+ * 只依赖  同一 hasNowPlaying 公式，保证 reservation 与 slot 同源。
  * Hook 层见 useMainChromeState.ts（只做 selector 派生，不 mutation）。
  */
 
@@ -16,14 +16,14 @@ import type {
 export type MainChromeVisibilityInput = {
     /** Session source（null 表示无可展示 session）。 */
     source: MiniSessionSnapshot['source'];
-    /** Session status（含 idle/hydrating 等 M5 全量）。 */
+    /** Session status（含 idle/hydrating 等  全量）。 */
     status: MiniSessionSnapshot['status'];
-    /** 三态 layoutMode（M6-01 契约：767→compact-docked；768→wide-*）。 */
+    /** 三态 layoutMode（ 契约：767→compact-docked；768→wide-*）。 */
     layoutMode: MiniNowPlayingLayoutMode;
     /** 软键盘是否展开（useSoftKeyboardState().isOpen）。 */
     isKeyboardOpen: boolean;
     /**
-     * Expanded 是否打开（M7-01 新增，缺省 false 保持 M6 调用兼容）。
+     * Expanded 是否打开（ 新增，缺省 false 保持  调用兼容）。
      * open 时 suppress Mini presentation（不改变 Session/Transport，spec §7）。
      */
     isExpanded?: boolean;
@@ -46,7 +46,7 @@ export type MainChromeVisibility = {
 };
 
 /**
- * 纯函数：MainChrome 可见性派生（spec §30 M6-03 切面 + M7-01 Expanded suppress）。
+ * 纯函数：MainChrome 可见性派生（spec §30  切面 +  Expanded suppress）。
  * 不读 store、不写 session、不触 audio，调用方（hook/单测）可独立验证。
  * Expanded open 只改变 Mini presentation，不改变 Session/Transport；
  * 关闭后 Mini 自动重新出现（调用方以同一输入重算即恢复）。
@@ -57,7 +57,7 @@ export const resolveMainChromeVisibility = (
     const hasNowPlaying = hasMiniNowPlaying({
         source: input.source,
         status: input.status,
-        // title/position 不进入显隐公式，占位即可（与 M6-02 同公式）。
+        // title/position 不进入显隐公式，占位即可（与  同公式）。
         title: '',
         lastCompletedParagraphIndex: -1,
         nextParagraphIndex: 0,

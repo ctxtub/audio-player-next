@@ -25,7 +25,7 @@ export interface ComposerProps {
   leftSlot?: React.ReactNode;
   /** 提交按钮文案，默认显示"发送"。 */
   submitText?: string;
-  /** 清空/重置按钮文案，默认"清空"；M9-C1 T2 创作页传入"新建创作"。 */
+  /** 清空/重置按钮文案，默认"清空"；  创作页传入"新建创作"。 */
   clearText?: string;
   /** 清空回调，用于触发更广泛的重置逻辑。 */
   onClear?: () => void;

@@ -7,31 +7,27 @@
 ## 测试影响
 
 - 影响的产品旅程：
-- 影响的 catalog case：
-- primary / required secondary defense：
+- 高损失风险（权限/数据/预算/迁移；无则写无）：
+- 复用或替换的测试（不得默认新增）：
 - spec 是否更新：是 / 否 / 不适用（说明原因）
-- catalog 是否更新：是 / 否 / 不适用（说明原因）
 
 ## 已执行的验证命令
 
 > 填写真实命令、退出码和关键结果；未运行写 `NOT_RUN` 与原因。
 
-- [ ] `yarn test:catalog`
-- [ ] `yarn lint`
-- [ ] `yarn tsc --noEmit --incremental false`
-- [ ] `yarn test:unit`
-- [ ] `yarn test:integration`
-- [ ] `yarn test:tooling`（命中 tooling 敏感路径时）
+- [ ] `yarn test:fast`
+- [ ] 受影响范围的最小窄测（列出命令）
 - [ ] `yarn build`
 - [ ] `git diff --check`
 
-## 浏览器验证
+## 交付末期浏览器验证
 
-- 是否需要：是 / 否（说明原因）
+- 当前是否已进入交付最后阶段：是 / 否
+- 未进入时写 `NOT_RUN（按政策延后）`，不得在开发中用内部测试入口伪验收。
 - Chromium 结果：
 - WebKit 结果：
 - retries：
-- evidence/run-id：
+- 结果摘要：
 
 ## 安全与边界
 

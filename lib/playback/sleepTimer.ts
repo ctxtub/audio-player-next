@@ -1,14 +1,14 @@
 /**
- * M7-03 Sleep Timer 领域语义（spec §21 / §22 / §22.1 / §23.1 / §24 / §29 / §31.1 / §32）。
+ *  Sleep Timer 领域语义（spec §21 / §22 / §22.1 / §23.1 / §24 / §29 / §31.1 / §32）。
  *
  * 本模块是 Sleep Timer 三态与数值规则的唯一纯函数 SSOT（无库/无 store 依赖，
  * unit 可直接导入；browser/integration 经 facade 复用同一规则）：
  * - 三态 off|minutes|story_end；story_end 仅 Work（Draft 不显示该选项，§22.1）；
  * - minutes 范围 10–120、step 10（与 server Zod 对齐，收口旧设置页 10–60 不一致，§31）；
  * - Legacy migration：remainingAllowedMs != null → minutes；== null → off
- *   （§23.1，不得只依赖 schema default）；
+ *（§23.1，不得只依赖 schema default）；
  * - Existing user：defaultSleepTimerEnabled=true + 原 playDurationMinutes
- *   （行为保持 30 分钟默认，§29.2 / M7-P04）。
+ *（行为保持 30 分钟默认，§29.2 /）。
  */
 
 /** Sleep Timer 三态（spec §22）。 */
@@ -153,7 +153,7 @@ export const resolveSetSleepTimerValues = (
 };
 
 /**
- * 到期归一值（spec §26 M7 新规则）：
+ * 到期归一值（spec §26  新规则）：
  * pause → save checkpoint → mode=off, remaining=null, total=null；
  * Session 保留 paused；之后 Play 正常继续（null 预算不受 <=0 守卫影响）。
  */

@@ -16,19 +16,19 @@ export interface StoryDetailPageProps {
 }
 
 /**
- * 故事详情页客户端 Shell 组件（M3-07）
+ * 故事详情页客户端 Shell 组件（）
  *
  * 核心生命周期与状态：
  * 1. loading：展示骨架占位态；
  * 2. unavailable：NOT_FOUND / UNAUTHORIZED / foreign-owned / trashed / 缺失，渲染统一不可用视图（LibraryUnavailable）；
  * 3. error：非不可用的系统级/网络级瞬态异常，展示重试机制；
  * 4. success：由 composeLibraryDetailViewModel 包装注入 progress=null 缝隙，纯净呈现 StoryDetail；
- * 5. mutations：接入详情侧 Rename / Favorite / Move to Trash，共享 M3-05 mutation 引擎与跨缓存一致性。
+ * 5. mutations：接入详情侧 Rename / Favorite / Move to Trash，共享  mutation 引擎与跨缓存一致性。
  *
  * 严格防护与边界约束：
  * - 绝不发起针对回收站视图的列表或额外探测查询；
  * - 仅支持 Rename / Favorite / Move to Trash，严禁在详情暴露 Restore / Permanent Delete；
- * - progress 经由 VM seam 严格注入为 null，为 M5 留出干净接入点。
+ * - progress 经由 VM seam 严格注入为 null，为  留出干净接入点。
  */
 const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id }) => {
   const numericId = Number.parseInt(id, 10);

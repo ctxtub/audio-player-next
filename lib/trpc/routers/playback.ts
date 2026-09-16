@@ -1,11 +1,11 @@
 /**
  * 断点续播 Router
  *
- * M5-04：Playback router 从 CRUD Progress 升级成 Session API（spec §13/§14）。
+ *：Playback router 从 CRUD Progress 升级成 Session API（spec §13/§14）。
  * 7 个正式 procedures（getAnchor / beginSession / saveCheckpoint /
  * completeSession / clearAnchor / promoteDraftToWork / getWorkProgressBatch），
  * 经 lib/server/playbackSession.ts facade 对外提供。
- * M9-03：旧 getProgress / saveProgress / clearProgress compatibility procedures
+ *：旧 getProgress / saveProgress / clearProgress compatibility procedures
  * 已删除（无合法 consumer，经全仓 audit 确认），行为由 Session API 承载。
  */
 
@@ -113,7 +113,7 @@ export const playbackRouter = router({
     }),
 
   /**
-   * M7-03 playback.setSleepTimer：当前 Session Timer 设置（spec §24 / §24.1）。
+   *  playback.setSleepTimer：当前 Session Timer 设置（spec §24 / §24.1）。
    * stale（sessionId 不匹配当前 Anchor）→ {accepted:false, reason:'STALE_SESSION'}；
    * Draft story_end → BAD_REQUEST。
    */
@@ -129,7 +129,7 @@ export const playbackRouter = router({
     }),
 
   /**
-   * §22 playback.getWorkProgressBatch：M3 消费的 Work 进度批量视图。
+   * §22 playback.getWorkProgressBatch： 消费的 Work 进度批量视图。
    */
   getWorkProgressBatch: guardedProcedure
     .input(getWorkPlaybackProgressBatchInputSchema)

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Collection 详情页客户端 Shell（M9-C1 T4）。
+ * Collection 详情页客户端 Shell（）。
  *
  * - 头部：返回、标题、重命名、收藏、删除（集合级生命周期）；
  * - 成员：按服务端 position 升序直出（areMemberPositionsOrdered 复核），逐 Work 播放；

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * M6-02 MiniNowPlaying 共享 presentation primitives（spec §9/§58）。
+ *  MiniNowPlaying 共享 presentation primitives（spec §9/§58）。
  *
  * 纯展示原子：只收 props，不读任何 store / Session / Transport /
  * legacy playbackProgressStore / GenerationHistory / StoryCard。
@@ -50,7 +50,7 @@ const actionMeta: Record<
 
 /**
  * 非交互粗进度 rail（spec §8.1/§58）。
- * 不展示百分比/精确时间；键盘不可聚焦；seek 归 M7。
+ * 不展示百分比/精确时间；键盘不可聚焦；seek 归。
  */
 export const MiniProgressRail: React.FC<MiniProgressRailProps> = ({ coarseProgress }) => {
     if (coarseProgress === null) {

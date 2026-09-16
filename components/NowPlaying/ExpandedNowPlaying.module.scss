@@ -1,4 +1,4 @@
-/* M7-01 Expanded Now Playing Surface（spec §10/§11/§12）。
+/*  Expanded Now Playing Surface（spec §10/§11/§12）。
  * 响应式单一 Modal 语义 + CSS 断点切换形态（JS 不重挂载，resize 时 isExpanded 不变）：
  * - <768px：Modal Bottom Sheet（底部弹出，顶部 Handle 发起 drag dismiss）；
  * - >=768px：Modal Right Side Panel（右侧 anchored，全高，glass elevated，左侧大圆角）。
@@ -215,7 +215,7 @@
   outline-offset: 2px;
 }
 
-/* Body：M7-01 最小信息区（P3A 段定位 + 完成态），可滚动，滚动手势不触发 dismiss。 */
+/* Body： 最小信息区（ 段定位 + 完成态），可滚动，滚动手势不触发 dismiss。 */
 .body {
   flex: 1;
   min-height: 0;
@@ -313,7 +313,7 @@
   color: var(--text-tertiary);
 }
 
-/* M7-02 P3A 播放能力区（additive，不改 M7-01 Surface 布局/断点）。
+/*   播放能力区（additive，不改  Surface 布局/断点）。
  * 新组件经 data-testid 兜底布局（触控热区 >=44px，与 Mini 同口径），
  * 视觉延续 glass/typography，不引入大型唱片（spec §13）。 */
 .body [data-testid='expanded-timeline-track'] {
@@ -466,7 +466,7 @@
   gap: var(--space-2);
 }
 
-/* M7-04-01 Work 查看正文动作区（additive，不改既有 Surface 布局/断点）。
+/*  Work 查看正文动作区（additive，不改既有 Surface 布局/断点）。
  * 内容导航按钮延续 glass/typography，触控热区 >=44px，与既有控制同口径。 */
 .body [data-testid='expanded-actions'] {
   display: grid;
@@ -536,7 +536,7 @@
   outline-offset: 2px;
 }
 
-/* M7-04-02 Draft Transcript 只读面（additive，不改既有 Surface 布局/断点）。
+/*  Draft Transcript 只读面（additive，不改既有 Surface 布局/断点）。
  * 正文可滚动（内容区滚动不触发 dismiss，spec §78），按钮延续 glass/typography，
  * 触控热区 >=44px，与查看正文同口径；只读展示无编辑面。 */
 .body [data-testid='expanded-transcript'] {

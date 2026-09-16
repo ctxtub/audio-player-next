@@ -1,5 +1,5 @@
 /**
- * M8 Canonical Audio 本地磁盘后端（spec §2.1/§19.2/§31；M8-02）。
+ *  Canonical Audio 本地磁盘后端（spec §2.1/§19.2/§31；）。
  *
  * - root 可配（`AUDIO_LOCAL_ROOT`，缺省 `/app/audio`）；与 SQLite 目录解耦，
  *   绝不落入 DB 备份耦合目录（由 index.ts 配置层拒绝，见 LEGACY_COUPLED_AUDIO_DIR）。

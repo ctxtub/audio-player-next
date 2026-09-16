@@ -1,7 +1,7 @@
 /**
  * Library (StoryWork) 相关 Zod Schemas 与 DTO 定义
  *
- * 冻结 M2/M3/M4/M5 统一消费的数据传输契约与接口校验。
+ * 冻结 /// 统一消费的数据传输契约与接口校验。
  */
 
 import { z } from 'zod';
@@ -33,7 +33,7 @@ export const storyAudioStatusSchema = z.enum([
 export type StoryAudioStatus = z.infer<typeof storyAudioStatusSchema>;
 
 /**
- * 统一音频投影结构（M2 阶段占位，M8 填充真实值，DTO 结构恒定）
+ * 统一音频投影结构（ 阶段占位， 填充真实值，DTO 结构恒定）
  */
 export const storyAudioProjectionSchema = z.object({
   status: storyAudioStatusSchema,
@@ -127,7 +127,7 @@ export const libraryGetInputSchema = libraryIdInputSchema;
 export type LibraryGetInput = z.infer<typeof libraryGetInputSchema>;
 
 /**
- * library.create 入参契约（供 M4 等创作者使用）
+ * library.create 入参契约（供  等创作者使用）
  */
 export const libraryCreateInputSchema = z.object({
   title: z

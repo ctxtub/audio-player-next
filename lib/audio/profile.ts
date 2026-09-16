@@ -1,8 +1,8 @@
 /**
- * M8 Canonical Audio TTS 身份配置（spec §5.3/§5.4 + §8/§9；M8-01 纯领域层）。
+ *  Canonical Audio TTS 身份配置（spec §5.3/§5.4 + §8/§9； 纯领域层）。
  *
  * 只放类型、常量与纯解析函数，不读取音频 bytes、不调用 TTS、不触 DB。
- * 真实合成入口 synthesizeSpeechWithProfile() 留待 M8-03（正式拆分口径）。
+ * 真实合成入口 synthesizeSpeechWithProfile() 留待（正式拆分口径）。
  */
 
 /** TTS backend 稳定身份默认值（非 secret；OPENAI_BASE_URL 可指向不同后端时仅靠 model 不足以表达真实身份，spec §5.3） */
@@ -25,13 +25,13 @@ export const CANONICAL_AUDIO_FORMAT = 'mp3';
 export const CANONICAL_AUDIO_CONTENT_TYPE = 'audio/mpeg';
 
 /**
- * Canonical 合成速度恒为 1.0（spec §7 / M8-P02）。
+ * Canonical 合成速度恒为 1.0（spec §7 /）。
  * 用户倍速一律由 HTMLAudioElement.playbackRate 实现，绝不进入 asset 身份、
  * 不创建新 Manifest、不重新 TTS、不改 duration metadata。
  */
 export const CANONICAL_SYNTHESIS_SPEED = 1.0 as const;
 
-/** OPENAI_TTS_MODEL 缺省回落（与 lib/server/openai.ts getTtsConfig fallback 同值；M8-02 统一收敛） */
+/** OPENAI_TTS_MODEL 缺省回落（与 lib/server/openai.ts getTtsConfig fallback 同值； 统一收敛） */
 export const FALLBACK_TTS_MODEL = 'tts-1';
 
 /** OPENAI_TTS_MODEL 环境变量名 */

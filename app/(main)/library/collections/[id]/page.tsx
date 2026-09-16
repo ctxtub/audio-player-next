@@ -9,7 +9,7 @@ interface CollectionDetailPageProps {
 }
 
 /**
- * 集合详情路由入口（M9-C1 T4）。
+ * 集合详情路由入口（）。
  * 集合 id 为 UUID 文本（非数字 Work id 命名空间，/library/[id] 不冲突）。
  * 空/超长输入直接 notFound；软删除集合由服务端 fail closed → 统一不可用视图。
  */

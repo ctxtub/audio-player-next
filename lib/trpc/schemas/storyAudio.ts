@@ -1,5 +1,5 @@
 /**
- * M8 Canonical Audio storyAudio Router Schemas（spec §20/§26；M8-03）。
+ *  Canonical Audio storyAudio Router Schemas（spec §20/§26；）。
  *
  * 输入严格三字段 `{ workId, segmentIndex, sessionId }`：
  * 不接 client 的 text/audio/profile/storageKey；Canonical input 全由 server 推导。
@@ -91,7 +91,7 @@ export const playbackManifestSchema = z.object({
   totalDurationMs: z.number().int().positive().nullable(),
   totalByteLength: z.number().int().min(0).nullable(),
   segments: z.array(playbackManifestSegmentSchema),
-  /** T3 单轨投影（开关开启时非 null；与空 segments 互斥，保证只暴露一条时间轴）。 */
+  /**  单轨投影（开关开启时非 null；与空 segments 互斥，保证只暴露一条时间轴）。 */
   singleTrack: storyAudioAssetSchema.nullable().optional(),
 });
 export type PlaybackManifest = z.infer<typeof playbackManifestSchema>;
@@ -111,7 +111,7 @@ export const ensureSegmentReadySchema = z.object({
     segmentCount: z.number().int().min(0),
     totalDurationMs: z.number().int().positive().nullable(),
   }),
-  /** T3 单轨：开关开启时附单资产投影（`segment` 恒为唯一 asset）。 */
+  /**  单轨：开关开启时附单资产投影（`segment` 恒为唯一 asset）。 */
   asset: storyAudioAssetSchema.optional(),
 });
 export type EnsureSegmentReady = z.infer<typeof ensureSegmentReadySchema>;
@@ -133,7 +133,7 @@ export const ensureSegmentOutputSchema = z.union([
 export type EnsureSegmentOutput = z.infer<typeof ensureSegmentOutputSchema>;
 
 // ---------------------------------------------------------------------------
-// M9-C1 T3 单轨资产输入/输出（DTO 定义见文件顶部以支持前向引用）
+//   单轨资产输入/输出（DTO 定义见文件顶部以支持前向引用）
 // ---------------------------------------------------------------------------
 
 /** storyAudio.ensure 输入（无 segmentIndex；严格 `{workId, sessionId}`）。 */

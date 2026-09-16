@@ -1,7 +1,4 @@
-// case_id: new-creation-strong-reset
-// journey: story-collection-continuous
-// legacy_aliases: [E2E-10-07]
-// M9-C1 T2：创作页「新建创作」是唯一强重置入口（原「清空」）。
+//：创作页「新建创作」是唯一强重置入口（原「清空」）。
 // 空会话点击后 Chat 归 idle、active Conversation identity 切换，且连续创作恢复默认开启。
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";

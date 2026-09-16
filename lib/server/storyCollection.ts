@@ -1,5 +1,5 @@
 /**
- * StoryCollection 服务层（change-id 2026-09-15-story-collection-continuous-creation T1）。
+ * StoryCollection 服务层（change-id 2026-09-15-story-collection-continuous-creation）。
  *
  * 职责：
  * 1. Promotion：Artifact → Collection/Work 的唯一写入口（产品 §2.1 首作建集、集合内 position、sourceMessageId 幂等）；
@@ -394,7 +394,7 @@ export async function restoreCollectionForSubject(
  * 永久删除集合：级联 Work（经 collection-aware 统一物理删除 seam，含音频 tombstone outbox）、
  * 进度与音频元数据。仅允许对回收站中的集合执行；active 为 CONFLICT。
  *
- * M9-C1 Blocker 1：重验、成员固定、tombstone、成员删除、无 survivor 确认与 Collection 删除
+ *  Blocker 1：重验、成员固定、tombstone、成员删除、无 survivor 确认与 Collection 删除
  * 全部收敛在 `executeStoryCollectionPhysicalDelete` 的同一 DB 原子边界内；restore 竞态
  * fail closed，绝不依赖 FK cascade 删除成员。
  */

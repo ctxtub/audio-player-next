@@ -1,28 +1,28 @@
 /**
- * M5-07 Playback Session 服务端 Facade（spec §14 / §15 / §16 / §17 / §18 / §19 /
+ *  Playback Session 服务端 Facade（spec §14 / §15 / §16 / §17 / §18 / §19 /
  * §21 / §22 / §24 / §30 / §33 / §36）。
  *
  * 本文件是 Session API 在 server 侧的正式暴露层，已替代
- * lib/server/playbackProgress.ts（旧 CRUD Progress 实现，M9-03 已删除）。
+ * lib/server/playbackProgress.ts（旧 CRUD Progress 实现， 已删除）。
  *
- * M5-07 定调：getAnchor / beginSession（M5-05）与 saveCheckpoint（M5-06）语义冻结
+ *  定调：getAnchor / beginSession（）与 saveCheckpoint（）语义冻结
  * 不动；completeSession / clearAnchor / promoteDraftToWork / getWorkProgressBatch
  * 落真逻辑（§19 / §21 / §22 / §24 / §30）。
  *
- * M5-08 §29 生命周期边界（CAS 内核不动，只收 trash/dangling 外环）：
+ *  §29 生命周期边界（CAS 内核不动，只收 trash/dangling 外环）：
  * getAnchor 对不可解析 work Anchor（trash/missing/foreign/已删）删行 + null；
  * saveCheckpoint / completeSession 对 trash 自有 Work 仍走同一 CAS 面（不复活）；
- * beginSession trash 仍经 M2 统一 NOT_FOUND（即 WORK_UNAVAILABLE 的 wire 形）；
+ * beginSession trash 仍经  统一 NOT_FOUND（即 WORK_UNAVAILABLE 的 wire 形）；
  * 另提供 invalidatePlaybackReferencesForWork 供 permanent delete 后清理（不自动接入）。
  *
  * - getAnchor（§15 / §33）：读取当前 Subject 唯一 Anchor；legacy
  *   chat→draft / generation→work 归一；sessionId null/invalid UUID 则生成
- *   UUID 写回；新写入全部要求 UUID（M5-01 isValidPlaybackSessionId）。
- * - beginSession（§16 / §36）：Work metadata 一律经 M2
+ *   UUID 写回；新写入全部要求 UUID（ isValidPlaybackSessionId）。
+ * - beginSession（§16 / §36）：Work metadata 一律经
  *   getStoryWorkForSubject（subject, workId），不得重算 title、不得重定义
  *   contentHash、不得直查 GenerationHistory；paragraph count 经现有
  *   normalizeStoryText / segmentStoryText 计算；不信任客户端 Story metadata
- *  （draftSnapshot 仅限 Draft，Work 携带即 BAD_REQUEST）；resume 做
+ *（draftSnapshot 仅限 Draft，Work 携带即 BAD_REQUEST）；resume 做
  *   hash/version 校验（不一致→reset 0 + 更新 Progress hash/version）；
  *   restart 位置→0、保留 completedAt、创建新 sessionId（input.sessionId）；
  *   Draft 验证 ChatMessage.messageId 属于当前 Subject，server 拒绝
@@ -36,18 +36,18 @@
  *   incoming.next < existing.next → 不回退（保持旧 server 保护性质，原样返回
  *   现有 Anchor，accepted:true，新 input 根本无此字段，
  *   透传亦忽略）；预读仅 fast-path，权威判定下沉 conditional write CAS
- *   （WHERE sessionId + next lte，以 DB 当前值为准，消除 TOCTOU）；
- *   M5-07 FIXUP 再绑 content identity（WHERE contentHash +
+ *（WHERE sessionId + next lte，以 DB 当前值为准，消除 TOCTOU）；
+ *    FIXUP 再绑 content identity（WHERE contentHash +
  *   segmentationVersion，同一原子子句）：seamless promotion 是唯一 source
  *   identity 改变而 sessionId 不变的 transition，promotion 前发出的旧包晚到时
  *   必须因 identity 失配 CAS 失败而 no-op，绝不把 Anchor 拉回旧 hash/next
- *   （§24.1）；hash/version 完全一致的 seamless 老包不受影响，继续被吸收；
+ *（§24.1）；hash/version 完全一致的 seamless 老包不受影响，继续被吸收；
  *   Work 时同一事务内先 CAS Anchor、成功才 UPSERT Progress
- *   （prisma.$transaction，用户/访客对称，completedAt 保留，lastPlayedAt=now）；
+ *（prisma.$transaction，用户/访客对称，completedAt 保留，lastPlayedAt=now）；
  *   Draft 按 Anchor identity 只 conditional 更新 Anchor，不做 Work progress。
  * - completeSession（§19 / §30 / §41）：session 匹配才收尾；Work 时同一事务内
  *   CAS Anchor（next=total/last=total-1/state=ended）+ UPSERT Progress
- *   （next=total/completedAt=首完时间/lastPlayedAt=now，重复 complete 保留首完，
+ *（next=total/completedAt=首完时间/lastPlayedAt=now，重复 complete 保留首完，
  *   不删 completion history）；Draft 仅 CAS 置 Anchor ended，不建 Work progress。
  * - clearAnchor（§21）：deleteMany WHERE sessionId（CAS 原子，不匹配 no-op
  *   cleared:false）；不校验 Work 存在（trash/missing 照清），User/Guest 对称。
@@ -57,13 +57,13 @@
  *   hash 一致沿用 draft 段落（钳制），不一致 reset 0；同一事务内 UPSERT Work
  *   progress（completedAt 保留，lastPlayedAt=now）。
  * - getWorkProgressBatch（§22 / §40）：只读批量视图，每个 workId 必有结果
- *   （无 row/非自有 → not_started 默认行）；state/progress 经
+ *（无 row/非自有 → not_started 默认行）；state/progress 经
  *   lib/playback/progress.ts 推导；绝不写库、不覆盖其它 work。
  *
  * Router（lib/trpc/routers/playback.ts）只经由本 facade 对外提供
  * 7 个新 procedures，Subject 鉴权与 rate limit 仍由 router 层复用。
  *
- * M7-03 Sleep Timer 增补（spec §23–§30）：
+ *  Sleep Timer 增补（spec §23–§30）：
  * - Anchor 行增补 sleepTimerMode（off|minutes|story_end）；toAnchorDto 归一
  *   remaining==0（到期不再以 0 持久化，§26）；getAnchor repair 同写 timer
  *   一致性（§23.1，不只依赖列 default）；
@@ -127,7 +127,7 @@ import type {
 } from '@/lib/trpc/schemas/playback';
 
 /**
- * M5-07 已落地全部 7 procedures：本占位不再使用（保留注释说明分态历史）。
+ *  已落地全部 7 procedures：本占位不再使用（保留注释说明分态历史）。
  * 所有未知/非法输入一律在各 procedure 内 fail-closed（BAD_REQUEST / NOT_FOUND /
  * STALE_SESSION / no-op），绝不脏写。
  */
@@ -147,7 +147,7 @@ type AnchorRow = {
   speed: number;
   remainingAllowedMs: number | null;
   totalAllowedMs: number | null;
-  /** M7-03 Sleep Timer 三态（DB TEXT；非法值由 toAnchorDto fail-closed 收敛）。 */
+  /**  Sleep Timer 三态（DB TEXT；非法值由 toAnchorDto fail-closed 收敛）。 */
   sleepTimerMode: string;
   updatedAt: Date;
 };
@@ -197,7 +197,7 @@ const toAnchorDto = (row: AnchorRow): PlaybackAnchorDTO | null => {
   if (!Number.isInteger(row.totalParagraphs) || row.totalParagraphs < 1) return null;
   if (typeof row.voiceId !== 'string' || row.voiceId.length > 64) return null;
   if (typeof row.speed !== 'number' || !(row.speed >= 0.25 && row.speed <= 4.0)) return null;
-  // M7-03 三元组归一（§23.1/§26 全局不变式：预算只存在于 minutes）：
+  //  三元组归一（§23.1/§26 全局不变式：预算只存在于 minutes）：
   // remaining==0 → null；显式 off/story_end 优先于派生；DTO 永不出现 off+预算。
   // getAnchor repair 负责把该归一把写回 DB。
   const timerTriple = normalizeSleepTimerTriple(
@@ -228,7 +228,7 @@ const toAnchorDto = (row: AnchorRow): PlaybackAnchorDTO | null => {
 };
 
 /**
- * M7-03 Anchor timer repair 判定（纯 helper，不触库；getAnchor repair 与测试共用）。
+ *  Anchor timer repair 判定（纯 helper，不触库；getAnchor repair 与测试共用）。
  *
  * 全局不变式（§23.1/§26）：预算只存在于 minutes。normalizeSleepTimerTriple
  * 与行现状逐字段比对，任一不一致即返回待写回三元组。
@@ -268,7 +268,7 @@ export const resolveAnchorSleepTimerRepair = (row: {
  * - different source → requestedSessionId !== currentSessionId（必须新，mode 无关）
  *
  * 无 current Anchor（null 行）或 currentSessionId 为空/非法时直接放行
- * （首次 begin 不挡；非法 session 由 getAnchor §33 repair 负责，不在此抢 ownership）。
+ *（首次 begin 不挡；非法 session 由 getAnchor §33 repair 负责，不在此抢 ownership）。
  * server 不生成 UUID（API 已要求 client 提供 v4），只拒绝 illegal transition。
  * dangling Anchor（source 不可解析 → null）视为 different source：
  * 同 session resume 亦拒绝（fail-closed），restart 同 session 本就拒绝。
@@ -312,7 +312,7 @@ export const assertValidBeginSessionTransition = (args: BeginSessionTransitionAr
   }
 };
 
-/** §15 playback.getAnchor：读取当前 Subject 唯一 Anchor（含 legacy repair，M5-05 落地）。 */
+/** §15 playback.getAnchor：读取当前 Subject 唯一 Anchor（含 legacy repair， 落地）。 */
 export const getPlaybackAnchorForSubject = async (
   subject: Subject,
 ): Promise<GetPlaybackAnchorOutput> => {
@@ -339,11 +339,11 @@ export const getPlaybackAnchorForSubject = async (
     } catch {
       return null;
     }
-    // M5-08 §29.2（M5-P03）/ §29.3：work Anchor 可解析性门禁。
+    //  §29.2（）/ §29.3：work Anchor 可解析性门禁。
     // getStoryWorkForSubject 仅放行 active（deletedAt IS NULL）自有 Work；trash /
-    // missing / foreign / 已物理删除统一 NOT_FOUND（M2 no-leak 不可区分面）→
+    // missing / foreign / 已物理删除统一 NOT_FOUND（ no-leak 不可区分面）→
     // fail-closed：删除 dangling Anchor 行，返回 null 不 rehydrate。
-    // Draft 无 trash 概念，不在此判定。本删除只清 Anchor 行（M5 半径 Anchor 层），
+    // Draft 无 trash 概念，不在此判定。本删除只清 Anchor 行（ 半径 Anchor 层），
     // Per-Work Progress 由 Work FK / GC 处理，不连带删。
     try {
       await getStoryWorkForSubject(subject, workId);
@@ -366,7 +366,7 @@ export const getPlaybackAnchorForSubject = async (
   // §33 repair：sessionId null/invalid UUID → 生成 UUID 写回。
   // 同时把 legacy chat/generation 收敛为 canonical draft/work 写回，
   // 非法 anchorState（非 ready|ended）收敛为 ready 写回；三者合并为一次 update。
-  // M7-03 增补 timer repair（§23.1）：sleepTimerMode 非法/与 remaining 不一致/
+  //  增补 timer repair（§23.1）：sleepTimerMode 非法/与 remaining 不一致/
   // remaining==0 过期残留时同一次 update 写回（不得只依赖 schema default）。
   const needsSessionRepair = !isValidPlaybackSessionId(row.sessionId);
   const needsKindRepair = row.sourceKind !== canonicalKind;
@@ -430,7 +430,7 @@ const computeWorkTotalParagraphs = (storyText: string): number => {
 };
 
 /**
- * M8-04 FIXUP（Blocking 1/2）/ FIXUP-2（Blocking 2）：Work 有效切分身份
+ *  FIXUP（Blocking 1/2）/ FIXUP-2（Blocking 2）：Work 有效切分身份
  * 只读 helper（Manifest 权威，spec §23；beginSession / completeSession /
  * promoteDraftToWork 三个身份写路径统一消费）。
  *
@@ -484,7 +484,7 @@ export const resolveWorkEffectiveSegmentation = async (
   return { effectiveSegmentationVersion: version, effectiveTotalParagraphs: total };
 };
 
-/** §16 playback.beginSession：创建新 Session 并落 Anchor（M5-05 落地）。 */
+/** §16 playback.beginSession：创建新 Session 并落 Anchor（ 落地）。 */
 export const beginPlaybackSessionForSubject = async (
   subject: Subject,
   input: BeginPlaybackSessionInput,
@@ -516,7 +516,7 @@ export const beginPlaybackSessionForSubject = async (
   }
   const beginTimerInputRemaining = input.remainingAllowedMs ?? null;
   const beginTimerInputTotal = input.totalAllowedMs ?? null;
-  // M7-03：新写入一律走三元组归一（全局不变式：预算只存在于 minutes）；
+  //：新写入一律走三元组归一（全局不变式：预算只存在于 minutes）；
   // 缺省 mode（旧客户端）按 Legacy 规则派生（remaining!=null→minutes，否则 off，
   // §23.1），显式 off/story_end 优先于派生且预算清零，不得只依赖列 default。
   const beginTimer = normalizeSleepTimerTriple(
@@ -536,11 +536,11 @@ export const beginPlaybackSessionForSubject = async (
         message: 'draftSnapshot 仅允许 Draft begin 使用',
       });
     }
-    // §36 边界：Work metadata 只经 M2 getStoryWorkForSubject（subject, workId）；
+    // §36 边界：Work metadata 只经  getStoryWorkForSubject（subject, workId）；
     // 不得重算 title、不得重定义 contentHash、不得直查 GenerationHistory。
     // getStoryWorkForSubject 对 missing / foreign / trash 统一抛 NOT_FOUND，原样透出。
     const work = await getStoryWorkForSubject(subject, input.source.workId);
-    // M8-04 FIXUP（Blocking 1/2）：Manifest 权威 effective pair；读失败直接抛 fail-closed。
+    //  FIXUP（Blocking 1/2）：Manifest 权威 effective pair；读失败直接抛 fail-closed。
     const { effectiveSegmentationVersion, effectiveTotalParagraphs } =
       await resolveWorkEffectiveSegmentation(subject, work.id, work.storyText);
     const totalParagraphs = effectiveTotalParagraphs;
@@ -596,7 +596,7 @@ export const beginPlaybackSessionForSubject = async (
       lastCompletedParagraphIndex = -1;
       nextParagraphIndex = 0;
     } else if (existingProgress) {
-      // §16.2 Work Resume：校验 hash + segmentationVersion（M8-04 FIXUP：version 对 Manifest 权威）。
+      // §16.2 Work Resume：校验 hash + segmentationVersion（ FIXUP：version 对 Manifest 权威）。
       const hashMatch = existingProgress.contentHash === work.contentHash;
       const versionMatch = existingProgress.segmentationVersion === effectiveSegmentationVersion;
       if (hashMatch && versionMatch) {
@@ -679,14 +679,14 @@ export const beginPlaybackSessionForSubject = async (
 
   // —— Draft Begin（§16.4） ——
   const messageId = input.source.messageId;
-  // M7-03 §24：story_end 仅 Work；Draft begin 携带即 BAD_REQUEST（fail-closed）。
+  //  §24：story_end 仅 Work；Draft begin 携带即 BAD_REQUEST（fail-closed）。
   if (input.sleepTimerMode === 'story_end') {
     throw new TRPCError({
       code: 'BAD_REQUEST',
       message: '[playback-session] story_end 仅 Work 可用（§22.1），Draft begin 拒绝',
     });
   }
-  // server contract：拒绝 replay-text-* 等瞬态 ID 持久化（M5-01 门禁提升到 server）。
+  // server contract：拒绝 replay-text-* 等瞬态 ID 持久化（ 门禁提升到 server）。
   if (!isValidDraftMessageId(messageId)) {
     throw new TRPCError({
       code: 'BAD_REQUEST',
@@ -757,18 +757,18 @@ export const beginPlaybackSessionForSubject = async (
 };
 
 /**
- * M5-06 FIXUP conditional-write (CAS) helpers（评审 Blocking 1：消除 TOCTOU；
- * M5-07 FIXUP 再绑 content identity：消除 promotion 竞态）。
+ *  FIXUP conditional-write (CAS) helpers（评审 Blocking 1：消除 TOCTOU；
+ *  FIXUP 再绑 content identity：消除 promotion 竞态）。
  *
  * 预读快照只做 fast-path 早退与 source 定路（不具权威性）；最终写入一律经
  * conditional updateMany 原子绑定，以数据库当前值（而非几毫秒前快照）为准：
  * - Stale CAS：anchor.sessionId === expectedSessionId
  * - Monotonic CAS：currentAnchor.nextParagraphIndex <= incomingNext
- * - Identity CAS（M5-07 FIXUP）：currentAnchor.contentHash === expectedContentHash
+ * - Identity CAS（ FIXUP）：currentAnchor.contentHash === expectedContentHash
  *   AND currentAnchor.segmentationVersion === expectedSegmentationVersion
  * 三者同时下沉到同一 WHERE，count===1 方为成功，count===0 则按当前 DB 值
  * 区分 STALE_SESSION / identity no-op / monotonic no-op
- * （见 resolveConditionalCheckpointFailure）。
+ *（见 resolveConditionalCheckpointFailure）。
  */
 export type CheckpointAnchorWriteData = {
   contentHash: string;
@@ -779,7 +779,7 @@ export type CheckpointAnchorWriteData = {
   speed: number;
   remainingAllowedMs: number | null;
   totalAllowedMs: number | null;
-  /** M7-03 Sleep Timer 三态（checkpoint 显式携带 timer 变更；缺省保持现值）。 */
+  /**  Sleep Timer 三态（checkpoint 显式携带 timer 变更；缺省保持现值）。 */
   sleepTimerMode: SleepTimerMode;
 };
 
@@ -838,7 +838,7 @@ export const conditionalUpdatePlaybackAnchorForSubject = async (
 };
 
 /**
- * CAS 失败后按数据库当前值区分原因（绝不写；不扩 API reason、不改 M5-04
+ * CAS 失败后按数据库当前值区分原因（绝不写；不扩 API reason、不改
  * contract：identity 失配与 monotonic 落后统一为 accepted:true + 当前 Anchor）：
  * - 无行 / session 已变化 → {accepted:false, reason:'STALE_SESSION'}
  * - session 相同但 contentHash / segmentationVersion 已变化（promotion 唯一
@@ -889,8 +889,8 @@ const resolveConditionalCheckpointFailureForSubject = async (
 };
 
 /**
- * §17 playback.saveCheckpoint：Session 归属 + 单调守卫后更新 Anchor（M5-06 落地，
- * M5-06 FIXUP 原子绑定：预读仅 fast-path，权威判定下沉 conditional write CAS）。
+ * §17 playback.saveCheckpoint：Session 归属 + 单调守卫后更新 Anchor（ 落地，
+ *  FIXUP 原子绑定：预读仅 fast-path，权威判定下沉 conditional write CAS）。
  *
  * 顺序冻结（§17.1 → §17.2 → §18）：
  * 1. Stale Guard：无 Anchor / anchor.sessionId !== input.sessionId（含 null/非法
@@ -902,17 +902,17 @@ const resolveConditionalCheckpointFailureForSubject = async (
  *    不允许回退（保持旧 server 保护性质；accepted:true + 现有 Anchor 原样返回，
  *    不写 Anchor、不碰 Progress；新 input 无此字段，透传亦忽略）。
  *    预读回退直接 no-op 返回；预读放行仍须经 CAS lte 子句复核（防同 Session 竞争回写）。
- * 2b. Content-Identity Guard（M5-07 FIXUP）：同 Session 但 incoming
+ * 2b. Content-Identity Guard（ FIXUP）：同 Session 但 incoming
  *    contentHash / segmentationVersion 与现有 Anchor 不一致 → 安全 no-op
- *    （accepted:true + 现有 Anchor 原样返回，不写 Anchor、不碰 Progress，
+ *（accepted:true + 现有 Anchor 原样返回，不写 Anchor、不碰 Progress，
  *    不伪装成 STALE_SESSION）。promotion 是唯一合法变更面（§24.1）；
  *    hash/version 一致的 seamless 老包不受影响，继续下沉 CAS 吸收。
  *    预读失配直接 no-op 返回；预读放行仍须经 CAS identity 子句以 DB 当前值
  *    复核（防 guard 后 promotion 穿透）。
  * 3. Work 行为（§18）：source.kind==work 时一事务内先 conditional CAS Anchor，
  *    CAS 成功才 UPSERT Progress，CAS 失败绝不碰 Progress
- *    （prisma.$transaction；completedAt 保留，lastPlayedAt=now；用户/
- *    访客对称；ownership 经 M2 getStoryWorkForSubject，不直查 Work 表）。
+ *（prisma.$transaction；completedAt 保留，lastPlayedAt=now；用户/
+ *    访客对称；ownership 经  getStoryWorkForSubject，不直查 Work 表）。
  *    Draft 按 Anchor identity 只 conditional 更新 Anchor，不做 Work progress。
  */
 export const savePlaybackCheckpointForSubject = async (
@@ -963,7 +963,7 @@ export const savePlaybackCheckpointForSubject = async (
   // §17.2：同 Session 单调守卫 fast-path——incoming.next < existing.next → 不回退。
   // 保持旧 server 保护性质：不写 Anchor、不碰 Progress，原样返回现有 Anchor。
   // 放行（>=）仍须经 CAS lte 子句以 DB 当前值复核，防同 Session 竞争回写。
-  // Content-identity fast-path（M5-07 FIXUP，与 CAS 同判定，非权威）：
+  // Content-identity fast-path（ FIXUP，与 CAS 同判定，非权威）：
   // session 相同但 DB hash/version 已与 input 不一致（promotion 唯一合法变更面，
   // §24.1）→ accepted:true + 现有 Anchor 安全 no-op，不伪装 STALE；hash/version
   // 一致的 seamless 老包不受影响，继续下沉 CAS 吸收。放行仍须经 CAS identity
@@ -978,7 +978,7 @@ export const savePlaybackCheckpointForSubject = async (
     return { accepted: true, anchor: existingDto };
   }
 
-  // M7-03：显式携带则更新 Timer；缺省（旧客户端/旧包）保持 Anchor 现值，
+  //：显式携带则更新 Timer；缺省（旧客户端/旧包）保持 Anchor 现值，
   // 绝不回退为列 default——旧 in-flight 包不得覆盖 setSleepTimer 新值。
   // 写前走三元组归一：保持的 off/story_end 配输入预算亦清零（旧包预算不得复活已关 Timer）；
   // minutes 缺正预算则安全降级 off（fail-closed 到安全态）。
@@ -1036,11 +1036,11 @@ export const savePlaybackCheckpointForSubject = async (
     return { accepted: true, anchor: dto };
   }
 
-  // —— Work checkpoint（§18 + M5-08 §29.1）：同一事务内 conditional CAS Anchor + UPSERT Progress ——
+  // —— Work checkpoint（§18 +  §29.1）：同一事务内 conditional CAS Anchor + UPSERT Progress ——
   const workId = source.workId;
-  // Ownership 经 M2（subject, workId），不直查 Work 表、不重算 title/hash；
+  // Ownership 经（subject, workId），不直查 Work 表、不重算 title/hash；
   // missing/foreign 统一 NOT_FOUND 原样透出（fail-closed，无 partial 写）。
-  // M5-08 trash 边界：在播 Session 的 Work 被 moveToTrash 后，内存播放不被打断，
+  //  trash 边界：在播 Session 的 Work 被 moveToTrash 后，内存播放不被打断，
   // 同一 Session 的 checkpoint 仍经同一 CAS 面落库（Stale/Monotonic/Identity 全绑，
   // 写值取 input/Anchor，不取 trash 行元数据，不复活无辜行）；仅当 Work 非 trash
   //（missing/foreign/已物理删除）才 NOT_FOUND。trash 判定只读 deletedAt 信号
@@ -1140,7 +1140,7 @@ export const savePlaybackCheckpointForSubject = async (
 };
 
 /**
- * M7-03 playback.setSleepTimer：当前 Session Timer 独立持久化（spec §24 / §24.1）。
+ *  playback.setSleepTimer：当前 Session Timer 独立持久化（spec §24 / §24.1）。
  *
  * - off → remaining=null, total=null, mode=off；
  * - minutes → minutes 必填（10–120 由 zod 门禁），remaining=total=minutes×60_000；
@@ -1224,7 +1224,7 @@ export const setSleepTimerForSubject = async (
 };
 
 /**
- * §19 playback.completeSession：完播收尾（保留 ended Anchor，M5-07 落地）。
+ * §19 playback.completeSession：完播收尾（保留 ended Anchor， 落地）。
  *
  * - 无 Anchor → null（不建不写）；dangling source 不可解析 → null（不给脏行续命）。
  * - input.sessionId 非法 → BAD_REQUEST（fail-closed，不写）。
@@ -1233,16 +1233,16 @@ export const setSleepTimerForSubject = async (
  *   通道，故以 fail-closed 抛错，绝不覆盖）。
  * - Draft：CAS（WHERE sessionId）置 anchorState=ended，不建 Work progress；
  *   重复 complete 幂等（已 ended 仍返回同一 ended Anchor，不破坏位置）。
- * - Work：先经 M2 getStoryWorkForSubject（subject, workId）鉴权
- *   （missing/foreign/trash 统一 NOT_FOUND，原样透出，无 partial 写）；
+ * - Work：先经  getStoryWorkForSubject（subject, workId）鉴权
+ *（missing/foreign/trash 统一 NOT_FOUND，原样透出，无 partial 写）；
  *   total/version 经 resolveWorkEffectiveSegmentation Manifest 权威
- *   （M8-04 FIXUP-2 Blocking 2：有 Manifest→manifest pair，无→当前切分，
+ *（ FIXUP-2 Blocking 2：有 Manifest→manifest pair，无→当前切分，
  *   读失败 fail-closed 写前抛，不写库；trash 自有仍取 Anchor frozen）；
  *   同一事务内 CAS Anchor（WHERE sessionId + sourceId，position→total、
  *   state→ended）+ UPSERT Progress（next=total/last=total-1、
  *   completedAt=首完保留、lastPlayedAt=now）；CAS 失败（并发切换）→
  *   BAD_REQUEST，绝不碰 Progress；重复 complete 保留首个 completedAt
- *   （不删 completion history，§41）。
+ *（不删 completion history，§41）。
  * - User/Guest 对称。
  */
 export const completePlaybackSessionForSubject = async (
@@ -1276,7 +1276,7 @@ export const completePlaybackSessionForSubject = async (
       subject.type === 'user'
         ? await prisma.userPlaybackAnchor.updateMany({
             where: { userId: subject.id, sessionId },
-            // M7-03 §27：完播 Timer reset off（remaining/total null；Draft 同理）。
+            //  §27：完播 Timer reset off（remaining/total null；Draft 同理）。
             data: {
               anchorState: 'ended',
               sleepTimerMode: 'off',
@@ -1309,13 +1309,13 @@ export const completePlaybackSessionForSubject = async (
     return dto;
   }
 
-  // —— Work complete（§19 / §30 / §41 + M5-08 §29.1）：ended + Progress next=total + completedAt ——
+  // —— Work complete（§19 / §30 / §41 +  §29.1）：ended + Progress next=total + completedAt ——
   const workId = source.workId;
-  // M5-08 trash 边界：在播 Session 的 Work 被 moveToTrash 后，completion 仍允许；
+  //  trash 边界：在播 Session 的 Work 被 moveToTrash 后，completion 仍允许；
   // trash 自有时 total/content 取 Anchor 已存值（frozen，不重算、不取 trash 行元数据，
   // Anchor frozen 与 Manifest 权威一致，因 begin 已用 effective pair 落库），
   // 同一 CAS 面落库；非 trash 的 missing/foreign/已物理删除仍 NOT_FOUND 原样透出。
-  // M8-04 FIXUP-2 Blocking 2：非 trash 时 total/version 经
+  //  FIXUP-2 Blocking 2：非 trash 时 total/version 经
   // resolveWorkEffectiveSegmentation Manifest 权威（写身份前只读，读失败直接抛 fail-closed）。
   let workTotal!: number;
   let workHashForProgress!: string;
@@ -1358,7 +1358,7 @@ export const completePlaybackSessionForSubject = async (
               nextParagraphIndex: workTotal,
               totalParagraphs: workTotal,
               anchorState: 'ended',
-              // M7-03 §27：完播 Timer reset off（无论此前 minutes/story_end/off）。
+              //  §27：完播 Timer reset off（无论此前 minutes/story_end/off）。
               sleepTimerMode: 'off',
               remainingAllowedMs: null,
               totalAllowedMs: null,
@@ -1441,11 +1441,11 @@ export const completePlaybackSessionForSubject = async (
 };
 
 /**
- * §21 playback.clearAnchor：仅清理当前 session（不匹配则 no-op，M5-07 落地）。
+ * §21 playback.clearAnchor：仅清理当前 session（不匹配则 no-op， 落地）。
  *
  * - deleteMany WHERE sessionId（CAS 原子，count 判定 cleared）；
  * - 无 Anchor / session 不匹配 / input session 非法 → {success:true, cleared:false}
- *  （no-op，绝不误删新会话；沿用 M5-04 router 注释契约）；
+ *（no-op，绝不误删新会话；沿用  router 注释契约）；
  * - 不校验 Work 存在与否（已 trash/missing 的 Anchor 照清，Trash invalidation 最小面）；
  * - dangling source 亦照 session 清（session 匹配即删，不给脏行续命但允许清理）；
  * - 已 ended 的 Anchor 同样可清（session 匹配即删）；
@@ -1471,16 +1471,16 @@ export const clearPlaybackAnchorForSubject = async (
 };
 
 /**
- * M5-08 §29.3 domain hook：清理某 Subject 下指向指定 Work 的 PlaybackAnchor。
+ *  §29.3 domain hook：清理某 Subject 下指向指定 Work 的 PlaybackAnchor。
  *
  * Permanent delete 后 Anchor 视为 dangling（无法再 resolve Source），本 hook 提供
  * Anchor 层 fail-closed 清理路径：
  * - subject-scoped（User/Guest 表 id 序列独立，绝不全局按 sourceId 删除）；
  * - 仅删 sourceKind work（含 legacy generation 兼容值）且 sourceId 为 String(workId) 的行；
- * - draft Anchor 不动；Per-Work Progress 由 Work FK CASCADE 接管（M5-02 schema），本 hook 不碰；
+ * - draft Anchor 不动；Per-Work Progress 由 Work FK CASCADE 接管（ schema），本 hook 不碰；
  * - 非法 workId → { cleared:false } no-op，不抛错。
  *
- * M5 半径内仅提供路径，不自动接入任何删除流程（不做大规模删除；“已在播不打断”由
+ *  半径内仅提供路径，不自动接入任何删除流程（不做大规模删除；“已在播不打断”由
  * getAnchor 懒清理 + checkpoint/complete 的 trash 容忍承接，刷新后自然 fail-closed）。
  */
 export const invalidatePlaybackReferencesForWork = async (
@@ -1510,19 +1510,19 @@ export const invalidatePlaybackReferencesForWork = async (
 };
 
 /**
- * §24 playback.promoteDraftToWork：Draft→Work 提升（M5-07 落地）。
+ * §24 playback.promoteDraftToWork：Draft→Work 提升（ 落地）。
  *
  * 三校验 fail-closed（任一失败绝不写库）：
  * 1. Anchor.sessionId === input.sessionId（不匹配 → BAD_REQUEST）；
  * 2. 当前 Source 必须是 draft（含 legacy chat 归一；已是 work/dangling → BAD_REQUEST）；
- * 3. StoryWork.sourceMessageId === draft.messageId（经 M2
+ * 3. StoryWork.sourceMessageId === draft.messageId（经
  *    getStoryWorkForSubject 加载，missing/foreign/trash 统一 NOT_FOUND；
  *    sourceMessageId 缺失/不一致 → BAD_REQUEST）。
  *
  * 成功（同一事务内 CAS Anchor + UPSERT Progress）：
  * - Anchor：source→work(workId)/title→work.title/contentHash→work.contentHash/
  *   voiceId→work.voiceId/segmentationVersion→effective/total→effective
- *   （M8-04 FIXUP-2 Blocking 2：目标 Work 已有 Manifest 时用 manifest pair，
+ *（ FIXUP-2 Blocking 2：目标 Work 已有 Manifest 时用 manifest pair，
  *   守「Audio segment index == Playback progress index」长期 invariant；
  *   无 Manifest→当前切分；Manifest 读失败则事务前直接抛 fail-closed，不写库）；
  *   **sessionId 不变**（§45 audio 不重启的 server 侧保证；client 维持播放）；
@@ -1573,7 +1573,7 @@ export const promoteDraftPlaybackToWorkForSubject = async (
   const draftNext = currentRow.nextParagraphIndex;
   const draftLast = currentRow.lastCompletedParagraphIndex;
 
-  // Work 鉴权与权威 metadata 一律经 M2（不直查表、不重算 title/hash）。
+  // Work 鉴权与权威 metadata 一律经（不直查表、不重算 title/hash）。
   const work = await getStoryWorkForSubject(subject, workId);
   if (!work.sourceMessageId || work.sourceMessageId !== draftMessageId) {
     throw new TRPCError({
@@ -1581,7 +1581,7 @@ export const promoteDraftPlaybackToWorkForSubject = async (
       message: '[playback-session] StoryWork.sourceMessageId 与 Draft.messageId 不一致，拒绝 promotion',
     });
   }
-  // M8-04 FIXUP-2 Blocking 2：目标 Work 有效身份 Manifest 权威（写身份前只读，
+  //  FIXUP-2 Blocking 2：目标 Work 有效身份 Manifest 权威（写身份前只读，
   // 读失败直接抛 fail-closed，不进事务不写库）。
   const workEffective = await resolveWorkEffectiveSegmentation(subject, work.id, work.storyText);
   const workTotal = workEffective.effectiveTotalParagraphs;
@@ -1696,13 +1696,13 @@ export const promoteDraftPlaybackToWorkForSubject = async (
 };
 
 /**
- * §22 playback.getWorkProgressBatch：M3 消费的 Work 进度批量视图（M5-07 落地）。
+ * §22 playback.getWorkProgressBatch： 消费的 Work 进度批量视图（ 落地）。
  *
  * - 只读：绝不创建/更新/删除任何 Anchor 或 Progress 行；
  * - 每个输入 workId 必有对应输出（顺序与输入一致；重复 id 逐项返回）；
  * - 无 Progress row 或 work 非当前 Subject 自有（missing/foreign 一律 fail-closed
  *   为 not_started，不抛错不泄漏；trash 本项不做 invalidation，原样返回进度，
- *   留 M5-08）→ state=not_started/progress=0/last=-1/next=0/total=1/
+ *   留）→ state=not_started/progress=0/last=-1/next=0/total=1/
  *   completedAt=null/lastPlayedAt=null；
  * - 有自有 Progress row → state/progress 经 lib/playback/progress.ts
  *   deriveWorkPlaybackState / computeWorkProgressRatio 推导（绝不另存 status 列，

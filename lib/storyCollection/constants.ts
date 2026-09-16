@@ -1,5 +1,5 @@
 /**
- * StoryCollection / Conversation 领域共享常量（change-id 2026-09-15-story-collection-continuous-creation T1）。
+ * StoryCollection / Conversation 领域共享常量（change-id 2026-09-15-story-collection-continuous-creation）。
  *
  * 冻结集合标题、标题来源、会话状态与集合游标协议，避免各端推导漂移。
  */

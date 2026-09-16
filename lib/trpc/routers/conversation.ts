@@ -1,5 +1,5 @@
 /**
- * Conversation tRPC 路由（change-id 2026-09-15-story-collection-continuous-creation T1）。
+ * Conversation tRPC 路由（change-id 2026-09-15-story-collection-continuous-creation）。
  *
  * getActive / get / createNew / saveSnapshot / close；全部 guardedProcedure + resolveSubject。
  * 与既有 chat.getConversation / saveConversation（legacy 单快照路径）并存，互不影响（expand 阶段回退 read flag）。

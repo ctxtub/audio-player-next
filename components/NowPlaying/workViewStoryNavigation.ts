@@ -1,5 +1,5 @@
 /**
- * M7-04-01 Work 查看正文导航副作用纯 helper（spec §33-§34 / §44）。
+ *  Work 查看正文导航副作用纯 helper（spec §33-§34 / §44）。
  *
  * - 目标仅由 PlaybackSourceRef.workId 直接派生（`/library/${workId}`）；
  * - Draft / 空 source 一律返回 null（绝不拼凑 Library 目标）；

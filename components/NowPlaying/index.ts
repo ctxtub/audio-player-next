@@ -1,6 +1,6 @@
 /**
- * M7-01 NowPlaying 正式 import surface（M6-04 命名迁移收官 + M7 Expanded UI Store）。
- * M9-03：FloatingPlayer 兼容 shim 已删除，新代码一律从本 surface 导入正式命名。
+ *  NowPlaying 正式 import surface（ 命名迁移收官 +  Expanded UI Store）。
+ *：FloatingPlayer 兼容 shim 已删除，新代码一律从本 surface 导入正式命名。
  */
 
 export { MiniNowPlaying, default } from './MiniNowPlaying';

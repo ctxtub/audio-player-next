@@ -1,5 +1,5 @@
 /**
- * Chat Artifact 纯状态机与领域转换函数（M4-01）。
+ * Chat Artifact 纯状态机与领域转换函数（）。
  *
  * 设计原则：
  * 1. 纯函数设计：无外部副作用，不依赖网络、数据库、React 或任何全局状态。
@@ -25,7 +25,7 @@ import type {
   ReadyChatArtifact,
 } from '../../types/chatArtifact';
 
-// M4-09 containment：Legacy read-compatibility helpers live in
+//  containment：Legacy read-compatibility helpers live in
 // ./chatStoryCompatibility.ts. This module is Modern lifecycle only.
 
 // ============================================================================
@@ -225,7 +225,7 @@ export function isTerminalArtifact(artifact: ChatArtifact): boolean {
 }
 
 /**
- * 获取用于 M2 library.create 幂等关联的 sourceMessageId。
+ * 获取用于  library.create 幂等关联的 sourceMessageId。
  * 契约冻结：恒为产生该 Artifact 的 assistant message id (msg.id)。
  */
 export function getSourceMessageId(artifact: ChatArtifact): string {

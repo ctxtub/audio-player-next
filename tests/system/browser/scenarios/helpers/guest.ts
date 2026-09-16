@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 
 /**
- * L3 场景访客登录助手（任务13 第二段）。
+ *  场景访客登录助手（任务13 第二段）。
  *
  * 经由真实 /auth 页点击访客入口进入 /chat，不自造 cookie、不碰生产端口。
  */

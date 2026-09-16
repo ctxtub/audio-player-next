@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * L3 场景隔离库直查助手（任务13 第二段）。
+ *  场景隔离库直查助手（任务13 第二段）。
  *
  * 隔离库由 harness app-server 注入（快照内独占文件），路径经
  * `.e2e-runtime/browser-harness/app-handle-<runId>.json` 的 dbFile 字段
- * 由 evidence-recorder 记录（fixtures 自动记 step，本助手仅直读同一路径，
+ * 本助手只读取当次隔离数据库，
  * 不自造库、不碰 prisma/dev.db）。
  *
  * 直查经 sqlite3 CLI 只读 SELECT（参数数组传参，不走 shell），由测试进程
@@ -31,7 +31,7 @@ const allowedTables: readonly string[] = [
 ];
 
 /**
- * 允许夹具直写的表（仅隔离库，用于构造“旧历史卡”等 L3 前置形态）。
+ * 允许夹具直写的表（仅隔离库，用于构造“旧历史卡”等  前置形态）。
  * 生产/开发库禁止任何写操作；dbFile 由 resolveIsolationDbPath 保证隔离。
  */
 const allowedWriteTables: readonly string[] = ["GuestChatMessage", "GuestPlaybackProgress"];
@@ -55,12 +55,12 @@ export function resolveIsolationDbPath(runId: string): string {
 /**
  * 对隔离库执行只读 SELECT 并返回 stdout 裁剪串。
  * @param dbFile 隔离库文件路径
- * @param sql 只读 SQL（调用方保证仅 SELECT 且表名已白名单校验）
+ * @param sql 只读 SQL（调用方保证仅 SELECT 且表名已白名单校）
  * @returns stdout 文本
  */
 function queryReadOnly(dbFile: string, sql: string): string {
-    // `-cmd .timeout`：L3 可能在 App 正在写 checkpoint/anchor 时轮询读取，避免瞬时 locked 假失败；
-    // 用 dot-command 而非 `PRAGMA busy_timeout`（后者会向 stdout 回显 "10000" 污染结果行）。
+    // `-cmd .timeout`： 可能在 App 正在写 checkpoint/anchor 时轮询读取，避免瞬时 locked 假失败；
+    // 用 dot-command 而非 `PRAGMA busy_timeout`（后者会向 stdout 回显 "10000" 污染结果）。
     const out: string = execFileSync("sqlite3", ["-cmd", ".timeout 10000", dbFile, sql], {
         encoding: "utf8",
         timeout: 15000,
@@ -172,7 +172,7 @@ function assertWriteTable(table: string): void {
 /**
  * 对隔离库执行写语句（busy_timeout 防 App 连接短暂锁库；仅夹具前置）。
  * @param dbFile 隔离库文件路径
- * @param table 目标表（白名单校验）
+ * @param table 目标表（白名单校）
  * @param sql 写 SQL（调用方保证仅本次隔离库）
  */
 function execWrite(dbFile: string, table: string, sql: string): void {
@@ -185,7 +185,7 @@ function execWrite(dbFile: string, table: string, sql: string): void {
 
 /**
  * 将某次生成的 assistant 消息改写为 Legacy storyCard 形态（模拟旧历史卡）。
- * 服务端对“新增 legacy storyCard 写入”有 guard（M4-08），故此夹具只经隔离库直写，
+ * 服务端对“新增 legacy storyCard 写入”有 guard（，故此夹具只经隔离库直写，
  * 用于验证渲染/播放的只读兼容路径。
  * @param dbFile 隔离库文件路径
  * @param prompt 该次生成的唯一提示词
@@ -216,7 +216,7 @@ export function seedLegacyStoryCardPartsByPrompt(
 
 /**
  * 删除某次生成对应访客的播放 Anchor（清理 autoplay 建立的预置 Session，
- * 使 L3 从“无 Session”冷态验证 StoryCard 播放入口）。
+ * 使  从“无 Session”冷态验证 StoryCard 播放入口）。
  * @param dbFile 隔离库文件路径
  * @param prompt 该次生成的唯一提示词
  */

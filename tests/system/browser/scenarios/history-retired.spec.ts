@@ -1,7 +1,4 @@
-// case_id: legacy-history-retirement
-// journey: story-collection-continuous
-// legacy_aliases: [E2E-10-09]
-// M9-C1 T2：Prompt/Generation History 前后端退役；创作页不得再暴露任何旧 History 入口，
+//：Prompt/Generation History 前后端退役；创作页不得再暴露任何旧 History 入口，
 // 原「清空」按钮文案切换为「新建创作」。
 import { test, expect } from "../harness/fixtures";
 import { ensureGuestByApi } from "./helpers/auth";
@@ -24,7 +21,7 @@ test("创作页不再暴露旧 History 入口", async ({ page, harnessEnv }) => 
     await expect(page.getByRole("button", { name: "新建创作" })).toBeVisible({
         timeout: 30000,
     });
-    // 连续创作状态卡（T2 新增）存在，证明创作页已围绕当前集合运行。
+    // 连续创作状态卡（新增）存在，证明创作页已围绕当前集合运行。
     await expect(page.getByTestId("continuous-status-card")).toBeVisible();
 
     await captureT2Visual(page, "history-retired-desktop");

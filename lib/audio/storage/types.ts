@@ -1,5 +1,5 @@
 /**
- * M8 Canonical Audio Storage 抽象契约（spec §2.4/§4；M8-02）。
+ *  Canonical Audio Storage 抽象契约（spec §2.4/§4；）。
  *
  * Backend-neutral：业务层只依赖本文件导出的 `AudioAssetStorage` 接口，
  * 绝不直接依赖 S3 SDK / filesystem path / bucket URL（由单测静态守卫锁定）。
@@ -85,7 +85,7 @@ export interface AudioAssetStorage {
   ): Promise<AudioStorageReadResult>;
 }
 
-/** 对象不存在（route 映射为 404；DB 侧不得借此改写 segment ready，M8-02 只读已有资产） */
+/** 对象不存在（route 映射为 404；DB 侧不得借此改写 segment ready， 只读已有资产） */
 export class AudioObjectNotFoundError extends Error {
   readonly key: string;
   constructor(key: string) {

@@ -1,5 +1,5 @@
 /**
- * M5-01 Legacy 来源解析器（spec §3 / §5.3 / §32 Step 2 / §38）
+ *  Legacy 来源解析器（spec §3 / §5.3 / §32 Step 2 / §38）
  *
  * 兼容输入（至少保留一个兼容周期）：
  *   chat       → draft
@@ -7,10 +7,10 @@
  *   draft      → draft
  *   work       → work
  * 数据库 sourceKind 正式值为 draft|work（物理列名可仍为 sourceType，
- * Prisma 侧用 sourceKind @map("sourceType")，M5-02+ 才动 schema）。
+ * Prisma 侧用 sourceKind @map("sourceType")，+ 才动 schema）。
  *
  * fail-closed：未知 kind / 非法 workId / replay-text-* draft 一律抛错或返回 null，
- * 绝不静默降级、绝不截断修正。缺映射 work anchor 丢弃（§31.3）由 M5-02+ 消费本解析器实现。
+ * 绝不静默降级、绝不截断修正。缺映射 work anchor 丢弃（§31.3）由 + 消费本解析器实现。
  *
  * 本文件为纯领域层：无 DB / store / API / Prisma 依赖。
  */

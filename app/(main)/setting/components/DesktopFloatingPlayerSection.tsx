@@ -4,7 +4,7 @@ import GlassSwitch from '@/components/ui/GlassSwitch';
 import styles from '../index.module.scss';
 
 /**
- * 桌面悬浮播放开关组件的入参（M6 领域语义）。
+ * 桌面悬浮播放开关组件的入参（ 领域语义）。
  */
 interface DesktopFloatingPlayerSectionProps {
   /** 宽屏是否启用悬浮迷你播放器；false=固定在底部导航上方。 */

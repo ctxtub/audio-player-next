@@ -23,7 +23,7 @@ function isValidStoryId(id: string | undefined | null): boolean {
 }
 
 /**
- * 故事详情页路由入口（M1-02 骨架）。
+ * 故事详情页路由入口（ 骨架）。
  * 执行 [id] 结构校验：仅接受正整数（positive integer: 1, 2, 3...）。
  * 非法输入（0, -1, foo, 1.2 等）直接触发 notFound()。
  * @param props App Router 动态段参数

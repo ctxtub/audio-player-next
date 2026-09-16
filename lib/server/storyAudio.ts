@@ -1,7 +1,7 @@
 /**
- * M8 Canonical Audio 写入面：Manifest 创建 + ensureSegment（spec §10–§18/§20–§21/§26/§45–§56；M8-03）。
+ *  Canonical Audio 写入面：Manifest 创建 + ensureSegment（spec §10–§18/§20–§21/§26/§45–§56；）。
  *
- * 核心链路（仍然不切 M5 正式 Work playback，那是 M8-04）：
+ * 核心链路（仍然不切  正式 Work playback，那是）：
  * ```text
  * Work + segmentIndex → frozen Manifest → lease → canonical TTS 1.0
  * → duration/checksum → storage.put → DB ready
@@ -22,10 +22,10 @@
  *   synthesis 路径绝不调用 buildSegmentStorageKey / randomUUID 新 key）。
  * - API 输入严格 `{ workId, segmentIndex, sessionId }`：不接 client 的
  *   text/audio/profile/storageKey；Canonical input 全由 server 推导。
- * - Trash 规则：Active owned Work → allowed；Trash Work → 仅当前 M5 Anchor
+ * - Trash 规则：Active owned Work → allowed；Trash Work → 仅当前  Anchor
  *   匹配 workId+sessionId → allowed；否则 → WORK_UNAVAILABLE。
  * - totalDurationMs=Σduration、totalByteLength=Σbytes 只是可信 metadata；
- *   不得顺手实现 story-level timeline（M8-03 禁项）。
+ *   不得顺手实现 story-level timeline（ 禁项）。
  */
 
 import { randomUUID } from 'node:crypto';
@@ -72,7 +72,7 @@ import {
   type StoryAudioAssetDTO,
 } from '@/lib/server/storyAudioAsset';
 
-/** Canonical Manifest 世代（V1 StoryWork 内容不可改，正常恒 1；M8-03 只建 v1） */
+/** Canonical Manifest 世代（V1 StoryWork 内容不可改，正常恒 1； 只建 v1） */
 export const STORY_AUDIO_MANIFEST_VERSION = 1;
 
 /** Segment synthesis 租约 TTL（ms；过期后下一次 ensure 可重新 claim，spec §15.4） */
@@ -127,7 +127,7 @@ export function buildSegmentPlaybackUrl(segmentId: string): string {
 }
 
 // ============================================================================
-// Opportunistic bounded tombstone cleanup（M8-05-04 production closure）
+// Opportunistic bounded tombstone cleanup（ production closure）
 // ============================================================================
 
 /**
@@ -265,7 +265,7 @@ async function resolveOwnedWork(
 /**
  * Trash ensureSegment 门禁（spec §21；纯判定 + DB Anchor 读取）。
  * - Active owned Work → allowed；
- * - Trash Work → 仅当前 M5 Anchor 匹配 workId+sessionId → allowed；否则 WORK_UNAVAILABLE。
+ * - Trash Work → 仅当前  Anchor 匹配 workId+sessionId → allowed；否则 WORK_UNAVAILABLE。
  */
 async function enforceTrashGate(
   subject: Subject,
@@ -388,7 +388,7 @@ async function ensureUserManifest(
     throwDomain('WORK_UNAVAILABLE', 'FORBIDDEN');
   }
   const effectiveHash = work.contentHash || expectedHash;
-  // 当次 segmentStoryText() 只跑一次（M8-03 锁死；结果即冻结，不再重算）
+  // 当次 segmentStoryText() 只跑一次（ 锁死；结果即冻结，不再重算）
   const segmentTexts = segmentStoryText(normalized);
   if (segmentTexts.length === 0) throwDomain('INVALID_SEGMENT', 'BAD_REQUEST');
 
@@ -501,7 +501,7 @@ async function ensureGuestManifest(
     throwDomain('WORK_UNAVAILABLE', 'FORBIDDEN');
   }
   const effectiveHash = work.contentHash || expectedHash;
-  // 当次 segmentStoryText() 只跑一次（M8-03 锁死）
+  // 当次 segmentStoryText() 只跑一次（ 锁死）
   const segmentTexts = segmentStoryText(normalized);
   if (segmentTexts.length === 0) throwDomain('INVALID_SEGMENT', 'BAD_REQUEST');
 
@@ -594,7 +594,7 @@ async function ensureGuestManifest(
 // Manifest 状态刷新（DB 侧聚合；短 DB transaction 内读+写原子完成，永不跨 TTS）
 // ============================================================================
 //
-// FIXUP Blocking1（M8-03 复审）：读取 segments → derive → Manifest update 必须在同一短
+// FIXUP Blocking1（ 复审）：读取 segments → derive → Manifest update 必须在同一短
 // transaction 内完成。内部无 TTS/storage/network（纯 DB 读+单写），不违反 §15.2。
 // SQLite 写事务把不同 completion 的 aggregate commit 顺序序列化；后完成的 refresh
 // 看到最新状态，旧 snapshot 不能覆盖新状态（杜绝 ready → preparing 回退）。
@@ -770,7 +770,7 @@ export type EnsureSegmentReadyResult = {
     totalDurationMs: number | null;
     totalByteLength: number | null;
   };
-  /** T3 单轨资产投影（仅 `SINGLE_TRACK_AUDIO_ENABLED=1` 时存在；旧调用方忽略此字段）。 */
+  /**  单轨资产投影（仅 `SINGLE_TRACK_AUDIO_ENABLED=1` 时存在；旧调用方忽略此字段）。 */
   asset?: StoryAudioAssetDTO;
 };
 
@@ -802,13 +802,13 @@ async function readGuestManifestSnapshot(manifestId: number) {
 }
 
 /**
- * ensureSegment（M8-03 canonical 写入唯一入口）。
+ * ensureSegment（ canonical 写入唯一入口）。
  *
  * 输入严格三字段；frozen text/profile/storageKey 全由 server 推导。
  * 并发：ready → 直接返回；有效 lease → preparing + retryAfter；
  * missing/failed/过期 lease → 原子 claim 后在 transaction 外合成。
  *
- * T3 去耦：单轨开关不再劫持本入口；ensureSegment 恒为旧多段 canonical 路径，
+ *  去耦：单轨开关不再劫持本入口；ensureSegment 恒为旧多段 canonical 路径，
  * 单轨写入口只在 `storyAudio.ensure`（服务端 flag 门禁）。
  */
 export async function ensureStoryAudioSegmentForSubject(
@@ -819,7 +819,7 @@ export async function ensureStoryAudioSegmentForSubject(
   const deps = resolveDeps(depsInput);
   const now = deps.now();
   const { workId, segmentIndex, sessionId } = input;
-  // M8-05-04 opportunistic bounded cleanup：低频节流 + 有界 + 失败吞错。
+  //  opportunistic bounded cleanup：低频节流 + 有界 + 失败吞错。
   // fire-and-forget（不 await），永不影响 ensureSegment 结果与延迟主路径。
   void maybeRunOpportunisticAudioDeletionCleanup();
   if (!Number.isInteger(workId) || workId <= 0) {
@@ -1410,11 +1410,11 @@ export type PlaybackManifestDTO = {
   totalDurationMs: number | null;
   totalByteLength: number | null;
   segments: PlaybackManifestSegmentDTO[];
-  /** T3 单轨投影（仅开关开启时存在/非 null；`segments` 同时为空，保证只暴露一条时间轴）。 */
+  /**  单轨投影（仅开关开启时存在/非 null；`segments` 同时为空，保证只暴露一条时间轴）。 */
   singleTrack?: StoryAudioAssetDTO | null;
 };
 
-/** T3：单轨投影 → 旧 PlaybackManifestDTO 形状（segments 空 + singleTrack）。 */
+/**：单轨投影 → 旧 PlaybackManifestDTO 形状（segments 空 + singleTrack）。 */
 async function getSingleTrackPlaybackManifest(
   subject: Subject,
   input: GetPlaybackManifestInput
@@ -1464,13 +1464,13 @@ async function getSingleTrackPlaybackManifest(
 
 /**
  * 读取播放用 Manifest 投影（只读；无 Manifest → missing 空投影，不回填、不合成）。
- * Trash Work 的已有 asset 仍允许读取（与 M8-02 §19.1 一致；trash 门禁仅约束 ensure 写）。
+ * Trash Work 的已有 asset 仍允许读取（与  §19.1 一致；trash 门禁仅约束 ensure 写）。
  */
 export async function getPlaybackManifestForSubject(
   subject: Subject,
   input: GetPlaybackManifestInput
 ): Promise<PlaybackManifestDTO> {
-  // T3：开关开启时改走单轨投影（segments 为空 + singleTrack，保证只暴露一条时间轴）。
+  //：开关开启时改走单轨投影（segments 为空 + singleTrack，保证只暴露一条时间轴）。
   if (isSingleTrackServerEnabled()) {
     return getSingleTrackPlaybackManifest(subject, input);
   }

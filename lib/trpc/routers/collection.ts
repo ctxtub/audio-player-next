@@ -1,5 +1,5 @@
 /**
- * StoryCollection tRPC 路由（change-id 2026-09-15-story-collection-continuous-creation T1）。
+ * StoryCollection tRPC 路由（change-id 2026-09-15-story-collection-continuous-creation）。
  *
  * 冻结集合公开 API：list / get / promoteArtifact / rename / setFavorite / softDelete / restore / deleteForever。
  * 全部 guardedProcedure + resolveSubject；写操作挂载内存滑动窗口限流。

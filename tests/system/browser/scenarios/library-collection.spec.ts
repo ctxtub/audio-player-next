@@ -174,22 +174,32 @@ test("Collection 两层列表/详情/逐Work播放 + Mini 安全区", async ({
             return r.bottom;
         });
     expect(lastCardBottom).toBeLessThanOrEqual(miniTop);
-    const occupancy = await page.evaluate(() => {
+    // MainChrome 单源输出三变量（Mini 占用非零即 docked 预留生效）。
+    const miniVar = await page.evaluate(() => {
         const host = document.querySelector('[data-testid="main-chrome"]');
-        if (!host) return null;
-        const cs = getComputedStyle(host);
-        const num = (name: string) => Number.parseFloat(cs.getPropertyValue(name)) || 0;
+        if (!host) return "";
+        return getComputedStyle(host).getPropertyValue("--mini-player-occupied-height");
+    });
+    expect(miniVar.trim().length).toBeGreaterThan(0);
+    expect(miniVar.trim()).not.toBe("0px");
+    // 数值组合行为断言（全部取已求值长度，避开 var()/calc() 原串解析）：
+    // .content padding-bottom ≈ TabBar 高 + Mini 高 + gap(8px token)。
+    const reservation = await page.evaluate(() => {
+        const content = document.querySelector('[data-testid="main-chrome-content"]');
+        const miniEl = document.querySelector('[data-testid="mini-now-playing"]');
+        const tabEl = document.querySelector('[role="tablist"]') ?? document.querySelector("nav");
+        if (!content || !miniEl || !tabEl) return null;
         return {
-            tab: num("--main-tabbar-occupied-height"),
-            mini: num("--mini-player-occupied-height"),
-            gap: num("--bottom-chrome-gap"),
-            safe: num("--bottom-chrome-safe-bottom"),
+            pad: Number.parseFloat(getComputedStyle(content as Element).paddingBottom) || 0,
+            miniH: miniEl.getBoundingClientRect().height,
+            tabH: (tabEl as HTMLElement).getBoundingClientRect().height,
         };
     });
-    expect(occupancy).not.toBeNull();
-    expect(occupancy!.mini).toBeGreaterThan(0);
-    expect(Math.abs(occupancy!.safe - (occupancy!.tab + occupancy!.mini + occupancy!.gap))).toBeLessThanOrEqual(1);
-    recorder.step("Mini安全区断言通过", { lastCardBottom, miniTop, occupancy });
+    expect(reservation).not.toBeNull();
+    expect(
+        Math.abs(reservation!.pad - (reservation!.tabH + reservation!.miniH + 8)),
+    ).toBeLessThanOrEqual(2);
+    recorder.step("Mini安全区断言通过", { lastCardBottom, miniTop, reservation });
 });
 
 test("Collection 集合级生命周期：重命名/收藏/删除/Undo/恢复/永久删除", async ({

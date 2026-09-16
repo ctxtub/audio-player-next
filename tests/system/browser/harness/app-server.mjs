@@ -1,7 +1,7 @@
 /**
- * 浏览器测试 production server 启停管理（任务13 harness）。
+ * 浏览器测试 production server 启停管理。
  *
- * 复用任务12 spike 验证过的方式：隔离快照 git archive → 合成 SESSION_SECRET +
+ * 使用隔离快照 git archive → 合成 SESSION_SECRET +
  * 隔离 DB migrate → next start 随机高位端口（31120-31150 范围取空闲）→
  * health 探测就绪；停止时 kill 子进程树并确认端口释放。
  *
@@ -125,7 +125,7 @@ function shortErr(err) {
 }
 
 /**
- * 快照前置守卫（WS4）：脏 tracked 树与 EXPECTED_TARGET_SHA 失配直接抛 BLOCKED。
+ * 快照前置守卫：脏 tracked 树与 EXPECTED_TARGET_SHA 失配直接抛 BLOCKED。
  *
  * - 脏 tracked 树：`git status --porcelain=v1 --untracked-files=no` 非空即抛；
  *   信息含前 20 行脏文件状态行（仅路径状态，不打印 secrets）；untracked（`??`）不阻断
@@ -173,23 +173,12 @@ export function assertArchivePreconditions({ expectedSha, cwd } = {}) {
 }
 
 /**
- * 快照 ready 标记中的 probe 开启令牌（ 。
- * 无此令牌的旧快照一律视为不可复用并重建（防无 probe 构建被复用导致 A/B 场景取不到探针）。
- */
-export const PROBE_BUILD_TOKEN = 'probe=e2e-playback-v1';
-
-/**
- * 快照 ready 判定：marker 存在且含 probe 开启令牌。
+ * 快照 ready 判定：当前提交目录内存在构建完成 marker。
  * @param readyMarker marker 文件路径
  * @returns 可复用返回 true
  */
 function isSnapshotReady(readyMarker) {
-    if (!existsSync(readyMarker)) return false;
-    try {
-        return readFileSync(readyMarker, 'utf8').includes(PROBE_BUILD_TOKEN);
-    } catch {
-        return false;
-    }
+    return existsSync(readyMarker);
 }
 /**
  * 简单目录锁（mkdir 原子性；超时抛错）。
@@ -223,17 +212,24 @@ function releaseDirLock(lockDir) {
  * @param bin 可执行文件绝对路径
  * @param args 参数表
  * @param env 合成环境
+ * @param label 用户可读步骤名
  */
-function runInSnapshot(snapshotDir, bin, args, env) {
-    execFileSync(bin, args, { cwd: snapshotDir, env, stdio: 'pipe', timeout: 300000 });
+function runInSnapshot(snapshotDir, bin, args, env, label) {
+    try {
+        execFileSync(bin, args, { cwd: snapshotDir, env, stdio: 'pipe', timeout: 300000 });
+    } catch (error) {
+        const stdout = error && Buffer.isBuffer(error.stdout) ? error.stdout.toString('utf8').trim() : '';
+        const stderr = error && Buffer.isBuffer(error.stderr) ? error.stderr.toString('utf8').trim() : '';
+        const detail = [stdout, stderr].filter(Boolean).join('\n');
+        throw new Error(`[browser-harness] ${label}失败${detail ? `\n${detail}` : ''}`);
+    }
 }
 
 /**
  * 确保 commit 级隔离快照就绪（含 production build；命中缓存则跳过）。
- * WS4：取锁之前 fast-path 先验守卫、取锁之后锁内复验守卫 + ready marker（防 TOCTOU）；
+ * 取锁之前执行先验守卫，取锁后再次检查并写入 ready marker，避免竞态复用；
  * 脏树即使快照已就绪也拒绝复用。快照键为 full SHA（目录名透传 short/full 均兼容，
  * marker 与日志记 full）；sha 缺失/'unknown' 直接抛 BLOCKED，不得回退缓存。
- *  缓存复用要求 marker 含 probe 开启令牌（旧构建无 probe，一律重建）。
  * @param sha commit SHA（full；short 透传仅作目录兼容）
  * @param env 合成环境（含 SESSION_SECRET/OPENAI_*，DATABASE_URL 另行按库覆写）
  * @param opts 选项 { cwd?, snapshotBase? }（测试注入用；缺省仓库根与运行时 snapshots）
@@ -249,8 +245,6 @@ export async function ensureSnapshot(sha, env, opts = {}) {
     assertArchivePreconditions({ cwd: root });
     const snapshotDir = join(snapshotsBase, sha);
     const readyMarker = join(snapshotDir, '.snapshot-ready');
-    // 中文注释： ——仅复用含 probe 开启令牌的快照；旧格式 marker（无令牌，
-    // 构建物无 probe）一律重建，防 A/B 场景取不到探针。
     if (isSnapshotReady(readyMarker)) return snapshotDir;
     const lockDir = join(snapshotsBase, `${sha}.lock`);
     mkdirSync(snapshotsBase, { recursive: true });
@@ -275,16 +269,28 @@ export async function ensureSnapshot(sha, env, opts = {}) {
             const nodeBin = process.execPath;
             const prismaBin = join(snapshotDir, 'node_modules', '.bin', 'prisma');
             const nextBin = join(snapshotDir, 'node_modules', 'next', 'dist', 'bin', 'next');
-            // 中文注释：generated client 系 gitignore 生成物，快照内补 generate（任务12 spike 同款）。
-            runInSnapshot(snapshotDir, nodeBin, [prismaBin, 'generate'], env);
+            // 中文注释：generated client 系 gitignore 生成物，快照内补 generate。
+            runInSnapshot(snapshotDir, nodeBin, [prismaBin, 'generate'], env, '生成 Prisma Client');
             // 中文注释：构建期隔离库（与运行时库分离，仅 build 收集页用）。
             const buildDb = join(snapshotDir, 'prisma', 'harness-build.db');
             rmSync(buildDb, { force: true });
-            runInSnapshot(snapshotDir, nodeBin, [prismaBin, 'migrate', 'deploy'], { ...env, DATABASE_URL: `file:${buildDb}` });
-            runInSnapshot(snapshotDir, nodeBin, [nextBin, 'build'], { ...env, DATABASE_URL: `file:${buildDb}` });
-            // 中文注释：marker 与日志记 full SHA（目录名透传 short/full 均兼容）+ probe 开启令牌。
+            runInSnapshot(
+                snapshotDir,
+                nodeBin,
+                [prismaBin, 'migrate', 'deploy'],
+                { ...env, DATABASE_URL: `file:${buildDb}` },
+                '初始化构建数据库',
+            );
+            runInSnapshot(
+                snapshotDir,
+                nodeBin,
+                [nextBin, 'build'],
+                { ...env, DATABASE_URL: `file:${buildDb}` },
+                '构建 production 应用',
+            );
+            // 中文注释：marker 记录完整提交 SHA，只有构建完整结束后才写入。
             const builtFull = currentFullSha(root);
-            writeFileSync(readyMarker, `${builtFull === 'unknown' ? sha : builtFull}\n${PROBE_BUILD_TOKEN}\n`);
+            writeFileSync(readyMarker, `${builtFull === 'unknown' ? sha : builtFull}\n`);
             return snapshotDir;
         } finally {
             releaseDirLock(lockDir);
@@ -293,8 +299,6 @@ export async function ensureSnapshot(sha, env, opts = {}) {
 
 /**
  * 构造快照子进程合成环境（隔离库 + 合成 secret + 全合成假上游）。
- *  统一注入 probe 显式开启信号（构建时内联进 client/server 产物，
- * 运行时同样可见）；缺省 ambient 即使含该变量亦被覆盖为开启（harness 内恒开）。
  * 统一注入 canonical 音频本地存储（driver=local + 可写独立根；缺省
  * `/app/audio` 在开发机/CI 均不可写，ensureSegment 会 AUDIO_STORAGE_FAILED）。
  * 音频根取隔离库同目录下 `audio/`（与隔离库同生命周期；storageKey 全 UUID，
@@ -304,9 +308,8 @@ export async function ensureSnapshot(sha, env, opts = {}) {
  * @returns 合成环境
  */
 export function buildSnapshotEnv(dbFile, mockBaseUrl) {
-    return {
+    const env = {
         ...process.env,
-        NEXT_PUBLIC_E2E_PLAYBACK_PROBE: '1',
         SESSION_SECRET: randomBytes(32).toString('hex'),
         DATABASE_URL: `file:${dbFile}`,
         OPENAI_API_KEY: 'sk-harness-synthetic',
@@ -322,10 +325,11 @@ export function buildSnapshotEnv(dbFile, mockBaseUrl) {
         ]),
         AUDIO_STORAGE_DRIVER: 'local',
         AUDIO_LOCAL_ROOT: join(dirname(dbFile), 'audio'),
-        // browser 套件内单轨服务端路径需真实开启；生产由部署 env 显式置位（默认关）。
-        // 既有 canonical segment spec 不改走单轨（客户端 provider 由各自 browser flag 选择）。
-        SINGLE_TRACK_AUDIO_ENABLED: '1',
     };
+    // Prisma schema engine 不应继承宿主 Rust 日志过滤器；部分取值会让迁移只返回空白
+    // Schema engine error。测试环境只隔离该工具变量，不覆盖业务配置。
+    delete env.RUST_LOG;
+    return env;
 }
 
 /**
@@ -478,7 +482,7 @@ export async function startAppServer(options = {}) {
     const nodeBin = process.execPath;
     const nextBin = join(snapshotDir, 'node_modules', 'next', 'dist', 'bin', 'next');
     const prismaBin = join(snapshotDir, 'node_modules', '.bin', 'prisma');
-    runInSnapshot(snapshotDir, nodeBin, [prismaBin, 'migrate', 'deploy'], env);
+    runInSnapshot(snapshotDir, nodeBin, [prismaBin, 'migrate', 'deploy'], env, '初始化运行数据库');
     const child = spawn(nodeBin, [nextBin, 'start', '-p', String(port)], {
         cwd: snapshotDir,
         env,

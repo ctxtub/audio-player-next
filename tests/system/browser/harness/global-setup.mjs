@@ -1,5 +1,5 @@
 /**
- * Playwright globalSetup（任务13 harness）。
+ * Playwright globalSetup。
  *
  * 由 harness 管理服务（不用 Playwright 内建 webServer）：
  * 拉起 detached 常驻 mock + isolation production server（unref 常驻），
@@ -8,7 +8,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { startAppServer } from './app-server.mjs';
@@ -59,13 +59,29 @@ async function waitJsonFile(absPath, timeoutMs = 15000) {
  */
 async function spawnResidentMock(runId) {
     const portFile = join(runtimeDir, `mock-port-${runId}.json`);
+    const startupLog = join(runtimeDir, `mock-startup-${runId}.log`);
+    const startupLogFd = openSync(startupLog, 'a');
     const child = spawn(process.execPath, [join(harnessDir, 'mock-standalone.mjs'), '--port-file', portFile], {
-        stdio: 'ignore',
+        stdio: ['ignore', startupLogFd, startupLogFd],
         detached: true,
     });
+    closeSync(startupLogFd);
     child.unref();
-    const info = await waitJsonFile(portFile);
-    return { port: info.port, pid: info.pid, url: `http://localhost:${info.port}`, portFile };
+    try {
+        const info = await waitJsonFile(portFile);
+        rmSync(startupLog, { force: true });
+        return { port: info.port, pid: info.pid, url: `http://localhost:${info.port}`, portFile };
+    } catch (error) {
+        const detail = existsSync(startupLog) ? readFileSync(startupLog, 'utf8').trim() : '';
+        rmSync(startupLog, { force: true });
+        try {
+            child.kill('SIGKILL');
+        } catch {
+            // 已退出即无需回收。
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`${message}${detail ? `\n[mock-standalone]\n${detail}` : ''}`);
+    }
 }
 
 /**

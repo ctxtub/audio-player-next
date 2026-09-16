@@ -287,7 +287,8 @@ r2 commit 链: 2e74b15（RED 纯测试）→ 5d51483（实现）→ 6c36075（RE
 
 ```text
 change-id: 2026-09-15-story-collection-continuous-creation（T4）
-目标完整 SHA: 125a08e4f00be49a1c8fe63c8b14507fdb3ac138
+目标完整 SHA: 125a08e4f00be49a1c8fe63c8b14507fdb3ac138（代码冻结；全部完成门均跑在此树 dirty=0；
+  本交接段 plan 提交为纯文档追加，不碰代码/测试/迁移）
 实际 commit（本地，未 push）:
   aa7ae96 test(T4): RED 集合两层列表/生命周期/安全区与 PromptHistory contract
   c4bf8d1 feat(M9-C1-T4): GREEN 集合两层列表/生命周期/安全区与 PromptHistory contract

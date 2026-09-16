@@ -127,6 +127,26 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
     await ensureRegisteredByApi(page, harnessEnv.appUrl, username, "SecurePass123!");
     recorder.step("注册独立用户完成", { username });
 
+    // W36（T4R1）：刻意 fail-closed 探测的关窗条件——React Query 默认重试尾巴
+    // （间隔 1s/2s/4s，console 错误与 retry 一一对应）必须落定后才关窗，否则纯墙钟窗恒有竞态。
+    // 关窗 = observed404Urls 连续 8s 无增长（覆盖最大 4s 重试间隔 + 抖动），60s 上限 fail-closed。
+    async function settleExpected404sAndCloseWindow(): Promise<void> {
+        const deadline = Date.now() + 60000;
+        let last = observed404Urls.length;
+        let quietSince = Date.now();
+        for (;;) {
+            if (Date.now() > deadline) throw new Error("expected-404-settle-timeout");
+            await page.waitForTimeout(1000);
+            if (observed404Urls.length !== last) {
+                last = observed404Urls.length;
+                quietSince = Date.now();
+            } else if (Date.now() - quietSince >= 8000) {
+                break;
+            }
+        }
+        allowExpected404 = false;
+    }
+
     // 1. 经真实 promotion 创建 22 个集合（各 1 作品，保证分页成立）
     const runKey = `${Date.now()}${Math.floor(Math.random() * 100000)}`;
     const collectionIds: string[] = [];
@@ -304,8 +324,9 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
         await expect(page.getByTestId("collection-detail-page")).toBeHidden();
         await page.getByTestId("back-to-library-link").click();
         await page.waitForURL("**/library", { timeout: 15000 });
+        await settleExpected404sAndCloseWindow();
     } finally {
-        allowExpected404 = false;
+        if (allowExpected404) allowExpected404 = false;
     }
     recorder.step("回收站卡片无详情入口且直接访问被统一不可用拦截", { id: targetId });
 
@@ -368,8 +389,9 @@ test("故事库完整生命周期旅程", async ({ page, harnessEnv, evidence })
         await page.goto(`${harnessEnv.appUrl}/library/collections/${targetId}`, { waitUntil: "domcontentloaded", timeout: 30000 });
         await expect(page.getByTestId("library-unavailable")).toBeVisible({ timeout: 15000 });
         await expect(page.getByTestId("collection-detail-page")).toBeHidden();
+        await settleExpected404sAndCloseWindow();
     } finally {
-        allowExpected404 = false;
+        if (allowExpected404) allowExpected404 = false;
     }
     recorder.step("集合全维度彻底消失验证完毕", { id: targetId });
 

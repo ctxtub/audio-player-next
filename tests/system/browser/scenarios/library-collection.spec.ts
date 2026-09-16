@@ -154,19 +154,19 @@ test("Collection 两层列表/详情/逐Work播放 + Mini 安全区", async ({
     await expect
         .poll(async () => (await readProbe(page)).source?.workId, { timeout: 60000 })
         .toBe(seed.workIds[1]);
-    // 可播性（与单轨 spec 同口径）：transport 拿到非空 Asset URL，会话未进 error。
+    // 可播性（W38，与单轨 spec 同口径）：transport 拿到非空 Asset URL，会话未进 error。
+    // 注：本 spec 未开单轨 flag，音源为 ephemeral（非 /api/audio/assets/ canonical），故不断言前缀。
     await expect
         .poll(async () => (await readProbe(page)).transport?.hasAudioUrl, { timeout: 60000 })
         .toBe(true);
     const playSnap = await readProbe(page);
     expect(playSnap.status).not.toBe("error");
-    expect(
-        typeof playSnap.transport?.audioUrl === "string" &&
-            (playSnap.transport?.audioUrl ?? "").startsWith("/api/audio/assets/"),
-    ).toBe(true);
+    const playedUrl = playSnap.transport?.audioUrl ?? "";
+    expect(typeof playSnap.transport?.audioUrl === "string" && playedUrl.length > 0).toBe(true);
     recorder.step("逐Work播放精确且可播", {
         workId: seed.workIds[1],
-        audioUrl: (playSnap.transport?.audioUrl ?? "").slice(0, 48),
+        audioUrlLen: playedUrl.length,
+        isCanonicalAssetUrl: playedUrl.startsWith("/api/audio/assets/"),
     });
 
     // Mini 安全区（docked 路径）：末成员可滚到 Mini 之上，且三占位变量数值组合成立。

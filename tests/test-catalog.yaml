@@ -949,6 +949,42 @@ cases:
     executable_ids: [exec-l3-library-lifecycle-journey]
     fixtures: []
     owner: story-library
+  - case_id: collection-library-ui
+    display_name_zh: Collection两层列表与集合生命周期
+    legacy_aliases: [E2E-07-18]
+    journey_id: story-library
+    user_goal: 故事库顶层恒为作品集卡片，集合详情成员按position升序并可逐Work播放，集合级重命名/收藏/删除/Undo/恢复/永久删除全链路可用
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, library, collection-ui, lifecycle, undo, per-work-play]
+    spec_path: docs/e2e/07-故事库与作品资产/18-Collection-Library两层列表与生命周期.md
+    executable_ids: [exec-l3-collection-library]
+    fixtures: []
+    owner: story-library
+  - case_id: library-mini-safe-area
+    display_name_zh: Library Mini底部安全区
+    legacy_aliases: [E2E-07-19]
+    journey_id: story-library
+    user_goal: Mini出现与否滚动容器末尾内容均不被底部Chrome遮挡且无幽灵空白，占位变量由MainChrome单源输出
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, library, mini, safe-area, responsive]
+    spec_path: docs/e2e/07-故事库与作品资产/19-Library-Mini底部安全区.md
+    executable_ids: [exec-l3-collection-library]
+    fixtures: []
+    owner: story-library
+  - case_id: prompt-history-contract
+    display_name_zh: PromptHistory表contract删除
+    legacy_aliases: []
+    journey_id: story-library
+    user_goal: 用户PromptHistory物理表被contract迁移删除，其余表（访客历史/风险转移/作品/旧Segment/集合）一律保留零误删
+    priority: P0
+    lifecycle_status: ACTIVE
+    risk_tags: [story-collection, library, contract, migration, retention]
+    spec_path: docs/e2e/10-会话与作品集连续创作/09-旧History前后端退役.md
+    executable_ids: [exec-prompt-history-contract]
+    fixtures: []
+    owner: story-library
   - case_id: canonical-work-playback-read
     display_name_zh: Canonical Work 播放读路径与 Lazy 物化
     legacy_aliases: []
@@ -1931,6 +1967,14 @@ executables:
     display_name_zh: L3故事库完整生命周期旅程
     layer: L3
     path: ./tests/system/browser/scenarios/library-lifecycle-journey.spec.ts
+  - executable_id: exec-l3-collection-library
+    display_name_zh: L3 Collection两层列表与Mini安全区
+    layer: L3
+    path: ./tests/system/browser/scenarios/library-collection.spec.ts
+  - executable_id: exec-prompt-history-contract
+    display_name_zh: PromptHistory表contract删除（隔离库）
+    layer: L2
+    path: ./tests/integration/persistence-config/prompt-history-contract.integration.test.ts
   - executable_id: exec-l3-playback-session-survives-navigation
     display_name_zh: L3播放会话跨路由导航存活
     layer: L3

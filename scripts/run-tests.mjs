@@ -167,6 +167,7 @@ const SUITES = [
     { id: 'continuous-creation-ui-binding', path: './tests/unit/continuous-creation/continuous-creation-ui-binding.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'legacy-history-retirement', path: './tests/unit/story-collection/legacy-history-retirement.unit.test.ts', group: 'unit', needs_db: false },
     { id: 'history-stop-migrate', path: './tests/integration/persistence-config/history-stop-migrate.integration.test.ts', group: 'integration', needs_db: true },
+    { id: 'prompt-history-contract', path: './tests/integration/persistence-config/prompt-history-contract.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'history-router-retired', path: './tests/integration/identity-session/history-router-retired.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'continuous-creation-budget', path: './tests/integration/creation-conversation/continuous-creation-budget.integration.test.ts', group: 'integration', needs_db: true },
     { id: 'new-creation-reset', path: './tests/integration/creation-conversation/new-creation-reset.integration.test.ts', group: 'integration', needs_db: true },

@@ -346,15 +346,19 @@ git worktree list: 仅主树；git stash list: 空
 ```text
 change-id: 2026-09-15-story-collection-continuous-creation（T4R1）
 起点: b25b2f1（dirty=0；worktree 仅主树；stash 空）
-目标完整 SHA: 本段收口提交（= 运行全部完成门的树；40 位 SHA 见 T4/post/CLOSEOUT-T4.md §7 与 READY 报告；
-  为避免"文档提交晚于门禁树"导致 green 证据树漂移，收口提交后不再追加任何提交）
-实际 commit（本地，未 push）:
+目标完整 SHA: 门禁代码树 = `5348b12edbb806429395c73b6233da2eae3594a9`（运行全部完成门、dirty=0）；
+  其后按监督方指令追加的**收尾 docs 提交仅改本 plan 文档**（零产品代码/零测试断言），故证据树仍为
+  `5348b12`；最终 HEAD（推送前）见 T4/post/CLOSEOUT-T4.md §7 与 READY 报告。
+实际 commit（本地）:
   14dd334 fix(M9-C1-T4R1): W39 P3B扫描排除gitignore生成物＋自证；W36 404双条件；
           W35单轨两层可达；W38成员可播oracle
   beacffc fix(M9-C1-T4R1): W38可播断言去单轨前缀；W36关窗待重试尾巴落定
   b764ccd fix(M9-C1-T4R1): W41 404期望窗绑定真实触发点（软删后重取）＋诊断收敛为逐行完整输出
           （收口前 squash：bebb87c/5ec1795/7b6c822/c55a6ca/d5df847/19315e4/994c8f6 七个施工期
            诊断提交 → 本提交；W39/W35/W36/W38 内容未被回退）
+  5348b12 docs(plan): 追加 T4R1 交接记录（W39/W41/W35/W38/W31/W27/W30/W32/W28 + 诚实限制）
+  （本提交）docs(M9-C1-T4R1): 收口披露补全（W40/W37/W43/W45/W46）＋W44 举证改可核验措辞
+          —— 仅改本 plan 文档与（gitignore 的）CLOSEOUT/日志改名，零产品代码/零测试断言
 本轮必收项与证据:
   W39（unit 假红根因）: tests/unit/navigation/m9-player-retirement-closure.unit.test.ts
     审计集改为 walk − `git check-ignore --stdin` 命中子集（排除 gitignore 生成物，非用 ls-files
@@ -383,9 +387,37 @@ change-id: 2026-09-15-story-collection-continuous-creation（T4R1）
   W32（名 green 实红日志）: l3-targeted-r1 / l3-targeted-r1-run2 等改名 *.red.log；
     全部非最终树 green 改 *.pre-final.log；收口机械自检每份 .green.log 的 # tree == 最终树。
   W28（最终树证据）: unit/tooling/build/定向 L3/全量 yarn test:browser 均在最终树 dirty=0 重出。
-完成门（最终树, dirty=0）: 见 T4/post/ 最终树 *.green.log（catalog/lint/tsc/unit/integration/
-  tooling/prisma validate/build/定向L3/全量 browser），每份带 # tree 头与 EXIT=。
+完成门（门禁树 5348b12, dirty=0）: 见 T4/post/ 最终树 *.green.log（catalog/lint/tsc/unit/integration/
+  tooling/prisma validate/build/定向L3/全量 browser），每份带 # tree 头与 EXIT=。收尾 docs 提交仅改
+  本 plan 文档（零产品代码/零测试断言），故证据树保持 5348b12。
 feature flag: 无新增；回滚：revert 本段 3 提交。
+收尾披露补全（全部可在当前树当场核验；详见 T4/post/CLOSEOUT-T4.md §8）:
+  W40 可播断言口径变更（beacffc）: library-collection.spec.ts 去掉 audioUrl 前缀断言
+    "/api/audio/assets/"（该 spec 未开单轨 flag，音源 ephemeral，前缀断言属借错口径）；
+    保留/新增 hasAudioUrl poll(60s) + status!=="error" + 非空 URL，recorder 记 audioUrlLen/
+    isCanonicalAssetUrl。属口径收窄到与实际配置一致，非放水。
+  W37 calc() 自定义属性未求值陷阱 + 监督方自我更正（20a6a11、125a08e）: getComputedStyle 对
+    含 calc() 的自定义属性返回未求值记号串 → parseFloat=NaN → ||0，制造"差 76px"假象；
+    监督方原 CSS 组合缺陷归因已撤销；修法=改取已求值几何（getBoundingClientRect/paddingBottom）
+    + 4px 容差（WebKit 亚像素舍入）。
+  W43 Undo 与 404 期望窗确定性时序互斥（994c8f6）: CollectionUndoProvider.tsx:119-124
+    setTimeout(...,6000) 浮条寿命 6000ms，而 journey settleExpected404sAndCloseWindow
+    (:213-224) 关窗判定为连续 8000ms 无新增 ⇒ 原序（visible→settle→click）必跑赢浮条、
+    300s 超时（非 flake）；修法=Undo 整段并入软删窗口块内、关窗前执行，断言逐条保留。
+  W44 举证更正: CLOSEOUT §5.3 原称 "library-list-lifecycle-undo.unit.test.ts §8 静态守卫用
+    fs.existsSync 显式断言 StoryWorkCard.tsx 必须存在" 与代码不符（:1330 是 filesToScan
+    :1329 循环内的通用存在性断言；docblock 8) 是用例分节标题，静态守卫为 9)），已删并改写为
+    含路径+行号的可核验措辞（read-ui :145/:147/:302/:348/:360/:368；undo :149-150/:1192-1197）。
+  W45 l3-full-final.red.log 假红: 1 failed(webkit m7-p3a-closure :60→:112 main-chrome
+    toBeAttached 超时)/79 passed；隔离复跑第1次 1 failed(EXIT=1，复现)、第2次 1 passed(12.1s)、
+    监督方独立复跑 1 passed(10.6s)；归因=harness 残留进程污染（见 W42），非产品回归。
+  W46 l3-full-final2.red.log 基础设施自伤: 37 failed(全部 webkit)/43 passed(3.0m)；
+    首条 helpers/auth.ts:97 fetch failed(AggregateError)，其后全部 "harness 指针缺失"；
+    根因=回收陈旧 harness 服务器动作与该轮 suite 运行不互斥，把其依赖的 app server 与
+    active.json 单槽指针一并清掉；与 l3-full-final3.green.log(80 passed/5.5m) 并列陈述。
+    ⇒ 硬性纪律：回收动作与测试运行必须互斥；L3 单写者串行。
+  W32 收尾正名: T4/post/l3-m7p3a-webkit-isolation.green.log（名 green 实红）已改为 .red.log；
+    自检 11/11 份 *.green.log 的 # tree==5348b12 且 EXIT=0。
 限制（不隐瞒）:
   1) W41 已知缺口：详情页软删后多发一次注定 404 的 collection.get（产品面次生瑕疵；本轮不修，
      建议后续在 moveToTrash/deleteForever 后跳过 detail(id) 失效）。
@@ -394,8 +426,14 @@ feature flag: 无新增；回滚：revert 本段 3 提交。
      建议后续补场景或显式标记 L1-only。
   3) L1 无独立 RED（沿用 T3 口径）；W31 遗留组件保留属有意取舍。
   4) 生产事项一律未动：无 push/merge/deploy、无生产数据删除；contract 迁移仅生成+本地验证。
-视觉验收（supervisor）: `yarn test:browser` 自带隔离服务（31120-31150 空闲端口 + per-run 库 +
-  mock OpenAI）；路由 /library、/library/collections/{id}、/library/{workId}、/chat、/setting
-报告: READY（Implementer 自证；最终 APPROVE 由独立 Reviewer 给出，push 由 supervisor 执行）
+  5) T4R1 环境风险（W42/W45/W46）：L3 harness 的 active.json 为全局单槽、端口池 31120-31150
+     全局共享；被中断的 run 会遗留 detached next-server/mock 且无法再被 teardown 回收 ⇒ 后续 run
+     可能命中残留服务（假红）或被他方"回收陈旧 harness 服务器"清掉在跑的 app server（基础设施
+     自伤）。规避：回收动作与测试运行必须互斥、L3 单写者串行；本轮未改 harness（避免扩大窄修范围），
+     建议列为后续 tooling 任务。
+视觉验收（supervisor）: 已由监督方在隔离环境独立通过（移动+桌面）；启动方式见 `yarn test:browser`
+  自带隔离服务（31120-31150 空闲端口 + per-run 库 + mock OpenAI）；路由 /library、
+  /library/collections/{id}、/library/{workId}、/chat、/setting
+报告: READY（Implementer 自证；最终 APPROVE 由独立 Reviewer 给出）
 ```
 

@@ -50,7 +50,8 @@ async function trpcQuery(page: Page, path: string, input: unknown): Promise<unkn
 
 type ProbeSnapshot = {
     source?: { kind: string; workId?: number } | null;
-    transport?: { currentTime?: number; duration?: number };
+    status?: string;
+    transport?: { currentTime?: number; duration?: number; hasAudioUrl?: boolean; audioUrl?: string | null };
 };
 
 async function readProbe(page: Page): Promise<ProbeSnapshot> {
@@ -148,12 +149,25 @@ test("Collection 两层列表/详情/逐Work播放 + Mini 安全区", async ({
     expect(positions).toEqual([0, 1, 2]);
     recorder.step("成员顺序断言通过", { positions });
 
-    // 逐 Work 播放精确到成员。
+    // 逐 Work 播放精确到成员，并产出可播音频（W38：只断言 source 即覆盖缺口）。
     await page.getByTestId(`member-play-${seed.workIds[1]}`).click();
     await expect
         .poll(async () => (await readProbe(page)).source?.workId, { timeout: 60000 })
         .toBe(seed.workIds[1]);
-    recorder.step("逐Work播放精确", { workId: seed.workIds[1] });
+    // 可播性（与单轨 spec 同口径）：transport 拿到非空 Asset URL，会话未进 error。
+    await expect
+        .poll(async () => (await readProbe(page)).transport?.hasAudioUrl, { timeout: 60000 })
+        .toBe(true);
+    const playSnap = await readProbe(page);
+    expect(playSnap.status).not.toBe("error");
+    expect(
+        typeof playSnap.transport?.audioUrl === "string" &&
+            (playSnap.transport?.audioUrl ?? "").startsWith("/api/audio/assets/"),
+    ).toBe(true);
+    recorder.step("逐Work播放精确且可播", {
+        workId: seed.workIds[1],
+        audioUrl: (playSnap.transport?.audioUrl ?? "").slice(0, 48),
+    });
 
     // Mini 安全区（docked 路径）：末成员可滚到 Mini 之上，且三占位变量数值组合成立。
     await expect(page.getByTestId("mini-slot")).toHaveAttribute("data-visible", "true", {

@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -14,7 +15,8 @@ import path from 'node:path';
 // 8) 正式 Now Playing 入口为 MiniNowPlaying + openExpanded()，Expanded 非 route；
 // 9) M5 冻结签名不可变（7 procedures + 四表 schema 原样）；
 // 10) P3B implementation markers 归零（注释剥离后）。
-// 审计口径：app/components/lib/stores 下 .ts/.tsx，注释剥离后匹配；
+// 审计口径：app/components/lib/stores 下 .ts/.tsx 中**未被 gitignore 命中**的手写源文件；
+// 被排除者须全经 git check-ignore 自证为生成物（见 M9-04-10），且对其复跑 P3B 命中仅允许来自 lib/generated/；
 // docs/specs/plans/tests 历史引用不计入；.e2e-runtime/snapshots 等非产品面不参与。
 
 const readRepoText = (rel: string): string =>
@@ -27,7 +29,30 @@ const stripComments = (src: string): string =>
 
 const AUDIT_ROOTS = ['app', 'components', 'lib', 'stores'];
 
-const walkAuditFiles = (): string[] => {
+// M9-C1 T4R1（W39）：被 gitignore 的构建产物不得进入审计（曾因 regen 的 Prisma
+// DMMF base64 偶然命中 P3B 造成确定性假红）。排除口径 = git check-ignore 命中
+// （而非 git ls-files 白名单），以免漏扫未提交的手写新文件。
+
+/** 单次 check-ignore 判定一批相对路径中被忽略的子集（posix 口径）。 */
+const getGitIgnoredSubset = (rels: string[]): Set<string> => {
+  if (rels.length === 0) return new Set();
+  let out: string;
+  try {
+    out = execFileSync('git', ['check-ignore', '--stdin'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      input: rels.map((r) => r.split(path.sep).join('/')).join('\n'),
+    });
+  } catch (err) {
+    // check-ignore 无命中时以 exit 1 退出且无输出——属正常“零忽略”，不得误报。
+    const code = (err as { status?: unknown }).status;
+    if (code === 1) return new Set();
+    throw new Error(`git check-ignore 调用失败（审计无法证明排除口径，fail-closed）：${String(err).slice(0, 200)}`);
+  }
+  return new Set(out.split('\n').map((s) => s.trim()).filter((s) => s.length > 0));
+};
+
+const walkAllAuditFiles = (): string[] => {
   const out: string[] = [];
   const walk = (dir: string): void => {
     const abs = path.resolve(process.cwd(), dir);
@@ -43,6 +68,28 @@ const walkAuditFiles = (): string[] => {
   };
   for (const root of AUDIT_ROOTS) walk(root);
   return out.sort();
+};
+
+/** 缓存的忽略子集（单测进程内单次 git 调用）。 */
+let cachedIgnored: Set<string> | null = null;
+const getIgnoredAuditPaths = (all: string[]): Set<string> => {
+  if (!cachedIgnored) cachedIgnored = getGitIgnoredSubset(all);
+  return cachedIgnored;
+};
+
+const toPosix = (rel: string): string => rel.split(path.sep).join('/');
+
+const walkAuditFiles = (): string[] => {
+  const all = walkAllAuditFiles();
+  const ignored = getIgnoredAuditPaths(all);
+  return all.filter((rel) => !ignored.has(toPosix(rel)));
+};
+
+/** 被排除的审计文件（walk 命中但 gitignore 命中），供自证断言使用。 */
+const walkExcludedAuditFiles = (): string[] => {
+  const all = walkAllAuditFiles();
+  const ignored = getIgnoredAuditPaths(all);
+  return all.filter((rel) => ignored.has(toPosix(rel)));
 };
 
 const ALLOWLIST_FILES = new Set<string>(['app/(main)/player/page.tsx']);
@@ -365,6 +412,34 @@ async function runM9ClosureUnit(): Promise<void> {
     }
     assert.deepStrictEqual(hits, [], `执行面 P3B markers 必须为 0：${hits.join('；')}`);
     console.log(`PASS: M9-04-10 zero-p3b files=${files.length}`);
+  }
+
+  console.log('=== M9-04-10b: 排除口径自证（W39，防掩盖真实残留） ===');
+  {
+    // 被排除者必须全部被 git check-ignore 命中（walkExcludedAuditFiles 的构造已保证；
+    // 此处复核：任一被排除路径若未被 ignore 命中，即为掩盖， fail-closed）。
+    const excluded = walkExcludedAuditFiles();
+    const rechecked = getGitIgnoredSubset(excluded);
+    const notIgnored = excluded.filter((rel) => !rechecked.has(toPosix(rel)));
+    assert.deepStrictEqual(notIgnored, [], `被排除文件必须全部被 gitignore 命中，否则审计在掩盖：${notIgnored.join('；')}`);
+    // 曾致假红的生成物路径：存在于磁盘时必须位于被排除集中。
+    const generatedHit = 'lib/generated/prisma/internal/class.ts';
+    if (fs.existsSync(path.resolve(process.cwd(), generatedHit))) {
+      assert.ok(
+        excluded.map(toPosix).includes(generatedHit),
+        `${generatedHit} 必须被排除（gitignore 生成物）`
+      );
+    }
+    // 对被排除集复跑 P3B：命中仅允许来自 lib/generated/（其它命中 = 真实残留被掩盖）。
+    const maskedHits: string[] = [];
+    for (const rel of excluded) {
+      const code = stripComments(readRepoText(rel));
+      if (code.includes('P3B') && !toPosix(rel).startsWith('lib/generated/')) {
+        maskedHits.push(rel);
+      }
+    }
+    assert.deepStrictEqual(maskedHits, [], `被排除集中不得藏匿 lib/generated/ 之外的 P3B：${maskedHits.join('；')}`);
+    console.log(`PASS: M9-04-10b exclusion-self-proof excluded=${excluded.length}`);
   }
 
   console.log('\nALL M9 PLAYER RETIREMENT CLOSURE UNIT TESTS PASSED SUCCESSFULLY!');

@@ -75,6 +75,45 @@ type Counters = {
     saveProgress: number;
 };
 
+type TrpcBatch = Array<{ result: { data: { json: unknown } } }>;
+
+/** 真实 tRPC mutation（POST，query 须走 GET，server 对 query POST 回 405）。 */
+async function trpcMutate(page: Page, path: string, input: unknown): Promise<unknown> {
+    return page.evaluate(
+        async (args: { path: string; input: unknown }) => {
+            const res = await fetch(`/api/trpc/${args.path}?batch=1`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ "0": { json: args.input } }),
+            });
+            if (!res.ok) throw new Error(`trpc-http-${res.status}`);
+            const batch = (await res.json()) as TrpcBatch;
+            const first = batch[0];
+            if (!first || !("result" in first)) throw new Error("trpc-error-shape");
+            return (first as { result: { data: { json: unknown } } }).result.data.json;
+        },
+        { path, input },
+    );
+}
+
+async function trpcQuery(page: Page, path: string, input: unknown): Promise<unknown> {
+    return page.evaluate(
+        async (args: { path: string; input: unknown }) => {
+            const encoded = encodeURIComponent(JSON.stringify({ "0": { json: args.input } }));
+            const res = await fetch(`/api/trpc/${args.path}?batch=1&input=${encoded}`, {
+                method: "GET",
+                headers: { accept: "application/json" },
+            });
+            if (!res.ok) throw new Error(`trpc-http-${res.status}`);
+            const batch = (await res.json()) as TrpcBatch;
+            const first = batch[0];
+            if (!first || !("result" in first)) throw new Error("trpc-error-shape");
+            return (first as { result: { data: { json: unknown } } }).result.data.json;
+        },
+        { path, input },
+    );
+}
+
 function attachCounters(page: Page): Counters {
     const counters: Counters = {
         legacyTts: 0,
@@ -182,12 +221,25 @@ test("StoryAudio 单轨资产：一条时间轴 + 卡片/Mini/Expanded 同源 + 
     const runKey = `${Date.now()}${Math.floor(Math.random() * 100000)}`;
     const para = (label: string): string =>
         `${label}深夜的灯塔下老船长翻开泛黄的航海日志，巨浪与星光交织成未知的航线，勇气与智慧将指引每一次抉择。${"内容".repeat(40)}${label}尾`;
-    const work = await createStoryWorkByPage(page, {
-        title: `单轨${runKey}`,
+    // W35（T4R1，oracle 变更已披露）：T4 起 Work 不再有列表直链，种子改经真实
+    // conversation.createNew + collection.promoteArtifact（作品行与旧 library.create
+    // 同构，音频链路无差异；promote 本身不触 TTS，legacyTts 计数口径不变）。
+    const createdConv = (await trpcMutate(page, "conversation.createNew", {})) as { id?: string };
+    if (!createdConv.id) throw new Error("no-conversation-id");
+    const work = (await trpcMutate(page, "collection.promoteArtifact", {
+        conversationId: createdConv.id,
+        sourceMessageId: `t3-single-${runKey}`,
         prompt: `单轨提示词${runKey}`,
         storyText: `${para("甲")}\n${para("乙")}`,
-    });
-    recorder.step("真实作品创建", { workId: work.id });
+    })) as { id: number };
+    const foundCol = (await trpcQuery(page, "collection.list", {
+        view: "active",
+        query: `单轨提示词${runKey}`,
+        limit: 5,
+    })) as { items?: Array<{ id?: string }> };
+    const collectionId = foundCol.items?.[0]?.id;
+    if (!collectionId) throw new Error("no-collection-id");
+    recorder.step("真实作品创建（含所属集合）", { workId: work.id, collectionId });
 
     const afterBegin = (await page.evaluate((workId: number) => {
         const w = window as unknown as Record<string, { beginWork: (id: number, mode: string) => Promise<ProbeSnapshot> }>;
@@ -255,6 +307,25 @@ test("StoryAudio 单轨资产：一条时间轴 + 卡片/Mini/Expanded 同源 + 
     expect(onLibrarySnapshot.transport?.audioUrl).toBe(firstUrl);
     expect(onLibrarySnapshot.audioCount).toBe(1);
     recorder.step("列表表面同源", { workId: work.id });
+
+    // W35（T4R1，oracle 变更已披露）：经新的两层路径真实可达该成员——
+    // 集合列表 → 所属集合详情 → 成员条目可见且位置正确（单作品集 position 恒 0）。
+    await page.getByTestId(`collection-link-${collectionId}`).click();
+    await page.waitForURL(`**/library/collections/${collectionId}`, { timeout: 15000 });
+    const memberRow = page.getByTestId(`member-work-${work.id}`);
+    await expect(memberRow).toBeVisible({ timeout: 15000 });
+    await expect(memberRow).toHaveAttribute("data-position", "0");
+    await expect(page.getByTestId(`member-play-${work.id}`)).toBeVisible({ timeout: 15000 });
+    // 二次导航后会话仍绑定同一 Asset（同源不断）。
+    const onDetailSnapshot = await readProbe(page);
+    expect(onDetailSnapshot.source?.workId).toBe(work.id);
+    expect(onDetailSnapshot.transport?.audioUrl).toBe(firstUrl);
+    recorder.step("两层路径成员可达且同源", {
+        collectionId,
+        workId: work.id,
+        position: 0,
+        audioUrl: onDetailSnapshot.transport?.audioUrl,
+    });
 
     // Mini → Expanded：同一 transport 时间轴，Expanded 时长 == 整轨时长。
     await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 15000 });

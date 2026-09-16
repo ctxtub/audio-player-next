@@ -367,14 +367,17 @@ export async function playStoryCard(input: StoryCardPlayInput): Promise<void> {
 }
 
 /**
- * Generation History 正式回放入口（）。
+ * 正式 Work 播放入口（中性命名：Chat 创作卡、作品集详情、连续创作共用）。
  *
- * History 底层即 StoryWork（DTO `record.id` = Work identity），回放走正式
- * Work Session：`source = {kind:'work', workId: record.id}`，经 Work
- * begin/restart/play 路径 + / 正式 provider，finite（不触发 AI continuation）。
- * 不得伪造 transient Draft，不得修改  source union。
+ * Work 底层即 StoryWork（`workId` = Work identity），回放走正式
+ * Work Session：`source = {kind:'work', workId}`，经 Work
+ * begin/restart/play 路径 + 正式 provider，finite（不触发 AI continuation）。
+ * 不得伪造 transient Draft，不得修改 source union。
+ *
+ * 并发/连击经上方同一串行临界区 + 请求代收口：只有最后一次用户操作落地，
+ * 不会并发创建多个服务端 begin 请求。
  */
-export async function playWorkFromHistory(workId: number): Promise<void> {
+export async function playStoryWork(workId: number): Promise<void> {
   if (!isValidWorkId(workId)) return;
   const source: PlaybackSourceRef = { kind: 'work', workId };
   const token = ++playRequestSeq;
@@ -410,6 +413,13 @@ export async function playWorkFromHistory(workId: number): Promise<void> {
   });
   await playPlanned(planned);
 }
+
+/**
+ * @deprecated 历史命名兼容别名：与 `playStoryWork` 同一实现。
+ * 范围外调用方（作品集详情等）迁移前保留；待无调用方后由后续段删除。
+ * 本段新代码一律使用 `playStoryWork`。
+ */
+export const playWorkFromHistory = playStoryWork;
 
 /**
  * 生成完成后 autoplay 正式入口（）。

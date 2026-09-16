@@ -176,13 +176,72 @@
   }
 }
 
-/* 操作区域 */
+/* 操作区域：主操作（播放）与次级文本按钮分层；窄屏可换行但不溢出 */
 .storyActions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   justify-content: flex-end;
+  flex-wrap: wrap;
+  min-width: 0;
   padding: 0 var(--space-3) var(--space-3);
+}
+
+/* 播放状态行：单行弱提示 + 细进度轨道。
+   ready 卡恒渲染本行（idle 显示“已保存”），各态只换文案不增减行数，
+   preparing 切换时卡片高度保持稳定。 */
+.playbackMeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 0 var(--space-3) var(--space-2);
+}
+
+.playbackStatus {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--text-secondary);
+}
+
+.playbackStatusError {
+  color: var(--status-error);
+}
+
+.playbackProgressTrack {
+  display: block;
+  height: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
+}
+
+.playbackProgressFill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--accent-primary);
+  transition: width var(--duration-normal) var(--ease-out);
+}
+
+/* 准备中 spinner：按钮内小尺寸沿用当前文字色 */
+.spinner {
+  animation: playbackSpin 0.9s linear infinite;
+}
+
+@keyframes playbackSpin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .expandButton {
@@ -227,6 +286,13 @@
 
   &:active {
     transform: translateY(0) scale(0.97);
+  }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: default;
+    transform: none;
+    box-shadow: var(--shadow-accent);
   }
 }
 
@@ -309,26 +375,20 @@
   }
 }
 
-/* ready 的 Library handoff CTA：纯导航锚点，与按钮同 token 对齐 */
-.libraryLink {
-  display: inline-flex;
-  align-items: center;
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  color: var(--accent-primary);
-  background: transparent;
-  border: 0.5px solid color-mix(in srgb, var(--accent-primary) 40%, transparent);
-  border-radius: var(--radius-xl);
-  text-decoration: none;
-  cursor: pointer;
-  transition: var(--transition-all);
-
-  &:hover {
-    background: var(--accent-primary-subtle);
+/* 尊重减少动态偏好：卡片内装饰/状态动效一律关闭 */
+@media (prefers-reduced-motion: reduce) {
+  .sparkle,
+  .cursor,
+  .bar,
+  .spinner {
+    animation: none;
   }
 
-  &:active {
-    transform: scale(0.97);
+  .storyCard,
+  .playButton,
+  .expandButton,
+  .retryButton,
+  .playbackProgressFill {
+    transition: none;
   }
 }

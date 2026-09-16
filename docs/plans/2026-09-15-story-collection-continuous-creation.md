@@ -262,3 +262,24 @@ r1 实现 commit: 42444aae84b8ea2c38a0717bdb14fea2607eeb48（本地提交，未 
 限制: 见 T3/post/CLOSEOUT-T3.md §5（r1 收口后仅保留有意的旧路径保留、L1 无独立 RED、双 flag 需同置等诚实声明）
 ```
 
+### 7.2 Task 3 r2 修复记录（Reviewer CHANGES REQUESTED 仅两项 ①④，Implementer 自证）
+
+```text
+change-id: 2026-09-15-story-collection-continuous-creation
+角色: Implementer（自跑门；不自批、未 push/merge/deploy/Actions）
+r1 最终基线: 97ff78d（clean）
+r2 commit 链: 2e74b15（RED 纯测试）→ 5d51483（实现）→ 6c36075（RED2 纯测试）→ 54161a1（实现2，代码最终树，clean；本文档提交仅在其上追加 §7.2，不含代码改动，完成门证据对应代码树 54161a1）
+必收 ①（positionMs 落库缺口）:
+  切曲前旧作品 force 落库: stores/playbackSessionStore.ts:684（hydrateFromAnchor 真实 seam，beginPlayback/restart 经此）+ :821（setActiveStory probe seam 防御）
+  页面隐藏/离开 force 落库: components/AudioControllerHost/index.tsx:266-272（visibilitychange+hidden 门 / pagehide / beforeunload → persistSingleTrackProgress({force:true})）
+  force 只绕过客户端 10s 节流；服务端 clamp/单调/节流二次保证未动
+  测试: L1 storycard-session-resume case J（真实 hydrate seam，RED2 positionms-hydrate-seam.red.log → unit 全绿）；L3 story-audio-single-track 新增 test 4（真机 DOM 事件 → saveProgress 计数，l3-pagehide.red.log 2 failed/6 passed → l3-pagehide.green.log 8 passed）
+必收 ④（server flag 真去耦）:
+  lib/audio/singleTrackFlag.ts:49 新增 isSingleTrackServerEnabled（只认运行时 SINGLE_TRACK_AUDIO_ENABLED）；:70 isSingleTrackAudioEnabled 收窄为 client 语义（只认 NEXT_PUBLIC_* / globalThis E2E 覆盖）
+  服务端入口改用 server 判定: lib/server/storyAudioAsset.ts:390/689/761/913、lib/server/audioAssetRead.ts:67、lib/server/storyAudio.ts:1474；client 侧（store/flow/lib/client）不变
+  仅置公开变量 ⇒ ensure/投影/进度 DISABLED + 读路由 404 + 零资产行，由 L2 9f–9j 锁定（single-track-flag-decouple.red.log failures=5 → integration 59/59）
+  文档四处同义: singleTrackFlag.ts 顶部契约、.env.sample、Dockerfile、docker-compose.yml
+完成门（tree 54161a1, clean）: catalog EXIT=0；unit 70/70（套件级，suites=70）；integration 59/59（套件级）；tooling 10/10（套件级）；tsc EXIT=0；lint EXIT=0；prisma validate valid；build EXIT=0；yarn test:browser 76 passed EXIT=0（run1–run3 webkit 加载超时 flake 留档 runN-flaky，三轮失败集零重叠且隔离全转绿，未改产品代码迁就；详见 CLOSEOUT-T3.md r2-4）
+限制: 见 T3/post/CLOSEOUT-T3.md r2-5（沿用 r1 §4/§5；增补后台 kill 极端丢心跳说明）
+```
+

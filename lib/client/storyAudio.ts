@@ -20,7 +20,6 @@
 
 import { trpc } from '@/lib/trpc/client';
 import { isCanonicalAudioEnabled } from '@/lib/audio/canonicalFlag';
-import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
 
 export type {
@@ -91,15 +90,11 @@ export const saveProgress = async (input: {
 };
 
 /**
- *  单轨读路径选择（纯函数）：Work + 单轨开关开启 → true。
+ * 单轨读路径选择（纯函数）：Work 恒走单轨正式路径。
  */
 export function shouldUseSingleTrackAudio(source: PlaybackSourceRef | null): boolean {
   if (!source || source.kind !== 'work') return false;
-  try {
-    return isSingleTrackAudioEnabled();
-  } catch {
-    return false;
-  }
+  return true;
 }
 
 /**  单资产 URL 形态守卫（/api/audio/assets/<opaque-id>）。 */

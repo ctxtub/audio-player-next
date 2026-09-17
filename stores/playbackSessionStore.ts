@@ -66,15 +66,12 @@ import { useConfigStore } from '@/stores/configStore';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
 import {
   ensureAsset as ensureCanonicalAsset,
-  ensureSegment as ensureCanonicalSegment,
   getPlaybackManifest as fetchPlaybackManifest,
   isCanonicalPlaybackUrl,
   isSingleTrackPlaybackUrl,
   saveProgress as saveSingleTrackProgress,
   selectWorkParagraphs,
-  shouldUseCanonicalAudio,
 } from '@/lib/client/storyAudio';
-import { isSingleTrackAudioEnabled } from '@/lib/audio/singleTrackFlag';
 import { SINGLE_TRACK_PROGRESS_THROTTLE_MS } from '@/lib/audio/asset';
 import {
   resolvePlaybackDraftSnapshot,
@@ -328,68 +325,44 @@ function sleepMs(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * Work Segment canonical 获取（含 preparing 轮询，不动 stale 语义）。
+ * Work 单轨资产获取（含 preparing 轮询，不动 stale 语义）。
  *
- * - ready → 返回 playbackUrl（/api/audio/segments/<id>，永不 revoke）；
+ * 整篇只物化一个 Asset，任意段落索引都返回同一 URL。
+ * - ready → 返回 playbackUrl（/api/audio/assets/<id>，永不 revoke）；
  * - preparing → 按 retryAfterMs 等待后重试（上限内），abort/stale 由调用方判定；
  * - 抛错 → 由调用方按 error/静默路径处理（play 置 error+Toast，prefetch 静默）。
  */
 async function fetchCanonicalAudioUrlWithRetry(
   workId: number,
-  segmentIndex: number,
+  _segmentIndex: number,
   sessionId: string,
   options?: { signal?: AbortSignal },
 ): Promise<string> {
-  // 单轨开关开启时整篇只物化一个 Asset，任意段落索引都返回同一 URL。
-  if (isSingleTrackAudioEnabled()) {
-    let singleAttempts = 0;
-    for (;;) {
-      singleAttempts += 1;
-      const output = await ensureCanonicalAsset({ workId, sessionId });
-      if (output.status === 'ready') {
-        // 服务端 positionMs 作为待恢复位，等 duration 已知后一次性 seek。
-        try {
-          usePlaybackSessionStore.setState({
-            singleTrackResumePositionMs:
-              typeof output.asset.positionMs === 'number' ? output.asset.positionMs : null,
-            singleTrackResumeSeekApplied: false,
-          });
-        } catch {
-          // store 尚未就绪（理论不可达）时忽略恢复位，不影响播放。
-        }
-        return output.asset.playbackUrl;
-      }
-      if (singleAttempts >= CANONICAL_ENSURE_MAX_ATTEMPTS) {
-        throw new Error('canonical single-track preparing timeout');
-      }
-      if (options?.signal?.aborted) throw new Error('canonical prefetch aborted');
-      const retryAfter =
-        typeof output.retryAfterMs === 'number' ? output.retryAfterMs : 500;
-      await sleepMs(Math.max(0, Math.min(retryAfter, 2000)), options?.signal);
-      if (options?.signal?.aborted) throw new Error('canonical prefetch aborted');
-    }
-  }
-  let attempts = 0;
+  let singleAttempts = 0;
   for (;;) {
-    attempts += 1;
-    const output = await ensureCanonicalSegment({ workId, segmentIndex, sessionId });
+    singleAttempts += 1;
+    const output = await ensureCanonicalAsset({ workId, sessionId });
     if (output.status === 'ready') {
-      return output.segment.playbackUrl;
+      // 服务端 positionMs 作为待恢复位，等 duration 已知后一次性 seek。
+      try {
+        usePlaybackSessionStore.setState({
+          singleTrackResumePositionMs:
+            typeof output.asset.positionMs === 'number' ? output.asset.positionMs : null,
+          singleTrackResumeSeekApplied: false,
+        });
+      } catch {
+        // store 尚未就绪（理论不可达）时忽略恢复位，不影响播放。
+      }
+      return output.asset.playbackUrl;
     }
-    if (attempts >= CANONICAL_ENSURE_MAX_ATTEMPTS) {
-      throw new Error('canonical segment preparing timeout');
+    if (singleAttempts >= CANONICAL_ENSURE_MAX_ATTEMPTS) {
+      throw new Error('canonical single-track preparing timeout');
     }
-    if (options?.signal?.aborted) {
-      throw new Error('canonical prefetch aborted');
-    }
+    if (options?.signal?.aborted) throw new Error('canonical prefetch aborted');
     const retryAfter =
-      typeof (output as { retryAfterMs?: unknown }).retryAfterMs === 'number'
-        ? ((output as { retryAfterMs: number }).retryAfterMs as number)
-        : 500;
+      typeof output.retryAfterMs === 'number' ? output.retryAfterMs : 500;
     await sleepMs(Math.max(0, Math.min(retryAfter, 2000)), options?.signal);
-    if (options?.signal?.aborted) {
-      throw new Error('canonical prefetch aborted');
-    }
+    if (options?.signal?.aborted) throw new Error('canonical prefetch aborted');
   }
 }
 
@@ -929,36 +902,35 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const voiceId = state.voiceId || useConfigStore.getState().apiConfig.voiceId;
     const speed = state.speed || useConfigStore.getState().apiConfig.speed;
 
-    // Work Segment audio provider 替换（只替换 provider，不动 identity）：
-    // Work + flag 开启 + 合法 sessionId → canonical（ensureSegment → ready playbackUrl）；
-    // Draft / flag 关闭 / 非法 session → legacy ephemeral TTS。speed 永不进入 asset 身份。
-    let useCanonical = false;
-    let canonicalWorkId: number | null = null;
-    let canonicalSessionId: string | null = null;
+    // Work 音源（正式单轨默认）：Work + 合法 sessionId → 单轨资产
+    //（ensureAsset → ready playbackUrl）；Draft / 非法 session → legacy ephemeral TTS。
+    // speed 永不进入 asset 身份。
+    let useSingleTrack = false;
+    let singleTrackWorkId: number | null = null;
+    let singleTrackSessionId: string | null = null;
     try {
       if (
         state.source?.kind === 'work' &&
-        (shouldUseCanonicalAudio(state.source) || isSingleTrackAudioEnabled()) &&
         typeof originatingSessionId === 'string' &&
         isValidPlaybackSessionId(originatingSessionId)
       ) {
-        useCanonical = true;
-        canonicalWorkId = state.source.workId;
-        canonicalSessionId = originatingSessionId;
+        useSingleTrack = true;
+        singleTrackWorkId = state.source.workId;
+        singleTrackSessionId = originatingSessionId;
       }
     } catch {
-      useCanonical = false;
+      useSingleTrack = false;
     }
 
     let audioUrl = state.prefetchedAudioUrl;
     if (state.prefetchingIndex !== paragraphIndex || !audioUrl) {
       set({ status: 'synthesizing' });
-      if (useCanonical && canonicalWorkId !== null && canonicalSessionId !== null) {
+      if (useSingleTrack && singleTrackWorkId !== null && singleTrackSessionId !== null) {
         try {
           audioUrl = await fetchCanonicalAudioUrlWithRetry(
-            canonicalWorkId,
+            singleTrackWorkId,
             paragraphIndex,
-            canonicalSessionId,
+            singleTrackSessionId,
           );
         } catch (err) {
           // §50 session guard：失败也须确认仍是同一 session 才置 error，避免旧结果覆盖新会话。
@@ -1014,8 +986,9 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   prefetchNextParagraph: async (paragraphIndex) => {
     const state = get();
-    // 单轨：整篇已是一个 Asset，无“下一段”可预取（同一 URL 已缓存）。
-    if (isSingleTrackAudioEnabled()) return;
+    // 单轨 Work 整篇已是一个 Asset，无“下一段”可预取（同一 URL 已缓存）；
+    // Draft 仍走 legacy 按段预取。
+    if (state.source?.kind === 'work') return;
     if (paragraphIndex !== state.nextParagraphIndex + 1) return;
     if (paragraphIndex >= state.paragraphs.length) return;
     if (!usePlaybackStore.getState().isPlaying) return;
@@ -1035,31 +1008,10 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const voiceId = state.voiceId || useConfigStore.getState().apiConfig.voiceId;
     const speed = state.speed || useConfigStore.getState().apiConfig.speed;
 
-    // lookahead 仍=1（本函数仅被 next+1 调用，绝不首播全篇）：
-    // Work + flag 开启 → ensure N+1；Draft/关闭 → legacy fetchAudio。
-    let prefetchCanonical: { workId: number; sessionId: string } | null = null;
+    // lookahead 仍=1（本函数仅被 next+1 调用，绝不首播全篇）；
+    // 此处仅 Draft 可达，一律 legacy fetchAudio。
     try {
-      if (
-        state.source?.kind === 'work' &&
-        (shouldUseCanonicalAudio(state.source) || isSingleTrackAudioEnabled()) &&
-        typeof originatingSessionId === 'string' &&
-        isValidPlaybackSessionId(originatingSessionId)
-      ) {
-        prefetchCanonical = { workId: state.source.workId, sessionId: originatingSessionId };
-      }
-    } catch {
-      prefetchCanonical = null;
-    }
-
-    try {
-      const audioUrl = prefetchCanonical
-        ? await fetchCanonicalAudioUrlWithRetry(
-            prefetchCanonical.workId,
-            paragraphIndex,
-            prefetchCanonical.sessionId,
-            { signal: abortCtrl.signal },
-          )
-        : await fetchAudio(textToPrefetch, voiceId, speed);
+      const audioUrl = await fetchAudio(textToPrefetch, voiceId, speed);
       if (abortCtrl.signal.aborted) return;
       // session 已切换则丢弃预取结果，不污染新会话。
       if (get().sessionId !== originatingSessionId) {
@@ -1076,8 +1028,9 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   handleParagraphEnded: async (): Promise<boolean> => {
     const state = get();
-    // 单轨：整篇是一条时间轴，audio ended 即整 Work 完播；绝不按段落推进导致整轨重放。
-    if (isSingleTrackAudioEnabled()) {
+    // 单轨 Work 整篇是一条时间轴，audio ended 即整 Work 完播；绝不按段落推进导致整轨重放。
+    // Draft 仍按段落推进。
+    if (state.source?.kind === 'work') {
       // 完播前强制落库最终 positionMs（server 端据此置 completedAt）。
       await get().persistSingleTrackProgress({ force: true });
       set({
@@ -1156,7 +1109,6 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   persistSingleTrackProgress: async (options) => {
     const state = get();
-    if (!isSingleTrackAudioEnabled()) return;
     if (!state.sessionId || !state.source || state.source.kind !== 'work') return;
     const transport = usePlaybackStore.getState();
     const durationSeconds = Number.isFinite(transport.duration) ? transport.duration : 0;

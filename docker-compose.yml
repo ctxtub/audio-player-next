@@ -8,9 +8,7 @@ services:
         # canonical enable gate（构建期；默认空 = fail-closed 关闭。
         # 安全开启：NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=1 docker compose build）
         NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED: "${NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED:-}"
-        # 单轨 build flag（默认空 = fail-closed；**只** 控制 client provider，
-        # 不授权服务端；需与 runtime SINGLE_TRACK_AUDIO_ENABLED 同时为 1）。
-        NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED: "${NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED:-}"
+        # 单轨音频已为正式默认路径（第二段），无需单轨 build 开关。
     env_file:
       - .env.local
     ports:
@@ -25,9 +23,7 @@ services:
       # 浏览器 provider 的 production rollout 必须在 build 时设置 NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=1，
       # 运行时变量单独不足以开启生产播放。语义见 lib/audio/canonicalFlag.ts）
       CANONICAL_AUDIO_ENABLED: "${CANONICAL_AUDIO_ENABLED:-}"
-      # 单轨运行时门（默认空 = fail-closed；**唯一** 服务端单轨授权依据，
-      # 公开变量不得授权；需与 build 变量 NEXT_PUBLIC_SINGLE_TRACK_AUDIO_ENABLED 同时为 1）。
-      SINGLE_TRACK_AUDIO_ENABLED: "${SINGLE_TRACK_AUDIO_ENABLED:-}"
+      # 单轨音频已为正式默认路径（第二段）；已退役的单轨运行时门不再声明。
     volumes:
       - ./data:/app/data
       - ./audio:/app/audio

@@ -64,7 +64,6 @@ import {
   synthesizeSpeechWithProfile,
   type CanonicalTtsSynthesizer,
 } from '@/lib/server/openai';
-import { isSingleTrackServerEnabled } from '@/lib/audio/singleTrackFlag';
 import { buildAssetPlaybackUrl } from '@/lib/audio/asset';
 import {
   getStoryAudioAssetProjectionForSubject,
@@ -770,7 +769,7 @@ export type EnsureSegmentReadyResult = {
     totalDurationMs: number | null;
     totalByteLength: number | null;
   };
-  /**  单轨资产投影（仅 `SINGLE_TRACK_AUDIO_ENABLED=1` 时存在；旧调用方忽略此字段）。 */
+  /** 单轨资产投影（历史兼容字段；正式单轨 ensure 不再经本入口填充）。 */
   asset?: StoryAudioAssetDTO;
 };
 
@@ -808,8 +807,8 @@ async function readGuestManifestSnapshot(manifestId: number) {
  * 并发：ready → 直接返回；有效 lease → preparing + retryAfter；
  * missing/failed/过期 lease → 原子 claim 后在 transaction 外合成。
  *
- *  去耦：单轨开关不再劫持本入口；ensureSegment 恒为旧多段 canonical 路径，
- * 单轨写入口只在 `storyAudio.ensure`（服务端 flag 门禁）。
+ * 历史兼容入口：ensureSegment 恒为旧多段 canonical 路径，仅服务既有数据；
+ * 新 Work 正式播放一律走单轨 `storyAudio.ensure`，不再经本入口创建用户可见分段曲目。
  */
 export async function ensureStoryAudioSegmentForSubject(
   subject: Subject,
@@ -1410,7 +1409,7 @@ export type PlaybackManifestDTO = {
   totalDurationMs: number | null;
   totalByteLength: number | null;
   segments: PlaybackManifestSegmentDTO[];
-  /**  单轨投影（仅开关开启时存在/非 null；`segments` 同时为空，保证只暴露一条时间轴）。 */
+  /** 单轨投影（正式默认；`segments` 同时为空，保证只暴露一条时间轴）。 */
   singleTrack?: StoryAudioAssetDTO | null;
 };
 
@@ -1463,106 +1462,13 @@ async function getSingleTrackPlaybackManifest(
 }
 
 /**
- * 读取播放用 Manifest 投影（只读；无 Manifest → missing 空投影，不回填、不合成）。
- * Trash Work 的已有 asset 仍允许读取（与  §19.1 一致；trash 门禁仅约束 ensure 写）。
+ * 读取播放用单轨投影（只读；正式默认单轨，segments 为空 + singleTrack，保证只暴露一条时间轴）。
+ * 旧 Segment/Manifest 行仅作历史兼容数据保留，不再经本入口暴露为用户可见分段曲目。
+ * Trash Work 的已有 asset 仍允许读取（trash 门禁仅约束 ensure 写）。
  */
 export async function getPlaybackManifestForSubject(
   subject: Subject,
   input: GetPlaybackManifestInput
 ): Promise<PlaybackManifestDTO> {
-  // 开关开启时改走单轨投影（segments 为空 + singleTrack，保证只暴露一条时间轴）。
-  if (isSingleTrackServerEnabled()) {
-    return getSingleTrackPlaybackManifest(subject, input);
-  }
-  const { workId } = input;
-  if (!Number.isInteger(workId) || workId <= 0) {
-    throwDomain('WORK_NOT_FOUND', 'NOT_FOUND');
-  }
-  const work = await resolveOwnedWork(subject, workId);
-  if (work.kind === 'user') {
-    const manifest = await prisma.storyAudioManifest.findUnique({
-      where: {
-        storyWorkId_version: {
-          storyWorkId: work.id,
-          version: STORY_AUDIO_MANIFEST_VERSION,
-        },
-      },
-      include: { segments: { orderBy: { segmentIndex: 'asc' } } },
-    });
-    if (!manifest) {
-      return {
-        workId: work.id,
-        status: 'missing',
-        contentHash: work.contentHash,
-        segmentationVersion: SEGMENTATION_VERSION,
-        voiceId: work.voiceId,
-        segmentCount: 0,
-        readySegmentCount: 0,
-        totalDurationMs: null,
-        totalByteLength: null,
-        segments: [],
-      };
-    }
-    return {
-      workId: work.id,
-      status: manifest.status as PlaybackManifestDTO['status'],
-      contentHash: manifest.contentHash,
-      segmentationVersion: manifest.segmentationVersion,
-      voiceId: manifest.voiceId,
-      segmentCount: manifest.segmentCount,
-      readySegmentCount: manifest.readySegmentCount,
-      totalDurationMs: manifest.totalDurationMs,
-      totalByteLength: manifest.totalByteLength,
-      segments: manifest.segments.map((s) => ({
-        index: s.segmentIndex,
-        text: s.text,
-        textHash: s.textHash,
-        status: s.status as PlaybackManifestSegmentDTO['status'],
-        durationMs: s.durationMs,
-        playbackUrl: s.status === 'ready' ? buildSegmentPlaybackUrl(s.id) : null,
-      })),
-    };
-  }
-  const manifest = await prisma.guestStoryAudioManifest.findUnique({
-    where: {
-      storyWorkId_version: {
-        storyWorkId: work.id,
-        version: STORY_AUDIO_MANIFEST_VERSION,
-      },
-    },
-    include: { segments: { orderBy: { segmentIndex: 'asc' } } },
-  });
-  if (!manifest) {
-    return {
-      workId: work.id,
-      status: 'missing',
-      contentHash: work.contentHash,
-      segmentationVersion: SEGMENTATION_VERSION,
-      voiceId: work.voiceId,
-      segmentCount: 0,
-      readySegmentCount: 0,
-      totalDurationMs: null,
-      totalByteLength: null,
-      segments: [],
-    };
-  }
-  return {
-    workId: work.id,
-    status: manifest.status as PlaybackManifestDTO['status'],
-    contentHash: manifest.contentHash,
-    segmentationVersion: manifest.segmentationVersion,
-    voiceId: manifest.voiceId,
-    segmentCount: manifest.segmentCount,
-    readySegmentCount: manifest.readySegmentCount,
-    totalDurationMs: manifest.totalDurationMs,
-    totalByteLength: manifest.totalByteLength,
-    segments: manifest.segments.map((s) => ({
-      index: s.segmentIndex,
-      text: s.text,
-      textHash: s.textHash,
-      status: s.status as PlaybackManifestSegmentDTO['status'],
-      durationMs: s.durationMs,
-      playbackUrl: s.status === 'ready' ? buildSegmentPlaybackUrl(s.id) : null,
-    })),
-  };
+  return getSingleTrackPlaybackManifest(subject, input);
 }

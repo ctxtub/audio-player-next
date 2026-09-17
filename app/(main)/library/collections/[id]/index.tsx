@@ -19,7 +19,7 @@ import {
   areMemberPositionsOrdered,
   formatCollectionWorkCount,
 } from '@/lib/client/collectionViewModel';
-import { playWorkFromHistory } from '@/app/services/playbackSessionFlow';
+import { playStoryWork } from '@/app/services/playbackSessionFlow';
 import { LibraryUnavailable, isUnavailableError } from '@/components/Library/LibraryUnavailable';
 import styles from '../../[id]/index.module.scss';
 
@@ -138,7 +138,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
 
   const handlePlayWork = async (workId: number) => {
     try {
-      await playWorkFromHistory(workId);
+      await playStoryWork(workId);
     } catch (err) {
       console.error('Collection member play failed:', err);
     }

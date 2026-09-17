@@ -39,7 +39,6 @@ import {
   enqueueAudioDeletionTombstones,
 } from '@/lib/server/audioStorageCleanup';
 import { isValidPlaybackSessionId } from '@/lib/playback/session';
-import { isSingleTrackServerEnabled } from '@/lib/audio/singleTrackFlag';
 import {
   getTtsConfig,
   synthesizeSpeechWithProfile,
@@ -387,9 +386,6 @@ async function ensureStoryAudioAssetInternal(
   input: { workId: number; sessionId: string },
   depsInput: StoryAudioAssetDeps,
 ): Promise<EnsureStoryAudioAssetResult> {
-  if (!isSingleTrackServerEnabled()) {
-    throwDomain('SINGLE_TRACK_AUDIO_DISABLED', 'FORBIDDEN');
-  }
   // 生产机会式 GC 触发：过期空闲资产有界清扫，fire-and-forget，绝不影响 ensure 延迟/结果。
   void maybeRunStoryAudioAssetGc();
   const deps = resolveDeps(depsInput);
@@ -686,9 +682,6 @@ export async function getStoryAudioAssetProjectionForSubject(
   input: { workId: number },
   depsInput: StoryAudioAssetDeps = {},
 ): Promise<StoryAudioAssetProjectionDTO> {
-  if (!isSingleTrackServerEnabled()) {
-    throwDomain('SINGLE_TRACK_AUDIO_DISABLED', 'FORBIDDEN');
-  }
   const deps = resolveDeps(depsInput);
   const { workId } = input;
   if (!Number.isInteger(workId) || workId <= 0) throwDomain('WORK_NOT_FOUND', 'NOT_FOUND');
@@ -758,9 +751,6 @@ export async function saveStoryAudioProgressForSubject(
   input: { workId: number; sessionId: string; positionMs: number; durationMs?: number | null; force?: boolean },
   depsInput: StoryAudioAssetDeps = {},
 ): Promise<boolean> {
-  if (!isSingleTrackServerEnabled()) {
-    throwDomain('SINGLE_TRACK_AUDIO_DISABLED', 'FORBIDDEN');
-  }
   const deps = resolveDeps(depsInput);
   const { workId, sessionId } = input;
   if (!Number.isInteger(workId) || workId <= 0) throwDomain('WORK_NOT_FOUND', 'NOT_FOUND');
@@ -902,17 +892,12 @@ async function playingWorkIdsForScope(
 /**
  * 有界清扫过期单轨资产（生产入口）：按 User/Guest 分域构建「正在播放」守卫后调用
  * `cleanupExpiredStoryAudioAssets`；缺省总上限 `AUDIO_DELETION_DEFAULT_LIMIT`（每域）。
- *
- * flag 关闭时直接零结果（fail closed，不产生任何单轨流量）。
  */
 export async function sweepExpiredStoryAudioAssets(options: {
   now?: Date;
   limit?: number;
   storage?: AudioAssetStorage;
 } = {}): Promise<CleanupExpiredStoryAudioAssetsResult> {
-  if (!isSingleTrackServerEnabled()) {
-    return { scanned: 0, enqueued: 0, deleted: 0 };
-  }
   const now = options.now ?? new Date();
   const [playingUser, playingGuest] = await Promise.all([
     playingWorkIdsForScope('user', now),

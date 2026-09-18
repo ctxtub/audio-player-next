@@ -2,13 +2,13 @@ import type { Page } from "@playwright/test";
 import { dismissOnboarding } from "./guest";
 
 /**
- *  场景身份前置助手（任务13 第二段）。
+ * 场景身份前置助手。
  *
- * 经由 harness 被测服务真实 API 签发身份（访客/注�），测试进程直取
+ * 经由 harness 被测服务真实 API 签发身份（访客/注册），测试进程直取
  * Set-Cookie 令牌后以非 Secure 写入上下文 cookie jar，再进业务页。
  * 背景：harness 本地 http 上 product 按生产要求置 Secure（生产 HTTPS 正确），
  * WebKit 拒收 http Secure（Chromium 放行 localhost 例外），致 UI 访客/注册键在
- * Safari 系Harness 内无法落盘；此处仅换测试侧传输通道，不自造令牌、不改产品语义。
+ * Safari 系 harness 内无法落盘；此处仅换测试侧传输通道，不自造令牌、不改产品语义。
  */
 
 /** tRPC 批量包体（单 op）。 */

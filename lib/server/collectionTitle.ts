@@ -54,14 +54,12 @@ export const defaultCollectionTitleGenerator: CollectionTitleGenerator = async (
 export type GenerateCollectionTitleOptions = {
   /** 短超时毫秒数（默认 COLLECTION_AI_TITLE_TIMEOUT_MS）。 */
   timeoutMs?: number;
-  /** 生成器注入（测试专用；缺省走默认 OpenAI 生成器）。 */
-  generate?: CollectionTitleGenerator;
 };
 
 /**
  * 短超时安全生成集合标题：任何失败/超时/空结果返回 null，绝不抛错。
  * @param input 首篇正文与提示词
- * @param options 超时与生成器注入
+ * @param options 超时
  * @returns 规范化标题或 null
  */
 export async function generateCollectionTitleSafely(
@@ -69,7 +67,7 @@ export async function generateCollectionTitleSafely(
   options?: GenerateCollectionTitleOptions,
 ): Promise<string | null> {
   const timeoutMs = options?.timeoutMs ?? COLLECTION_AI_TITLE_TIMEOUT_MS;
-  const generate = options?.generate ?? defaultCollectionTitleGenerator;
+  const generate = defaultCollectionTitleGenerator;
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

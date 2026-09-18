@@ -284,11 +284,13 @@ export const ExpandedNowPlaying: React.FC = () => {
         return null;
     }
 
-    const subtitle = formatExpandedSubtitle(
-        viewModel.voiceLabel,
-        viewModel.paragraph.current,
-        viewModel.paragraph.total
-    );
+    const subtitle =
+        viewModel.workSubtitle ??
+        formatExpandedSubtitle(
+            viewModel.voiceLabel,
+            viewModel.paragraph.current,
+            viewModel.paragraph.total
+        );
 
     // drag 位移仅作用于 Sheet（跟手），释放后关闭/回弹；桌面 Panel 经 CSS 隐藏 Handle，
     // 位移在桌面视口下无视觉影响（Handle display:none，不可发起）。

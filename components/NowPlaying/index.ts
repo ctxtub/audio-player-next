@@ -41,6 +41,7 @@ export {
     deriveExpandedParagraph,
     deriveExpandedSleepTimer,
     deriveExpandedTitle,
+    deriveExpandedWorkSubtitle,
     deriveExpandedVoiceLabel,
     deriveExpandedTimeline,
     deriveExpandedPlaybackRate,

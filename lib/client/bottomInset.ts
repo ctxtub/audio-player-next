@@ -3,7 +3,8 @@
  *
  * 与 styles/app.module.scss 的 .app 变量赋值保持同构：
  * - 无 docked Mini：mini/gap 均为 0；
- * - 有 docked Mini：mini = Mini 高度 token，gap = 间距 token；
+ * - 有 docked Mini：mini = MainChrome 实测 Mini 真实高度（内联覆盖
+ *   --mini-player-occupied-height，首屏回落 Mini 高度 token），gap = 间距 token；
  * - TabBar 占用恒为 tab-bar token（含 safe-area，由 token 自带）。
  * 真实遮挡 oracle 由 L3 包围盒断言承担，本模块锁定 TS/CSS 契约一致。
  */

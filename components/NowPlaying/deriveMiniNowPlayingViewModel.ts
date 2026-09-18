@@ -2,7 +2,10 @@
  *  MiniNowPlaying ViewModel 纯派生（spec §2.3/§3/§4/§5/§6/§8.1/§10/§30/§33）。
  *
  * 冻结数据来源：
- * - title → PlaybackSessionStore.session.title（空回退“正在播放”，spec §5）；
+ * - title → PlaybackSessionStore.session.collectionTitle（无则回退 title，
+ *   空再回退“正在播放”，spec §5 + 标题一致性：与创作页头部/故事库卡片/
+ *   作品集详情同一集合标题）；
+ * - secondary work 会话后缀作品短标题（副标题表达位置或短标题）；
  * - session status/source/position → PlaybackSessionStore（spec §4）；
  * - 播放/暂停与当前段时间进度 → playbackStore / Transport（currentTime/duration/isPlaying）；
  * - remainingMs → Mini 不展示（spec §7，本文件绝不读取该字段）；
@@ -43,10 +46,17 @@ export const hasMiniNowPlaying = (session: MiniSessionSnapshot): boolean =>
     session.source !== null && session.status !== 'idle';
 
 /**
- * 标题派生（spec §5）：title = Session.title；空/全空白回退“正在播放”。
+ * 标题派生（spec §5 + 标题一致性）：collectionTitle 优先（与创作页头部/
+ * 故事库卡片/作品集详情同一集合标题），无则回退 Session.title，
+ * 空/全空白回退“正在播放”。
  * 不允许 prompt.slice / 读取  / 展示 remainingMs / 段落文案上移为标题。
  */
 export const deriveMiniTitle = (session: MiniSessionSnapshot): string => {
+    const collection =
+        typeof session.collectionTitle === 'string' ? session.collectionTitle.trim() : '';
+    if (collection.length > 0 && session.collectionTitle) {
+        return session.collectionTitle;
+    }
     const raw = typeof session.title === 'string' ? session.title.trim() : '';
     return raw.length > 0 ? session.title : MINI_NOW_PLAYING_FALLBACK_TITLE;
 };
@@ -69,22 +79,30 @@ export const mapSessionStatusToMiniStatus = (
 };
 
 /**
- * Secondary Label 纯派生（spec §6）：
+ * Secondary Label 纯派生（spec §6 + 标题一致性）：
  * synthesizing → 正在准备语音；error → 播放遇到问题；ended → 播放完成；
  * 多段 → 第 X / Y 段（X = nextParagraphIndex+1，钳制 1..total）；
  * 单段 playing → 正在播放；单段 paused/ready → 已暂停。
- * Draft / Work 不做视觉分叉（spec §33）。
+ * Draft / Work 不做视觉分叉（spec §33）；work 会话统一后缀作品短标题
+ * （副标题表达作品位置或短标题），draft 会话（workTitle null）保持原样。
  */
 export const deriveMiniSecondaryLabel = (session: MiniSessionSnapshot): string | null => {
     const status = mapSessionStatusToMiniStatus(session.status);
+    const workSuffix =
+        session.source?.kind === 'work' &&
+        typeof session.workTitle === 'string' &&
+        session.workTitle.trim().length > 0
+            ? ` · ${session.workTitle}`
+            : '';
+    const withWork = (base: string): string => `${base}${workSuffix}`;
     if (status === 'synthesizing') {
-        return '正在准备语音';
+        return withWork('正在准备语音');
     }
     if (status === 'error') {
-        return '播放遇到问题';
+        return withWork('播放遇到问题');
     }
     if (status === 'ended') {
-        return '播放完成';
+        return withWork('播放完成');
     }
     const total = Number.isFinite(session.totalParagraphs) && session.totalParagraphs > 0
         ? Math.floor(session.totalParagraphs)
@@ -94,12 +112,12 @@ export const deriveMiniSecondaryLabel = (session: MiniSessionSnapshot): string |
             ? Math.floor(session.nextParagraphIndex)
             : 0;
         const display = Math.min(Math.max(rawNext + 1, 1), total);
-        return `第 ${display} / ${total} 段`;
+        return withWork(`第 ${display} / ${total} 段`);
     }
     if (status === 'playing') {
-        return '正在播放';
+        return withWork('正在播放');
     }
-    return '已暂停';
+    return withWork('已暂停');
 };
 
 /**

@@ -43,17 +43,10 @@ export type PromotableChatArtifact = (
 };
 
 /**
- * collection.promoteArtifact 函数签名（与 frozen facade 一致，便于测试注入）。
- */
-export type PromotionCreateFn = (input: CollectionPromoteInput) => Promise<StoryWorkDetailDTO>;
-
-
-/**
- * promotion 依赖注入（测试用隔离桩；生产默认走 frozen collection.promoteArtifact）。
+ * promotion 会话归属（真实调用链唯一形态：直接走冻结门面，不得注入替换）。
  * `conversationId` 为会话级 promotion 归属证据，缺失即 fail-fast。
  */
 export interface PromotionAdapterDeps {
-  readonly create?: PromotionCreateFn;
   readonly conversationId?: string;
 }
 
@@ -135,11 +128,11 @@ export function buildPromotionInput(
 
 /**
  * 将 Complete / PromotionFailed Artifact 提升为 StoryWork。
- * 薄 I/O：门控 → 构造 frozen input（含会话归属）→ 透传 collection.promoteArtifact；
- * 错误原样上抛。：这是 Artifact → Collection/Work 的唯一写路径。
+ * 薄 I/O：门控 → 构造 frozen input（含会话归属）→ 透传冻结门面
+ * collection.promoteArtifact；错误原样上抛。：这是 Artifact → Collection/Work 的唯一写路径。
  *
  * @param artifact 必须为 complete（初次）或 promotion_failed（幂等重试源）。
- * @param deps 可选注入的 create 实现与当前 conversationId。
+ * @param deps 会话归属（真实远端调用，不得注入替换）。
  * @returns 服务端返回的 StoryWorkDetailDTO。
  */
 export async function promoteStoryArtifact(
@@ -157,6 +150,5 @@ export async function promoteStoryArtifact(
     ...buildPromotionInput(artifact),
     conversationId,
   };
-  const create = deps?.create ?? promoteArtifact;
-  return create(input);
+  return promoteArtifact(input);
 }

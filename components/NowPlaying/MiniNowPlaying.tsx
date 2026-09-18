@@ -88,6 +88,8 @@ const useMiniPrimaryAction = (primaryAction: 'play' | 'pause' | 'restart' | 'ret
 export const MiniNowPlaying: React.FC = () => {
     const source = usePlaybackSessionStore((state) => state.source);
     const title = usePlaybackSessionStore((state) => state.title);
+    const collectionTitle = usePlaybackSessionStore((state) => state.collectionTitle);
+    const workTitle = usePlaybackSessionStore((state) => state.workTitle);
     const sessionStatus = usePlaybackSessionStore((state) => state.status);
     const lastCompletedParagraphIndex = usePlaybackSessionStore(
         (state) => state.lastCompletedParagraphIndex
@@ -114,6 +116,8 @@ export const MiniNowPlaying: React.FC = () => {
             source,
             status: sessionStatus,
             title,
+            collectionTitle,
+            workTitle,
             lastCompletedParagraphIndex,
             nextParagraphIndex,
             totalParagraphs,

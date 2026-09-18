@@ -70,11 +70,16 @@ export type StoryWorkSummaryDTO = z.infer<typeof storyWorkSummaryDtoSchema>;
 
 /**
  * 故事详情 DTO（包含完整正文、原始提示词与来源消息追踪）
+ *
+ * collectionTitle：该作品所属作品集标题（读时 join 现有 collectionId FK，
+ * 无需 schema 变更）；无所属集合时为 null。播放器展示层优先用它作一级标题，
+ * 作品短标题走副标题，标题一致性见创作页头部/故事库卡片/作品集详情。
  */
 export const storyWorkDetailDtoSchema = storyWorkSummaryDtoSchema.extend({
   prompt: z.string(),
   storyText: z.string(),
   sourceMessageId: z.string().nullable(),
+  collectionTitle: z.string().max(80).nullable().optional(),
 });
 export type StoryWorkDetailDTO = z.infer<typeof storyWorkDetailDtoSchema>;
 

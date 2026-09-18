@@ -86,6 +86,16 @@ export type MiniSessionSnapshot = {
         | 'error';
     /** Session 标题（ StoryWork.title 或 Draft 快照 title）。 */
     title: string;
+    /**
+     * 所属作品集标题（work 会话读时回填，无集合/draft 会话为 null）。
+     * 一级标题优先用它（与创作页头部/故事库卡片/作品集详情同一字符串）。
+     */
+    collectionTitle: string | null;
+    /**
+     * 作品短标题（work 会话为作品标题，draft 会话为 null）。
+     * 副标题表达作品位置或短标题时使用。
+     */
+    workTitle: string | null;
     /** 已完成段落下标（初始 -1）。 */
     lastCompletedParagraphIndex: number;
     /** 下一待播段落下标（0-based）。 */
@@ -115,7 +125,7 @@ export type MiniTransportSnapshot = {
 export type MiniNowPlayingViewModel = {
     /** 是否渲染 Mini（hasNowPlaying； 不含键盘/Expanded 抑制，那是）。 */
     visible: boolean;
-    /** 一级标题：Session.title（空时回退“正在播放”）。 */
+    /** 一级标题：所属作品集标题（无则回退 Session.title，空再回退“正在播放”）。 */
     title: string;
     /** 六态展示状态。 */
     status: MiniNowPlayingStatus;

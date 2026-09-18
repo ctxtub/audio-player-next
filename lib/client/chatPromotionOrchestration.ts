@@ -10,7 +10,7 @@
  * 1. 状态机推进只用 lib/client/chatArtifactState 纯函数（startPromotion / markPromotionSuccess / markPromotionFailed）。
  * 2. I/O 只走 lib/client/storyArtifactPromotion.promoteStoryArtifact（ 唯一通道），
  *    不直调门面 create，不 import server/Prisma/raw trpc，不碰 generation transport。
- * 3. 缺省 create 走 adapter 缺省（冻结门面）；测试经 setPromotionCreateOverride 注入隔离桩。
+ * 3. 真实调用链唯一入口：直接走冻结门面缺省，不得注入替换。
  * 4. 错误原样上抛（尤其 CONFLICT）：不包装、不换 sourceMessageId、不触发重生成，由调用方落为 promotion_failed。
  * 5. 不读 Settings、不补 prompt、不改 delivery——快照与投递语义归调用方与既有 handler。
  */
@@ -20,10 +20,7 @@ import {
   markPromotionSuccess,
   startPromotion,
 } from '@/lib/client/chatArtifactState';
-import {
-  promoteStoryArtifact,
-  type PromotionCreateFn,
-} from '@/lib/client/storyArtifactPromotion';
+import { promoteStoryArtifact } from '@/lib/client/storyArtifactPromotion';
 import type {
   CompleteChatArtifact,
   PromotingChatArtifact,
@@ -39,26 +36,6 @@ import type { StoryWorkDetailDTO } from '@/lib/trpc/schemas/library';
 export type PromotionSourceArtifact =
   | CompleteChatArtifact
   | PromotionFailedChatArtifact;
-
-/** 测试用隔离桩（生产保持 undefined → 走冻结门面缺省）。 */
-let createOverride: PromotionCreateFn | undefined = undefined;
-
-/**
- * 注入/清除 promotion create 隔离桩（仅测试使用）。
- * @param fn 替代门面 create 的实现；传 undefined 恢复生产缺省。
- */
-export function setPromotionCreateOverride(
-  fn: PromotionCreateFn | undefined,
-): void {
-  createOverride = fn;
-}
-
-/**
- * 读取当前注入的隔离桩（测试断言用）。
- */
-export function getPromotionCreateOverride(): PromotionCreateFn | undefined {
-  return createOverride;
-}
 
 /**
  * 由 complete / promotion_failed 进入 promoting（startPromotion 纯包装）。
@@ -81,9 +58,6 @@ export async function executePromotionCreate(
   source: PromotionSourceArtifact,
   conversationId: string,
 ): Promise<StoryWorkDetailDTO> {
-  if (createOverride) {
-    return promoteStoryArtifact(source, { create: createOverride, conversationId });
-  }
   return promoteStoryArtifact(source, { conversationId });
 }
 

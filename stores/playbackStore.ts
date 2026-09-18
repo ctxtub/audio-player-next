@@ -3,10 +3,10 @@
  * 新 SSOT = server 四表 + Anchor DTO + stores/playbackSessionStore.ts。
  * 下列语义 identity 副本已 @deprecated（presentation 收敛时移除，
  * 物理删除）：sessionId / currentMessageId / sourceType / sourceId /
- * title / isOneShot / isRehydratedReady / currentParagraphIndex /
+ * title / isOneShot / currentParagraphIndex /
  * totalParagraphs。已删除 spec §2.2 Mini 显隐三件套：Mini 显隐只由
  * PlaybackSession 派生（spec §2.3/§30），Transport 不再持有第二套显隐标记。
- * Transport 动作（playAudio/resumeAudio/pauseAudio/seek/setPlaybackRate/
+ * Transport 动作（playAudio/pauseAudioPlayback/unloadAudio/seek/setPlaybackRate/
  * ensureUnlocked/registerAudioController + isPlaying/currentTime/duration/
  * playbackRate/remainingMs/totalAllowedMs）保持不变，仍为全局 <audio> 唯一 ownership。
  * 旧字段仅作兼容镜像由 PlaybackSessionStore 同步写入，新代码禁止直接写入它们。
@@ -16,11 +16,6 @@ import { devtools } from 'zustand/middleware';
 import type { AudioControllerHandle } from '@/types/audioPlayer';
 import type { SleepTimerMode } from '@/lib/playback/sleepTimer';
 import { resolveSleepTimerModeFromLegacy as resolveHydratedSleepTimerMode } from '@/lib/playback/sleepTimer';
-
-/**
- * 一分钟对应的毫秒数，用于换算倒计时。
- */
-const MINUTE_IN_MS = 60000;
 
 /**
  * seek clamp 纯函数（spec §17.3）。
@@ -99,11 +94,6 @@ type PlaybackStoreBaseState = {
    */
   isOneShot: boolean;
   /**
-   * 是否处于断点水合完成的就绪待播态（停驻 PAUSED/READY，解封播放按钮）。
-   * @deprecated 已迁移至 PlaybackSessionStore.status=ready，本字段仅兼容镜像。
-   */
-  isRehydratedReady: boolean;
-  /**
    * 创作源类型：起为四值兼容 'chat' | 'generation' | 'draft' | 'work'
    *（DB canonical 为 draft|work，旧值仍可读；新写统一由 server 收敛为 canonical）。
    * @deprecated 已迁移至 PlaybackSessionStore.source，本字段仅兼容镜像。
@@ -135,11 +125,6 @@ type PlaybackStoreBaseState = {
  * 播放器可执行的动作：启动/暂停播放、更新进度、推进段落、恢复初始状态等。
  */
 type PlaybackStoreActions = {
-  markSessionStart: (
-    sessionId: string,
-    playDurationMinutes: number,
-    options?: { oneShot?: boolean }
-  ) => void;
   start: () => void;
   pause: () => void;
   /** fixup（§25.1）：Host 上报音频实际推进信号（waiting/stalled=false；playing=true）。 */
@@ -151,10 +136,14 @@ type PlaybackStoreActions = {
   registerAudioController: (controller: AudioControllerHandle | null) => void;
   ensureUnlocked: () => Promise<void>;
   playAudio: (audioUrl: string, messageId?: string, options?: { explicit?: boolean }) => Promise<void>;
-  resumeAudio: () => Promise<void>;
   pauseAudioPlayback: () => void;
+  /**
+   * 卸载媒体：暂停并清空底层 <audio> 元素音源（新建创作等强重置入口使用，
+   * 立即停声并确保旧轨道不残留、不复活）。
+   * @returns void
+   */
+  unloadAudio: () => void;
   seekAudio: (time: number) => void;
-  setCurrentAudioUrl: (url: string | null) => void;
   syncPlaybackState: (url: string, messageId?: string) => void;
   /**
    * 断点水合装载：置为就绪暂停态，解封播放按钮。
@@ -173,7 +162,6 @@ type PlaybackStoreActions = {
     currentParagraphIndex: number;
     totalParagraphs: number;
   }) => void;
-  clearRehydratedReady: () => void;
   /**
    * 同步 Sleep Timer 三态 + 预算（spec §25：只有 minutes 启动 countdown）。
    * 由 Session 侧（hydrate/begin/setSleepTimer/expiry/complete）统一调用；
@@ -226,7 +214,6 @@ const INITIAL_STATE: PlaybackStoreBaseState = {
   currentAudioUrl: null,
   currentMessageId: null,
   isOneShot: false,
-  isRehydratedReady: false,
   sourceType: null,
   sourceId: null,
   title: null,
@@ -344,32 +331,6 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
 
   return {
     ...INITIAL_STATE,
-    /**
-     * 标记新的播放会话：记录 sessionId、重置段落索引并初始化倒计时。
-     * @param sessionId 当前故事会话标识
-     * @param playDurationMinutes 允许播放时长（分钟）
-     * @param options.oneShot 是否为一次性播放（历史回放），播完即止、不续写
-     * @returns void
-     */
-    markSessionStart: (sessionId, playDurationMinutes, options) => {
-      clearCountdown();
-      set({
-        sessionId,
-        currentSegmentIndex: 0,
-        remainingMs: playDurationMinutes * MINUTE_IN_MS,
-        totalAllowedMs: playDurationMinutes * MINUTE_IN_MS,
-        // legacy 入口保持“有时长即 minutes”旧语义（新 Session 默认走
-        // flow.setSleepTimerState 显式同步，此处仅兼容 storyFlow 旧链。
-        sleepTimerMode: 'minutes',
-        currentTime: 0,
-        duration: 0,
-        isPlaying: false,
-        _lastTickAt: null,
-        currentAudioUrl: null,
-        currentMessageId: null,
-        isOneShot: options?.oneShot ?? false,
-      });
-    },
     /**
      * 开始播放：设置播放状态并启动倒计时。
      * 已知耗尽（非 null 且 <=0）在任何模式下早退
@@ -525,29 +486,8 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
       set({
         currentAudioUrl: audioUrl,
         currentMessageId: messageId ?? null,
-        isRehydratedReady: false,
       });
       await controller.play(audioUrl, messageId);
-    },
-    /**
-     * 恢复暂停的音频播放。
-     * @returns Promise<void>
-     */
-    resumeAudio: async () => {
-      const controller = get().audioController;
-      if (!controller) {
-        throw new Error('音频播放器尚未注册');
-      }
-      // 中文注释：预算耗尽守卫——已知耗尽（非 null 且 <=0）任何模式下 resume 不得续响；
-      // minutes+null 拦截；off/story_end+null 合法，保持既有语义（§26）。
-      const resumeBudgetMs = get().remainingMs;
-      if (resumeBudgetMs !== null && resumeBudgetMs <= 0) {
-        return;
-      }
-      if (get().sleepTimerMode === 'minutes' && resumeBudgetMs === null) {
-        return;
-      }
-      await controller.resume();
     },
     /**
      * 暂停当前音频播放。
@@ -555,6 +495,14 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
      */
     pauseAudioPlayback: () => {
       get().audioController?.pause();
+    },
+    /**
+     * 卸载媒体：暂停并清空底层 <audio> 元素音源（新建创作等强重置入口使用，
+     * 立即停声并确保旧轨道不残留、不复活）。
+     * @returns void
+     */
+    unloadAudio: () => {
+      get().audioController?.unload();
     },
     /**
      * 跳转到指定播放时间点。
@@ -571,13 +519,6 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         return;
       }
       get().audioController?.seek(clamped);
-    },
-    /**
-     * 直接设置当前的音频 URL，用于同步播放状态（例如自动切歌时）。
-     * @param url 音频地址或 null
-     */
-    setCurrentAudioUrl: (url: string | null) => {
-      set({ currentAudioUrl: url });
     },
     syncPlaybackState: (url: string, messageId?: string) => {
       set({
@@ -602,14 +543,10 @@ const playbackStoreCreator: StateCreator<PlaybackStore> = (set, get) => {
         currentParagraphIndex: payload.currentParagraphIndex,
         totalParagraphs: payload.totalParagraphs,
         isPlaying: false,
-        isRehydratedReady: true,
         currentAudioUrl: null,
         currentTime: 0,
         duration: 0,
       });
-    },
-    clearRehydratedReady: () => {
-      set({ isRehydratedReady: false });
     },
     setSleepTimerState: (mode, remainingMs, totalMs) => {
       if (mode !== 'off' && mode !== 'minutes' && mode !== 'story_end') {

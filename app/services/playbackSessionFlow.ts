@@ -414,13 +414,6 @@ export async function playStoryWork(workId: number): Promise<void> {
 }
 
 /**
- * @deprecated 历史命名兼容别名：与 `playStoryWork` 同一实现。
- * 范围外调用方（作品集详情等）迁移前保留；待无调用方后由后续段删除。
- * 本段新代码一律使用 `playStoryWork`。
- */
-export const playWorkFromHistory = playStoryWork;
-
-/**
  * 生成完成后 autoplay 正式入口（）。
  * 恒 fresh-restart 建 Draft Session 再从 `paragraphs[0]` 起播（旧整篇 blob 不得
  * 当 paragraph 播放，由调用方吊销）。transport 可能残留旧轨道，故恒 explicit。

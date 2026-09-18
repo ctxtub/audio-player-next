@@ -87,12 +87,3 @@ export const useNowPlayingUiStore = create<NowPlayingUiState>()(
         { name: 'now-playing-ui-store' }
     )
 );
-
-/** 测试隔离：重置 UI 开关与焦点目标（不触任何播放状态）。 */
-export function __resetNowPlayingUiForTest(): void {
-    try {
-        useNowPlayingUiStore.setState({ isExpanded: false, returnFocusTarget: null });
-    } catch {
-        // 测试环境 setState 失败不抛错（调用方断言 store 状态）。
-    }
-}

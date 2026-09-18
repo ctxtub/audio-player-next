@@ -25,6 +25,12 @@ export interface AudioControllerHandle {
    */
   pause: () => void;
   /**
+   * 卸载媒体：暂停并清空底层音源（新建创作等强重置入口使用，
+   * 立即停声并确保旧轨道不残留、不复活）。
+   * @returns void
+   */
+  unload: () => void;
+  /**
    * 跳转到音频指定时间点。
    * @param time 目标播放时间（秒）
    * @returns void

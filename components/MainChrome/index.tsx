@@ -22,7 +22,7 @@
  * Expanded open/close 一律不触发 play/pause/new Session（ §9）。
  */
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 import appStyles from '@/styles/app.module.scss';
 
@@ -42,13 +42,54 @@ export type MainChromeProps = {
  */
 export const MainChrome: React.FC<MainChromeProps> = ({ children }) => {
     const state = useMainChromeState();
+    const appRef = useRef<HTMLDivElement | null>(null);
 
     const appClassName = state.hasDockedMini
         ? `${appStyles.app} ${appStyles.appWithDockedNowPlaying}`
         : appStyles.app;
 
+    /**
+     * 安全区真实高度：docked Mini 挂载时用 ResizeObserver 测量其真实高度，
+     * 写入 --mini-player-occupied-height（长标题换行撑高时仍足额避让）；
+     * 未 docked（无 session/Expanded/keyboard/floating）时清除内联值，
+     * 回落样式表 0px，不残留固定空白。SSR 无 ResizeObserver 时静默跳过。
+     */
+    useEffect(() => {
+        const appEl = appRef.current;
+        if (!appEl || !state.hasDockedMini) {
+            appEl?.style.removeProperty('--mini-player-occupied-height');
+            return undefined;
+        }
+        if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined') {
+            return undefined;
+        }
+        const applyHeight = (height: number): void => {
+            if (Number.isFinite(height) && height > 0) {
+                appEl.style.setProperty('--mini-player-occupied-height', `${Math.ceil(height)}px`);
+            }
+        };
+        const miniEl = appEl.querySelector('[data-testid="mini-now-playing"]');
+        if (miniEl) {
+            applyHeight(miniEl.getBoundingClientRect().height);
+        }
+        const observer = new ResizeObserver((entries) => {
+            const entry = entries[0];
+            if (entry) {
+                applyHeight(entry.contentRect.height);
+            }
+        });
+        if (miniEl) {
+            observer.observe(miniEl);
+        }
+        return () => {
+            observer.disconnect();
+            appEl.style.removeProperty('--mini-player-occupied-height');
+        };
+    }, [state.hasDockedMini]);
+
     return (
         <div
+            ref={appRef}
             className={appClassName}
             data-testid="main-chrome"
             data-has-docked-mini={state.hasDockedMini ? 'true' : 'false'}

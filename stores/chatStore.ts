@@ -48,6 +48,7 @@ import {
   fetchConversationMessages,
   saveConversationSnapshot,
 } from '@/lib/client/conversation';
+import { getCollection } from '@/lib/client/collection';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 import {
   rehydrateServerMessages,
@@ -360,6 +361,53 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   };
 
   /**
+   * 晋升成功后收敛创作头集合身份（目标一：创作头与库/详情/Mini/Expanded 同标题，
+   * 无需 reload）。仅当标题未知时补拉一次：读 active 会话归属 → 取集合标题 →
+   * 应用。stale 防线只认会话 id（新建创作/登出会换 active id，读到不一致即放弃；
+   * 注意 promotion 代次与会话代次是两套计数器，不得混比）。
+   * 任何失败静默忽略（头保留"新作品集"，不阻断播放）。
+   */
+  const refreshCollectionIdentityAfterPromotion = (): void => {
+    void (async () => {
+      try {
+        const before = get();
+        if (before.collectionTitle && before.collectionTitle.trim().length > 0) {
+          return;
+        }
+        const active = await ensureActiveConversation();
+        const collectionId = active.collectionId ?? null;
+        if (!collectionId) {
+          return;
+        }
+        // 其间发生新建创作/登出（active 已换）→ 放弃，绝不把旧标题写进新会话。
+        const live = get();
+        if (live.conversationId !== null && live.conversationId !== active.id) {
+          return;
+        }
+        const collection = await getCollection(collectionId);
+        const title = typeof collection.title === 'string' ? collection.title.trim() : '';
+        if (title.length === 0) {
+          return;
+        }
+        const latest = get();
+        if (latest.conversationId !== null && latest.conversationId !== active.id) {
+          return;
+        }
+        if (latest.collectionTitle && latest.collectionTitle.trim().length > 0) {
+          return;
+        }
+        latest.applyConversationIdentity({
+          conversationId: active.id,
+          collectionId,
+          collectionTitle: title,
+        });
+      } catch {
+        // 补拉失败不阻断：头保留"新作品集"，下次晋升/重进再收敛。
+      }
+    })();
+  };
+
+  /**
    * drain 本次 dispatch 登记的 promotion kicks（dispatch 尾部调用，set() 之后）。
    * 异步 create 结算后一律经 promotion.resolved/rejected 回写，由归属校验决定生效或 no-op。
    * conversationId 缺失时先 ensureActiveConversation 补齐，再走唯一写入口。
@@ -382,6 +430,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             promotionEpoch: kick.epoch,
             storyWorkId: dto.id,
           });
+          // 晋升成功后收敛创作头集合身份（标题未知时补拉，会话守卫防 stale 回写）。
+          refreshCollectionIdentityAfterPromotion();
         } catch (error) {
           get().dispatch({
             type: 'promotion.rejected',
@@ -493,19 +543,9 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
 
   /**
    * 显示基线冲突提示（懒加载 GlassToast，避免 Node 单测启动时解析 .tsx）。
-   * 测试可经 globalThis.__H15_TOAST__ 注入捕获桩；浏览器走真实 GlassToast。
    */
   const showConflictToast = (): void => {
     const content = '会话已被其它标签页更新，已刷新';
-    try {
-      const stubbed = (globalThis as { __H15_TOAST__?: { show: (config: unknown) => void } }).__H15_TOAST__;
-      if (stubbed) {
-        stubbed.show({ icon: 'fail', content });
-        return;
-      }
-    } catch {
-      // 中文注释：取桩失败则继续走真实 Toast。
-    }
     // 中文注释：浏览器懒加载真实 GlassToast；Node 无 DOM/解析失败时忽略，仅保留 saveError。
     void import('@/components/ui/GlassToast')
       .then((mod) => {
@@ -1249,11 +1289,16 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     // 清空作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op，绝不复活）。
     invalidateInflightPromotions();
     // 强重置推进保存代次——任何在途防抖保存不得把旧会话快照写入新会话。
-    // 服务端旧会话消息保留（旧集合仍可回访），新会话由 startNewCreation 的 createNew 明确创建。
+    // 服务端旧会话消息保留（旧集合仍可回访），新会话由 startNewCreation 经真实远端调用明确创建。
     conversationSaveEpoch += 1;
     set((state) => ({
       messages: [],
-      // 清空消息同时丢弃当前会话身份并递增代次。
+      // 清空消息同时丢弃当前会话身份并递增代次；同时丢弃输入草稿、
+      // 待自动发送与未读标记——新建创作回到空对话初始态，旧内容不得
+      // 经 pendingAutoSend 自动发送进新会话。
+      inputValue: '',
+      pendingAutoSend: null,
+      hasUnviewedResponse: false,
       conversationId: null,
       collectionId: null,
       collectionTitle: null,

@@ -1,6 +1,8 @@
 .undoToast {
   position: fixed;
-  bottom: 80px;
+  // 撤销提示坐于底部 Chrome（TabBar + docked Mini 真实高度 + 间距 + 设备安全区）之上，
+  // 有 Mini 时不被遮挡，无 Mini 时不悬空。
+  bottom: calc(var(--bottom-chrome-safe-bottom, var(--tab-bar-safe-bottom)) + var(--space-2));
   left: 50%;
   transform: translateX(-50%);
   z-index: 1000;
@@ -17,7 +19,6 @@
   animation: slideUp 0.2s ease-out;
 
   @media (max-width: 640px) {
-    bottom: 72px;
     width: calc(100vw - 32px);
     justify-content: space-between;
   }

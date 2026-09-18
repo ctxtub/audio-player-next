@@ -52,6 +52,8 @@ export type StoryWorkRow = {
   excerpt: string;
   contentHash: string;
   sourceMessageId: string | null;
+  /** 所属作品集 id（首作晋升建集后回填；悬空作品为 null）。 */
+  collectionId: string | null;
   favoritedAt: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
@@ -440,6 +442,42 @@ export async function listStoryWorksForSubject(
 }
 
 /**
+ * 解析作品所属作品集标题（读时 join 现有 collectionId FK，无 schema 变更）。
+ *
+ * 播放器展示层用它作一级标题（与创作页头部/故事库卡片/作品集详情同一字符串），
+ * 作品短标题走副标题。无所属集合、集合缺失或标题为空时返回 null，
+ * 调用方回退作品标题。
+ * @param subject 身份主体（User / Guest，决定查哪张集合表）
+ * @param collectionId 作品行上的所属集合 id（null 表示悬空作品）
+ * @returns 非空集合标题；无可用标题时返回 null
+ */
+export async function resolveWorkCollectionTitle(
+  subject: Subject,
+  collectionId: string | null | undefined,
+): Promise<string | null> {
+  if (typeof collectionId !== 'string' || collectionId.length === 0) {
+    return null;
+  }
+  try {
+    const row =
+      subject.type === 'user'
+        ? await prisma.storyCollection.findUnique({
+            where: { id: collectionId },
+            select: { title: true },
+          })
+        : await prisma.guestStoryCollection.findUnique({
+            where: { id: collectionId },
+            select: { title: true },
+          });
+    const title = typeof row?.title === 'string' ? row.title.trim() : '';
+    return title.length > 0 && row ? row.title : null;
+  } catch {
+    // 集合读失败不阻断作品详情：调用方回退作品标题。
+    return null;
+  }
+}
+
+/**
  * 获取指定主体的单条作品详情（Library Get）
  *
  * 严格安全约束：
@@ -494,7 +532,11 @@ export async function getStoryWorkForSubject(
 
   //  Library audio projection（spec §12.4）：单条按需 enrichment，无则 missing。
   const audioMap = await getAudioProjectionsForSubject(subject, [row.id]);
-  return toDetailDto(row, audioMap.get(row.id) ?? createMissingAudioProjection());
+  const dto = toDetailDto(row, audioMap.get(row.id) ?? createMissingAudioProjection());
+  // 标题一致性：附带所属作品集标题（读时 join，无 schema 变更）；
+  // 播放器一级标题优先用它，作品短标题走副标题。
+  dto.collectionTitle = await resolveWorkCollectionTitle(subject, row.collectionId);
+  return dto;
 }
 
 /**

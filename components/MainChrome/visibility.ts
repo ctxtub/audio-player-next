@@ -59,6 +59,8 @@ export const resolveMainChromeVisibility = (
         status: input.status,
         // title/position 不进入显隐公式，占位即可（与  同公式）。
         title: '',
+        collectionTitle: null,
+        workTitle: null,
         lastCompletedParagraphIndex: -1,
         nextParagraphIndex: 0,
         totalParagraphs: 1,

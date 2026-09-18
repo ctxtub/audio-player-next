@@ -97,6 +97,17 @@ interface PlaybackSessionState {
   /** 新 SSOT source（discriminated union draft/work，替代旧 sourceType/sourceId 双写）。 */
   source: PlaybackSourceRef | null;
   title: string;
+  /**
+   * 所属作品集标题（读时由作品详情 join 回填，无所属集合时 null）。
+   * Mini/Expanded 一级标题优先用它（与创作页头部/故事库卡片/作品集详情
+   * 同一字符串）；Session.title 语义不变（作品/草稿标题），副标题用 workTitle。
+   */
+  collectionTitle: string | null;
+  /**
+   * 当前作品短标题（work 会话：作品标题；draft 会话：null）。
+   * 播放器副标题表达作品位置或短标题时使用，展示层截断/省略。
+   */
+  workTitle: string | null;
   storyText: string;
   paragraphs: string[];
   contentHash: string;
@@ -126,11 +137,11 @@ interface PlaybackSessionState {
 
 interface PlaybackSessionActions {
   /** §25 页面启动：getAnchor → resolve Source（hydration 纪元守卫）。 */
-  init: (deps?: SessionRehydrateDeps) => Promise<boolean>;
-  initForUser: (deps?: SessionRehydrateDeps) => Promise<boolean>;
-  initForGuest: (deps?: SessionRehydrateDeps) => Promise<boolean>;
-  /** 由 Anchor DTO 直接水合（init 内部与测试共用）。 */
-  hydrateFromAnchor: (anchor: PlaybackAnchorDTO, deps?: SessionRehydrateDeps) => Promise<boolean>;
+  init: () => Promise<boolean>;
+  initForUser: () => Promise<boolean>;
+  initForGuest: () => Promise<boolean>;
+  /** 由 Anchor DTO 直接水合（init 内部调用）。 */
+  hydrateFromAnchor: (anchor: PlaybackAnchorDTO) => Promise<boolean>;
   /**
    * 当前 Session 倍速（spec §20/§20.1 additive，无新 SSOT）。
    * Session.speed + Transport.playbackRate + Anchor 持久化三同步；
@@ -138,23 +149,6 @@ interface PlaybackSessionActions {
    * 非法值（非有限/越界 0.25–4.0）直接忽略；无 source 时 no-op。
    */
   setSpeed: (rate: number) => Promise<void>;
-  setActiveStory: (params: {
-    source: PlaybackSourceRef;
-    sessionId?: string | null;
-    title: string;
-    storyText: string;
-    voiceId?: string;
-    speed?: number;
-    continuationMode?: SessionContinuationMode;
-    remainingAllowedMs?: number | null;
-    totalAllowedMs?: number | null;
-    /**
-     * 当前 Session Timer 三态（缺省按 User Config 默认解析，§28；
-     * 显式传入时与 remaining/total 一致性由调用方保证）。
-     */
-    sleepTimerMode?: SleepTimerMode;
-    initialNextIndex?: number;
-  }) => void;
   resumeRehydratedPlayback: () => Promise<void>;
   playParagraph: (paragraphIndex: number, options?: { explicit?: boolean }) => Promise<void>;
   prefetchNextParagraph: (paragraphIndex: number) => Promise<void>;
@@ -162,7 +156,7 @@ interface PlaybackSessionActions {
   handleExplicitPause: () => void;
   /** §30 restart：新 sessionId + position 0（保留 completedAt 由 server 侧持有）。 */
   restart: () => Promise<void>;
-  promoteDraftToWork: (workId: number, deps?: SessionRehydrateDeps) => Promise<void>;
+  promoteDraftToWork: (workId: number) => Promise<void>;
   beginPlayback: (params: {
     source: PlaybackSourceRef;
     mode: 'resume' | 'restart';
@@ -204,46 +198,43 @@ interface PlaybackSessionActions {
 
 export type PlaybackSessionStore = PlaybackSessionState & PlaybackSessionActions;
 
-/** 可注入的 rehydrate 依赖（生产默认走真实 client/store；测试注入 fake）。 */
-export interface SessionRehydrateDeps {
-  getAnchor?: () => Promise<GetPlaybackAnchorOutput>;
-  getWork?: (workId: number) => Promise<{
+/** Rehydrate 依赖（内部常量，生产唯一真实实现；不得经参数注入替换调用链）。 */
+interface RehydrateDeps {
+  getAnchor: () => Promise<GetPlaybackAnchorOutput>;
+  getWork: (workId: number) => Promise<{
     title: string;
     storyText: string;
     voiceId: string;
     contentHash: string;
+    collectionTitle: string | null;
   }>;
-  ensureChatLoaded?: () => Promise<void>;
+  ensureChatLoaded: () => Promise<void>;
   /**
    * Work Manifest 只读投影（spec §23 Segmentation SSOT）。
-   * 生产默认经 storyAudio.getPlaybackManifest；测试可注入 fake；
-   * 正常返回 missing/segments=[] 表示真无 Manifest（回落本地切分合法）；
-   * fetch throws 表示 unknown（canonical Work fail-closed，
+   * 经 storyAudio.getPlaybackManifest；missing/segments=[] 表示真无 Manifest
+   * （回落本地切分合法）；fetch throws 表示 unknown（canonical Work fail-closed，
    * 不得回落本地，不得进 ready，可 retry，不得删 Session/清 Anchor）。
    */
-  getManifest?: (workId: number) => Promise<{
+  getManifest: (workId: number) => Promise<{
     segments: Array<{ index: number; text: string }>;
     segmentationVersion?: string;
     segmentCount?: number;
   } | null>;
   /**
    * fixup canonical：Draft 快照解析（Modern first → Legacy fallback）。
-   * 生产默认经 resolvePlaybackDraftSnapshot；测试可注入 fake snapshot。
+   * 经 resolvePlaybackDraftSnapshot canonical resolver。
    */
-  findDraftSnapshot?: (messageId: string) => PlaybackDraftSnapshot | null;
-  /**
-   * @deprecated 仅为旧测试注入兼容保留（string 形态绕过 canonical 快照）。
-   * 新代码一律用 findDraftSnapshot；hydrate 优先 snapshot，其次才看本字段。
-   */
-  findDraftStoryText?: (messageId: string) => string | null;
-  clearAnchor?: (sessionId: string) => Promise<unknown>;
-  notifyDrift?: () => void;
+  findDraftSnapshot: (messageId: string) => PlaybackDraftSnapshot | null;
+  clearAnchor: (sessionId: string) => Promise<unknown>;
+  notifyDrift: () => void;
 }
 
 const INITIAL_SESSION_STATE: PlaybackSessionState = {
   sessionId: null,
   source: null,
   title: '',
+  collectionTitle: null,
+  workTitle: null,
   storyText: '',
   paragraphs: [],
   contentHash: '',
@@ -374,20 +365,20 @@ function defaultFindDraftSnapshot(messageId: string): PlaybackDraftSnapshot | nu
   return resolvePlaybackDraftSnapshot(messageId);
 }
 
-/** @deprecated 兼容垫片：经 canonical snapshot 派生 string（保留旧注入形态）。 */
-function defaultFindDraftStoryText(messageId: string): string | null {
-  return resolvePlaybackDraftSnapshot(messageId)?.storyText ?? null;
-}
-
-const defaultDeps: Required<SessionRehydrateDeps> = {
+const defaultDeps: RehydrateDeps = {
   getAnchor: () => getPlaybackAnchor(),
   getWork: async (workId: number) => {
     const detail = await getWorkDetail({ id: workId });
+    const collectionTitle =
+      typeof detail.collectionTitle === 'string' && detail.collectionTitle.trim().length > 0
+        ? detail.collectionTitle
+        : null;
     return {
       title: detail.title,
       storyText: detail.storyText,
       voiceId: detail.voiceId,
       contentHash: detail.contentHash,
+      collectionTitle,
     };
   },
   ensureChatLoaded: async () => {
@@ -405,44 +396,18 @@ const defaultDeps: Required<SessionRehydrateDeps> = {
     };
   },
   findDraftSnapshot: (messageId: string) => defaultFindDraftSnapshot(messageId),
-  findDraftStoryText: (messageId: string) => defaultFindDraftStoryText(messageId),
   clearAnchor: (sessionId: string) => clearPlaybackAnchor({ sessionId }),
   notifyDrift: () => {
     GlassToast.show({ icon: 'fail', content: '故事正文已更新，将从开头重新播放' });
   },
 };
 
-function resolveDeps(deps?: SessionRehydrateDeps): Required<SessionRehydrateDeps> {
-  return {
-    getAnchor: deps?.getAnchor ?? defaultDeps.getAnchor,
-    getWork: deps?.getWork ?? defaultDeps.getWork,
-    ensureChatLoaded: deps?.ensureChatLoaded ?? defaultDeps.ensureChatLoaded,
-    getManifest: deps?.getManifest ?? defaultDeps.getManifest,
-    findDraftSnapshot: deps?.findDraftSnapshot ?? defaultDeps.findDraftSnapshot,
-    findDraftStoryText: deps?.findDraftStoryText ?? defaultDeps.findDraftStoryText,
-    clearAnchor: deps?.clearAnchor ?? defaultDeps.clearAnchor,
-    notifyDrift: deps?.notifyDrift ?? defaultDeps.notifyDrift,
-  };
-}
-
 /**
- * Draft 快照 canonical 消费（fixup）：
- * 显式注入 findDraftSnapshot 优先；仅注入旧 string 时做一次性适配；
- * 两者皆无注入时走默认 canonical resolver。Store 不再理解 wire 结构。
+ * Draft 快照 canonical 消费（fixup）：只消费 canonical resolver 输出
+ * （snapshot），不解析 wire 结构。
  */
-function resolveDraftSnapshotForHydrate(
-  messageId: string,
-  deps: SessionRehydrateDeps | undefined,
-  resolved: Required<SessionRehydrateDeps>,
-): PlaybackDraftSnapshot | null {
-  if (deps?.findDraftSnapshot) {
-    return deps.findDraftSnapshot(messageId);
-  }
-  if (deps?.findDraftStoryText) {
-    const text = deps.findDraftStoryText(messageId);
-    return typeof text === 'string' && text.length > 0 ? { storyText: text } : null;
-  }
-  return resolved.findDraftSnapshot(messageId);
+function resolveDraftSnapshotForHydrate(messageId: string): PlaybackDraftSnapshot | null {
+  return defaultDeps.findDraftSnapshot(messageId);
 }
 
 /** dangling 清理（fail-closed）：本地 + transport 复位，best-effort 清 server Anchor。 */
@@ -475,9 +440,9 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   setStatus: (status) => set({ status }),
 
-  init: async (deps) => {
+  init: async () => {
     if (initPromise) return initPromise;
-    const d = resolveDeps(deps);
+    const d = defaultDeps;
     hydrationEpochCounter += 1;
     const epoch = hydrationEpochCounter;
     set({ hydrationEpoch: epoch, status: 'hydrating' });
@@ -490,7 +455,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
           if (get().hydrationEpoch === epoch) set({ status: 'idle' });
           return false;
         }
-        return get().hydrateFromAnchor(anchor, deps);
+        return get().hydrateFromAnchor(anchor);
       } catch (err) {
         console.warn('[playbackSessionStore] init failed', err);
         if (get().hydrationEpoch === epoch) set({ status: 'idle' });
@@ -502,12 +467,12 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     return initPromise;
   },
 
-  initForUser: async (deps) => get().init(deps),
+  initForUser: async () => get().init(),
 
-  initForGuest: async (deps) => get().init(deps),
+  initForGuest: async () => get().init(),
 
-  hydrateFromAnchor: async (anchor, deps) => {
-    const d = resolveDeps(deps);
+  hydrateFromAnchor: async (anchor) => {
+    const d = defaultDeps;
     const epochAtStart = get().hydrationEpoch;
     set({ status: 'hydrating' });
 
@@ -515,6 +480,10 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     let storyText = '';
     let liveTitle: string | null = null;
     let liveVoiceId = anchor.voiceId;
+    // 标题一致性：work 会话附带所属作品集标题（一级标题）与作品短标题（副标题）；
+    // draft 会话两者均为 null，展示回退既有行为。
+    let liveCollectionTitle: string | null = null;
+    let liveWorkTitle: string | null = null;
 
     if (anchor.source.kind === 'draft') {
       try {
@@ -524,7 +493,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       }
       if (get().hydrationEpoch !== epochAtStart) return false;
       // fixup：只消费 canonical resolver 输出（snapshot），不解析 wire。
-      const snapshot = resolveDraftSnapshotForHydrate(anchor.source.messageId, deps, d);
+      const snapshot = resolveDraftSnapshotForHydrate(anchor.source.messageId);
       if (!snapshot || typeof snapshot.storyText !== 'string' || snapshot.storyText.length === 0) {
         return dropDanglingAnchor(
           get,
@@ -543,7 +512,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     } else {
       // §25.1：严禁走 generationHistoryStore 最近 N 条 find(id)；
       // library.get(workId) 精确 resolve（分页后 Anchor 可指向任意页）。
-      let work: { title: string; storyText: string; voiceId: string; contentHash: string };
+      let work: { title: string; storyText: string; voiceId: string; contentHash: string; collectionTitle: string | null };
       try {
         work = await d.getWork(anchor.source.workId);
       } catch {
@@ -567,6 +536,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       }
       storyText = work.storyText;
       liveTitle = work.title;
+      liveWorkTitle = typeof work.title === 'string' && work.title.length > 0 ? work.title : null;
+      liveCollectionTitle = work.collectionTitle;
       if (!liveVoiceId && work.voiceId) liveVoiceId = work.voiceId;
     }
 
@@ -663,6 +634,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         ? { kind: 'draft', messageId: anchor.source.messageId }
         : { kind: 'work', workId: anchor.source.workId },
       title,
+      collectionTitle: liveCollectionTitle,
+      workTitle: liveWorkTitle,
       storyText: normalized,
       paragraphs,
       contentHash: currentHash,
@@ -701,7 +674,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     }
 
     // rehydrate 即时同步 Transport.playbackRate = Anchor.speed
-    //（无 isRehydratedReady 特殊分支，spec §61；只经 Transport，不碰 UserConfig）。
+    //（只经 Transport，不碰 UserConfig）。
     try {
       const anchorSpeed = anchor.speed;
       if (typeof anchorSpeed === 'number' && Number.isFinite(anchorSpeed)) {
@@ -739,112 +712,6 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     }
     // Anchor 持久化（同一 Session 内 speed 上报；stale 时 server 侧 no-op，不抛错）。
     await get().saveCheckpointImmediate({ forceReset: false });
-  },
-
-  setActiveStory: (params) => {
-    if (params.source.kind === 'draft' && params.source.messageId.startsWith('replay-text-')) {
-      return;
-    }
-    const normalized = normalizeStoryText(params.storyText);
-    const currentHash = computeStoryContentHash(normalized);
-    const paragraphs = segmentStoryText(normalized);
-    const totalParagraphs = Math.max(1, paragraphs.length);
-    const nextParagraphIndex = params.initialNextIndex ?? 0;
-    const lastCompleted = nextParagraphIndex > 0 ? nextParagraphIndex - 1 : -1;
-
-    abortPrefetch();
-    clearDebounceTimer();
-
-    // 新 Session Timer（§28）：不继承旧 Session remaining；显式传入优先，
-    // 缺省按 User Config 默认解析（enabled→minutes，否则 off）。
-    // 兼容旧形态：仅传 remaining（无 mode）视为 minutes（Legacy 规则 §23.1）。
-    const explicitMode =
-      params.sleepTimerMode ??
-      (params.remainingAllowedMs != null ? ('minutes' as const) : undefined);
-    const sessionTimer =
-      explicitMode !== undefined
-        ? {
-            mode: explicitMode,
-            remainingMs: explicitMode === 'minutes' ? (params.remainingAllowedMs ?? null) : null,
-            totalMs: explicitMode === 'minutes' ? (params.totalAllowedMs ?? null) : null,
-          }
-        : resolveDefaultSessionTimer({
-            defaultEnabled: (() => {
-              try {
-                return useConfigStore.getState().apiConfig.defaultSleepTimerEnabled !== false;
-              } catch {
-                return true;
-              }
-            })(),
-            defaultMinutes: (() => {
-              try {
-                const cfg = useConfigStore.getState().apiConfig;
-                return cfg.defaultSleepTimerMinutes > 0
-                  ? cfg.defaultSleepTimerMinutes
-                  : cfg.playDuration;
-              } catch {
-                return 30;
-              }
-            })(),
-          });
-
-    // 单轨切曲 seam：覆盖 source 之前，先把「即将离开」的旧作品 positionMs 强制落库
-    //（force 绕过客户端 10s 节流；server clamp/单调/节流二次保证不变）。
-    // 同一作品重水合时幂等无害；无 duration/无旧 source 时内部早退。
-    void get().persistSingleTrackProgress({ force: true });
-
-    set({
-      sessionId: params.sessionId ?? null,
-      source: params.source.kind === 'draft'
-        ? { kind: 'draft', messageId: params.source.messageId }
-        : { kind: 'work', workId: params.source.workId },
-      title: params.title,
-      storyText: normalized,
-      paragraphs,
-      contentHash: currentHash,
-      segmentationVersion: SEGMENTATION_VERSION,
-      lastCompletedParagraphIndex: lastCompleted,
-      nextParagraphIndex,
-      totalParagraphs,
-      voiceId: params.voiceId ?? '',
-      speed: params.speed ?? 1.0,
-      continuationMode: params.continuationMode ?? 'finite',
-      status: 'playing',
-      sleepTimerMode: sessionTimer.mode,
-      prefetchedAudioUrl: null,
-      prefetchingIndex: null,
-    });
-
-    // 新会话 Transport Timer 同步（countdown 门与预算同源）。
-    try {
-      usePlaybackStore.getState().setSleepTimerState(
-        sessionTimer.mode,
-        sessionTimer.remainingMs,
-        sessionTimer.totalMs,
-      );
-    } catch {
-      // transport 同步失败不阻断本地激活。
-    }
-
-    try {
-      usePlaybackStore.getState().setParagraphInfo({
-        currentParagraphIndex: nextParagraphIndex,
-        totalParagraphs,
-        title: params.title,
-      });
-    } catch {
-      // transport 同步失败不阻断本地激活。
-    }
-
-    // 新会话激活即时同步 Transport.playbackRate（只经 Transport，不碰 UserConfig）。
-    try {
-      const activeSpeed = params.speed ?? 1.0;
-      if (typeof activeSpeed === 'number' && Number.isFinite(activeSpeed)) {
-        usePlaybackStore.getState().setPlaybackRate(activeSpeed);
-      }
-    } catch {
-      // ignore
-    }
   },
 
   resumeRehydratedPlayback: async () => {
@@ -974,7 +841,6 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       status: 'playing',
     });
 
-    usePlaybackStore.getState().clearRehydratedReady();
     usePlaybackStore.getState().setParagraphInfo({
       currentParagraphIndex: paragraphIndex,
       totalParagraphs: state.totalParagraphs,
@@ -1190,7 +1056,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     await get().playParagraph(0, { explicit: true });
   },
 
-  promoteDraftToWork: async (workId, deps) => {
+  promoteDraftToWork: async (workId) => {
     const state = get();
     if (!state.sessionId || !state.source || state.source.kind !== 'draft') return;
     const sessionId = state.sessionId;
@@ -1198,6 +1064,20 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const draftNext = state.nextParagraphIndex;
     const draftParagraphs = state.paragraphs;
     const anchor = await promoteDraftPlaybackToWork({ sessionId, workId });
+    // 晋升后标题一致性：起播中草稿晋升为正式 Work 时，用作品详情回填
+    // 所属作品集标题与作品短标题（读时 join，无 schema 变更）；失败则回退
+    // anchor.title（作品标题），播放不中断。
+    let promotedCollectionTitle: string | null = null;
+    let promotedWorkTitle: string | null = null;
+    try {
+      const detail = await defaultDeps.getWork(workId);
+      if (get().sessionId !== sessionId) return;
+      promotedCollectionTitle = detail.collectionTitle;
+      promotedWorkTitle = typeof detail.title === 'string' && detail.title.length > 0 ? detail.title : null;
+    } catch {
+      // 详情回填失败不阻断晋升收尾：标题回退 anchor.title。
+    }
+    if (get().sessionId !== sessionId) return;
     // Blocking（spec §23 Session.paragraphs[index]==Manifest.segments[index].text）：
     // server promotion 已返回 Manifest 权威 Anchor（version=Manifest version、total=Manifest segmentCount）；
     // client 必须同步把 Session 后续 segment provider 切到目标 Work Manifest frozen segments：
@@ -1209,7 +1089,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     // 但 paragraphs 不可信，须经 hydrate retry 恢复；当前 Blob 不打断）。
     // 复用 getPlaybackManifest + selectWorkParagraphs，不造新状态；当前 Blob 不 pause/stop/换 URL（§22.4）。
     // §50 session guard：manifest 晚到时确认仍是同一 session，否则丢弃覆盖。
-    const d = resolveDeps(deps);
+    const d = defaultDeps;
     let manifest: {
       segments: Array<{ index: number; text: string }>;
       segmentationVersion?: string;
@@ -1233,6 +1113,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       set({
         source: { kind: 'work', workId },
         title: anchor.title,
+        collectionTitle: promotedCollectionTitle,
+        workTitle: promotedWorkTitle ?? anchor.title,
         contentHash: anchor.contentHash,
         segmentationVersion: anchor.segmentationVersion,
         lastCompletedParagraphIndex: nextOnError > 0 ? nextOnError - 1 : -1,
@@ -1302,6 +1184,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     set({
       source: { kind: 'work', workId },
       title: anchor.title,
+      collectionTitle: promotedCollectionTitle,
+      workTitle: promotedWorkTitle ?? anchor.title,
       contentHash: anchor.contentHash,
       segmentationVersion: effectiveSegmentationVersion,
       lastCompletedParagraphIndex: next > 0 ? next - 1 : -1,
@@ -1511,11 +1395,3 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 export const usePlaybackSessionStore = create<PlaybackSessionStore>()(
   devtools(playbackSessionStoreCreator, { name: 'playback-session-store' }),
 );
-
-/** 测试隔离：清 debounce/prefetch/init 句柄与纪元（不触业务状态）。 */
-export function __resetPlaybackSessionTestHooks(): void {
-  clearDebounceTimer();
-  abortPrefetch();
-  initPromise = null;
-  hydrationEpochCounter = 0;
-}

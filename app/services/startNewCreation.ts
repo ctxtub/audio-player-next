@@ -24,16 +24,12 @@ import { cancelPendingNextWork } from './continuousCreationFlow';
 /** 预算快照解析（保持既有公共出口，供测试/调用方复用）。 */
 export { resolveContinuousCreationBudgetMinutes };
 
-/** `startNewCreation` 入参。 */
+/** `startNewCreation` 入参（真实调用链唯一入口：不得注入替换 createNew）。 */
 export type StartNewCreationOptions = {
   /** 客户端已知的旧 active 会话 id；用于防多标签页并发覆盖（服务端 CONFLICT）。 */
   expectedOldId?: string;
   /** 草稿/在途生成/未保存 Artifact 的确认；返回 false 则放弃（不产生任何副作用）。 */
   confirm?: () => boolean | Promise<boolean>;
-  /** 测试注入：替换远端 createNew（隔离网络）。 */
-  createNew?: (
-    expectedOldId?: string,
-  ) => Promise<{ id: string; collectionId: string | null }>;
 };
 
 /** `startNewCreation` 结果。 */
@@ -54,7 +50,6 @@ export type StartNewCreationResult = {
  * 唯一「新建创作」强重置入口。
  * @param options.expectedOldId 旧 active 会话 id。
  * @param options.confirm 确认回调。
- * @param options.createNew createNew 注入（测试）。
  * @returns 强重置结果。
  */
 export async function startNewCreation(
@@ -86,8 +81,14 @@ export async function startNewCreation(
   //（准备中的下一作品、调度在途、audio 采样点、下一篇展示身份）。
   cancelPendingNextWork();
 
-  // 5) 停声并清空 Playback Session（reset 会换掉 sessionId，旧会话迟到的 TTS/段落
-  //    回调凭 sessionId 失配 no-op，绝不复活播放；reset transport 清 <audio> 与 Blob）。
+  // 5) 立即停声、卸载媒体并清空 Playback Session（reset 会换掉 sessionId，
+  //    旧会话迟到的 TTS/段落回调凭 sessionId 失配 no-op，绝不复活播放；
+  //    unloadAudio 清底层 <audio> 音源，reset transport 清状态与 Blob）。
+  try {
+    usePlaybackStore.getState().unloadAudio();
+  } catch {
+    // 控制器未注册时忽略，仍继续状态重置。
+  }
   try {
     usePlaybackSessionStore.getState().reset();
   } catch {
@@ -99,15 +100,15 @@ export async function startNewCreation(
   // 6) reset message runtime（保留服务端旧会话，仅本地清空身份）
   useChatStore.getState().resetChat();
 
-  // 7) createNew(expectedOldId)；优先显式入参，否则用步骤 1 捕获的旧会话 id。
+  // 7) createNew(expectedOldId) 真实远端调用（不得注入替换）；
+  // 优先显式入参，否则用步骤 1 捕获的旧会话 id。
   const budgetMinutes = resolveContinuousCreationBudgetMinutes();
-  const createNew = options.createNew ?? createNewConversation;
   const expectedOldId = options.expectedOldId ?? capturedOldConversationId;
   let conversationId: string | null = null;
   let collectionId: string | null = null;
   let reason: 'remote-failed' | undefined;
   try {
-    const created = await createNew(expectedOldId);
+    const created = await createNewConversation(expectedOldId);
     conversationId = created.id;
     collectionId = created.collectionId ?? null;
   } catch {

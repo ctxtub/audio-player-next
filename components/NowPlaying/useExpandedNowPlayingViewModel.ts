@@ -74,8 +74,14 @@ export type ExpandedNowPlayingViewModel = {
     sessionId: string | null;
     /** 是否存在可展示 session（source 非空且 status 非 idle）。 */
     hasSession: boolean;
-    /** 一级标题（Session.title，空回退“正在播放”）。 */
+    /** 一级标题（所属作品集标题，无则回退 Session.title，空再回退“正在播放”）。 */
     title: string;
+    /**
+     * 作品副标题（work 会话为作品短标题，draft 会话为 null）。
+     * 展示层副标题优先用它（副标题表达作品位置或短标题），无则回退既有
+     * voice·段格式。
+     */
+    workSubtitle: string | null;
     /** 语音标签（Session.voiceId → lookup → fallback）。 */
     voiceLabel: string;
     /**  Session 状态原样透传（pause/ended/error 均不自动关闭，spec §8）。 */
@@ -133,6 +139,10 @@ export type ExpandedSessionSnapshot = {
     source: PlaybackSourceRef | null;
     status: PlaybackSessionStatus;
     title: string;
+    /** 所属作品集标题（work 会话读时回填，无集合/draft 会话为 null）。 */
+    collectionTitle?: string | null;
+    /** 作品短标题（work 会话为作品标题，draft 会话为 null）。 */
+    workTitle?: string | null;
     voiceId: string;
     nextParagraphIndex: number;
     totalParagraphs: number;
@@ -200,11 +210,31 @@ export const deriveExpandedParagraph = (
 };
 
 /**
- * 纯函数：标题派生（与 Mini 同公式：trim 后空回退）。
+ * 纯函数：标题派生（与 Mini 同公式：collectionTitle 优先，trim 后空回退）。
  */
-export const deriveExpandedTitle = (title: string): string => {
+export const deriveExpandedTitle = (title: string, collectionTitle?: string | null): string => {
+    const collection =
+        typeof collectionTitle === 'string' ? collectionTitle.trim() : '';
+    if (collection.length > 0 && collectionTitle) {
+        return collectionTitle;
+    }
     const raw = typeof title === 'string' ? title.trim() : '';
     return raw.length > 0 ? title : EXPANDED_NOW_PLAYING_FALLBACK_TITLE;
+};
+
+/**
+ * 纯函数：作品副标题派生（副标题表达作品位置或短标题）。
+ * work 会话且作品短标题非空 → 短标题；其余 null（调用方回退 voice·段格式）。
+ */
+export const deriveExpandedWorkSubtitle = (
+    source: PlaybackSourceRef | null,
+    workTitle?: string | null,
+): string | null => {
+    if (source?.kind !== 'work') {
+        return null;
+    }
+    const raw = typeof workTitle === 'string' ? workTitle.trim() : '';
+    return raw.length > 0 && workTitle ? workTitle : null;
 };
 
 /**
@@ -340,7 +370,8 @@ export const deriveExpandedNowPlayingViewModel = (
     return {
         hasSession,
         sessionId: session.sessionId ?? null,
-        title: deriveExpandedTitle(session.title),
+        title: deriveExpandedTitle(session.title, session.collectionTitle),
+        workSubtitle: deriveExpandedWorkSubtitle(session.source, session.workTitle),
         voiceLabel: deriveExpandedVoiceLabel(session.voiceId, voiceOptions),
         sessionStatus: session.status,
         source: session.source,
@@ -384,6 +415,8 @@ export const useExpandedNowPlayingViewModel = (): ExpandedNowPlayingViewModel =>
     const source = usePlaybackSessionStore((state) => state.source);
     const status = usePlaybackSessionStore((state) => state.status);
     const title = usePlaybackSessionStore((state) => state.title);
+    const collectionTitle = usePlaybackSessionStore((state) => state.collectionTitle);
+    const workTitle = usePlaybackSessionStore((state) => state.workTitle);
     const voiceId = usePlaybackSessionStore((state) => state.voiceId);
     const nextParagraphIndex = usePlaybackSessionStore((state) => state.nextParagraphIndex);
     const totalParagraphs = usePlaybackSessionStore((state) => state.totalParagraphs);
@@ -399,7 +432,7 @@ export const useExpandedNowPlayingViewModel = (): ExpandedNowPlayingViewModel =>
     const voiceOptions = useConfigStore((state) => state.voiceOptions);
 
     return deriveExpandedNowPlayingViewModel(
-        { source, status, title, voiceId, nextParagraphIndex, totalParagraphs, speed, sleepTimerMode, storyText, sessionId },
+        { source, status, title, collectionTitle, workTitle, voiceId, nextParagraphIndex, totalParagraphs, speed, sleepTimerMode, storyText, sessionId },
         { isPlaying, currentTime, duration, playbackRate, remainingMs } as unknown as ExpandedTransportSnapshot,
         voiceOptions
     );

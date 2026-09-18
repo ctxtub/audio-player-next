@@ -36,10 +36,7 @@ import {
   type StoryWorkRow,
 } from './storyWork';
 import { isUniqueViolation } from './conversation';
-import {
-  generateCollectionTitleSafely,
-  type CollectionTitleGenerator,
-} from './collectionTitle';
+import { generateCollectionTitleSafely } from './collectionTitle';
 import {
   normalizeCollectionTitle,
   resolveExistingCollectionTitle,
@@ -52,12 +49,6 @@ import {
   isCollectionCursorMatchingInput,
 } from '@/lib/storyCollection/cursor';
 import { createCollectionId } from '@/lib/storyCollection/identity';
-
-/** Promotion 依赖注入（测试用；缺省走真实 AI 标题生成器）。 */
-export type PromoteArtifactDeps = {
-  generateTitle?: CollectionTitleGenerator;
-  titleTimeoutMs?: number;
-};
 
 /** Promotion 重试上限（并发建集/分配 position 的唯一冲突重试）。 */
 const PROMOTE_MAX_ATTEMPTS = 3;
@@ -431,7 +422,6 @@ export async function deleteForeverCollectionForSubject(
 export async function promoteArtifactForSubject(
   subject: Subject,
   rawInput: unknown,
-  deps?: PromoteArtifactDeps,
 ): Promise<StoryWorkDetailDTO> {
   const input = collectionPromoteInputSchema.parse(rawInput) as CollectionPromoteInput;
   const voiceId = input.voiceId ?? '';
@@ -461,10 +451,7 @@ export async function promoteArtifactForSubject(
   const existingCollection = await findCollectionByConversationId(subject, input.conversationId);
   const aiTitle = existingCollection
     ? null
-    : await generateCollectionTitleSafely(
-        { storyText: input.storyText, prompt: input.prompt },
-        { generate: deps?.generateTitle, timeoutMs: deps?.titleTimeoutMs },
-      );
+    : await generateCollectionTitleSafely({ storyText: input.storyText, prompt: input.prompt });
   const resolvedTitle = existingCollection
     ? resolveExistingCollectionTitle({
         existingTitle: existingCollection.title,

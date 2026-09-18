@@ -147,7 +147,14 @@ const AudioControllerHost: React.FC = () => {
       // 使用 syncPlaybackState 避免递归调用 play
       usePlaybackStore.getState().syncPlaybackState(audioUrl, messageId);
 
-      audioEl.src = audioUrl;
+      // 同源重播不重设 src：相同地址重设会 abort 进行中加载并在 seek 时
+      // 触发 Chromium 加载失败（error=2），而元素已缓冲完整数据，直接 seek+播即可。
+      if (audioEl.getAttribute("src") !== audioUrl) {
+        audioEl.src = audioUrl;
+      } else if (audioEl.error) {
+        // 同源但元素带历史错误：先 load 清错重取，否则 play 恒为 no-op。
+        audioEl.load();
+      }
       audioEl.currentTime = 0;
       audioEl.playbackRate = playbackRate;
       hasTriggeredPreload.current = false;
@@ -218,6 +225,29 @@ const AudioControllerHost: React.FC = () => {
   }, []);
 
   /**
+   * 卸载媒体：暂停并清空底层 <audio> 音源（新建创作等强重置入口使用，
+   * 立即停声并确保旧轨道不残留、不复活）。
+   */
+  const handleUnload = useCallback(() => {
+    const audioEl = audioRef.current;
+    if (!audioEl) {
+      return;
+    }
+    try {
+      audioEl.pause();
+    } catch {
+      // 暂停失败不阻断卸载。
+    }
+    audioEl.removeAttribute('src');
+    try {
+      audioEl.load();
+    } catch {
+      // load 失败不阻断（元素已无音源）。
+    }
+    reportProgress({ currentTime: 0, duration: 0 });
+  }, []);
+
+  /**
    * 设置音频播放速率。
    * @param rate 目标倍速
    */
@@ -234,6 +264,7 @@ const AudioControllerHost: React.FC = () => {
       play: handlePlay,
       resume: handleResume,
       pause: handlePause,
+      unload: handleUnload,
       seek: handleSeek,
       setPlaybackRate: handleSetPlaybackRate,
     };
@@ -249,6 +280,7 @@ const AudioControllerHost: React.FC = () => {
     handleResume,
     handleSeek,
     handleSetPlaybackRate,
+    handleUnload,
     handleUnlock,
     registerAudioController,
   ]);

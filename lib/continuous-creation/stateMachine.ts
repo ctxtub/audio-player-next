@@ -9,7 +9,9 @@
  * - 预算只在 audio 实际推进（audioActive）时递减，生成/TTS/缓冲/暂停不扣；
  * - 严格 work lookahead=1：`hasNextJob` 为真时不得再次调度；
  * - 调度窗 = 下一作品准备耗时的移动平均，clamp 30–120 秒，冷启动 60 秒；
- * - 所有异步回写携带 epoch，`isStaleCallback` 为真一律 no-op（stale guard）。
+ * - 所有异步回写携带 epoch，`isStaleCallback` 为真一律 no-op（stale guard）；
+ *   waiting_next 的 workSaved / audioPreparing / audioReady 还须由调用方校验
+ *   epoch + conversationId + collectionId 三元组，任一失配完全丢弃。
  */
 
 /** 调度窗下界（毫秒）。 */
@@ -26,6 +28,7 @@ export type ContinuousCreationStatus =
   | 'disabled'
   | 'enabled_idle'
   | 'generating_next'
+  | 'saving_next_work'
   | 'preparing_audio'
   | 'next_ready'
   | 'waiting_next'
@@ -35,8 +38,12 @@ export type ContinuousCreationStatus =
 /** 会占用 lookahead=1 唯一槽位的状态。 */
 const NEXT_JOB_STATUSES: ReadonlySet<ContinuousCreationStatus> = new Set([
   'generating_next',
+  'saving_next_work',
   'preparing_audio',
   'next_ready',
+  // waiting_next 期间在途任务仍在推进（生成/晋升/音频 ensure 任一阶段），
+  // 仍占用唯一槽位：不计入会导致迟到结算被误判无槽位而丢弃、用户抢占漏取消。
+  'waiting_next',
 ]);
 
 /** 状态机快照。 */
@@ -68,6 +75,8 @@ export type ContinuousCreationEvent =
   | { type: 'audioActiveTick'; deltaMs: number }
   | { type: 'schedule' }
   | { type: 'generationFailed'; error: string }
+  | { type: 'generationComplete' }
+  | { type: 'workSaved' }
   | { type: 'audioPreparing' }
   | { type: 'audioReady'; prepMs: number }
   | { type: 'trackEnded'; hasReadyNext: boolean }
@@ -221,7 +230,8 @@ export function reduce(
   event: ContinuousCreationEvent,
 ): ContinuousCreationState {
   //   终态锁死守卫——disabled / ended_budget 一旦进入，迟到事件
-  //（trackEnded / nextConsumed / generationFailed / schedule / audioPreparing / audioReady）
+  //（trackEnded / nextConsumed / generationFailed / generationComplete / workSaved /
+  // schedule / audioPreparing / audioReady）
   // 一律 no-op，不得把终态复活成 waiting_next / enabled_idle / error。
   // 仅显式恢复路径（enable / reset / setBudget / advanceEpoch）可离开终态。
   if (isTerminalStatus(state.status)) {
@@ -283,13 +293,31 @@ export function reduce(
       return { ...state, status: 'generating_next', lastError: null };
     case 'generationFailed':
       return { ...state, status: 'error', lastError: event.error };
-    case 'audioPreparing':
+    case 'generationComplete':
+      // 正文生成完成 → 进入正式 Work 晋升阶段；仅 generating_next 可进。
       if (state.status !== 'generating_next') {
+        return state;
+      }
+      return { ...state, status: 'saving_next_work' };
+    case 'workSaved':
+      // 晋升成功拿到 workId → 进入音频准备；waiting_next 等待中晋升完成同样推进。
+      // epoch / conversationId / collectionId 失配的迟到事件由调用方丢弃，不到此处。
+      if (state.status !== 'saving_next_work' && state.status !== 'waiting_next') {
+        return state;
+      }
+      return { ...state, status: 'preparing_audio' };
+    case 'audioPreparing':
+      if (state.status !== 'generating_next' && state.status !== 'saving_next_work') {
+        // waiting_next 等待中到达的 preparing 是自环（仍在等待，不推进也不复位）。
         return state;
       }
       return { ...state, status: 'preparing_audio' };
     case 'audioReady':
-      if (state.status !== 'generating_next' && state.status !== 'preparing_audio') {
+      if (
+        state.status !== 'generating_next' &&
+        state.status !== 'preparing_audio' &&
+        state.status !== 'waiting_next'
+      ) {
         return state;
       }
       return recordPrepSample({ ...state, status: 'next_ready', lastError: null }, event.prepMs);

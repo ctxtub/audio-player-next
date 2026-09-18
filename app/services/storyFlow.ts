@@ -20,7 +20,6 @@ import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 
 import {
   endContinuousCreationRun,
-  handleTrackEnded,
   scheduleNextWork,
 } from './continuousCreationFlow';
 
@@ -133,17 +132,10 @@ export const handleSegmentEnded = async (): Promise<PlayableSegment | null> => {
     }
   }
 
-  // 连续创作：消费已就绪的下一作品（lookahead=1，exactly-once）。
-  const nextWork = handleTrackEnded(useContinuousCreationStore.getState().epoch);
-  if (!nextWork) {
-    return null;
-  }
-  usePlaybackStore.getState().advanceSegment();
-  return {
-    audioUrl: nextWork.audioUrl,
-    segment: nextWork.segment,
-    messageId: nextWork.messageId,
-  };
+  // 连续创作正式交接已迁至 playbackSessionFlow.handleEnded +
+  // continuousCreationFlow（正式 Work 经 playStoryWork 续播）；
+  // legacy 音频不消费连续创作下一篇，直接收尾。
+  return null;
 };
 
 /**

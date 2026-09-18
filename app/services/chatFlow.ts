@@ -38,12 +38,15 @@ let streamSeq = 0;
  * story_complete 仅完成正文（draft→complete），done 仅标记 delivered，音频仅瞬态播放不写入消息。
  * @param context 即将发送给后端的对话上下文。
  * @param assistantMessageId 本次 attempt 的助手消息 id（sourceMessageId 同值）。
+ * @param options.suppressAutoplay 预载续写传 true：绝不起播，瞬态音频直接吊销
+ * （下一篇经正式晋升 + 单轨 ensure + playStoryWork 续播，不走 Draft autoplay）。
  * @returns 包含最终音频地址和生成内容的对象
  */
 const executeChatStream = async (
   context: ChatConversationMessage[],
   assistantMessageId: string,
   frozenVoiceId?: string,
+  options?: { suppressAutoplay?: boolean },
 ): Promise<{ audioUrl: string; content: string }> => {
   const generationStore = useGenerationStore.getState();
 
@@ -133,10 +136,12 @@ const executeChatStream = async (
 
             if (stillExists && pendingAudioBlob) {
               // 仅当历史中没有故事时（即首次生成故事），才自动开始播放；清空后消息已不存在则绝不孤儿播放。
+              // 预载续写（连续创作下一篇）绝不起播：正文经晋升落正式 Work 后，
+              // 由单轨 ensure + playStoryWork 续播，此处瞬态音频直接吊销。
               const existingStories = useChatStore
                 .getState()
                 .selectors.hasStoryMessages(assistantMessageId);
-              if (!existingStories) {
+              if (!existingStories && !options?.suppressAutoplay) {
                 // autoplay 经正式 Draft Session（先落盘保证 ChatMessage 行存在，
                 // 再 begin+provider 起播；旧整篇 blob 无 segment identity 不得当 paragraph
                 // 播放，一律吊销丢弃）。失败则 fail-closed 静默（聊天持久化本身亦已失败）。
@@ -163,6 +168,11 @@ const executeChatStream = async (
                     return;
                   }
                   if (!useChatStore.getState().messages.some((m) => m.id === assistantMessageId)) {
+                    revoked();
+                    return;
+                  }
+                  // 预载续写绝不起播（下一篇走正式 Work 续播链），仅吊销瞬态音频。
+                  if (options?.suppressAutoplay) {
                     revoked();
                     return;
                   }
@@ -243,12 +253,13 @@ export const beginChatStream = async (
   // 获取刚刚创建的助手消息 ID (为最后一条消息，此时处于 sending 状态)
   const assistantMsgId = useChatStore.getState().selectors.latestMessage()?.id;
 
-  // 3. 执行流
+  // 3. 执行流（预载续写抑制 Draft autoplay，走正式 Work 续播链）
   if (assistantMsgId) {
     const { audioUrl, content: generatedContent } = await executeChatStream(
       context,
       assistantMsgId,
       frozenVoiceId,
+      { suppressAutoplay: options?.origin === 'preload' },
     );
     return { messageId: assistantMsgId, audioUrl, content: generatedContent };
   }

@@ -15,6 +15,7 @@ import OnboardingModal from '../OnboardingModal';
 import InputArea from './InputArea';
 import MessageArea from './MessageArea';
 import ContinuousCreationBar from '../ContinuousCreationBar';
+import ContinuousCreationCard from '../ContinuousCreationCard';
 import styles from './index.module.scss';
 import type { ChatLayoutProps } from './types';
 
@@ -238,6 +239,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         isLoading={false}
         onRetry={handleRetry}
       />
+      <ContinuousCreationCard />
       <InputArea
         onSubmit={handleSubmit}
         disabled={isSending}

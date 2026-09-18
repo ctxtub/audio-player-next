@@ -20,10 +20,27 @@ import {
   type ContinuousCreationStatus,
 } from '@/lib/continuous-creation/stateMachine';
 
-/** store 状态 = 状态机快照 + 当前集合身份。 */
+/** store 状态 = 状态机快照 + 当前集合身份 + 下一篇身份。 */
 export type ContinuousCreationStoreState = ContinuousCreationState & {
   /** 当前集合 id；null = 尚未有集合（首作晋升前）。 */
   collectionId: string | null;
+  /**
+   * 下一篇正式 Work 身份（与状态机同快照，供卡片展示标题/状态）。
+   * 仅展示用，不参与并发控制；取消/失败/消费/重置时清空。
+   */
+  nextWork: ContinuousNextWorkIdentity | null;
+};
+
+/** 下一篇正式 Work 身份（展示用）。 */
+export type ContinuousNextWorkIdentity = {
+  /** 正式 Work id（晋升成功后才有）。 */
+  workId: number;
+  /** 产生该 Work 的 assistant 消息 id。 */
+  sourceMessageId: string;
+  /** 作品标题（晋升结果或正文派生）。 */
+  title: string;
+  /** 下一篇音频状态（与 ensure 实际进展一致）。 */
+  audioStatus: 'preparing' | 'ready';
 };
 
 /** store 动作。 */
@@ -46,8 +63,16 @@ export type ContinuousCreationStoreActions = {
   schedule: () => boolean;
   /** 下一作品生成失败。 */
   generationFailed: (error: string) => void;
+  /** 正文生成完成，进入正式 Work 晋升阶段。 */
+  generationComplete: () => void;
+  /** 晋升成功拿到正式 workId，进入音频准备。 */
+  workSaved: () => void;
   /** 下一作品进入音频准备。 */
   audioPreparing: () => void;
+  /** 下一篇正式 Work 身份（晋升成功/音频就绪时由编排写入展示）。 */
+  setNextWork: (work: ContinuousNextWorkIdentity) => void;
+  /** 清空下一篇身份（取消/失败/消费/重置时）。 */
+  clearNextWork: () => void;
   /** 下一作品音频就绪（记录准备耗时样本）。 */
   audioReady: (prepMs: number) => void;
   /** 当前整轨结束。 */
@@ -74,21 +99,27 @@ export type ContinuousCreationStore = ContinuousCreationStoreState &
 const INITIAL_STATE: ContinuousCreationStoreState = {
   ...createInitialState(),
   collectionId: null,
+  nextWork: null,
 };
 
 /** 从 store 状态取出纯状态机快照。 */
 function machineStateOf(state: ContinuousCreationStoreState): ContinuousCreationState {
-  const { collectionId: _collectionId, ...machine } = state;
+  const { collectionId: _collectionId, nextWork: _nextWork, ...machine } = state;
   void _collectionId;
+  void _nextWork;
   return machine;
 }
 
-/** 把纯状态机事件应用到 store（保留 collectionId）。 */
+/** 把纯状态机事件应用到 store（保留 collectionId 与 nextWork 身份）。 */
 function applyEvent(
   state: ContinuousCreationStoreState,
   event: ContinuousCreationEvent,
 ): ContinuousCreationStoreState {
-  return { ...reduce(machineStateOf(state), event), collectionId: state.collectionId };
+  return {
+    ...reduce(machineStateOf(state), event),
+    collectionId: state.collectionId,
+    nextWork: state.nextWork,
+  };
 }
 
 /**
@@ -144,13 +175,14 @@ const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (s
     // 关闭开关必须先走真取消 seam（abort 在途传输 + 清 prepared/
     // 调度锁），再落 disabled 终态；否则关闭前的就绪 next 会被迟到轨道结束续播。
     cancelHandler?.();
-    set((state) => applyEvent(state, { type: 'disable' }));
+    set((state) => ({ ...applyEvent(state, { type: 'disable' }), nextWork: null }));
   },
 
   resetForNewCreation: ({ collectionId, budgetMinutes, epoch }) =>
     set((state) => ({
       ...applyEvent(state, { type: 'reset', epoch, budgetMinutes }),
       collectionId,
+      nextWork: null,
     })),
 
   setBudget: (budgetMs) => set((state) => applyEvent(state, { type: 'setBudget', budgetMs })),
@@ -165,15 +197,21 @@ const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (s
   },
 
   generationFailed: (error) =>
-    set((state) => applyEvent(state, { type: 'generationFailed', error })),
+    set((state) => ({ ...applyEvent(state, { type: 'generationFailed', error }), nextWork: null })),
+  generationComplete: () =>
+    set((state) => applyEvent(state, { type: 'generationComplete' })),
+  workSaved: () => set((state) => applyEvent(state, { type: 'workSaved' })),
   audioPreparing: () => set((state) => applyEvent(state, { type: 'audioPreparing' })),
+  setNextWork: (work) => set(() => ({ nextWork: work })),
+  clearNextWork: () => set(() => ({ nextWork: null })),
   audioReady: (prepMs) => set((state) => applyEvent(state, { type: 'audioReady', prepMs })),
   trackEnded: (hasReadyNext) =>
     set((state) => applyEvent(state, { type: 'trackEnded', hasReadyNext })),
-  nextConsumed: () => set((state) => applyEvent(state, { type: 'nextConsumed' })),
+  nextConsumed: () =>
+    set((state) => ({ ...applyEvent(state, { type: 'nextConsumed' }), nextWork: null })),
 
   advanceEpoch: () => {
-    set((state) => applyEvent(state, { type: 'advanceEpoch' }));
+    set((state) => ({ ...applyEvent(state, { type: 'advanceEpoch' }), nextWork: null }));
     return get().epoch;
   },
 
@@ -188,6 +226,7 @@ const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (s
     set((state) => ({
       ...applyEvent(state, { type: 'advanceEpoch' }),
       collectionId,
+      nextWork: null,
     }));
     return get().epoch;
   },
@@ -208,16 +247,17 @@ export const useContinuousCreationStore = create<ContinuousCreationStore>()(
   devtools(continuousCreationStoreCreator, { name: 'continuous-creation-store' }),
 );
 
-/** 状态卡文案映射（UI 与状态机同源）。 */
+/** 状态卡文案映射（UI 与状态机同源；阶段文案按产品计划逐字采用）。 */
 export const CONTINUOUS_CREATION_STATUS_LABEL: Record<ContinuousCreationStatus, string> = {
   disabled: '连续创作已关闭',
   enabled_idle: '连续创作已开启',
-  generating_next: '正在生成下一集',
-  preparing_audio: '正在准备下一集音频',
-  next_ready: '下一集已就绪',
-  waiting_next: '等待下一集',
-  ended_budget: '播放预算已用完',
-  error: '连续创作出错',
+  generating_next: '正在创作下一篇',
+  saving_next_work: '正在保存下一篇',
+  preparing_audio: '正在准备下一篇语音',
+  next_ready: '下一篇已准备好',
+  waiting_next: '当前故事已结束，正在等待下一篇',
+  ended_budget: '本次连续创作已结束',
+  error: '下一篇准备失败',
 };
 
 /** 人类可读剩余预算（mm:ss）；null = 不限。 */

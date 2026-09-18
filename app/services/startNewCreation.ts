@@ -19,8 +19,7 @@ import { useGenerationStore } from '@/stores/generationStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 
-import { abortActiveChatStream } from './chatFlow';
-import { resetContinuousCreationRuntime } from './continuousCreationFlow';
+import { cancelPendingNextWork } from './continuousCreationFlow';
 
 /** 预算快照解析（保持既有公共出口，供测试/调用方复用）。 */
 export { resolveContinuousCreationBudgetMinutes };
@@ -83,11 +82,9 @@ export async function startNewCreation(
   // 2) 先 epoch++ 使旧回调失效（generation/promotion/audio/continuation 一律 no-op）
   useContinuousCreationStore.getState().advanceEpoch();
 
-  // 3) abort 在途 generation
-  abortActiveChatStream();
-
-  // 4) 清空连续创作编排运行时（准备中的下一作品、调度在途、audio 采样点）
-  resetContinuousCreationRuntime();
+  // 3)+4) 经真取消 seam：abort 在途 generation/ensure 等待，并清空连续创作编排运行时
+  //（准备中的下一作品、调度在途、audio 采样点、下一篇展示身份）。
+  cancelPendingNextWork();
 
   // 5) 停声并清空 Playback Session（reset 会换掉 sessionId，旧会话迟到的 TTS/段落
   //    回调凭 sessionId 失配 no-op，绝不复活播放；reset transport 清 <audio> 与 Blob）。

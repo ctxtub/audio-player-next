@@ -672,13 +672,13 @@ export async function handleEnded(play: (audioUrl: string, messageId?: string) =
       return await session.handleParagraphEnded();
     }
     if (!shouldAllowAiContinuation(session.continuationMode)) {
-      // finite 整轨结束 → 优先无缝续播连续创作已就绪的下一作品；
-      // 无/过期则进入 waiting_next 并收尾（绝不复活旧结果）。
+      // finite 整轨结束 → 连续创作正式交接：next_ready 原子取出并经
+      // playStoryWork 续播；在途则进入 waiting_next（准备完成后自动续播）；
+      // error/终态保持当前页面（绝不复活旧结果）。
       const epoch = useContinuousCreationStore.getState().epoch;
       const { handleTrackEnded } = await import('@/app/services/continuousCreationFlow');
-      const nextWork = handleTrackEnded(epoch);
-      if (nextWork) {
-        await play(nextWork.audioUrl, nextWork.messageId);
+      const continued = await handleTrackEnded(epoch);
+      if (continued) {
         return true;
       }
       return await session.handleParagraphEnded();

@@ -100,7 +100,9 @@ test.describe("播放与准备中新创作强重置", () => {
         // ⑦ 生成中重置：发送后看到用户气泡（旧会话消息已落定，确认框必弹）
         // 即新建创作，旧流被中断，不留半截卡片。
         await sendStory(page, "写一个关于白塔湖的故事");
-        await expect(chatContent(page).getByText("白塔湖")).toBeVisible({ timeout: 15000 });
+        await expect(
+            chatContent(page).locator("span").filter({ hasText: "写一个关于白塔湖的故事" }).first(),
+        ).toBeVisible({ timeout: 15000 });
         await page.getByRole("button", { name: "新建创作" }).click();
         await page.waitForTimeout(10000);
         expect(await cardActionButtons(page).count()).toBe(0);

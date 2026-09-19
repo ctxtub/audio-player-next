@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import GlassToast from '@/components/ui/GlassToast';
 
 import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
@@ -50,6 +50,7 @@ const defaultSuggestions: HeaderSuggestion[] = [
  * @returns 布局结构 JSX。
  */
 const ChatLayout: React.FC<ChatLayoutProps> = () => {
+  const [isStartingNewCreation, setIsStartingNewCreation] = useState(false);
   const messages = useChatStore((state) => state.messages);
   const inputValue = useChatStore((state) => state.inputValue);
   const setInputValue = useChatStore((state) => state.setInputValue);
@@ -209,20 +210,31 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
    * 唯一「新建创作」入口：强重置当前集合运行态。
    * 仅当存在草稿/在途内容时确认；确认后由 startNewCreation 承担全部副作用。
    */
-  const handleNewCreation = useCallback(() => {
+  const handleNewCreation = useCallback(async () => {
+    if (isStartingNewCreation) {
+      return;
+    }
     const needsConfirm = useChatStore.getState().messages.length > 0;
-    void startNewCreation({
-      confirm: () => {
-        if (!needsConfirm) {
-          return true;
-        }
-        if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
-          return true;
-        }
-        return window.confirm('开始新建创作？当前会话内容将被清空。');
-      },
-    });
-  }, []);
+    setIsStartingNewCreation(true);
+    try {
+      const result = await startNewCreation({
+        confirm: () => {
+          if (!needsConfirm) {
+            return true;
+          }
+          if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
+            return true;
+          }
+          return window.confirm('开始新建创作？当前会话内容将被清空。');
+        },
+      });
+      if (result.reason === 'remote-failed') {
+        GlassToast.show({ icon: 'fail', content: '新建创作失败，请重试' });
+      }
+    } finally {
+      setIsStartingNewCreation(false);
+    }
+  }, [isStartingNewCreation]);
 
   return (
     <div className={styles.chatLayout}>
@@ -242,7 +254,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
       <ContinuousCreationCard />
       <InputArea
         onSubmit={handleSubmit}
-        disabled={isSending}
+        disabled={isSending || isStartingNewCreation}
         isSending={isSending}
         value={inputValue}
         onChange={handleInputChange}

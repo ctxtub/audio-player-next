@@ -52,9 +52,7 @@ export function continuousStatusText(page: Page): Locator {
 /**
  * 发送一篇故事并等待其输入被接收（发送按钮恢复可用即视为已提交；
  * 就绪等待由调用方按卡片按钮做）。
- * 提交走键盘回车（与点击「发送」同一提交入口）：宽视口下浮动 Mini 默认
- * 停靠右下、盖住输入框右端发送按钮是既有设计（可拖拽避让，见视觉报告），
- * 回车是用户同样自然的提交路径。
+ * 提交走键盘回车（与点击「发送」同一提交入口），覆盖键盘创作路径。
  * @param page 页面
  * @param prompt 用户输入
  */
@@ -138,14 +136,18 @@ export async function setContinuousEnabled(page: Page, enabled: boolean): Promis
 }
 
 /**
- * 等待系统续写卡片自动播完（无人点击）。
+ * 等待系统续写卡片自动开始播放（无人点击）。
+ *
+ * 卡片只展示“当前播放会话”的实时状态；接力到再下一篇后，前一篇会恢复
+ * 可播放态。因此这里观察目标卡真实出现「暂停」或短暂完成态，而不要求它在
+ * 后续接力期间永久停留为「重新播放」。
  * 容错：若下一篇卡片出现产品可见的「发送失败」，按用户方式点其「重试」
  * （有界两轮；仍失败则如实抛错，绝不吞错）。重试后目标自动跟随末卡。
  * @param page 页面
  * @param index 目标卡片序号（0 起）
  * @param timeoutMs 总预算毫秒
  */
-export async function waitAutoplayedCardEnded(
+export async function waitAutoplayedCardActive(
     page: Page,
     index: number,
     timeoutMs = 150000,
@@ -156,8 +158,11 @@ export async function waitAutoplayedCardEnded(
     for (;;) {
         const buttons = cardActionButtons(page);
         const count = await buttons.count();
-        if (count > target && (await readCardActionLabel(buttons.nth(target))) === "重新播放") {
-            return;
+        if (count > target) {
+            const label = await readCardActionLabel(buttons.nth(target));
+            if (label === "暂停" || label === "重新播放") {
+                return;
+            }
         }
         const nextCard = page.getByTestId("continuous-next-card");
         if ((await nextCard.getByText("发送失败").count()) > 0) {
@@ -171,9 +176,9 @@ export async function waitAutoplayedCardEnded(
             continue;
         }
         if (Date.now() >= deadline) {
-            throw new Error(`autoplayed card ${target} did not end within budget`);
+            throw new Error(`autoplayed card ${target} did not become active within budget`);
         }
-        await page.waitForTimeout(2000);
+        await page.waitForTimeout(100);
     }
 }
 

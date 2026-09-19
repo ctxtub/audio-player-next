@@ -6,7 +6,7 @@
  * - compact-docked / wide-docked：固定 TabBar 上方，不可拖，无 grip；
  * - wide-floating：position:fixed、width:var(--size-mini-now-playing-wide)、
  *   z-index:var(--z-floating)；默认 right:var(--space-4) +
- *   bottom:calc(tab-bar-safe-bottom + var(--space-4))；data-dragged=true 时
+ *   bottom:calc(tab-bar-safe-bottom + Mini 高度 + var(--space-8))；data-dragged=true 时
  *   left/top 内联坐标生效（right/bottom 由属性选择器释放）。
  */
 
@@ -37,7 +37,10 @@
 .miniRoot[data-layoutmode='wide-floating'] {
   left: auto;
   right: var(--space-4);
-  bottom: calc(var(--tab-bar-safe-bottom) + var(--space-4));
+  /* 默认位置避开创作页固定在底部的输入与操作区；用户拖动后仍由 left/top 接管。 */
+  bottom: calc(
+    var(--tab-bar-safe-bottom) + var(--size-mini-now-playing-height) + var(--space-8)
+  );
   width: var(--size-mini-now-playing-wide);
   max-width: calc(100vw - var(--space-4) - var(--space-4));
   margin-left: 0;

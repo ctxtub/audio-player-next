@@ -60,6 +60,10 @@ test.describe("集合详情起播跨页播放", () => {
 
         // ④ 起播首篇：Mini 主标题为集合标题，副标题含作品短标题。
         await page.getByTestId(/^member-play-/).first().click();
+        await expect(page.getByTestId("mini-title")).toHaveText(collectionTitle, { timeout: 15000 });
+        await expect(page.getByTestId("mini-secondary-label")).toContainText(firstWorkTitle, {
+            timeout: 15000,
+        });
         const mini = await readMiniTitles(page);
         expect(mini.title).toBe(collectionTitle);
         expect(mini.secondary).not.toBeNull();

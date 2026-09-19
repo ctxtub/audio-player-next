@@ -17,7 +17,7 @@
  * - Wide Floating（§18）：viewport>=768 且 desktopFloatingPlayerEnabled=true →
  *   wide-floating（position:fixed、width:var(--size-mini-now-playing-wide)、
  *   z-index:var(--z-floating)）；初始 CSS 右下（right:var(--space-4)；
- *   bottom:calc(tab-bar-safe-bottom + var(--space-4))），用户首次 drag 后转
+ *   bottom 位于底部输入操作区之上），用户首次 drag 后转
  *   left/top 内联坐标；仅 DragGrip 绑定 useDrag，Playback/Metadata 按钮不参与；
  *   drag 期间/结束 clamp，结束吸附最近水平边，resize re-clamp；位置 localStorage
  *   持久化 + refresh restore（useMiniFloatingDrag，容错 fallback 默认右下）；

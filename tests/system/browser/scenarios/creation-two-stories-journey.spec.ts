@@ -8,7 +8,7 @@ import {
     sendStory,
     setContinuousEnabled,
     verifyCardPlayPauseResume,
-    waitAutoplayedCardEnded,
+    waitAutoplayedCardActive,
     waitCardEnded,
     waitStoryCardReady,
 } from "./helpers/creation-journey";
@@ -93,10 +93,10 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         await captureVisual(page, "1440-preparing");
         await page.setViewportSize(initialViewport);
 
-        // ⑥ 第三篇（系统续写）自动续播：无人点击过它，它播完（卡片落到
-        // 「重新播放」）即证明自动续播发生；Mini 复现同集合标题。
+        // ⑥ 第三篇（系统续写）自动续播：无人点击过它却进入播放态，
+        // 即证明自动续播发生；Mini 复现同集合标题。
         // 偶发发送失败时用产品重试（有界），仍失败则如实失败。
-        await waitAutoplayedCardEnded(page, 2, 150000);
+        await waitAutoplayedCardActive(page, 2, 150000);
         const mini = await readMiniTitles(page);
         expect(mini.title).toBe(collectionTitle);
         expect(mini.secondary).not.toBeNull();

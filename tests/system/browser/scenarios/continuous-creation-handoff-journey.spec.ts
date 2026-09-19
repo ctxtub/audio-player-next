@@ -8,8 +8,7 @@ import {
     readMiniTitles,
     sendStory,
     setContinuousEnabled,
-    waitAutoplayedCardEnded,
-    waitCardEnded,
+    waitAutoplayedCardActive,
     waitStoryCardReady,
 } from "./helpers/creation-journey";
 
@@ -61,10 +60,10 @@ test.describe("连续创作下一篇等待与自动续播", () => {
         expect(collectionTitle.length).toBeGreaterThan(0);
 
         // ④ 第一轮交接：草稿自动播起播（Mini 现身）后重播首篇触发尾段调度；
-        // 第二篇（系统续写）无人点击却最终播完 = 自动续播发生。
+        // 第二篇（系统续写）无人点击却进入播放态 = 自动续播发生。
         await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 60000 });
         await playCardWhenSettled(page, 0);
-        await waitCardEnded(page, 1, 150000);
+        await waitAutoplayedCardActive(page, 1, 150000);
 
         // ⑤ 在后续交接中捕获等待态：顺延多轮，每轮都是真实等待。
         // 若下一篇发送失败，用产品重试（有界两轮）后继续等。
@@ -108,10 +107,10 @@ test.describe("连续创作下一篇等待与自动续播", () => {
         }
         expect(waitingProven).toBe(true);
 
-        // ⑥ 等待结束 = 自动续播：新增卡片自动播完（偶发发送失败时产品重试），
+        // ⑥ 等待结束 = 自动续播：新增卡片自动进入播放（偶发发送失败时产品重试），
         // 且 Mini 复现同集合标题。
         const cardCountBefore = await cardActionButtons(page).count();
-        await waitAutoplayedCardEnded(page, cardCountBefore, 150000);
+        await waitAutoplayedCardActive(page, cardCountBefore, 150000);
         const mini = await readMiniTitles(page);
         expect(mini.title).toBe(collectionTitle);
         await expect(budget).toContainText("剩余", { timeout: 10000 });

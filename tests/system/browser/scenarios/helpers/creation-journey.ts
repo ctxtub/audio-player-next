@@ -95,29 +95,9 @@ export async function waitStoryCardReady(
     timeoutMs = 90000,
 ): Promise<void> {
     const button = cardActionButton(page, index);
-    const deadline = Date.now() + timeoutMs;
-    let retries = 0;
-    for (;;) {
-        if ((await button.count()) > 0 && await button.isVisible()) {
-            break;
-        }
-        const retryButtons = chatContent(page).getByRole("button", { name: "重试" });
-        if ((await retryButtons.count()) > 0) {
-            retries += 1;
-            if (retries > 2) {
-                throw new Error("story generation failed after 2 visible retries");
-            }
-            await retryButtons.last().click();
-            await page.waitForTimeout(1000);
-            continue;
-        }
-        if (Date.now() >= deadline) {
-            throw new Error(`story card ${index} did not become ready within journey budget`);
-        }
-        await page.waitForTimeout(250);
-    }
+    await expect(button).toBeVisible({ timeout: timeoutMs });
     await expect
-        .poll(async () => readCardActionLabel(button), { timeout: Math.max(1000, deadline - Date.now()) })
+        .poll(async () => readCardActionLabel(button), { timeout: timeoutMs })
         .toMatch(/^(播放|暂停)$/);
 }
 

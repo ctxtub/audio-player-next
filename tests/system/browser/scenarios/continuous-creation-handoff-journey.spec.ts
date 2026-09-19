@@ -3,6 +3,7 @@ import { ensureGuestByApi } from "./helpers/auth";
 import {
     captureVisual,
     cardActionButtons,
+    composerInput,
     continuousStatusText,
     playCardWhenSettled,
     readMiniTitles,
@@ -47,6 +48,8 @@ test.describe("连续创作下一篇准备与自动续播", () => {
         await page.goto(`${appUrl}/chat`, { waitUntil: "networkidle", timeout: 60000 });
         await page.getByRole("button", { name: "新建创作" }).click();
         await expect(budget).toHaveText("剩余 10:00", { timeout: 15000 });
+        await expect(composerInput(page)).toBeEnabled({ timeout: 15000 });
+        await page.waitForTimeout(500);
 
         // ③ 发起第一篇并等其就绪，记下集合标题（晋升成功后收敛）。
         await sendStory(page, "讲一个关于森林邮递员的故事");

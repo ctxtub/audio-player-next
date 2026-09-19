@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import GlassToast from '@/components/ui/GlassToast';
 
 import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
@@ -51,6 +51,7 @@ const defaultSuggestions: HeaderSuggestion[] = [
  */
 const ChatLayout: React.FC<ChatLayoutProps> = () => {
   const [isStartingNewCreation, setIsStartingNewCreation] = useState(false);
+  const newCreationPromiseRef = useRef<Promise<boolean> | null>(null);
   const messages = useChatStore((state) => state.messages);
   const inputValue = useChatStore((state) => state.inputValue);
   const setInputValue = useChatStore((state) => state.setInputValue);
@@ -82,7 +83,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
           collectionId,
           collectionTitle: collection.title,
         });
-      })
+    })
       .catch(() => undefined);
     return () => {
       cancelled = true;
@@ -115,6 +116,12 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
    */
   const handleSubmit = useCallback(async (content: string) => {
     try {
+      // 点击新建后的同一帧内，禁用态可能尚未完成渲染。提交必须等待真实的
+      // 新会话创建结束，不能让新消息落到重置中的旧会话再被取消。
+      const pendingNewCreation = newCreationPromiseRef.current;
+      if (pendingNewCreation && !(await pendingNewCreation)) {
+        throw new Error('新建创作尚未完成，请重试');
+      }
       // 用户主动输入即抢占连续创作：丢弃在途/就绪的下一作品并作废旧回调。
       preemptContinuousCreationForUserInput();
       await usePlaybackStore.getState().ensureUnlocked();
@@ -210,31 +217,36 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
    * 唯一「新建创作」入口：强重置当前集合运行态。
    * 仅当存在草稿/在途内容时确认；确认后由 startNewCreation 承担全部副作用。
    */
-  const handleNewCreation = useCallback(async () => {
-    if (isStartingNewCreation) {
+  const handleNewCreation = useCallback(() => {
+    if (newCreationPromiseRef.current) {
       return;
     }
     const needsConfirm = useChatStore.getState().messages.length > 0;
     setIsStartingNewCreation(true);
-    try {
-      const result = await startNewCreation({
-        confirm: () => {
-          if (!needsConfirm) {
-            return true;
-          }
-          if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
-            return true;
-          }
-          return window.confirm('开始新建创作？当前会话内容将被清空。');
-        },
+    const task = startNewCreation({
+      confirm: () => {
+        if (!needsConfirm) {
+          return true;
+        }
+        if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
+          return true;
+        }
+        return window.confirm('开始新建创作？当前会话内容将被清空。');
+      },
+      })
+      .then((result) => {
+        if (result.reason === 'remote-failed') {
+          GlassToast.show({ icon: 'fail', content: '新建创作失败，请重试' });
+          return false;
+        }
+        return result.started;
+      })
+      .finally(() => {
+        newCreationPromiseRef.current = null;
+        setIsStartingNewCreation(false);
       });
-      if (result.reason === 'remote-failed') {
-        GlassToast.show({ icon: 'fail', content: '新建创作失败，请重试' });
-      }
-    } finally {
-      setIsStartingNewCreation(false);
-    }
-  }, [isStartingNewCreation]);
+    newCreationPromiseRef.current = task;
+  }, []);
 
   return (
     <div className={styles.chatLayout}>

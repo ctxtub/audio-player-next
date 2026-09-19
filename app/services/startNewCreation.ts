@@ -56,9 +56,6 @@ export async function startNewCreation(
   options: StartNewCreationOptions = {},
 ): Promise<StartNewCreationResult> {
   const currentEpoch = useContinuousCreationStore.getState().epoch;
-  //（评审闭合项 3）：在重置前捕获当前会话 id，作为旧会话校验值传给 createNew。
-  // 多标签页/竞态下服务端凭它与真实 active 比对，不匹配即 CONFLICT，绝不静默覆盖。
-  const capturedOldConversationId = useChatStore.getState().conversationId ?? undefined;
 
   // 1) 确认（拒绝时不产生任何副作用）
   if (options.confirm) {
@@ -73,6 +70,18 @@ export async function startNewCreation(
       };
     }
   }
+
+  // 页面整页重载后，配置就绪即可先展示主界面，但聊天与播放 Anchor 恢复可能仍在途。
+  // 强重置必须先等二者收口，否则旧初始化可在 reset 之后晚到，复活旧会话并抢占
+  // 用户紧接着发出的新作品。初始化失败按各 store 的 fail-closed 结果继续重置。
+  await Promise.all([
+    useChatStore.getState().initForUser(),
+    usePlaybackSessionStore.getState().init(),
+  ]);
+
+  // 初始化收口后再捕获当前会话 id，作为旧会话校验值传给 createNew。
+  // 多标签页/竞态下服务端凭它与真实 active 比对，不匹配即 CONFLICT，绝不静默覆盖。
+  const capturedOldConversationId = useChatStore.getState().conversationId ?? undefined;
 
   // 2) 先 epoch++ 使旧回调失效（generation/promotion/audio/continuation 一律 no-op）
   useContinuousCreationStore.getState().advanceEpoch();

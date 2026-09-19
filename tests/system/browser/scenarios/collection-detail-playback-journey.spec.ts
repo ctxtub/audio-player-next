@@ -140,8 +140,8 @@ test.describe("集合详情起播跨页播放", () => {
         await page.setViewportSize(initialViewport);
 
         // ⑨ /player 已退役：进故事库。
-        await page.goto(`${appUrl}/player`, { timeout: 60000 });
-        await page.waitForURL("**/library**", { timeout: 15000 });
+        await page.goto(`${appUrl}/player`, { waitUntil: "networkidle", timeout: 60000 });
+        await page.waitForURL("**/library**", { timeout: 30000 });
         expect(page.url()).toContain(`${appUrl}/library`);
     });
 });

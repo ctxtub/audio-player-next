@@ -1387,8 +1387,11 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     abortPrefetch();
     lastSingleTrackPersistMs = 0;
     lastSingleTrackPersistPositionMs = -1;
-    const epoch = get().hydrationEpoch;
-    set({ ...INITIAL_SESSION_STATE, hydrationEpoch: epoch });
+    // 强重置必须作废仍在等待 Anchor / Work / Manifest 的旧水合请求。
+    // 若保留原纪元，旧请求可在新建创作后晚到并复活旧播放会话，继而触发
+    // 连续创作调度、抢占用户刚开始的新生成。
+    const nextHydrationEpoch = get().hydrationEpoch + 1;
+    set({ ...INITIAL_SESSION_STATE, hydrationEpoch: nextHydrationEpoch });
   },
 });
 

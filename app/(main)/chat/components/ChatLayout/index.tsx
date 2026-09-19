@@ -8,6 +8,7 @@ import { preemptContinuousCreationForUserInput } from '@/app/services/continuous
 import { startNewCreation } from '@/app/services/startNewCreation';
 import { getCollection } from '@/lib/client/collection';
 import { useChatStore } from '@/stores/chatStore';
+import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 
 import HeaderArea from './HeaderArea';
@@ -50,6 +51,7 @@ const defaultSuggestions: HeaderSuggestion[] = [
  * @returns 布局结构 JSX。
  */
 const ChatLayout: React.FC<ChatLayoutProps> = () => {
+  const [isCreationReady, setIsCreationReady] = useState(false);
   const [isStartingNewCreation, setIsStartingNewCreation] = useState(false);
   const newCreationPromiseRef = useRef<Promise<boolean> | null>(null);
   const messages = useChatStore((state) => state.messages);
@@ -66,6 +68,23 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     () => messages.some((m) => m.status === 'sending'),
     [messages],
   );
+
+  // AccountSyncProvider 只以配置就绪作为主界面渲染门；聊天与播放恢复仍可能在途。
+  // 输入区必须等二者收口后再开放，避免首条消息被迟到的账号/Anchor 恢复中断。
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      useChatStore.getState().initForUser(),
+      usePlaybackSessionStore.getState().init(),
+    ]).finally(() => {
+      if (active) {
+        setIsCreationReady(true);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // 有集合但标题未知时补拉集合标题（创作页围绕当前集合运行）。
   useEffect(() => {
@@ -266,7 +285,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
       <ContinuousCreationCard />
       <InputArea
         onSubmit={handleSubmit}
-        disabled={isSending || isStartingNewCreation}
+        disabled={!isCreationReady || isSending || isStartingNewCreation}
         isSending={isSending}
         value={inputValue}
         onChange={handleInputChange}

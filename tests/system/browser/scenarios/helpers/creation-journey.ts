@@ -95,9 +95,31 @@ export async function waitStoryCardReady(
     timeoutMs = 90000,
 ): Promise<void> {
     const button = cardActionButton(page, index);
-    await expect(button).toBeVisible({ timeout: timeoutMs });
+    const deadline = Date.now() + timeoutMs;
+    let retries = 0;
+    let nextRetryAt = 0;
+    for (;;) {
+        if ((await button.count()) > 0 && await button.isVisible()) {
+            break;
+        }
+        const retryButtons = chatContent(page).getByRole("button", { name: "重试" });
+        if (Date.now() >= nextRetryAt && (await retryButtons.count()) > 0) {
+            retries += 1;
+            if (retries > 2) {
+                throw new Error("story generation failed after 2 completed visible retries");
+            }
+            await retryButtons.last().click();
+            // 旧用户气泡的失败按钮会继续存在；给本次真实请求完整结算窗口，
+            // 不把同一个遗留按钮重复计算成多次失败。
+            nextRetryAt = Date.now() + 15000;
+        }
+        if (Date.now() >= deadline) {
+            throw new Error(`story card ${index} did not become ready within journey budget`);
+        }
+        await page.waitForTimeout(250);
+    }
     await expect
-        .poll(async () => readCardActionLabel(button), { timeout: timeoutMs })
+        .poll(async () => readCardActionLabel(button), { timeout: Math.max(1000, deadline - Date.now()) })
         .toMatch(/^(播放|暂停)$/);
 }
 

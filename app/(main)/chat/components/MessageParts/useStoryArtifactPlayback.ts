@@ -19,11 +19,12 @@
  * 本段 Session 侧无可靠过期信号，运行时默认 `unknown`，不伪造过期态。
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePlaybackSessionStore, type PlaybackSessionStatus } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { pausePlayback, playStoryWork } from '@/app/services/playbackSessionFlow';
 import { isValidWorkId, type PlaybackSourceRef } from '@/lib/playback/source';
+import { getProjection } from '@/lib/client/storyAudio';
 
 /** 作品卡播放七态。 */
 export type StoryArtifactPlaybackState =
@@ -55,6 +56,7 @@ export type StoryArtifactTransportSnapshot = {
  * `unknown` 为本段缺省：不猜测过期与否；`missing` 明确缺失时才进入 expired。
  */
 export type StoryAudioCacheHint = 'unknown' | 'missing' | 'available';
+type StoryAudioProjectionHint = 'unknown' | 'missing' | 'preparing' | 'ready' | 'failed' | 'expired';
 
 /** 主操作图标语义（展示层据此选图标，不进业务分支）。 */
 export type StoryArtifactPlaybackIcon = 'play' | 'pause' | 'retry' | 'restart' | 'loading';
@@ -79,19 +81,24 @@ export function deriveStoryArtifactPlaybackState(input: {
   session: StoryArtifactSessionSnapshot;
   transport: StoryArtifactTransportSnapshot;
   cache?: StoryAudioCacheHint;
+  projection?: StoryAudioProjectionHint;
 }): StoryArtifactPlaybackState {
-  const { workId, session, transport, cache = 'unknown' } = input;
+  const { workId, session, transport, cache = 'unknown', projection = 'unknown' } = input;
   if (!isValidWorkId(workId)) return 'idle';
   if (!isCurrentStoryArtifactCard(session.source, workId)) {
-    return cache === 'missing' ? 'expired' : 'idle';
+    if (projection === 'preparing') return 'preparing';
+    if (projection === 'failed') return 'error';
+    if (projection === 'expired' || cache === 'missing') return 'expired';
+    return 'idle';
   }
   if (session.status === 'error') return 'error';
   if (session.status === 'ended') return 'ended';
   if (session.status === 'synthesizing' || session.status === 'hydrating') return 'preparing';
   if (transport.isPlaying || session.status === 'playing') return 'playing';
-  if (cache === 'missing') return 'expired';
   if (session.status === 'paused') return 'paused';
   if (session.status === 'ready') {
+    if (projection === 'failed') return 'error';
+    if (projection === 'expired' || cache === 'missing') return 'expired';
     return session.nextParagraphIndex > 0 ? 'paused' : 'idle';
   }
   return 'idle';
@@ -236,7 +243,37 @@ export function useStoryArtifactPlaybackViewModel(
   const duration = usePlaybackStore((state) => state.duration);
 
   const [acting, setActing] = useState(false);
+  const [projection, setProjection] = useState<StoryAudioProjectionHint>('unknown');
   const actingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isValidWorkId(workId)) {
+      setProjection('unknown');
+      return;
+    }
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        while (!cancelled) {
+          const value = await getProjection({ workId });
+          if (cancelled) return;
+          if (value.status === 'missing' && value.readyAt !== null) {
+            setProjection('expired');
+            return;
+          }
+          setProjection(value.status);
+          if (value.status !== 'preparing') return;
+          await new Promise((resolve) => setTimeout(resolve, 750));
+        }
+      } catch {
+        if (!cancelled) setProjection('unknown');
+      }
+    };
+    void refresh();
+    return () => {
+      cancelled = true;
+    };
+  }, [workId]);
 
   const cache = options?.cache ?? 'unknown';
   const session: StoryArtifactSessionSnapshot = {
@@ -246,7 +283,7 @@ export function useStoryArtifactPlaybackViewModel(
     totalParagraphs,
   };
   const transport: StoryArtifactTransportSnapshot = { isPlaying, currentTime, duration };
-  const state = deriveStoryArtifactPlaybackState({ workId, session, transport, cache });
+  const state = deriveStoryArtifactPlaybackState({ workId, session, transport, cache, projection });
   const isCurrent = isCurrentStoryArtifactCard(source, workId);
   const disabled = state === 'preparing' || acting;
 

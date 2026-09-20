@@ -2,10 +2,39 @@ import { useChatStore } from '@/stores/chatStore';
 import type { ChatMessageOrigin } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
 import { useConfigStore } from '@/stores/configStore';
-import type { ChatConversationMessage } from '@/types/chat';
+import { isStoryArtifactPart, type ChatConversationMessage } from '@/types/chat';
 import type { AgentMessage } from '@/types/agent';
 import { interactWithAgent } from './agentFlow';
-import { autoplayDraftStory } from './playbackSessionFlow';
+import { playStoryWork } from './playbackSessionFlow';
+
+/** 释放上游流返回的瞬态音频；正式播放只允许使用 StoryWork Asset。 */
+function revokeTransientAudio(audioUrl: string): void {
+  if (typeof audioUrl !== 'string' || !audioUrl.startsWith('blob:')) return;
+  try {
+    URL.revokeObjectURL(audioUrl);
+  } catch {
+    // 释放失败不影响正式 Work 晋升与播放。
+  }
+}
+
+/** 等待当前消息晋升为正式 Work；取消、新会话或失败时返回 null。 */
+async function waitForReadyStoryWork(
+  messageId: string,
+  expectedStreamSeq: number,
+): Promise<number | null> {
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    if (expectedStreamSeq !== streamSeq) return null;
+    const message = useChatStore.getState().messages.find((item) => item.id === messageId);
+    if (!message) return null;
+    const artifact = message.parts?.find(isStoryArtifactPart)?.artifact;
+    if (!artifact && message.status !== 'sending') return null;
+    if (artifact?.status === 'ready') return artifact.storyWorkId;
+    if (artifact?.status === 'promotion_failed' || artifact?.status === 'interrupted') return null;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return null;
+}
 
 /**
  * 将未知异常标准化为 Error，便于上层展示 Toast。
@@ -38,15 +67,12 @@ let streamSeq = 0;
  * story_complete 仅完成正文（draft→complete），done 仅标记 delivered，音频仅瞬态播放不写入消息。
  * @param context 即将发送给后端的对话上下文。
  * @param assistantMessageId 本次 attempt 的助手消息 id（sourceMessageId 同值）。
- * @param options.suppressAutoplay 预载续写传 true：绝不起播，瞬态音频直接吊销
- * （下一篇经正式晋升 + 单轨 ensure + playStoryWork 续播，不走 Draft autoplay）。
  * @returns 包含最终音频地址和生成内容的对象
  */
 const executeChatStream = async (
   context: ChatConversationMessage[],
   assistantMessageId: string,
   frozenVoiceId?: string,
-  options?: { suppressAutoplay?: boolean },
 ): Promise<{ audioUrl: string; content: string }> => {
   const generationStore = useGenerationStore.getState();
 
@@ -55,7 +81,7 @@ const executeChatStream = async (
     globalAbortController.abort();
   }
   globalAbortController = new AbortController();
-  const myStreamSeq = ++streamSeq;
+  streamSeq += 1;
 
   let streamErrored = false;
   let lastErrorMessage: string | undefined;
@@ -124,9 +150,6 @@ const executeChatStream = async (
           generationStore.setPhase('ready');
 
           if (!streamErrored) {
-            const stillExists = useChatStore
-              .getState()
-              .messages.some((m) => m.id === assistantMessageId);
             // done 与 story_complete 解耦：无论有无音频，一律只标记 delivered（Artifact 原样保留）。
             useChatStore.getState().dispatch({
               type: 'stream.finish',
@@ -134,58 +157,9 @@ const executeChatStream = async (
               messageId: assistantMessageId,
             });
 
-            if (stillExists && pendingAudioBlob) {
-              // 仅当历史中没有故事时（即首次生成故事），才自动开始播放；清空后消息已不存在则绝不孤儿播放。
-              // 预载续写（连续创作下一篇）绝不起播：正文经晋升落正式 Work 后，
-              // 由单轨 ensure + playStoryWork 续播，此处瞬态音频直接吊销。
-              const existingStories = useChatStore
-                .getState()
-                .selectors.hasStoryMessages(assistantMessageId);
-              if (!existingStories && !options?.suppressAutoplay) {
-                // autoplay 经正式 Draft Session（先落盘保证 ChatMessage 行存在，
-                // 再 begin+provider 起播；旧整篇 blob 无 segment identity 不得当 paragraph
-                // 播放，一律吊销丢弃）。失败则 fail-closed 静默（聊天持久化本身亦已失败）。
-                // onComplete 是同步回调，落盘/起播链经 async IIFE 串行，不阻塞流收尾。
-                void (async () => {
-                  try {
-                    await useChatStore.getState().flushPendingSave().catch(() => false);
-                  } catch {
-                    // 落盘失败不阻断 begin 尝试（行可能已存在）；begin 侧自行 fail-closed。
-                  }
-                  //   评审闭合：落盘 await 期间若发生 abort/新流/强重置（代次变化）
-                  // 或消息已被清空，则绝不复活旧故事起播，仅吊销 Blob。
-                  const revoked = () => {
-                    try {
-                      if (typeof pendingAudioBlob === 'string' && pendingAudioBlob.startsWith('blob:')) {
-                        URL.revokeObjectURL(pendingAudioBlob);
-                      }
-                    } catch {
-                      // 吊销失败不影响播放链。
-                    }
-                  };
-                  if (myStreamSeq !== streamSeq) {
-                    revoked();
-                    return;
-                  }
-                  if (!useChatStore.getState().messages.some((m) => m.id === assistantMessageId)) {
-                    revoked();
-                    return;
-                  }
-                  // 预载续写绝不起播（下一篇走正式 Work 续播链），仅吊销瞬态音频。
-                  if (options?.suppressAutoplay) {
-                    revoked();
-                    return;
-                  }
-                  autoplayDraftStory({
-                    messageId: assistantMessageId,
-                    storyText: generatedContent,
-                  }).catch(console.error);
-                  revoked();
-                })();
-              }
-            } else if (stillExists) {
-              // 无音频的普通对话同样已在上标记 delivered，无需额外分支。
-            }
+            // 上游音频只是流式生成过程的瞬态结果。正式播放必须等待 Artifact
+            // 晋升为 StoryWork，再由 playStoryWork 使用单个 StoryAudioAsset。
+            revokeTransientAudio(pendingAudioBlob);
 
             // 触发历史总结检查 (异步执行，不阻塞 UI)
             useChatStore.getState().checkAndSummarize().catch(console.error);
@@ -255,12 +229,24 @@ export const beginChatStream = async (
 
   // 3. 执行流（预载续写抑制 Draft autoplay，走正式 Work 续播链）
   if (assistantMsgId) {
+    const shouldAutoplayFirstWork =
+      options?.origin !== 'preload' &&
+      !useChatStore.getState().selectors.hasStoryMessages(assistantMsgId);
+    const expectedStreamSeq = streamSeq + 1;
     const { audioUrl, content: generatedContent } = await executeChatStream(
       context,
       assistantMsgId,
       frozenVoiceId,
-      { suppressAutoplay: options?.origin === 'preload' },
     );
+    if (shouldAutoplayFirstWork && expectedStreamSeq === streamSeq) {
+      const workId = await waitForReadyStoryWork(assistantMsgId, expectedStreamSeq);
+      if (workId !== null && expectedStreamSeq === streamSeq) {
+        await useChatStore.getState().flushPendingSave().catch(() => false);
+        if (expectedStreamSeq === streamSeq) {
+          await playStoryWork(workId);
+        }
+      }
+    }
     return { messageId: assistantMsgId, audioUrl, content: generatedContent };
   }
   throw new Error('Failed to create assistant message');

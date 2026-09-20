@@ -11,7 +11,7 @@ import SummaryPartRenderer from './SummaryPart';
 /**
  * 片段渲染器的通用 Props 定义。
  * onPlayStory Transport 回调已删除——StoryCard 播放 ownership 收口至
- * PlaybackSessionFlow.playStoryCard，组件只收 messageId。
+ * Legacy StoryCard 只读展示，不进入正式播放队列。
  */
 export type PartRendererProps<T extends MessagePart = MessagePart> = {
     /** 待渲染的消息片段。 */

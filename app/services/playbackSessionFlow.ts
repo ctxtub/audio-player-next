@@ -34,13 +34,7 @@ import { usePlaybackStore, clampSegmentSeekTarget } from '@/stores/playbackStore
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { useConfigStore } from '@/stores/configStore';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
-import { resolvePlaybackDraftSnapshot } from '@/lib/client/playbackDraftSnapshot';
-import {
-  computeStoryContentHash,
-  normalizeStoryText,
-  segmentStoryText,
-} from '@/utils/segmentation';
-import { isValidDraftMessageId, isValidWorkId } from '@/lib/playback/source';
+import { isValidWorkId } from '@/lib/playback/source';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
 import type { SessionContinuationMode } from '@/stores/playbackSessionStore';
 import type { SleepTimerMode } from '@/lib/playback/sleepTimer';
@@ -136,105 +130,6 @@ export async function restartPlayback(): Promise<void> {
  * 正确 > 复用旧音频缓存（未来复用需另立 audio→segment identity 契约）。
  */
 
-/** StoryCard 播放上下文：组件只交稳定 identity + 卡片上下文，不做播放决策。 */
-export type StoryCardPlayInput = {
-  /** 卡片所属 assistant 消息 id（Draft identity 唯一来源）。 */
-  messageId: string;
-  /** 卡片自带正文（仅当 canonical resolver 取不到快照时 fallback）。 */
-  storyText?: string;
-  /** 卡片/Artifact 自带标题（可选；缺省按 § 首行规则派生）。 */
-  title?: string;
-  /** 卡片自带 voice（可选；缺省用当前配置）。 */
-  voiceId?: string;
-};
-
-/** Draft begin 所需集中式 metadata（§：Flow/domain helper 唯一构造点）。 */
-export type StoryCardDraftMetadata = {
-  source: Extract<PlaybackSourceRef, { kind: 'draft' }>;
-  /** 规范化后正文（hash/切分严格基于此串）。 */
-  storyText: string;
-  paragraphs: string[];
-  contentHash: string;
-  totalParagraphs: number;
-  title: string;
-  voiceId: string;
-  speed: number;
-  /** server draft begin 快照（与本地 paragraphs 同源）。 */
-  draftSnapshot: { title: string; contentHash: string; totalParagraphs: number; voiceId: string };
-};
-
-/** Draft 标题派生（纯函数）：首个非空行，去空白折叠后至多 60 字。 */
-export function deriveDraftTitle(normalizedText: string): string {
-  const firstLine = String(normalizedText ?? '')
-    .split('\n')
-    .map((line) => line.replace(/\s+/g, ' ').trim())
-    .find((line) => line.length > 0) ?? '';
-  const sliced = firstLine.slice(0, 60);
-  return sliced.length > 0 ? sliced : '未命名故事';
-}
-
-function pickNonEmptyString(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? value : null;
-}
-
-/**
- * 集中构造 Draft begin metadata（ 唯一构造点；StoryCard/ChatLayout 不得各自定义）。
- * @returns 合法 metadata；任何非法输入（坏 messageId / 无可用正文 / 空切分）一律 null（fail-closed）。
- */
-export function buildStoryCardDraftMetadata(input: StoryCardPlayInput): StoryCardDraftMetadata | null {
-  const messageId = typeof input.messageId === 'string' ? input.messageId : '';
-  if (!isValidDraftMessageId(messageId)) return null;
-  let snapshotTitle: string | null = null;
-  let snapshotVoice: string | null = null;
-  let snapshotText: string | null = null;
-  try {
-    const snapshot = resolvePlaybackDraftSnapshot(messageId);
-    snapshotText = snapshot && pickNonEmptyString(snapshot.storyText);
-    snapshotTitle = snapshot ? pickNonEmptyString(snapshot.title) : null;
-    snapshotVoice = snapshot ? pickNonEmptyString(snapshot.voiceId) : null;
-  } catch {
-    snapshotText = null;
-  }
-  const rawText = snapshotText ?? pickNonEmptyString(input.storyText);
-  if (rawText === null) return null;
-  const storyText = normalizeStoryText(rawText);
-  if (storyText.length === 0) return null;
-  const paragraphs = segmentStoryText(storyText);
-  if (paragraphs.length === 0) return null;
-  const contentHash = computeStoryContentHash(storyText);
-  if (contentHash.length === 0) return null;
-  const totalParagraphs = Math.max(1, paragraphs.length);
-  let configVoice = '';
-  let configSpeed = 1.0;
-  try {
-    const apiConfig = useConfigStore.getState().apiConfig;
-    configVoice = typeof apiConfig.voiceId === 'string' ? apiConfig.voiceId : '';
-    configSpeed = typeof apiConfig.speed === 'number' && Number.isFinite(apiConfig.speed) ? apiConfig.speed : 1.0;
-  } catch {
-    // 配置不可用时用安全缺省（playParagraph 侧仍有 voice 回退）。
-  }
-  const title = (pickNonEmptyString(input.title) ?? snapshotTitle ?? deriveDraftTitle(storyText)).slice(0, 100);
-  const voiceId = (pickNonEmptyString(input.voiceId) ?? snapshotVoice ?? configVoice ?? '').slice(0, 64);
-  return {
-    source: { kind: 'draft', messageId },
-    storyText,
-    paragraphs,
-    contentHash,
-    totalParagraphs,
-    title: title.length > 0 ? title : '未命名故事',
-    voiceId,
-    speed: configSpeed,
-    draftSnapshot: {
-      title: (title.length > 0 ? title : '未命名故事'),
-      contentHash,
-      totalParagraphs,
-      voiceId,
-    },
-  };
-}
-
 /**
  * post-begin source-match 守卫（§50 切卡竞态）：
  * begin 返回后若当前 Session 已不是本次请求的 source（更新的切换已落地），
@@ -318,54 +213,6 @@ async function playPlanned(planned: PlannedPlay): Promise<void> {
 }
 
 /**
- * StoryCard 正式播放入口（ 唯一 StoryCard 播放决策面）。
- *
- * - 当前 Session 就是该 Draft 且 Transport 正在出声 → 正式 pause；
- * - 就是该 Draft 且 `ended`（或 next 越界） → 正式 restart（新 sessionId）；
- * - 就是该 Draft（ready/paused，含合法未完成断点 `0<next<total`）→ `resumePlayback()`，
- *   保持 sessionId 与 canonical next（TTS 只合成 `paragraphs[next]`）；
- * - 无 Session 或另一张卡 → 新建 Draft Session（restart+新 UUID）再从正式起点起播。
- * 并发/连击时只有最后一次用户操作落地（见上方请求代说明）。
- * 不在 StoryCard/ChatLayout/storyFlow 复制第二套 Session/断点状态机。
- */
-export async function playStoryCard(input: StoryCardPlayInput): Promise<void> {
-  const messageId = typeof input.messageId === 'string' ? input.messageId : '';
-  if (!isValidDraftMessageId(messageId)) return;
-  const meta = buildStoryCardDraftMetadata(input);
-  if (!meta) return;
-  const token = ++playRequestSeq;
-  const planned = await runSerialized(async (): Promise<PlannedPlay> => {
-    if (token !== playRequestSeq) return null;
-    const session = usePlaybackSessionStore.getState();
-    const transport = usePlaybackStore.getState();
-    if (isSameSource(session, meta.source)) {
-      const intent = planSameSourceIntent(session, transport);
-      if (intent === 'pause') {
-        pausePlayback();
-        return null;
-      }
-      if (intent === 'restart') {
-        await restartPlayback();
-        return null;
-      }
-      await resumePlayback();
-      return null;
-    }
-    await beginPlayback({
-      source: meta.source,
-      mode: 'restart',
-      speed: meta.speed,
-      draftSnapshot: meta.draftSnapshot,
-    });
-    if (token !== playRequestSeq) return null;
-    if (!isCurrentSource(meta.source)) return null;
-    const live = usePlaybackSessionStore.getState();
-    return { source: meta.source, sessionId: live.sessionId, nextIndex: live.nextParagraphIndex };
-  });
-  await playPlanned(planned);
-}
-
-/**
  * 正式 Work 播放入口（中性命名：Chat 创作卡、作品集详情、连续创作共用）。
  *
  * Work 底层即 StoryWork（`workId` = Work identity），回放走正式
@@ -409,33 +256,6 @@ export async function playStoryWork(workId: number): Promise<void> {
     if (!isCurrentSource(source)) return null;
     const live = usePlaybackSessionStore.getState();
     return { source, sessionId: live.sessionId, nextIndex: live.nextParagraphIndex };
-  });
-  await playPlanned(planned);
-}
-
-/**
- * 生成完成后 autoplay 正式入口（）。
- * 恒 fresh-restart 建 Draft Session 再从 `paragraphs[0]` 起播（旧整篇 blob 不得
- * 当 paragraph 播放，由调用方吊销）。transport 可能残留旧轨道，故恒 explicit。
- */
-export async function autoplayDraftStory(input: StoryCardPlayInput): Promise<void> {
-  const messageId = typeof input.messageId === 'string' ? input.messageId : '';
-  if (!isValidDraftMessageId(messageId)) return;
-  const meta = buildStoryCardDraftMetadata(input);
-  if (!meta) return;
-  const token = ++playRequestSeq;
-  const planned = await runSerialized(async (): Promise<PlannedPlay> => {
-    if (token !== playRequestSeq) return null;
-    await beginPlayback({
-      source: meta.source,
-      mode: 'restart',
-      speed: meta.speed,
-      draftSnapshot: meta.draftSnapshot,
-    });
-    if (token !== playRequestSeq) return null;
-    if (!isCurrentSource(meta.source)) return null;
-    const live = usePlaybackSessionStore.getState();
-    return { source: meta.source, sessionId: live.sessionId, nextIndex: 0 };
   });
   await playPlanned(planned);
 }

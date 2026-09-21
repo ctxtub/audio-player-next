@@ -205,7 +205,8 @@ export async function waitAutoplayedCardActive(
 }
 
 /**
- * 卡片落定为「播放」后起播，并等到播放中（暂停可见）。
+ * 卡片落定为可起播态后起播，并等到播放中（暂停可见）。首篇可能在用户
+ * 操作前已完成自动播放，因此「播放」与「重新播放」都是合法入口。
  * 落定等待覆盖晋升回写窗口；起播后整轨在前。
  * @param page 页面
  * @param index 卡片序号（0 起，按创作顺序 DOM 定位）
@@ -213,7 +214,9 @@ export async function waitAutoplayedCardActive(
 export async function playCardWhenSettled(page: Page, index: number): Promise<void> {
     const button = cardActionButton(page, index);
     await expect(button).toBeVisible({ timeout: 15000 });
-    await expect.poll(async () => readCardActionLabel(button), { timeout: 30000 }).toBe("播放");
+    await expect
+        .poll(async () => readCardActionLabel(button), { timeout: 30000 })
+        .toMatch(/^(播放|重新播放)$/);
     await button.click();
     await expect.poll(async () => readCardActionLabel(button), { timeout: 15000 }).toBe("暂停");
 }

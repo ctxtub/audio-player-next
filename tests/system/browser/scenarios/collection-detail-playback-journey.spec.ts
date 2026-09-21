@@ -99,14 +99,14 @@ test.describe("集合详情起播跨页播放", () => {
         // 长标题详情在亮色、暗色与移动/桌面均保持完整层级，不出现原生控件或横向溢出。
         const detailUrl = page.url();
         await page.goto(`${appUrl}/setting`, { waitUntil: "networkidle", timeout: 60000 });
-        await page.getByRole("radio", { name: "亮色模式" }).click();
+        await page.getByText("亮色模式", { exact: true }).click();
         await page.goto(detailUrl, { waitUntil: "networkidle", timeout: 60000 });
         await page.setViewportSize({ width: 375, height: 812 });
         await captureVisual(page, "375-collection-detail-light-long-title");
         await page.setViewportSize({ width: 1440, height: 900 });
         await captureVisual(page, "1440-collection-detail-light-long-title");
         await page.goto(`${appUrl}/setting`, { waitUntil: "networkidle", timeout: 60000 });
-        await page.getByRole("radio", { name: "暗色模式" }).click();
+        await page.getByText("暗色模式", { exact: true }).click();
         await page.goto(detailUrl, { waitUntil: "networkidle", timeout: 60000 });
         await page.setViewportSize({ width: 375, height: 812 });
         await captureVisual(page, "375-collection-detail-dark-long-title");

@@ -5,7 +5,6 @@ import {
     cardActionButtons,
     composerInput,
     continuousStatusText,
-    playCardWhenSettled,
     readMiniTitles,
     sendStory,
     setContinuousEnabled,
@@ -61,10 +60,10 @@ test.describe("连续创作下一篇准备与自动续播", () => {
         const collectionTitle = (await barTitle.innerText()).trim();
         expect(collectionTitle.length).toBeGreaterThan(0);
 
-        // ④ 第一轮交接：草稿自动播起播（Mini 现身）后重播首篇触发尾段调度；
-        // 第二篇（系统续写）无人点击却进入播放态 = 自动续播发生。
+        // ④ 第一轮交接：首篇草稿自动起播后保持无人干预；第二篇（系统续写）
+        // 无人点击却进入播放态 = 当前作品自然结束后的自动续播真实发生。
+        // 此处不可等待首篇落定后再重播，否则可能在接力已开始时把播放抢回首篇。
         await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 60000 });
-        await playCardWhenSettled(page, 0);
         await waitAutoplayedCardActive(page, 1, 150000);
 
         // ⑤ 观察下一轮交接。若真实进入等待态，验证等待期间预算不推进；

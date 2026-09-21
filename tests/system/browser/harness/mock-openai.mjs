@@ -18,6 +18,10 @@ import { join } from 'node:path';
 
 // 中文注释：固定 MP3 字节来源（ffmpeg 生成的 1s 静音 mp3；仓库根 cwd 解析，Playwright 转 CJS 下禁用 import.meta）。
 const fixturePath = join(process.cwd(), 'tests', 'support', 'fixtures', 'spike-fixed.mp3');
+// 1 秒样本不足以让真实用户完成暂停/继续操作，也会让自动接力状态在一次
+// Playwright 轮询之间消失。重复完整 MP3 帧，保留同一公开音频端点，同时给
+// 可见 UI 留出稳定的交互窗口；这只改变 mock 上游素材，不改变产品业务分支。
+const PLAYABLE_FIXTURE_REPEAT = 8;
 
 // 中文注释：Agent 非流固定响应（确定性文本，不访问真实上游）。
 const AGENT_FIXED_REPLY = 'harness 固定 mock 回复';
@@ -232,7 +236,8 @@ function waitClosed(server) {
  * @returns 句柄 { id, port, url, mp3Url, server }
  */
 export async function startMockServer(options = {}) {
-    const mp3Bytes = loadFixtureBytes();
+    const fixtureBytes = loadFixtureBytes();
+    const mp3Bytes = Buffer.concat(Array.from({ length: PLAYABLE_FIXTURE_REPEAT }, () => fixtureBytes));
     const server = createServer((req, res) => {
         const url = new URL(req.url ?? '/', 'http://localhost');
         if (req.method === 'GET' && url.pathname === '/health') {

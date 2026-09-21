@@ -770,37 +770,62 @@ export async function saveStoryAudioProgressForSubject(
   await enforceTrashGate(subject, work, sessionId);
   const clamped = clampPositionMs(input.positionMs, input.durationMs ?? null);
   const now = deps.now();
-  const table = progressDelegate(subject.type);
-  const current = await table.findUnique({ where: { storyWorkId: work.id } });
-  const decide = shouldPersistPosition({
-    positionMs: clamped,
-    previousPositionMs: current?.positionMs ?? null,
-    lastWriteAt: current?.updatedAt ?? null,
-    now,
-    force: input.force,
-  });
-  if (!decide) return false;
-  const completedAt =
-    clamped >= (input.durationMs ?? Number.POSITIVE_INFINITY) ? now : (current?.completedAt ?? null);
-  await table.upsert({
-    where: { storyWorkId: work.id },
-    create: {
-      storyWorkId: work.id,
+  // Anchor 与单轨 Progress 在同一事务内做 session fencing。restart/切曲后，
+  // 旧 timeupdate、离场 flush 或网络迟到写即使位置更大，也不能覆盖新会话进度。
+  return prisma.$transaction(async (tx) => {
+    const anchor =
+      subject.type === 'user'
+        ? await tx.userPlaybackAnchor.findUnique({
+            where: { userId: subject.id },
+            select: { sourceKind: true, sourceId: true, sessionId: true },
+          })
+        : await tx.guestPlaybackAnchor.findUnique({
+            where: { guestId: subject.id },
+            select: { sourceKind: true, sourceId: true, sessionId: true },
+          });
+    if (
+      !anchor ||
+      (anchor.sourceKind !== 'work' && anchor.sourceKind !== 'generation') ||
+      anchor.sourceId !== String(work.id) ||
+      anchor.sessionId !== sessionId
+    ) {
+      return false;
+    }
+
+    const table = (
+      subject.type === 'user' ? tx.storyAudioProgress : tx.guestStoryAudioProgress
+    ) as unknown as TwinDelegate;
+    const current = await table.findUnique({ where: { storyWorkId: work.id } });
+    if (current && current.sessionId !== sessionId) return false;
+    const decide = shouldPersistPosition({
+      positionMs: clamped,
+      previousPositionMs: current?.positionMs ?? null,
+      lastWriteAt: current?.updatedAt ?? null,
+      now,
+      force: input.force,
+    });
+    if (!decide) return false;
+    const completedAt =
+      clamped >= (input.durationMs ?? Number.POSITIVE_INFINITY)
+        ? now
+        : (current?.completedAt ?? null);
+    const progressData = {
       positionMs: clamped,
       durationMs: input.durationMs ?? null,
       sessionId,
       completedAt,
       lastPlayedAt: now,
-    },
-    update: {
-      positionMs: clamped,
-      durationMs: input.durationMs ?? null,
-      sessionId,
-      completedAt,
-      lastPlayedAt: now,
-    },
+    };
+    if (!current) {
+      await table.create({ data: { storyWorkId: work.id, ...progressData } });
+      return true;
+    }
+    const updated = await table.updateMany({
+      where: { storyWorkId: work.id, sessionId },
+      data: progressData,
+    });
+    return updated.count === 1;
   });
-  return true;
 }
 
 // ---------------------------------------------------------------------------

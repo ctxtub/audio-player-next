@@ -320,6 +320,7 @@ export async function scheduleNextWork(input: {
   epoch: number;
   nowPlaying: boolean;
   remainingTrackMs: number;
+  playWhenReady?: boolean;
 }): Promise<boolean> {
   const store = useContinuousCreationStore.getState();
   if (!store.canSchedule({ nowPlaying: input.nowPlaying, epoch: input.epoch })) {
@@ -345,7 +346,7 @@ export async function scheduleNextWork(input: {
   const startedAt = Date.now();
   // 管线生命周期内是否观察到 waiting_next：若当前音频先结束，
   // 准备完成后必须立即自动续播，不要求用户再点一次播放。
-  let sawWaiting = false;
+  let sawWaiting = input.playWhenReady === true;
   const noteWaiting = () => {
     if (useContinuousCreationStore.getState().status === 'waiting_next') {
       sawWaiting = true;
@@ -438,14 +439,20 @@ export async function scheduleNextWork(input: {
  * 由当前 transport 状态发起一次调度（finite 会话尾段/整轨结束的真实调用入口）。
  * @returns 是否接受并完成调度。
  */
-export async function scheduleContinuousNextWork(): Promise<boolean> {
+export async function scheduleContinuousNextWork(options?: {
+  allowAfterTrackEnded?: boolean;
+}): Promise<boolean> {
   const playback = usePlaybackStore.getState();
   const { currentTime, duration } = playback;
-  const remainingTrackMs = duration > 0 ? Math.max(0, (duration - currentTime) * 1000) : 0;
+  const allowAfterTrackEnded = options?.allowAfterTrackEnded === true;
+  const playWhenReady = allowAfterTrackEnded && !playback.isPlaying;
+  const remainingTrackMs =
+    allowAfterTrackEnded || duration <= 0 ? 0 : Math.max(0, (duration - currentTime) * 1000);
   return scheduleNextWork({
     epoch: useContinuousCreationStore.getState().epoch,
-    nowPlaying: playback.isPlaying,
+    nowPlaying: playback.isPlaying || allowAfterTrackEnded,
     remainingTrackMs,
+    playWhenReady,
   });
 }
 
@@ -584,5 +591,7 @@ export function retryContinuousCreation(): void {
     return;
   }
   store.enable();
-  void scheduleContinuousNextWork();
+  // 当前作品可能已经结束；这是用户从错误卡片发起的显式恢复，允许在静音等待态
+  // 重新启动生成，准备完成后仍按正式 Work 交接。
+  void scheduleContinuousNextWork({ allowAfterTrackEnded: true });
 }

@@ -436,12 +436,34 @@ export function reportTimeUpdate(payload: {
   const { currentTime, duration } = payload;
   if (!(duration > 0)) return;
   const remaining = duration - currentTime;
+  const playback = usePlaybackStore.getState();
+  const session = usePlaybackSessionStore.getState();
+
+  // 正式 Work 是一条完整音频，不能再按正文段落索引预载。直接使用连续创作
+  // 状态机的 30–120 秒窗口，让下一条正式 Work 有足够时间完成生成、保存和语音准备。
+  if (
+    session.source?.kind === 'work' &&
+    session.totalParagraphs > 0 &&
+    !shouldAllowAiContinuation(session.continuationMode)
+  ) {
+    const continuous = useContinuousCreationStore.getState();
+    if (remaining * 1000 > continuous.windowMs) return;
+    if (payload.hasTriggeredPreload.current) return;
+    if (!continuous.canSchedule({ nowPlaying: playback.isPlaying, epoch: continuous.epoch })) return;
+    payload.hasTriggeredPreload.current = true;
+    void import('@/app/services/continuousCreationFlow')
+      .then((flow) => flow.scheduleContinuousNextWork())
+      .catch((error) => {
+        console.error('连续创作调度下一作品失败:', error);
+      });
+    return;
+  }
+
   const adaptiveThreshold = Math.min(10, Math.max(5, duration * 0.25));
   if (remaining > adaptiveThreshold) return;
   if (payload.hasTriggeredPreload.current) return;
-  if (!usePlaybackStore.getState().isPlaying) return;
+  if (!playback.isPlaying) return;
 
-  const session = usePlaybackSessionStore.getState();
   if (session.source && session.totalParagraphs > 1 && session.nextParagraphIndex + 1 < session.totalParagraphs) {
     // 非尾段：段落级预载（lookahead=1，续写模式无关——预载已定段落不是 AI 续写）。
     payload.hasTriggeredPreload.current = true;

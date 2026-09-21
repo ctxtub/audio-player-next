@@ -22,9 +22,12 @@ const fixturePath = join(process.cwd(), 'tests', 'support', 'fixtures', 'spike-f
 // Playwright 轮询之间消失。重复完整 MP3 帧，保留同一公开音频端点，同时给
 // 可见 UI 留出稳定的交互窗口；这只改变 mock 上游素材，不改变产品业务分支。
 const PLAYABLE_FIXTURE_REPEAT = 8;
+const INITIAL_STORY_FIXTURE_REPEAT = 24;
+const CONTINUATION_TTS_DELAY_MS = 10000;
 
 // 中文注释：Agent 非流固定响应（确定性文本，不访问真实上游）。
 const AGENT_FIXED_REPLY = 'harness 固定 mock 回复';
+const CONTINUATION_FIXED_REPLY = 'harness 连续 mock 回复';
 
 // 中文注释：运行中的 mock 实例表（stop 时按 handle id 回收）。
 let nextMockId = 1;
@@ -113,6 +116,17 @@ function readJsonBody(req) {
     });
 }
 
+function readLastUserText(body) {
+    const messages = Array.isArray(body.messages) ? body.messages : [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (message && message.role === 'user' && typeof message.content === 'string') {
+            return message.content;
+        }
+    }
+    return '';
+}
+
 /**
  * Agent 固定响应（chat/completions）：非流回固定 JSON，流式回 SSE 含 [DONE]。
  * 兼容 LangChain functionCalling 结构化输出：带 tools 时回 tool_calls（supervisor 路由），
@@ -122,21 +136,13 @@ function readJsonBody(req) {
  */
 async function serveAgent(req, res) {
     const body = await readJsonBody(req);
+    const lastUserText = readLastUserText(body);
     const tools = Array.isArray(body.tools) ? body.tools : [];
     if (tools.length > 0) {
         const toolName =
             tools[0] && tools[0].function && typeof tools[0].function.name === 'string'
                 ? tools[0].function.name
                 : 'supervisor';
-        const messages = Array.isArray(body.messages) ? body.messages : [];
-        let lastUserText = '';
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const m = messages[i];
-            if (m && m.role === 'user' && typeof m.content === 'string') {
-                lastUserText = m.content;
-                break;
-            }
-        }
         const wantsStory = /故事|继续|创作|续写|睡前|冒险|深海|星际|森林|动物/.test(lastUserText);
         const decision = wantsStory
             ? { next: 'StoryAgent', intent: 'Story' }
@@ -176,13 +182,20 @@ async function serveAgent(req, res) {
         );
         return;
     }
+    const reply = lastUserText.includes('请继续故事')
+        ? CONTINUATION_FIXED_REPLY
+        : AGENT_FIXED_REPLY;
     if (body.stream === true) {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
-        res.end(`data: {"choices":[{"delta":{"content":"${AGENT_FIXED_REPLY}"}}]}\n\ndata: [DONE]\n\n`);
+        const split = Math.ceil(reply.length / 2);
+        res.write(`data: {"choices":[{"delta":{"content":"${reply.slice(0, split)}"}}]}\n\n`);
+        setTimeout(() => {
+            res.end(`data: {"choices":[{"delta":{"content":"${reply.slice(split)}"}}]}\n\ndata: [DONE]\n\n`);
+        }, reply === CONTINUATION_FIXED_REPLY ? 500 : 0);
         return;
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: AGENT_FIXED_REPLY } }] }));
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: reply } }] }));
 }
 
 /**
@@ -238,6 +251,9 @@ function waitClosed(server) {
 export async function startMockServer(options = {}) {
     const fixtureBytes = loadFixtureBytes();
     const mp3Bytes = Buffer.concat(Array.from({ length: PLAYABLE_FIXTURE_REPEAT }, () => fixtureBytes));
+    const initialStoryMp3Bytes = Buffer.concat(
+        Array.from({ length: INITIAL_STORY_FIXTURE_REPEAT }, () => fixtureBytes),
+    );
     const server = createServer((req, res) => {
         const url = new URL(req.url ?? '/', 'http://localhost');
         if (req.method === 'GET' && url.pathname === '/health') {
@@ -250,9 +266,17 @@ export async function startMockServer(options = {}) {
             return;
         }
         if (req.method === 'POST' && url.pathname.startsWith('/v1/audio/speech')) {
-            // 中文注释：消费掉请求体再回固定 MP3，避免 socket 挂起。
-            req.resume();
-            req.on('end', () => serveMp3(req, res, mp3Bytes));
+            // 初篇使用较长完整音频，使 next_ready 可见；续篇模拟正常上游慢响应，
+            // 让短续篇结束后真实进入 waiting_next。两者都只改变隔离 mock 的
+            // 外部时延/音频长度，不注入产品状态或测试业务开关。
+            readJsonBody(req).then((body) => {
+                const input = typeof body.input === 'string' ? body.input : '';
+                const isContinuation = input.includes(CONTINUATION_FIXED_REPLY);
+                setTimeout(
+                    () => serveMp3(req, res, isContinuation ? mp3Bytes : initialStoryMp3Bytes),
+                    isContinuation ? CONTINUATION_TTS_DELAY_MS : 0,
+                );
+            });
             return;
         }
         if (req.method === 'POST' && url.pathname === '/v1/chat/completions') {

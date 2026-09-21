@@ -1,7 +1,6 @@
 import { test, expect } from "../harness/fixtures";
 import { enterGuestChat } from "./helpers/guest";
 import {
-    cardActionButton,
     cardActionButtons,
     chatContent,
     composerInput,
@@ -87,14 +86,21 @@ test.describe("播放与准备中新创作强重置", () => {
         await page.goto(`${appUrl}/chat`, { waitUntil: "networkidle", timeout: 60000 });
         await expect(page.getByText("暂未开始任何对话")).toBeVisible({ timeout: 15000 });
 
-        // ⑥ 准备中重置：新会话发一篇，就绪后点播放、不等出声即新建创作。
+        // ⑥ 下一篇准备中重置：重置后的连续创作默认开启；首篇正式播放后，
+        // 等页面明确展示下一篇正在生成/保存/准备语音，再新建创作。
         await sendStory(page, "写一个关于青石巷的故事");
         await waitStoryCardReady(page, 0);
-        await cardActionButton(page, 0).click();
+        await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 60000 });
+        const nextPreparingStatus = page
+            .getByTestId("continuous-next-card")
+            .getByRole("status")
+            .filter({ hasText: /正在创作下一篇|正在保存下一篇|正在准备下一篇语音/ });
+        await expect(nextPreparingStatus).toBeVisible({ timeout: 60000 });
         await page.getByRole("button", { name: "新建创作" }).click();
-        await page.waitForTimeout(8000);
+        await page.waitForTimeout(12000);
         await expect(page.getByTestId("mini-now-playing")).toBeHidden({ timeout: 10000 });
         expect(await cardActionButtons(page).count()).toBe(0);
+        await expect(page.getByTestId("continuous-next-card")).toBeHidden();
         await expect(page.getByText("暂未开始任何对话")).toBeVisible();
 
         // ⑦ 生成中重置：发送后看到用户气泡（旧会话消息已落定，确认框必弹）

@@ -7,8 +7,6 @@ import {
     continuousStatusText,
     readMiniTitles,
     sendStory,
-    setContinuousEnabled,
-    waitAutoplayedCardActive,
     waitStoryCardReady,
 } from "./helpers/creation-journey";
 
@@ -19,15 +17,15 @@ import {
  * - 播放尾段会自动准备下一篇；当前播完而下一篇未就绪时，下一篇卡片
  *   明确进入「当前故事已结束，正在等待下一篇」（等待期间不消耗预算），
  *   就绪后自动续播，无需用户再点一次播放。
- * - 下一篇可能提前准备完成，也可能在当前篇结束后仍未就绪；只有后一种情况
- *   才出现等待态。旅程不通过人为减速制造分支，等待真实出现时再验证预算暂停。
+ * - 隔离上游为首篇和续篇提供不同但真实有效的音频长度/响应时延，使一次
+ *   旅程先覆盖 ready，再覆盖 waiting；产品侧没有状态注入或测试分支。
  *
  * 全程只认可见 UI：状态卡文案、预算文本、卡片按钮文案、Mini 标题。不读
  * Store、不调 API、不读隐藏 DOM、不设任何测试开关。
  */
 test.describe("连续创作下一篇准备与自动续播", () => {
     test("连续创作下一篇准备与自动续播", async ({ page, harnessEnv }) => {
-        test.setTimeout(240000);
+        test.setTimeout(16 * 60 * 1000);
         await enterGuestChat(page, harnessEnv.appUrl);
         const appUrl = harnessEnv.appUrl;
 
@@ -60,19 +58,42 @@ test.describe("连续创作下一篇准备与自动续播", () => {
         const collectionTitle = (await barTitle.innerText()).trim();
         expect(collectionTitle.length).toBeGreaterThan(0);
 
-        // ④ 第一轮交接：首篇草稿自动起播后保持无人干预；第二篇（系统续写）
-        // 无人点击却进入播放态 = 当前作品自然结束后的自动续播真实发生。
-        // 此处不可等待首篇落定后再重播，否则可能在接力已开始时把播放抢回首篇。
+        // ④ 第一轮交接：首篇保持无人干预，逐项观察下一篇生成、保存、语音
+        // 准备和 ready；随后第二篇无人点击进入播放态，证明正式 Work 自动续播。
         await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 60000 });
-        await waitAutoplayedCardActive(page, 1, 150000);
+        const nextCardScope = page.getByTestId("continuous-next-card");
+        const observedPhases = new Set<string>();
+        const firstHandoffDeadline = Date.now() + 180000;
+        for (;;) {
+            const status = nextCardScope.getByRole("status");
+            if ((await status.count()) > 0) {
+                observedPhases.add((await status.innerText()).trim());
+            }
+            const buttons = cardActionButtons(page);
+            if ((await buttons.count()) > 1) {
+                const label = (await buttons.nth(1).innerText()).trim();
+                if (label === "暂停" || label === "重新播放") break;
+            }
+            if (Date.now() >= firstHandoffDeadline) {
+                throw new Error("first automatic handoff did not complete within visible budget");
+            }
+            await page.waitForTimeout(25);
+        }
+        for (const phase of [
+            "正在创作下一篇",
+            "正在保存下一篇",
+            "正在准备下一篇语音",
+            "下一篇已准备好",
+        ]) {
+            expect(observedPhases.has(phase), `missing visible phase: ${phase}`).toBe(true);
+        }
 
-        // ⑤ 观察下一轮交接。若真实进入等待态，验证等待期间预算不推进；
-        // 若提前准备完成，则直接验证下一篇无人点击自动进入播放。
+        // ⑤ 第二轮续篇较短且 mock 上游语音较慢，必须真实进入 waiting；等待
+        // 期间预算保持不变，准备完成后第三篇仍在无人点击时自动起播。
         const waitingStatus = page
             .getByTestId("continuous-next-card")
             .getByRole("status")
             .filter({ hasText: "当前故事已结束，正在等待下一篇" });
-        const nextCardScope = page.getByTestId("continuous-next-card");
         let waitingBudget: string | null = null;
         let sendRetries = 0;
         const nextCardIndex = await cardActionButtons(page).count();
@@ -108,13 +129,26 @@ test.describe("连续创作下一篇准备与自动续播", () => {
             }
             await page.waitForTimeout(100);
         }
+        expect(waitingBudget).not.toBeNull();
 
         // ⑥ 自动续播后 Mini 复现同集合标题。
         const mini = await readMiniTitles(page);
         expect(mini.title).toBe(collectionTitle);
         await expect(budget).toContainText("剩余", { timeout: 10000 });
 
-        // ⑦ 关开关收尾（在途续写被真取消，只认关闭文案）。
-        await setContinuousEnabled(page, false);
+        // ⑦ 保持无人干预直到 10 分钟可见预算真实耗尽：当前音频停止、预算归零，
+        // 且沉淀一个上游准备周期后不再生成或播放新作品。
+        await expect(continuousStatusText(page)).toHaveText("本次连续创作已结束", {
+            timeout: 13 * 60 * 1000,
+        });
+        await expect(budget).toHaveText("剩余 00:00");
+        const cardsAtBudgetEnd = await cardActionButtons(page).count();
+        await expect(
+            cardActionButtons(page).filter({ hasText: /^暂停$/ }),
+        ).toHaveCount(0);
+        await page.waitForTimeout(12000);
+        expect(await cardActionButtons(page).count()).toBe(cardsAtBudgetEnd);
+        await expect(continuousStatusText(page)).toHaveText("本次连续创作已结束");
+        await expect(budget).toHaveText("剩余 00:00");
     });
 });

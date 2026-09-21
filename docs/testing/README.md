@@ -38,8 +38,8 @@ CI 不运行数据库集成测试、全量测试套件或真实用户浏览器�
 yarn test:delivery-journeys
 ```
 
-该命令按用户旅程逐个启动隔离的 production harness；每条旅程仍在 Chromium 与
-WebKit 中从可见 UI 完整执行，但不共享服务进程、数据库或运行态，避免场景间污染。
+该命令在隔离的 production harness 中用 Chromium 从可见 UI 完整执行四条用户旅程。
+只有发现明确 WebKit 兼容风险时，才用同一配置显式补跑受影响旅程的 WebKit project。
 
 ## 命名规则
 

@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:fast": "yarn lint && yarn tsc --noEmit --incremental false",
-    "test:delivery-journeys": "playwright test --config tests/system/browser/playwright.config.ts tests/system/browser/scenarios/automatic-continuation-journey.spec.ts --project=chromium --project=webkit && playwright test --config tests/system/browser/playwright.config.ts tests/system/browser/scenarios/collection-detail-playback-journey.spec.ts --project=chromium --project=webkit && playwright test --config tests/system/browser/playwright.config.ts tests/system/browser/scenarios/creation-two-stories-journey.spec.ts --project=chromium --project=webkit && playwright test --config tests/system/browser/playwright.config.ts tests/system/browser/scenarios/new-creation-interrupt-journey.spec.ts --project=chromium --project=webkit",
+    "test:delivery-journeys": "playwright test --config tests/system/browser/playwright.config.ts --project=chromium",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up",
     "docker:push": "./scripts/push-ghcr.sh"

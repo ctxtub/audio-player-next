@@ -1,5 +1,5 @@
 import { test, expect } from "../harness/fixtures";
-import { ensureGuestByApi } from "./helpers/auth";
+import { enterGuestChat } from "./helpers/guest";
 import {
     captureVisual,
     cardActionButton,
@@ -23,7 +23,7 @@ import {
 test.describe("同一会话两篇故事播放与连续开关交接", () => {
     test("同一会话两篇故事播放与连续开关交接", async ({ page, harnessEnv }) => {
         test.setTimeout(240000);
-        await ensureGuestByApi(page, harnessEnv.appUrl);
+        await enterGuestChat(page, harnessEnv.appUrl);
         const appUrl = harnessEnv.appUrl;
 
         // ① 默认连续创作开启：状态卡文案 + 预算 + 开关三者同源可见。

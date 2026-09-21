@@ -1,5 +1,5 @@
 import { test, expect } from "../harness/fixtures";
-import { ensureGuestByApi } from "./helpers/auth";
+import { enterGuestChat } from "./helpers/guest";
 import {
     cardActionButton,
     cardActionButtons,
@@ -28,7 +28,7 @@ import {
 test.describe("播放与准备中新创作强重置", () => {
     test("播放与准备中新创作强重置", async ({ page, harnessEnv }) => {
         test.setTimeout(240000);
-        await ensureGuestByApi(page, harnessEnv.appUrl);
+        await enterGuestChat(page, harnessEnv.appUrl);
         const appUrl = harnessEnv.appUrl;
 
         // 原生确认框：一律接受并记录（三次重置都有旧消息，都会弹框）。

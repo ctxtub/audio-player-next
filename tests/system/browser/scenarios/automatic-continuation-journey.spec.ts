@@ -1,5 +1,5 @@
 import { test, expect } from "../harness/fixtures";
-import { ensureGuestByApi } from "./helpers/auth";
+import { enterGuestChat } from "./helpers/guest";
 import {
     captureVisual,
     cardActionButtons,
@@ -29,7 +29,7 @@ import {
 test.describe("连续创作下一篇准备与自动续播", () => {
     test("连续创作下一篇准备与自动续播", async ({ page, harnessEnv }) => {
         test.setTimeout(240000);
-        await ensureGuestByApi(page, harnessEnv.appUrl);
+        await enterGuestChat(page, harnessEnv.appUrl);
         const appUrl = harnessEnv.appUrl;
 
         // ① 连续创作默认开启；预算默认不限（秒级预算断言需先经设置页设为有限）。

@@ -32,13 +32,7 @@ export type CanonicalAudioEnvLike = {
 /**
  * 判定当前 runtime 是否允许 Work 播放走 canonical 路径。
  * @param env 可注入的环境表（单测用；缺省读 ambient process.env）
- * @returns 任一变量严格为 '1' 时 true，否则 false（production 默认 false）
- *
- *  browser targeted 运行时覆盖：E2E harness 构建为单快照（全场景共享
- * 构建期 env），不能为单个 spec 开构建开关；故当显式注入
- * `globalThis.__CANONICAL_AUDIO_ENABLED === '1'`（仅 browser E2E spec 经
- * addInitScript 设置，每用例独立 context）时亦视为开启。生产 runtime 无此
- * global（且无 E2E probe 构建），保持 fail closed。
+ * @returns 任一正式环境变量严格为 '1' 时 true，否则 false（production 默认 false）
  */
 export function isCanonicalAudioEnabled(env?: CanonicalAudioEnvLike): boolean {
   if (env !== undefined && env !== null) {
@@ -57,12 +51,6 @@ export function isCanonicalAudioEnabled(env?: CanonicalAudioEnvLike): boolean {
     }
   } catch {
     return false;
-  }
-  try {
-    const g = globalThis as unknown as Record<string, unknown>;
-    if (g['__CANONICAL_AUDIO_ENABLED'] === CANONICAL_AUDIO_ENABLED_VALUE) return true;
-  } catch {
-    // ignore
   }
   return false;
 }

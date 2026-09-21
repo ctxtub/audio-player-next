@@ -498,7 +498,7 @@ export async function playReadyNextWork(): Promise<boolean> {
     return false;
   }
   const { playStoryWork } = await import('./playbackSessionFlow');
-  await playStoryWork(work.workId);
+  await playStoryWork(work.workId, { origin: 'autoplay' });
   return true;
 }
 

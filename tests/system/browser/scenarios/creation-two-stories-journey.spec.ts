@@ -4,6 +4,7 @@ import {
     captureVisual,
     cardActionButton,
     closeExpanded,
+    composerInput,
     continuousStatusText,
     expectExpandedTimelineAdvancing,
     openExpandedFromMini,
@@ -47,6 +48,11 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         // ② 关开关，连续生成两篇（互不干扰，各自出现播放按钮）。
         await setContinuousEnabled(page, false);
         await sendStory(page, "写一个关于山间小屋的短故事");
+        const firstAction = cardActionButton(page, 0);
+        await expect(firstAction).toHaveText("正在准备语音", { timeout: 90000 });
+        await expect(firstAction).toBeDisabled();
+        await expect(composerInput(page)).toBeEnabled();
+        await expect(page.getByRole("button", { name: "发送" })).toBeDisabled();
         await waitStoryCardReady(page, 0);
 
         // 首作晋升后作品集标题落地创作头（晋升成功回写后收敛，无需 reload）：

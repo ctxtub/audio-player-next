@@ -232,7 +232,7 @@ export type StoryArtifactPlaybackViewModel = {
  */
 export function useStoryArtifactPlaybackViewModel(
   workId: number | null | undefined,
-  options?: { cache?: StoryAudioCacheHint },
+  options?: { cache?: StoryAudioCacheHint; autoplayPending?: boolean },
 ): StoryArtifactPlaybackViewModel {
   const source = usePlaybackSessionStore((state) => state.source);
   const status = usePlaybackSessionStore((state) => state.status);
@@ -283,7 +283,9 @@ export function useStoryArtifactPlaybackViewModel(
     totalParagraphs,
   };
   const transport: StoryArtifactTransportSnapshot = { isPlaying, currentTime, duration };
-  const state = deriveStoryArtifactPlaybackState({ workId, session, transport, cache, projection });
+  const state = options?.autoplayPending && isValidWorkId(workId)
+    ? 'preparing'
+    : deriveStoryArtifactPlaybackState({ workId, session, transport, cache, projection });
   const isCurrent = isCurrentStoryArtifactCard(source, workId);
   const disabled = state === 'preparing' || acting;
 

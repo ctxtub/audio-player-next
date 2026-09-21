@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { Loader2, Pause, Play, RotateCcw, RotateCw, Sparkles } from 'lucide-react';
 import type { StoryArtifactPart } from '@/types/chat';
 import { useChatStore } from '@/stores/chatStore';
+import { usePlaybackIntentStore } from '@/stores/playbackIntentStore';
 import { isValidWorkId } from '@/lib/playback/source';
 import StoryViewer from '@/app/(main)/chat/components/StoryViewer';
 import {
@@ -50,6 +51,9 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
   const contentRef = useRef<HTMLDivElement>(null);
 
   const dispatch = useChatStore((state) => state.dispatch);
+  const autoplayPending = usePlaybackIntentStore(
+    (state) => Boolean(messageId) && state.pendingAutoplayMessageId === messageId,
+  );
 
   const artifact = part.artifact;
   const status = artifact.status;
@@ -60,7 +64,7 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
     status === 'ready' && isValidWorkId(artifact.storyWorkId) ? artifact.storyWorkId : null;
 
   // 播放 ViewModel：非 ready 时传入 null，派生恒为 idle 且主操作不渲染。
-  const playback = useStoryArtifactPlaybackViewModel(readyWorkId);
+  const playback = useStoryArtifactPlaybackViewModel(readyWorkId, { autoplayPending });
 
   // 正文唯一来源是 Artifact 自身持有，不读全局 generation。
   const currentText = artifact.storyText;

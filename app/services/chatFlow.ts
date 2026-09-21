@@ -2,6 +2,7 @@ import { useChatStore } from '@/stores/chatStore';
 import type { ChatMessageOrigin } from '@/stores/chatStore';
 import { useGenerationStore } from '@/stores/generationStore';
 import { useConfigStore } from '@/stores/configStore';
+import { usePlaybackIntentStore } from '@/stores/playbackIntentStore';
 import { isStoryArtifactPart, type ChatConversationMessage } from '@/types/chat';
 import type { AgentMessage } from '@/types/agent';
 import { interactWithAgent } from './agentFlow';
@@ -60,6 +61,28 @@ let globalAbortController: AbortController | null = null;
  * 复核代次：若期间发生 abort/新建创作/登出，则放弃起播，旧故事绝不复活。
  */
 let streamSeq = 0;
+
+/**
+ * 首篇自动播放后台编排。
+ *
+ * 消息流完成即允许 Composer 解锁；保存、音频准备和起播继续由本任务完成。
+ * 全程复核 streamSeq，新的用户输入/新建创作会使旧任务静默失效。
+ */
+function scheduleFirstWorkAutoplay(messageId: string, expectedStreamSeq: number): void {
+  void (async () => {
+    try {
+      const workId = await waitForReadyStoryWork(messageId, expectedStreamSeq);
+      if (workId === null || expectedStreamSeq !== streamSeq) return;
+      await useChatStore.getState().flushPendingSave().catch(() => false);
+      if (expectedStreamSeq !== streamSeq) return;
+      await playStoryWork(workId, { origin: 'autoplay' });
+    } catch {
+      // PlaybackSession 已负责错误态与 Toast；后台任务不得形成未处理拒绝。
+    } finally {
+      usePlaybackIntentStore.getState().clearAutoplay(messageId);
+    }
+  })();
+}
 
 /**
  * 执行一次聊天流式调用，根据流事件更新 store。
@@ -209,6 +232,9 @@ export const beginChatStream = async (
   content: string,
   options?: { origin?: ChatMessageOrigin },
 ): Promise<{ messageId: string; audioUrl: string; content: string }> => {
+  // 新流代表更新的用户意图；旧首篇自动播放等待必须立即退出可见准备态。
+  // 旧后台任务随后还会凭 streamSeq 失配自行终止，compare-and-clear 不会误清新意图。
+  usePlaybackIntentStore.getState().clearAutoplay();
   //  快照冻结：在生成开始前单次捕获实际请求所用 voice，并与 prompt 一同冻结进 draft；
   // 同一快照透传给 executeChatStream，确保 draft 冻结值与真实请求用值恒等；promotion 严禁重读 Settings。
   const frozenVoiceId = useConfigStore.getState().apiConfig.voiceId;
@@ -233,19 +259,21 @@ export const beginChatStream = async (
       options?.origin !== 'preload' &&
       !useChatStore.getState().selectors.hasStoryMessages(assistantMsgId);
     const expectedStreamSeq = streamSeq + 1;
+    if (shouldAutoplayFirstWork) {
+      usePlaybackIntentStore.getState().beginAutoplay(assistantMsgId);
+    }
     const { audioUrl, content: generatedContent } = await executeChatStream(
       context,
       assistantMsgId,
       frozenVoiceId,
-    );
+    ).catch((error) => {
+      usePlaybackIntentStore.getState().clearAutoplay(assistantMsgId);
+      throw error;
+    });
     if (shouldAutoplayFirstWork && expectedStreamSeq === streamSeq) {
-      const workId = await waitForReadyStoryWork(assistantMsgId, expectedStreamSeq);
-      if (workId !== null && expectedStreamSeq === streamSeq) {
-        await useChatStore.getState().flushPendingSave().catch(() => false);
-        if (expectedStreamSeq === streamSeq) {
-          await playStoryWork(workId);
-        }
-      }
+      scheduleFirstWorkAutoplay(assistantMsgId, expectedStreamSeq);
+    } else if (shouldAutoplayFirstWork) {
+      usePlaybackIntentStore.getState().clearAutoplay(assistantMsgId);
     }
     return { messageId: assistantMsgId, audioUrl, content: generatedContent };
   }
@@ -260,6 +288,7 @@ export const beginChatStream = async (
  */
 export const abortActiveChatStream = (): void => {
   streamSeq += 1;
+  usePlaybackIntentStore.getState().clearAutoplay();
   if (globalAbortController) {
     globalAbortController.abort();
     globalAbortController = null;

@@ -188,8 +188,17 @@ function runSerialized<T>(fn: () => Promise<T>): Promise<T> {
 function planSameSourceIntent(
   session: { status: string; nextParagraphIndex: number; totalParagraphs: number },
   transport: { isPlaying: boolean },
-): 'pause' | 'restart' | 'resume' {
+): 'pause' | 'restart' | 'resume' | 'noop' {
   if (transport.isPlaying) return 'pause';
+  // 同一 Work 已在水合、合成或刚交给 Transport 起播时，后到的自动播放/点击
+  // 只是重复意图。不得再次 resume → playParagraph，否则会并发 ensure/playAudio。
+  if (
+    session.status === 'hydrating' ||
+    session.status === 'synthesizing' ||
+    session.status === 'playing'
+  ) {
+    return 'noop';
+  }
   if (session.status === 'ended' || session.nextParagraphIndex >= session.totalParagraphs) {
     return 'restart';
   }
@@ -223,7 +232,10 @@ async function playPlanned(planned: PlannedPlay): Promise<void> {
  * 并发/连击经上方同一串行临界区 + 请求代收口：只有最后一次用户操作落地，
  * 不会并发创建多个服务端 begin 请求。
  */
-export async function playStoryWork(workId: number): Promise<void> {
+export async function playStoryWork(
+  workId: number,
+  options?: { origin?: 'user' | 'autoplay' },
+): Promise<void> {
   if (!isValidWorkId(workId)) return;
   const source: PlaybackSourceRef = { kind: 'work', workId };
   const token = ++playRequestSeq;
@@ -232,7 +244,15 @@ export async function playStoryWork(workId: number): Promise<void> {
     const session = usePlaybackSessionStore.getState();
     const transport = usePlaybackStore.getState();
     if (isSameSource(session, source)) {
+      // 自动播放是“确保该 Work 已起播”，不是一次切换按钮操作。若用户已经
+      // 抢先点击并建立了同源 Session，迟到的自动播放不得暂停、重播或 resume。
+      if (options?.origin === 'autoplay') {
+        return null;
+      }
       const intent = planSameSourceIntent(session, transport);
+      if (intent === 'noop') {
+        return null;
+      }
       if (intent === 'pause') {
         pausePlayback();
         return null;

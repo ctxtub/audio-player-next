@@ -70,6 +70,7 @@ const Composer: React.FC<ComposerProps> = ({
     () => disabled || isSending || isLocalSending,
     [disabled, isSending, isLocalSending],
   );
+  const sendDisabled = effectiveDisabled || internalValue.trim().length === 0;
 
   /**
    * 空内容提示提醒用户补充输入。
@@ -215,7 +216,7 @@ const Composer: React.FC<ComposerProps> = ({
               variant="primary"
               size="sm"
               loading={isSending || isLocalSending}
-              isDisabled={effectiveDisabled}
+              isDisabled={sendDisabled}
               onPress={() => { void handleSubmit(); }}
               className={styles.sendButton}
             >

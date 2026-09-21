@@ -103,6 +103,8 @@ test.describe("集合详情起播跨页播放", () => {
         await lightMode.focus();
         await page.keyboard.press("Space");
         await expect(lightMode).toBeChecked();
+        // 配置以 500ms 防抖持久化；用户完成选择后留出保存窗口，再做整页跨页验证。
+        await page.waitForTimeout(1000);
         await page.goto(detailUrl, { waitUntil: "networkidle", timeout: 60000 });
         await page.setViewportSize({ width: 375, height: 812 });
         await captureVisual(page, "375-collection-detail-light-long-title");
@@ -113,6 +115,7 @@ test.describe("集合详情起播跨页播放", () => {
         await darkMode.focus();
         await page.keyboard.press("Space");
         await expect(darkMode).toBeChecked();
+        await page.waitForTimeout(1000);
         await page.goto(detailUrl, { waitUntil: "networkidle", timeout: 60000 });
         await page.setViewportSize({ width: 375, height: 812 });
         await captureVisual(page, "375-collection-detail-dark-long-title");

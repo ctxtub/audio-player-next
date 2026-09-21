@@ -274,10 +274,11 @@ export async function startMockServer(options = {}) {
                 const input = typeof body.input === 'string' ? body.input : '';
                 const isContinuation = input.includes(CONTINUATION_FIXED_REPLY);
                 if (isContinuation) continuationTtsCount += 1;
-                // 前两篇模拟冷启动，足以分别展示 ready 与 waiting；后续模拟
-                // 已热缓存的正常上游，避免把等待墙钟误当成播放预算。
+                // 前两篇续作的 Draft/Work 语音（每篇各两次）模拟冷启动，足以
+                // 分别展示 ready 与 waiting；后续模拟已热缓存的正常上游，
+                // 避免把等待墙钟误当成播放预算。
                 const delayMs =
-                    isContinuation && continuationTtsCount <= 2
+                    isContinuation && continuationTtsCount <= 4
                         ? CONTINUATION_TTS_DELAY_MS
                         : 0;
                 setTimeout(

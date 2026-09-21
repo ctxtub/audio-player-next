@@ -264,6 +264,11 @@ export async function playStoryWork(
       await resumePlayback();
       return null;
     }
+    // 切换 Work 必须先经正式 Flow 停住旧 Transport。否则 begin/hydrate 会把
+    // Transport 投影重置为空闲，而旧 <audio> 仍继续出声，形成声画分裂。
+    if (session.source !== null) {
+      pausePlayback();
+    }
     let speed = 1.0;
     try {
       const configSpeed = useConfigStore.getState().apiConfig.speed;

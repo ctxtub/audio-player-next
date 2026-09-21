@@ -442,6 +442,13 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   init: async () => {
     if (initPromise) return initPromise;
+    const current = get();
+    // SPA 主导航会重新挂载页面级组件并再次请求 init。已有内存 Session 时必须
+    // 幂等返回：重水合会把 Transport 置为暂停/清空 URL，但全局 <audio> 仍在播放。
+    // 整页刷新时 Store 从 INITIAL_SESSION_STATE 开始，仍会正常读取 Anchor。
+    if (current.source !== null && current.sessionId !== null && current.status !== 'idle') {
+      return true;
+    }
     const d = defaultDeps;
     hydrationEpochCounter += 1;
     const epoch = hydrationEpochCounter;

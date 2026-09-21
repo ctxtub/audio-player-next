@@ -58,8 +58,22 @@ test.describe("集合详情起播跨页播放", () => {
         const firstWorkTitle = ((await memberTitles.first().innerText()).trim());
         expect(firstWorkTitle.length).toBeGreaterThan(0);
 
-        // ④ 起播首篇：Mini 主标题为集合标题，副标题含作品短标题。
-        await page.getByTestId(/^member-play-/).first().click();
+        // ④ 起播首篇后快速切到第二篇、再切回首篇：任何时刻只允许最新目标
+        // 显示准备中，旧请求不得清理新目标状态或迟到起播。
+        const memberPlayButtons = page.getByTestId(/^member-play-/);
+        const firstPlay = memberPlayButtons.first();
+        const secondPlay = memberPlayButtons.nth(1);
+        await firstPlay.click();
+        await expect(firstPlay).toContainText("暂停", { timeout: 60000 });
+        await secondPlay.click();
+        await expect(secondPlay).toContainText("准备语音", { timeout: 15000 });
+        await expect(firstPlay).not.toContainText("准备语音");
+        await firstPlay.click();
+        await expect(firstPlay).toContainText("准备语音", { timeout: 15000 });
+        await expect(secondPlay).not.toContainText("准备语音");
+        await expect(firstPlay).toContainText("暂停", { timeout: 60000 });
+
+        // latest-wins 后 Mini 主标题为集合标题，副标题仍是最终首篇。
         await expect(page.getByTestId("mini-title")).toHaveText(collectionTitle, { timeout: 15000 });
         await expect(page.getByTestId("mini-secondary-label")).toContainText(firstWorkTitle, {
             timeout: 15000,
@@ -131,8 +145,14 @@ test.describe("集合详情起播跨页播放", () => {
         await expectExpandedTimelineAdvancing(page);
         await closeExpanded(page);
 
-        // ⑦ 跨页保持：回创作页 Mini 仍在且为新集合标题（截图矩阵）。
-        await page.goto(`${appUrl}/chat`, { waitUntil: "networkidle", timeout: 60000 });
+        // ⑦ 跨 Tab 保持：经底部主导航切到创作页，内存 Session 不重水合，
+        // Mini 和物理音频继续播放而不是声画分裂成“已暂停”。
+        await expect(page.getByTestId("mini-now-playing")).toHaveAttribute("data-status", "playing");
+        await page.getByRole("tab", { name: "创作" }).click();
+        await page.waitForURL("**/chat", { timeout: 15000 });
+        await expect(page.getByTestId("mini-now-playing")).toHaveAttribute("data-status", "playing");
+        await expect(page.getByTestId("mini-secondary-label")).toContainText("正在播放");
+        await expect(page.getByTestId("mini-playback-button")).toHaveAttribute("aria-label", "暂停播放");
         const miniOnChat = await readMiniTitles(page);
         expect(miniOnChat.title).toBe(renamedTitle);
         await captureVisual(page, "1280-chat-bar-on");

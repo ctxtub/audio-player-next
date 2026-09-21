@@ -9,7 +9,7 @@
  * - 删除成功后自动导航回 /library（Undo 跨路由留存于 layout provider）。
  */
 
-import React, { useContext, useState } from 'react';
+import React, { useContext, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import {
@@ -52,6 +52,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [startingWorkId, setStartingWorkId] = useState<number | null>(null);
+  const playRequestSeqRef = useRef(0);
   const [actionError, setActionError] = useState<string | null>(null);
   const currentWorkId = usePlaybackSessionStore((state) =>
     state.source?.kind === 'work' ? state.source.workId : null,
@@ -158,16 +159,22 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
   };
 
   const handlePlayWork = async (workId: number) => {
-    if (startingWorkId !== null) return;
+    const requestSeq = playRequestSeqRef.current + 1;
+    playRequestSeqRef.current = requestSeq;
     setActionError(null);
     setStartingWorkId(workId);
     try {
       await playStoryWork(workId);
     } catch (err) {
       console.error('Collection member play failed:', err);
-      setActionError('暂时无法播放这篇作品，请稍后重试。');
+      if (playRequestSeqRef.current === requestSeq) {
+        setActionError('暂时无法播放这篇作品，请稍后重试。');
+      }
     } finally {
-      setStartingWorkId(null);
+      // 旧请求晚到不得清掉更新目标的 preparing 状态。
+      if (playRequestSeqRef.current === requestSeq) {
+        setStartingWorkId(null);
+      }
     }
   };
 
@@ -296,7 +303,9 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
               const isCurrent = currentWorkId === work.id;
               const isPreparing =
                 startingWorkId === work.id ||
-                (isCurrent && (playbackStatus === 'hydrating' || playbackStatus === 'synthesizing'));
+                (startingWorkId === null &&
+                  isCurrent &&
+                  (playbackStatus === 'hydrating' || playbackStatus === 'synthesizing'));
               const isCurrentPlaying = isCurrent && isPlaying;
               const isEnded = isCurrent && playbackStatus === 'ended';
               const buttonLabel = isPreparing
@@ -340,7 +349,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                     className={`${styles.playButton} ${isCurrentPlaying ? styles.playButtonActive : ''}`}
                     data-testid={`member-play-${work.id}`}
                     onClick={() => handlePlayWork(work.id)}
-                    disabled={startingWorkId !== null}
+                    disabled={isPreparing}
                     aria-label={`${buttonLabel}《${work.title}》`}
                   >
                     <ButtonIcon

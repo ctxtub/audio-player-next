@@ -2,12 +2,9 @@
 
 .libraryPage {
   padding: var(--page-padding);
-  /* 直接消费 MainChrome 三占位变量（TabBar/Mini/gap），动态跟随 Mini 显隐；
-   * 回退链保证旧变量环境仍可用；预留走容器 padding，禁止末卡固定 margin。 */
-  padding-bottom: calc(
-    var(--main-tabbar-occupied-height, var(--bottom-chrome-safe-bottom, var(--tab-bar-safe-bottom, 80px))) +
-      var(--mini-player-occupied-height, 0px) + var(--bottom-chrome-gap, 0px) + var(--space-6)
-  );
+  /* MainChrome 的滚动容器已统一消费 TabBar、Mini 与设备安全区；页面只补内容间距，
+   * 避免把同一底部占位重复计算两次。 */
+  padding-bottom: var(--space-6);
   flex: 1;
   display: flex;
   flex-direction: column;

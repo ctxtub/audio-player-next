@@ -143,6 +143,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
         {!isTrash ? (
           <button
             type="button"
+            className={styles.trashBtn}
             onClick={handleMoveToTrash}
             disabled={isTrashing}
             data-testid={`collection-trash-btn-${collection.id}`}
@@ -155,6 +156,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
           <>
             <button
               type="button"
+              className={styles.restoreBtn}
               onClick={handleRestore}
               disabled={isRestoring}
               data-testid="collection-restore-btn"
@@ -165,6 +167,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
             </button>
             <button
               type="button"
+              className={styles.deletePermanentlyBtn}
               onClick={() => setIsDeleteConfirmOpen(true)}
               data-testid="collection-permanent-delete-btn"
               aria-label={`永久删除作品集《${collection.title}》`}
@@ -177,23 +180,43 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
       </div>
 
       {isDeleteConfirmOpen ? (
-        <div role="dialog" aria-modal="true" data-testid="collection-delete-confirm">
-          <p>永久删除作品集《{collection.title}》及其全部成员？此操作不可撤销。</p>
-          <button
-            type="button"
-            onClick={handleDeleteForever}
-            disabled={isDeletingPermanently}
-            data-testid="collection-delete-confirm-ok"
+        <div className={styles.confirmOverlay}>
+          <div
+            className={styles.confirmDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`collection-delete-title-${collection.id}`}
+            data-testid="collection-delete-confirm"
           >
-            {isDeletingPermanently ? '删除中...' : '永久删除'}
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsDeleteConfirmOpen(false)}
-            data-testid="collection-delete-confirm-cancel"
-          >
-            取消
-          </button>
+            <h4
+              id={`collection-delete-title-${collection.id}`}
+              className={styles.confirmTitle}
+            >
+              永久删除作品集？
+            </h4>
+            <p className={styles.confirmMessage}>
+              《{collection.title}》及其中全部作品将被永久删除，此操作不可撤销。
+            </p>
+            <div className={styles.confirmActions}>
+              <button
+                type="button"
+                className={styles.cancelBtn}
+                onClick={() => setIsDeleteConfirmOpen(false)}
+                data-testid="collection-delete-confirm-cancel"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className={styles.dangerBtn}
+                onClick={handleDeleteForever}
+                disabled={isDeletingPermanently}
+                data-testid="collection-delete-confirm-ok"
+              >
+                {isDeletingPermanently ? '删除中...' : '永久删除'}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </article>

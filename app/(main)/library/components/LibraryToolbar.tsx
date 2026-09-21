@@ -37,7 +37,7 @@ export const LibraryToolbar: React.FC<LibraryToolbarProps> = ({
         <input
           type="text"
           className={styles.searchInput}
-          placeholder="搜索故事..."
+          placeholder="搜索作品集或作品..."
           maxLength={100}
           value={draftQ}
           onChange={(e) => onDraftQChange(e.target.value)}

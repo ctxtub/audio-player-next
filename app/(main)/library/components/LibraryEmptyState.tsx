@@ -27,7 +27,7 @@ export const LibraryEmptyState: React.FC<LibraryEmptyStateProps> = ({
         <div className={styles.emptyIconWrapper}>
           <Search size={24} />
         </div>
-        <h3 className={styles.emptyTitle}>没有找到匹配“{query}”的故事</h3>
+        <h3 className={styles.emptyTitle}>没有找到匹配“{query}”的作品集</h3>
         <p className={styles.emptySubtitle}>尝试搜索其他关键词或清除搜索条件</p>
         {onClearSearch ? (
           <button
@@ -50,8 +50,8 @@ export const LibraryEmptyState: React.FC<LibraryEmptyStateProps> = ({
         <div className={styles.emptyIconWrapper}>
           <Star size={24} />
         </div>
-        <h3 className={styles.emptyTitle}>还没有收藏的故事</h3>
-        <p className={styles.emptySubtitle}>在故事库中点击收藏，喜欢的作品会保存在这里。</p>
+        <h3 className={styles.emptyTitle}>还没有收藏的作品集</h3>
+        <p className={styles.emptySubtitle}>在故事库中点击收藏，喜欢的作品集会保存在这里。</p>
       </div>
     );
   }
@@ -75,8 +75,8 @@ export const LibraryEmptyState: React.FC<LibraryEmptyStateProps> = ({
       <div className={styles.emptyIconWrapper}>
         <BookOpen size={24} />
       </div>
-      <h3 className={styles.emptyTitle}>还没有故事</h3>
-      <p className={styles.emptySubtitle}>完成一次创作后，作品会保存在这里。</p>
+      <h3 className={styles.emptyTitle}>还没有作品集</h3>
+      <p className={styles.emptySubtitle}>完成一次创作后，作品会归入作品集并保存在这里。</p>
       <Link
         href="/chat"
         className={styles.emptyCtaBtn}

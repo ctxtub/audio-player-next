@@ -104,6 +104,10 @@ export const deriveMiniSecondaryLabel = (session: MiniSessionSnapshot): string |
     if (status === 'ended') {
         return withWork('播放完成');
     }
+    // 正式 Work 是一条完整音频，正文段落只用于内容身份，不能再作为播放轨道 UI。
+    if (session.source?.kind === 'work') {
+        return withWork(status === 'playing' ? '正在播放' : '已暂停');
+    }
     const total = Number.isFinite(session.totalParagraphs) && session.totalParagraphs > 0
         ? Math.floor(session.totalParagraphs)
         : 1;
@@ -168,6 +172,16 @@ export const deriveMiniCoarseProgress = (
 ): number | null => {
     if (!hasMiniNowPlaying(session)) {
         return null;
+    }
+    if (session.source?.kind === 'work') {
+        if (
+            Number.isFinite(transport.currentTime) &&
+            Number.isFinite(transport.duration) &&
+            transport.duration > 0
+        ) {
+            return clamp01(transport.currentTime / transport.duration);
+        }
+        return 0;
     }
     const total = Number.isFinite(session.totalParagraphs) && session.totalParagraphs > 0
         ? Math.floor(session.totalParagraphs)

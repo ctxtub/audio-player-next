@@ -369,18 +369,21 @@ export const ExpandedNowPlaying: React.FC = () => {
                             <div className={styles.statusLine} data-testid="expanded-status">
                                 {viewModel.isEnded ? '播放完成' : subtitle}
                             </div>
-                            <div
-                                className={styles.paragraphLine}
-                                data-testid="expanded-paragraph"
-                            >
-                                {`第 ${viewModel.paragraph.current} / ${viewModel.paragraph.total} 段`}
-                            </div>
-                            {/*   段落 badge（spec §39，与 Mini 同公式的结构化表达）。 */}
-                            <ParagraphStatus
-                                current={viewModel.paragraph.current}
-                                total={viewModel.paragraph.total}
-                            />
-                            {/*   当前 Segment timeline（本段，不伪装整篇，spec §17/§68）。 */}
+                            {viewModel.source?.kind === 'draft' ? (
+                                <>
+                                    <div
+                                        className={styles.paragraphLine}
+                                        data-testid="expanded-paragraph"
+                                    >
+                                        {`第 ${viewModel.paragraph.current} / ${viewModel.paragraph.total} 段`}
+                                    </div>
+                                    <ParagraphStatus
+                                        current={viewModel.paragraph.current}
+                                        total={viewModel.paragraph.total}
+                                    />
+                                </>
+                            ) : null}
+                            {/* Work 为完整音频时间轴；只有 legacy Draft 保留当前段时间轴。 */}
                             <PlaybackTimeline
                                 currentTime={viewModel.timeline.currentTime}
                                 duration={viewModel.timeline.duration}

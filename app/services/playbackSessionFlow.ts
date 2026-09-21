@@ -425,6 +425,14 @@ export function reportTimeUpdate(payload: {
   hasTriggeredPreload: { current: boolean };
 }): void {
   reportProgress({ currentTime: payload.currentTime, duration: payload.duration });
+  // `playing` 只在进入推进态时触发一次；用真实 timeupdate 提供后续采样，
+  // 否则连续创作预算只有状态切换时才会扣减。buffering / pause 已把
+  // audioActive 置 false，因此这些等待时间不会进入预算。
+  if (usePlaybackStore.getState().audioActive) {
+    void import('./continuousCreationFlow')
+      .then((flow) => flow.reportContinuousAudioActive(true))
+      .catch(() => undefined);
+  }
   const { currentTime, duration } = payload;
   if (!(duration > 0)) return;
   const remaining = duration - currentTime;

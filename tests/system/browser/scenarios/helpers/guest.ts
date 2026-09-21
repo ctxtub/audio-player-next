@@ -33,8 +33,13 @@ export async function enterGuestChat(page: Page, appUrl: string): Promise<void> 
  */
 export async function dismissOnboarding(page: Page): Promise<void> {
     const startButton = page.getByRole("button", { name: "开始体验" });
-    const count: number = await startButton.count();
-    if (count > 0) {
-        await startButton.first().click({ timeout: 10000 });
-    }
+    // 创作页先渲染主体，配置水合后才可能挂载引导；不能用瞬时 count，
+    // 否则 helper 返回后遮罩才出现并拦截第一个真实用户动作。
+    const appeared = await startButton
+        .first()
+        .waitFor({ state: "visible", timeout: 15000 })
+        .then(() => true, () => false);
+    if (!appeared) return;
+    await startButton.first().click();
+    await startButton.first().waitFor({ state: "hidden", timeout: 10000 });
 }

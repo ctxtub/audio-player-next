@@ -10,6 +10,7 @@
  */
 
 import { prisma } from '@/lib/db';
+import { isSingleTrackAssetExpired, shouldRefreshLastAccess } from '@/lib/audio/asset';
 import { isSingleTrackServerEnabled } from '@/lib/audio/singleTrackFlag';
 import type { Subject } from '@/lib/server/subject';
 import { decodeGuestCookie, decodeSession, SESSION_COOKIE } from '@/lib/session';
@@ -92,6 +93,22 @@ export async function resolveReadableAudioAssetForSubject(
     if (userAsset.status !== 'ready' || !userAsset.storageKey) {
       throw new AudioAssetAccessError(404, 'ASSET_NOT_READY');
     }
+    const now = new Date();
+    if (
+      isSingleTrackAssetExpired({
+        readyAt: userAsset.readyAt,
+        lastAccessedAt: userAsset.lastAccessedAt,
+        now,
+      })
+    ) {
+      throw new AudioAssetAccessError(404, 'ASSET_NOT_READY');
+    }
+    if (shouldRefreshLastAccess(userAsset.lastAccessedAt, now)) {
+      await prisma.storyAudioAsset.updateMany({
+        where: { id: userAsset.id, status: 'ready' },
+        data: { lastAccessedAt: now },
+      });
+    }
     return {
       assetId: userAsset.id,
       workId: userAsset.storyWorkId,
@@ -109,6 +126,22 @@ export async function resolveReadableAudioAssetForSubject(
   if (guestWork.guestId !== subject.id) throw new AudioAssetAccessError(403, 'FORBIDDEN');
   if (guestAsset!.status !== 'ready' || !guestAsset!.storageKey) {
     throw new AudioAssetAccessError(404, 'ASSET_NOT_READY');
+  }
+  const now = new Date();
+  if (
+    isSingleTrackAssetExpired({
+      readyAt: guestAsset!.readyAt,
+      lastAccessedAt: guestAsset!.lastAccessedAt,
+      now,
+    })
+  ) {
+    throw new AudioAssetAccessError(404, 'ASSET_NOT_READY');
+  }
+  if (shouldRefreshLastAccess(guestAsset!.lastAccessedAt, now)) {
+    await prisma.guestStoryAudioAsset.updateMany({
+      where: { id: guestAsset!.id, status: 'ready' },
+      data: { lastAccessedAt: now },
+    });
   }
   return {
     assetId: guestAsset!.id,

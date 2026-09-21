@@ -713,13 +713,24 @@ export async function getStoryAudioAssetProjectionForSubject(
     };
   }
   const now = deps.now();
-  const ready = row.status === 'ready' && row.durationMs !== null && row.byteLength !== null;
+  const expired =
+    row.status === 'ready' &&
+    isSingleTrackAssetExpired({
+      readyAt: row.readyAt,
+      lastAccessedAt: row.lastAccessedAt,
+      now,
+    });
+  const ready =
+    row.status === 'ready' &&
+    !expired &&
+    row.durationMs !== null &&
+    row.byteLength !== null;
   if (ready && shouldRefreshLastAccess(row.lastAccessedAt, now)) {
     await table.updateMany({ where: { id: row.id }, data: { lastAccessedAt: now } });
   }
   return {
     workId: work.id,
-    status: row.status as StoryAudioAssetProjectionDTO['status'],
+    status: expired ? 'missing' : (row.status as StoryAudioAssetProjectionDTO['status']),
     assetId: ready ? row.id : null,
     version: row.version,
     contentHash: row.contentHash,
@@ -841,7 +852,14 @@ export async function cleanupExpiredStoryAudioAssets(options: {
       result.deleted += deletion.succeeded;
       await table.updateMany({
         where: { id: row.id, leaseId: null },
-        data: { status: 'missing', storageKey: buildAssetStorageKey(row.id), byteLength: null, durationMs: null, checksum: null, readyAt: null, supersededAt: now },
+        data: {
+          status: 'missing',
+          storageKey: buildAssetStorageKey(row.id),
+          byteLength: null,
+          durationMs: null,
+          checksum: null,
+          supersededAt: now,
+        },
       });
     }
   }

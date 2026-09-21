@@ -242,11 +242,11 @@ export async function verifyCardPlayPauseResume(page: Page, index: number): Prom
     await button.click();
     await expect.poll(async () => readCardActionLabel(button), { timeout: 10000 }).toBe("继续播放");
     await button.click();
-    // 继续后回到播放中（暂停复现）或播完（重新播放）：继续播放生效后音频
-    // 必推进，两种都是其合法可见终态（停留继续播放 = 继续失败，轮询超时即失败）。
-    await expect
-        .poll(async () => readCardActionLabel(button), { timeout: 15000 })
-        .toMatch(/^(暂停|重新播放)$/);
+    await expect.poll(async () => readCardActionLabel(button), { timeout: 15000 }).toBe("暂停");
+    // 重播若错误恢复到旧完成位置，会短暂出现“暂停”后立刻回到“重新播放”。
+    // 沉淀后仍在播放，才证明从头恢复并持续推进，而不是只捕捉到瞬态按钮。
+    await page.waitForTimeout(1500);
+    await expect(button).toHaveText("暂停");
 }
 
 /**

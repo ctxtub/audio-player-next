@@ -254,6 +254,7 @@ export async function startMockServer(options = {}) {
     const initialStoryMp3Bytes = Buffer.concat(
         Array.from({ length: INITIAL_STORY_FIXTURE_REPEAT }, () => fixtureBytes),
     );
+    let continuationTtsCount = 0;
     const server = createServer((req, res) => {
         const url = new URL(req.url ?? '/', 'http://localhost');
         if (req.method === 'GET' && url.pathname === '/health') {
@@ -272,9 +273,16 @@ export async function startMockServer(options = {}) {
             readJsonBody(req).then((body) => {
                 const input = typeof body.input === 'string' ? body.input : '';
                 const isContinuation = input.includes(CONTINUATION_FIXED_REPLY);
+                if (isContinuation) continuationTtsCount += 1;
+                // 前两篇模拟冷启动，足以分别展示 ready 与 waiting；后续模拟
+                // 已热缓存的正常上游，避免把等待墙钟误当成播放预算。
+                const delayMs =
+                    isContinuation && continuationTtsCount <= 2
+                        ? CONTINUATION_TTS_DELAY_MS
+                        : 0;
                 setTimeout(
                     () => serveMp3(req, res, isContinuation ? mp3Bytes : initialStoryMp3Bytes),
-                    isContinuation ? CONTINUATION_TTS_DELAY_MS : 0,
+                    delayMs,
                 );
             });
             return;

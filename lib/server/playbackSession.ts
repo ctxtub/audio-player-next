@@ -593,6 +593,26 @@ export const beginPlaybackSessionForSubject = async (
           });
         }
       }
+      // 正式单轨有独立的毫秒级 StoryAudioProgress。restart 若只重置段落
+      // Progress，后续 ensure 会把旧 positionMs（包括完播末尾）重新下发，
+      // loadedmetadata 又会 seek 回旧断点。这里同步把单轨位置归零并换成
+      // 新 sessionId；保留 duration/completedAt，历史完播事实不因重播丢失。
+      const audioProgressData = {
+        positionMs: 0,
+        sessionId: input.sessionId,
+        lastPlayedAt: new Date(),
+      };
+      if (subject.type === 'user') {
+        await prisma.storyAudioProgress.updateMany({
+          where: { storyWorkId: work.id },
+          data: audioProgressData,
+        });
+      } else {
+        await prisma.guestStoryAudioProgress.updateMany({
+          where: { storyWorkId: work.id },
+          data: audioProgressData,
+        });
+      }
       lastCompletedParagraphIndex = -1;
       nextParagraphIndex = 0;
     } else if (existingProgress) {

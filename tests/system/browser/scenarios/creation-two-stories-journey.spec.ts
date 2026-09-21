@@ -3,7 +3,10 @@ import { enterGuestChat } from "./helpers/guest";
 import {
     captureVisual,
     cardActionButton,
+    closeExpanded,
     continuousStatusText,
+    expectExpandedTimelineAdvancing,
+    openExpandedFromMini,
     readMiniTitles,
     sendStory,
     setContinuousEnabled,
@@ -59,6 +62,24 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         // 「播放」后做用户三态验证（重播入口，整轨在前，确定性）。
         await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 60000 });
         await verifyCardPlayPauseResume(page, 0);
+
+        // 重播推进后整页刷新：页面隐藏会保存本次新进度；刷新后再次播放并打开
+        // Expanded，只认可见时间线证明恢复在开头十秒内且继续推进，不能跳回旧末尾。
+        await page.reload({ waitUntil: "networkidle", timeout: 60000 });
+        await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 15000 });
+        await setContinuousEnabled(page, false);
+        await page.getByTestId("mini-playback-button").click();
+        await openExpandedFromMini(page);
+        await expect
+            .poll(async () => {
+                const text = (await page.getByTestId("expanded-timeline-current").innerText()).trim();
+                const parts = text.split(":").map(Number);
+                const seconds = parts.reduce((total, part) => total * 60 + part, 0);
+                return Number.isFinite(seconds) && seconds < 10 ? "near-start" : "old-position";
+            }, { timeout: 15000 })
+            .toBe("near-start");
+        await expectExpandedTimelineAdvancing(page);
+        await closeExpanded(page);
         await waitCardEnded(page, 0);
 
         // 第二篇：后续草稿不再自动播，就绪即「播放」，直接验证。

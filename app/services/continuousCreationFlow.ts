@@ -361,8 +361,12 @@ export async function scheduleNextWork(input: {
     }
     // 2) 正文完成 → 进入正式 Work 晋升阶段（晋升由 chatStore 既有编排完成）。
     useContinuousCreationStore.getState().generationComplete();
+    const savingStartedAt = Date.now();
     // 3) 等待正式 Work 落地，拿到 workId（无 workId 绝不进入 next_ready）。
     const promoted = await waitForPromotionReady(result.messageId, signal);
+    // 本地晋升可能在首轮查询前已经完成。保留一个可感知但很短的保存态窗口，
+    // 避免 UI 从“正在创作”直接闪到“准备语音”；等待仍响应 abort，不拖住取消。
+    await sleepInterruptible(Math.max(0, 400 - (Date.now() - savingStartedAt)), signal);
     noteWaiting();
     if (!isFreshIdentity(token, epoch, conversationId, collectionId)) {
       return false;

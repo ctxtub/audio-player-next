@@ -5,8 +5,8 @@
  * 用户触发后必须中止旧生成、停止播放并恢复创作初始状态。
  *
  * 顺序（不得拆散、不得各自 abort）：
- *   确认 → epoch++ → abort generation → pause/unload + clear Session/Anchor →
- *   reset runtime → createNew(expectedOldId) → 连续创作默认开启 + 预算快照。
+ *   确认 → 立即 epoch++ / abort generation / pause+unload → 等待旧身份初始化收口 →
+ *   clear Session/Anchor/runtime → createNew(expectedOldId) → 连续创作默认开启 + 预算快照。
  *
  * 远端失败保持无声安全态并允许重试，绝不恢复旧播放。
  */
@@ -71,28 +71,10 @@ export async function startNewCreation(
     }
   }
 
-  // 页面整页重载后，配置就绪即可先展示主界面，但聊天与播放 Anchor 恢复可能仍在途。
-  // 强重置必须先等二者收口，否则旧初始化可在 reset 之后晚到，复活旧会话并抢占
-  // 用户紧接着发出的新作品。初始化失败按各 store 的 fail-closed 结果继续重置。
-  await Promise.all([
-    useChatStore.getState().initForUser(),
-    usePlaybackSessionStore.getState().init(),
-  ]);
-
-  // 初始化收口后再捕获当前会话 id，作为旧会话校验值传给 createNew。
-  // 多标签页/竞态下服务端凭它与真实 active 比对，不匹配即 CONFLICT，绝不静默覆盖。
-  const capturedOldConversationId = useChatStore.getState().conversationId ?? undefined;
-
-  // 2) 先 epoch++ 使旧回调失效（generation/promotion/audio/continuation 一律 no-op）
+  // 2) 确认后立即切断旧运行态，不等待任何网络初始化：旧生成、下一作品回调和
+  // 底层音频都必须在用户点击后立刻停止。
   useContinuousCreationStore.getState().advanceEpoch();
-
-  // 3)+4) 经真取消 seam：abort 在途 generation/ensure 等待，并清空连续创作编排运行时
-  //（准备中的下一作品、调度在途、audio 采样点、下一篇展示身份）。
   cancelPendingNextWork();
-
-  // 5) 立即停声、卸载媒体并清空 Playback Session（reset 会换掉 sessionId，
-  //    旧会话迟到的 TTS/段落回调凭 sessionId 失配 no-op，绝不复活播放；
-  //    unloadAudio 清底层 <audio> 音源，reset transport 清状态与 Blob）。
   try {
     usePlaybackStore.getState().unloadAudio();
   } catch {
@@ -106,10 +88,31 @@ export async function startNewCreation(
   usePlaybackStore.getState().reset();
   useGenerationStore.getState().reset();
 
-  // 6) reset message runtime（保留服务端旧会话，仅本地清空身份）
+  // 页面整页重载后，聊天与播放 Anchor 恢复可能仍在途。立即停声之后再等二者
+  // 收口，既取得旧会话身份，又保证最终 reset 之后不会有旧初始化晚到复活。
+  await Promise.all([
+    useChatStore.getState().initForUser(),
+    usePlaybackSessionStore.getState().init(),
+  ]);
+
+  // 初始化收口后再捕获当前会话 id，作为旧会话校验值传给 createNew。
+  // 多标签页/竞态下服务端凭它与真实 active 比对，不匹配即 CONFLICT，绝不静默覆盖。
+  const capturedOldConversationId = useChatStore.getState().conversationId ?? undefined;
+
+  // 3) 初始化已经收口，再清一次可能被旧 Anchor 水合的状态。reset 会换掉
+  // sessionId，旧 TTS/段落回调凭身份失配 no-op，绝不复活播放。
+  try {
+    usePlaybackSessionStore.getState().reset();
+  } catch {
+    // session 不可用时仅清 transport，不阻断强重置。
+  }
+  usePlaybackStore.getState().reset();
+  useGenerationStore.getState().reset();
+
+  // 4) reset message runtime（保留服务端旧会话，仅本地清空身份）
   useChatStore.getState().resetChat();
 
-  // 7) createNew(expectedOldId) 真实远端调用（不得注入替换）；
+  // 5) createNew(expectedOldId) 真实远端调用（不得注入替换）；
   // 优先显式入参，否则用步骤 1 捕获的旧会话 id。
   const budgetMinutes = resolveContinuousCreationBudgetMinutes();
   const expectedOldId = options.expectedOldId ?? capturedOldConversationId;
@@ -124,7 +127,7 @@ export async function startNewCreation(
     reason = 'remote-failed';
   }
 
-  // 8) 连续创作默认开启 + 预算快照（epoch 已递增，旧回调不会写回）
+  // 6) 连续创作默认开启 + 预算快照（epoch 已递增，旧回调不会写回）
   if (conversationId !== null) {
     // 创作页围绕新 active Conversation 运行（identity 读路径）。
     useChatStore.getState().applyConversationIdentity({

@@ -8,7 +8,7 @@
  *
  * 关键约束：
  * - User / Guest 严格对称，跨主体统一 NOT_FOUND；
- * - 标题 AI 生成在事务外短超时，失败走确定性回退，绝不阻断入库；
+ * - 标题 AI 生成在事务外有限等待，失败走确定性短标题回退，绝不阻断入库；
  * - 同一 sourceMessageId + 同 hash 幂等返回既有 Work，不同 hash 为 CONFLICT；
  * - 集合永久删除级联 Work/进度/音频元数据，音频对象经统一 tombstone outbox 清理。
  */
@@ -415,7 +415,7 @@ export async function deleteForeverCollectionForSubject(
  * 顺序（产品 §2.2）：
  * 1. 幂等：同一 sourceMessageId 已存在 → 同 hash 返回既有 Work，不同 hash CONFLICT；
  * 2. 校验会话归属与 active；
- * 3. 集合不存在时事务外短超时生成 AI 标题（失败走确定性回退）；
+ * 3. 集合不存在时事务外有限等待生成 AI 标题（失败走确定性短标题回退）；
  * 4. 事务内 upsert 集合 + 分配集合内 position + 创建 Work；
  * 5. 唯一冲突（并发）最多重试 PROMOTE_MAX_ATTEMPTS 次。
  */

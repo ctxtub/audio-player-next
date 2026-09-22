@@ -122,7 +122,7 @@ export type CollectionDeleteForeverOutput = z.infer<
 
 /**
  * collection.promoteArtifact 入参（Artifact → Collection/Work 唯一写入口，产品 §2.1）。
- * conversationId + sourceMessageId 为幂等与归属证据；AI 标题由服务端短超时生成。
+ * conversationId + sourceMessageId 为幂等与归属证据；AI 标题由服务端有限等待生成。
  */
 export const collectionPromoteInputSchema = z.object({
   conversationId: z.string().min(1).max(64),

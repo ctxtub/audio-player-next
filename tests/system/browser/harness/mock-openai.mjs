@@ -28,6 +28,7 @@ const CONTINUATION_TTS_DELAY_MS = 10000;
 // 中文注释：Agent 非流固定响应（确定性文本，不访问真实上游）。
 const AGENT_FIXED_REPLY = 'harness 固定 mock 回复';
 const CONTINUATION_FIXED_REPLY = 'harness 连续 mock 回复';
+const COLLECTION_TITLE_FIXED_REPLY = '山间小屋故事集';
 
 // 中文注释：运行中的 mock 实例表（stop 时按 handle id 回收）。
 let nextMockId = 1;
@@ -137,6 +138,14 @@ function readLastUserText(body) {
 async function serveAgent(req, res) {
     const body = await readJsonBody(req);
     const lastUserText = readLastUserText(body);
+    const messages = Array.isArray(body.messages) ? body.messages : [];
+    const isCollectionTitleRequest = messages.some(
+        (message) =>
+            message &&
+            message.role === 'system' &&
+            typeof message.content === 'string' &&
+            message.content.includes('故事作品集标题助手'),
+    );
     const tools = Array.isArray(body.tools) ? body.tools : [];
     if (tools.length > 0) {
         const toolName =
@@ -182,7 +191,9 @@ async function serveAgent(req, res) {
         );
         return;
     }
-    const reply = lastUserText.includes('请继续故事')
+    const reply = isCollectionTitleRequest
+        ? COLLECTION_TITLE_FIXED_REPLY
+        : lastUserText.includes('请继续故事')
         ? CONTINUATION_FIXED_REPLY
         : AGENT_FIXED_REPLY;
     if (body.stream === true) {

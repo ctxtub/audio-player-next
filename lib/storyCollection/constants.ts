@@ -26,10 +26,10 @@ export type ConversationState = (typeof CONVERSATION_STATES)[number];
 export const CONVERSATION_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** AI 集合标题生成短超时（毫秒；失败不阻断入库，产品 §2.2） */
-export const COLLECTION_AI_TITLE_TIMEOUT_MS = 1500;
+/** AI 集合标题生成有限等待（毫秒；失败不阻断入库，产品 §2.2） */
+export const COLLECTION_AI_TITLE_TIMEOUT_MS = 6000;
 
-/** AI 集合标题建议展示区间（仅提示词约束，不参与存储校验） */
+/** AI / 自动回退集合标题展示区间（用户手动重命名仍使用 80 字存储上限） */
 export const COLLECTION_TITLE_SUGGESTED_MIN = 4;
 export const COLLECTION_TITLE_SUGGESTED_MAX = 18;
 

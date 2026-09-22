@@ -1,12 +1,12 @@
 /**
  * AI 集合标题生成（change-id 2026-09-15-story-collection-continuous-creation）。
  *
- * 首作建集时在事务外短超时生成标题；失败/超时绝不阻断入库（产品 §2.2）。
- * 默认生成器调用 Chat Completion；测试经 options.generate 注入确定性实现，绝不触网。
+ * 首作建集时在事务外有限等待生成标题；失败/超时绝不阻断入库（产品 §2.2）。
+ * 默认生成器调用 Chat Completion。
  */
 
 import { getOpenAIConfig, getOpenAIClient } from './openai';
-import { normalizeCollectionTitle } from '@/lib/storyCollection/title';
+import { normalizeGeneratedCollectionTitle } from '@/lib/storyCollection/title';
 import {
   COLLECTION_TITLE_SUGGESTED_MAX,
   COLLECTION_TITLE_SUGGESTED_MIN,
@@ -31,7 +31,8 @@ export const defaultCollectionTitleGenerator: CollectionTitleGenerator = async (
   const config = getOpenAIConfig();
   const client = getOpenAIClient();
   const response = await client.chat.completions.create({
-    model: config.storyModel,
+    // 标题是短文本分类/概括任务，使用 Agent 模型可避免阻塞在较慢的长篇故事模型上。
+    model: config.agentModel,
     temperature: 0.3,
     max_tokens: 48,
     messages: [
@@ -52,12 +53,12 @@ export const defaultCollectionTitleGenerator: CollectionTitleGenerator = async (
 };
 
 export type GenerateCollectionTitleOptions = {
-  /** 短超时毫秒数（默认 COLLECTION_AI_TITLE_TIMEOUT_MS）。 */
+  /** 有限等待毫秒数（默认 COLLECTION_AI_TITLE_TIMEOUT_MS）。 */
   timeoutMs?: number;
 };
 
 /**
- * 短超时安全生成集合标题：任何失败/超时/空结果返回 null，绝不抛错。
+ * 有限等待内安全生成集合标题：任何失败/超时/不合格结果返回 null，绝不抛错。
  * @param input 首篇正文与提示词
  * @param options 超时
  * @returns 规范化标题或 null
@@ -75,8 +76,7 @@ export async function generateCollectionTitleSafely(
       timer = setTimeout(() => reject(new Error('collection-title-timeout')), timeoutMs);
     });
     const raw = await Promise.race([generate(input), timeout]);
-    const normalized = normalizeCollectionTitle(typeof raw === 'string' ? raw : '');
-    return normalized.length > 0 ? normalized : null;
+    return normalizeGeneratedCollectionTitle(typeof raw === 'string' ? raw : '');
   } catch {
     return null;
   } finally {

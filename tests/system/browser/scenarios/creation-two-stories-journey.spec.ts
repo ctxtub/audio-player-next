@@ -62,7 +62,8 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
             .poll(async () => (await barTitle.innerText()).trim(), { timeout: 30000 })
             .not.toBe("新作品集");
         const collectionTitle = (await barTitle.innerText()).trim();
-        expect(collectionTitle.length).toBeGreaterThan(0);
+        expect(collectionTitle).toBe("山间小屋故事集");
+        expect(Array.from(collectionTitle).length).toBeLessThanOrEqual(18);
 
         // ③ 第一篇：草稿自动播会起播（Mini 现身即证明），卡片随晋升落定
         // 「播放」后做用户三态验证（重播入口，整轨在前，确定性）。

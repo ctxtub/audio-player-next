@@ -58,13 +58,13 @@ test.describe("播放与准备中新创作强重置", () => {
         expect(dialogs.length).toBeGreaterThanOrEqual(1);
         expect(dialogs[dialogs.length - 1]).toContain("新建创作");
 
-        // ③ 立即回到空对话初始态：无 Mini、无卡片按钮、空态文案、输入框清空可用、
-        // 开关回到默认开启、新作品集占位。
+        // ③ 立即回到空对话初始态：无 Mini、无卡片按钮、空态文案、输入框清空可用，
+        // 空内容不能发送；开关回到默认开启、新作品集占位。
         await expect(page.getByTestId("mini-now-playing")).toBeHidden({ timeout: 10000 });
         await expect(page.getByText("暂未开始任何对话")).toBeVisible({ timeout: 10000 });
         await expect(composerInput(page)).toHaveValue("");
         await expect(composerInput(page)).toBeEnabled();
-        await expect(page.getByRole("button", { name: "发送" })).toBeEnabled();
+        await expect(page.getByRole("button", { name: "发送" })).toBeDisabled();
         await expect(continuousStatusText(page)).toHaveText("连续创作已开启", { timeout: 10000 });
         expect((await page.getByTestId("continuous-collection-title").innerText()).trim()).toBe(
             "新作品集",

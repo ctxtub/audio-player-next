@@ -76,6 +76,7 @@
 import { prisma } from '@/lib/db';
 import { TRPCError } from '@/lib/trpc/init';
 import type { Subject } from '@/lib/server/subject';
+import { resolveWorkPlaybackSnapshot } from '@/lib/server/workPlaybackSnapshot';
 import { getStoryWorkForSubject, isStoryWorkTrashedForSubject } from '@/lib/server/storyWork';
 import {
   STALE_SESSION,
@@ -107,8 +108,6 @@ import {
 } from '@/lib/playback/progress';
 import {
   SEGMENTATION_VERSION,
-  normalizeStoryText,
-  segmentStoryText,
 } from '@/utils/segmentation';
 import type {
   BeginPlaybackSessionInput,
@@ -419,69 +418,17 @@ export const getPlaybackAnchorForSubject = async (
   }
 };
 
-/**
- * 经现有分段算法计算 Work 总段落数（§16.1，不信任客户端）。
- * 空文本兜底为 1（与 store / progress 推导的 MIN_TOTAL_PARAGRAPHS 一致）。
- */
-const computeWorkTotalParagraphs = (storyText: string): number => {
-  const normalized = normalizeStoryText(storyText);
-  const segments = segmentStoryText(normalized);
-  return Math.max(1, segments.length);
-};
-
-/**
- *  /2）/ ：Work 有效切分身份
- * 只读 helper（Manifest 权威，spec §23；beginSession / completeSession /
- * promoteDraftToWork 三个身份写路径统一消费）。
- *
- * - 已有 Manifest（canonical manifest 行存在）→
- *   effectiveSegmentationVersion = manifest.segmentationVersion，
- *   effectiveTotalParagraphs = manifest.segmentCount；
- * - 无 Manifest（null）→ SEGMENTATION_VERSION / 当前 segmentStoryText().length；
- * - Manifest 读取失败（throws）→ 直接抛（fail-closed，不得回落本地切分，
- *   不得写 Progress/Anchor，调用方按失败处理，可 retry；调用方须在写身份前
- *   调用，抛错即不写）。
- *
- * 只读：除 Manifest 行 select 外不触写；PlaybackSourceRef / sessionId /
- * Anchor schema / Progress schema / CAS 规则全部不变。
- * MANIFEST_VERSION=1 硬编码保留（本轮非阻塞，未提前做 active-manifest SSOT）。
- */
+/** Shared read-only segmentation identity; callers resolve Work ownership first. */
 export const resolveWorkEffectiveSegmentation = async (
   subject: Subject,
   workId: number,
   storyText: string,
 ): Promise<{ effectiveSegmentationVersion: string; effectiveTotalParagraphs: number }> => {
-  const fallback = (): { effectiveSegmentationVersion: string; effectiveTotalParagraphs: number } => ({
-    effectiveSegmentationVersion: SEGMENTATION_VERSION,
-    effectiveTotalParagraphs: computeWorkTotalParagraphs(storyText),
-  });
-  // Manifest 世代恒 1（与 lib/server/storyAudio.STORY_AUDIO_MANIFEST_VERSION 同值；
-  // 此处不 import storyAudio 以避免 server 写入面耦合，仅读行）。
-  const MANIFEST_VERSION = 1;
-  let row: { segmentationVersion: string; segmentCount: number } | null = null;
-  if (subject.type === 'user') {
-    row = await prisma.storyAudioManifest.findUnique({
-      where: { storyWorkId_version: { storyWorkId: workId, version: MANIFEST_VERSION } },
-      select: { segmentationVersion: true, segmentCount: true },
-    });
-  } else {
-    row = await prisma.guestStoryAudioManifest.findUnique({
-      where: { storyWorkId_version: { storyWorkId: workId, version: MANIFEST_VERSION } },
-      select: { segmentationVersion: true, segmentCount: true },
-    });
-  }
-  if (!row) return fallback();
-  const version =
-    typeof row.segmentationVersion === 'string' && row.segmentationVersion.length > 0
-      ? row.segmentationVersion
-      : SEGMENTATION_VERSION;
-  const total =
-    typeof row.segmentCount === 'number' &&
-    Number.isFinite(row.segmentCount) &&
-    Math.floor(row.segmentCount) >= 1
-      ? Math.floor(row.segmentCount)
-      : computeWorkTotalParagraphs(storyText);
-  return { effectiveSegmentationVersion: version, effectiveTotalParagraphs: total };
+  const snapshot = await resolveWorkPlaybackSnapshot(subject, workId, storyText);
+  return {
+    effectiveSegmentationVersion: snapshot.segmentationVersion,
+    effectiveTotalParagraphs: snapshot.totalParagraphs,
+  };
 };
 
 /** §16 playback.beginSession：创建新 Session 并落 Anchor（ 落地）。 */

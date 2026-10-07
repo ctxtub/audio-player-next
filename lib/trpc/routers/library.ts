@@ -42,6 +42,7 @@ import {
   permanentlyDeleteStoryWorkForSubject,
 } from '@/lib/server/storyWork';
 import { resolveSubject } from '@/lib/server/subject';
+import { resolveWorkPlaybackSnapshot } from '@/lib/server/workPlaybackSnapshot';
 import {
   enforceProcedureRateLimit,
   defaultRateLimiter,
@@ -159,7 +160,11 @@ export const libraryRouter = router({
     .query(async ({ ctx, input }) => {
       try {
         const subject = resolveSubject(ctx);
-        return await getStoryWorkForSubject(subject, input.id);
+        const work = await getStoryWorkForSubject(subject, input.id);
+        return {
+          ...work,
+          playbackSnapshot: await resolveWorkPlaybackSnapshot(subject, work.id, work.storyText),
+        };
       } catch (error) {
         handleLibraryError(error);
       }

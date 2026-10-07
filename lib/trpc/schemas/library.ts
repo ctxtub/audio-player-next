@@ -75,11 +75,20 @@ export type StoryWorkSummaryDTO = z.infer<typeof storyWorkSummaryDtoSchema>;
  * 无需 schema 变更）；无所属集合时为 null。播放器展示层优先用它作一级标题，
  * 作品短标题走副标题，标题一致性见创作页头部/故事库卡片/作品集详情。
  */
+export const workPlaybackSnapshotSchema = z.object({
+  paragraphs: z.array(z.string()),
+  segmentationVersion: z.string().min(1),
+  totalParagraphs: z.number().int().positive(),
+});
+export type WorkPlaybackSnapshot = z.infer<typeof workPlaybackSnapshotSchema>;
+
 export const storyWorkDetailDtoSchema = storyWorkSummaryDtoSchema.extend({
   prompt: z.string(),
   storyText: z.string(),
   sourceMessageId: z.string().nullable(),
   collectionTitle: z.string().max(80).nullable().optional(),
+  // Guaranteed on library.get; mutation responses need not carry playback metadata.
+  playbackSnapshot: workPlaybackSnapshotSchema.optional(),
 });
 export type StoryWorkDetailDTO = z.infer<typeof storyWorkDetailDtoSchema>;
 
@@ -199,4 +208,3 @@ export const libraryDeletePermanentlyOutputSchema = z.object({
   id: z.number().int().positive(),
 });
 export type LibraryDeletePermanentlyOutput = z.infer<typeof libraryDeletePermanentlyOutputSchema>;
-

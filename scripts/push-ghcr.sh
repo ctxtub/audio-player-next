@@ -113,11 +113,6 @@ if [ "${PUSH_IMAGE:-true}" = "true" ] || [ "${PUSH_IMAGE:-true}" = "1" ]; then
 fi
 
 echo "Building images for platforms: ${PLATFORMS}"
-# 正式发布镜像必须显式传递客户端构建开关。
-# NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED is inlined at Next build time; an official
-# immutable image built without this --build-arg freezes client canonical OFF.
-# `:-` keeps `set -u` safe when the variable is unset (empty = fail-closed OFF,
-# same as Dockerfile default); the quoted value stays one word (no split pit).
 # NOTE: ${BUILD_EXTRA_PUSH_FLAG} intentionally unquoted — empty value must vanish
 # entirely (bash < 4.4 errors on empty-array expansion under `set -u`); value is
 # a hardcoded literal so word-splitting cannot occur.
@@ -126,7 +121,6 @@ docker buildx build \
   --platform "${PLATFORMS}" \
   "${BUILD_TAG_ARGS[@]}" \
   "${BUILD_LABEL_ARGS[@]}" \
-  --build-arg "NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED=${NEXT_PUBLIC_CANONICAL_AUDIO_ENABLED:-}" \
   -f "${PROJECT_ROOT}/Dockerfile" \
   --provenance=true \
   --sbom=true \

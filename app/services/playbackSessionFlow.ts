@@ -21,7 +21,7 @@
  *
  *  Work canonical read（spec §22–§23）：本 flow 不直接选音源，
  * 仅经 store.playParagraph/prefetchNextParagraph 委托（lookahead 仍=1）；
- * store 内 Work+flag 开启 → ensureSegment → ready playbackUrl，
+ * store 内 Work → ensureAsset → ready playbackUrl，
  * stale（sessionId 失配）绝不播放 A；Draft 恒旧路径；promotion 不打断当前 Blob。
  *
  * storyFlow.ts 回到故事生成流程兼容层；其中播放 session / preload / ended
@@ -529,6 +529,8 @@ export function reportTimeUpdate(payload: {
  */
 export async function handleEnded(play: (audioUrl: string, messageId?: string) => Promise<void>): Promise<boolean> {
   const session = usePlaybackSessionStore.getState();
+  // An unresolved Work snapshot must not complete a Work or hand off to the next one.
+  if (session.status === 'error') return false;
   if (session.source && session.totalParagraphs > 0) {
     // 单轨 Work 整轨只有一个 Asset，任意物理 ended 都代表「整 track 播完」，
     // 必须走尾段分支（先试连续创作下一 Work，再整 Work 完播），不得按段落推进。

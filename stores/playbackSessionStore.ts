@@ -39,6 +39,7 @@ import {
   setSleepTimer as apiSetSleepTimer,
 } from '@/lib/client/playbackSession';
 import { get as getWorkDetail } from '@/lib/client/library';
+import type { WorkPlaybackSnapshot } from '@/lib/trpc/schemas/library';
 import {
   SEGMENTATION_VERSION,
   computeStoryContentHash,
@@ -66,11 +67,7 @@ import { useConfigStore } from '@/stores/configStore';
 import { fetchAudio } from '@/lib/client/ttsGenerate';
 import {
   ensureAsset as ensureCanonicalAsset,
-  getPlaybackManifest as fetchPlaybackManifest,
-  isCanonicalPlaybackUrl,
-  isSingleTrackPlaybackUrl,
   saveProgress as saveSingleTrackProgress,
-  selectWorkParagraphs,
 } from '@/lib/client/storyAudio';
 import { SINGLE_TRACK_PROGRESS_THROTTLE_MS } from '@/lib/audio/asset';
 import {
@@ -207,19 +204,9 @@ interface RehydrateDeps {
     voiceId: string;
     contentHash: string;
     collectionTitle: string | null;
+    playbackSnapshot: WorkPlaybackSnapshot;
   }>;
   ensureChatLoaded: () => Promise<void>;
-  /**
-   * Work Manifest 只读投影（spec §23 Segmentation SSOT）。
-   * 经 storyAudio.getPlaybackManifest；missing/segments=[] 表示真无 Manifest
-   * （回落本地切分合法）；fetch throws 表示 unknown（canonical Work fail-closed，
-   * 不得回落本地，不得进 ready，可 retry，不得删 Session/清 Anchor）。
-   */
-  getManifest: (workId: number) => Promise<{
-    segments: Array<{ index: number; text: string }>;
-    segmentationVersion?: string;
-    segmentCount?: number;
-  } | null>;
   /**
    * fixup canonical：Draft 快照解析（Modern first → Legacy fallback）。
    * 经 resolvePlaybackDraftSnapshot canonical resolver。
@@ -287,8 +274,6 @@ const CANONICAL_ENSURE_MAX_ATTEMPTS = 20;
 /** 仅 blob: 才 revoke（canonical segment 与 单轨 /api/audio/assets/* 永不 revoke）。 */
 function revokeAudioUrlIfBlob(url: string | null): void {
   if (typeof url !== 'string' || url.length === 0) return;
-  if (isCanonicalPlaybackUrl(url)) return;
-  if (isSingleTrackPlaybackUrl(url)) return;
   if (!url.startsWith('blob:')) return;
   try {
     URL.revokeObjectURL(url);
@@ -369,6 +354,7 @@ const defaultDeps: RehydrateDeps = {
   getAnchor: () => getPlaybackAnchor(),
   getWork: async (workId: number) => {
     const detail = await getWorkDetail({ id: workId });
+    if (!detail.playbackSnapshot) throw new Error('Work playback snapshot unavailable');
     const collectionTitle =
       typeof detail.collectionTitle === 'string' && detail.collectionTitle.trim().length > 0
         ? detail.collectionTitle
@@ -378,22 +364,12 @@ const defaultDeps: RehydrateDeps = {
       storyText: detail.storyText,
       voiceId: detail.voiceId,
       contentHash: detail.contentHash,
+      playbackSnapshot: detail.playbackSnapshot,
       collectionTitle,
     };
   },
   ensureChatLoaded: async () => {
     await useChatStore.getState().initForUser();
-  },
-  getManifest: async (workId: number) => {
-    // fetch throws 与 missing 必须区分。
-    // missing（null/segments=[]）由 hydrate 回落本地；throws 直接抛由 hydrate fail-closed。
-    const manifest = await fetchPlaybackManifest({ workId });
-    if (!manifest) return null;
-    return {
-      segments: manifest.segments,
-      segmentationVersion: manifest.segmentationVersion,
-      segmentCount: manifest.segmentCount,
-    };
   },
   findDraftSnapshot: (messageId: string) => defaultFindDraftSnapshot(messageId),
   clearAnchor: (sessionId: string) => clearPlaybackAnchor({ sessionId }),
@@ -491,6 +467,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     // draft 会话两者均为 null，展示回退既有行为。
     let liveCollectionTitle: string | null = null;
     let liveWorkTitle: string | null = null;
+    let workSnapshot: WorkPlaybackSnapshot | null = null;
 
     if (anchor.source.kind === 'draft') {
       try {
@@ -519,17 +496,18 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     } else {
       // §25.1：严禁走 generationHistoryStore 最近 N 条 find(id)；
       // library.get(workId) 精确 resolve（分页后 Anchor 可指向任意页）。
-      let work: { title: string; storyText: string; voiceId: string; contentHash: string; collectionTitle: string | null };
+      let work: Awaited<ReturnType<RehydrateDeps['getWork']>>;
       try {
         work = await d.getWork(anchor.source.workId);
-      } catch {
-        return dropDanglingAnchor(
-          get,
-          set,
-          anchor.sessionId ?? null,
-          d.clearAnchor,
-          `work:${anchor.source.workId}`,
-        );
+      } catch (error) {
+        if (get().hydrationEpoch !== epochAtStart) return false;
+        const code = (error as { data?: { code?: string } } | null)?.data?.code;
+        if (code !== 'NOT_FOUND') {
+          set({ status: 'error' });
+          return false;
+        }
+        return dropDanglingAnchor(get, set, anchor.sessionId ?? null, d.clearAnchor,
+          `work:${anchor.source.workId}`);
       }
       if (get().hydrationEpoch !== epochAtStart) return false;
       if (!work || typeof work.storyText !== 'string' || work.storyText.length === 0) {
@@ -541,6 +519,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
           `work:${anchor.source.workId}`,
         );
       }
+      workSnapshot = work.playbackSnapshot;
       storyText = work.storyText;
       liveTitle = work.title;
       liveWorkTitle = typeof work.title === 'string' && work.title.length > 0 ? work.title : null;
@@ -552,59 +531,11 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const normalized = normalizeStoryText(storyText);
     const currentHash = computeStoryContentHash(normalized);
     const localParagraphs = segmentStoryText(normalized);
-    // Segmentation SSOT（spec §23）+ /Blocking：
-    // Work hydrate 始终读取 Manifest identity（与 CANONICAL_AUDIO flag 无关）：
-    // Manifest 已存在 → Work 播放段落文本 SSOT = Manifest.segments[].text，
-    // effectiveSegmentationVersion = manifest.segmentationVersion，
-    // effectiveTotalParagraphs = manifest.segmentCount（Manifest 权威）；
-    // 无 Manifest（null/segments=[]）→ 回落本地切分，第一次真正请求时 ensure 侧 lazy 建；
-    // Manifest 读取 throws（unknown）→ Work fail-closed：不进 ready，
-    // 不把 local 当 SSOT，不改写 version，不推进/重置 Progress，可 retry，
-    // 不删 Session、不清 Anchor。flag 只控制音源 provider（play/prefetch：
-    // on→ensureSegment/canonical URL，off→fetchAudio/ephemeral），不控制 identity。
-    // Draft 恒本地切分（不受开关影响）。
-    let paragraphs = localParagraphs;
-    let effectiveSegmentationVersion = SEGMENTATION_VERSION;
-    let effectiveTotalParagraphs = Math.max(1, localParagraphs.length);
-    if (anchor.source.kind === 'work') {
-      let manifest: {
-        segments: Array<{ index: number; text: string }>;
-        segmentationVersion?: string;
-        segmentCount?: number;
-      } | null;
-      try {
-        manifest = await d.getManifest(anchor.source.workId);
-      } catch (err) {
-        // / unknown ≠ missing，不得回落本地（flag 无关）。
-        console.warn('[playbackSessionStore] manifest read failed, fail-closed', err);
-        if (get().hydrationEpoch !== epochAtStart) return false;
-        set({ status: 'error' });
-        return false;
-      }
-      if (get().hydrationEpoch !== epochAtStart) return false;
-      if (manifest && Array.isArray(manifest.segments) && manifest.segments.length > 0) {
-        paragraphs = selectWorkParagraphs(localParagraphs, manifest);
-        if (
-          typeof manifest.segmentationVersion === 'string' &&
-          manifest.segmentationVersion.length > 0
-        ) {
-          effectiveSegmentationVersion = manifest.segmentationVersion;
-        }
-        if (
-          typeof manifest.segmentCount === 'number' &&
-          Number.isFinite(manifest.segmentCount) &&
-          Math.floor(manifest.segmentCount) >= 1
-        ) {
-          effectiveTotalParagraphs = Math.floor(manifest.segmentCount);
-        } else {
-          effectiveTotalParagraphs = Math.max(1, paragraphs.length);
-        }
-      } else {
-        effectiveTotalParagraphs = Math.max(1, paragraphs.length);
-      }
-    } else {
-      effectiveTotalParagraphs = Math.max(1, paragraphs.length);
-    }
+    // Work identity comes from the same server snapshot used by session writes.
+    // Draft retains local paragraph segmentation.
+    const paragraphs = workSnapshot?.paragraphs ?? localParagraphs;
+    const effectiveSegmentationVersion = workSnapshot?.segmentationVersion ?? SEGMENTATION_VERSION;
+    const effectiveTotalParagraphs = workSnapshot?.totalParagraphs ?? Math.max(1, paragraphs.length);
     const totalParagraphs = effectiveTotalParagraphs;
     const position = decideRehydratedPosition({
       savedNextParagraphIndex: anchor.nextParagraphIndex,
@@ -909,6 +840,9 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
 
   handleParagraphEnded: async (): Promise<boolean> => {
     const state = get();
+    // A retained Draft Blob may end while Work snapshot resolution is failing.
+    // Preserve the error and all progress until hydration can retry.
+    if (state.status === 'error') return false;
     // 单轨 Work 整篇是一条时间轴，audio ended 即整 Work 完播；绝不按段落推进导致整轨重放。
     // Draft 仍按段落推进。
     if (state.source?.kind === 'work') {
@@ -932,10 +866,6 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       }
       return false;
     }
-    // fail-closed（Manifest unknown → 绝不以 Draft 切分冒充 Work Manifest SSOT）：
-    // status=error 时当前 Blob 可自然播完，到 ended 事件时停止：不推进 next、不 checkpoint、
-    // 不 fetchAudio、不 ensureSegment、不清 Session；等 hydrate/retry 恢复可信 Manifest SSOT。
-    if (state.status === 'error') return false;
     if (state.totalParagraphs <= 0 || state.paragraphs.length === 0) return false;
     const completed = state.nextParagraphIndex;
     const next = completed + 1;
@@ -1077,48 +1007,26 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const sessionId = state.sessionId;
     const draftHash = state.contentHash;
     const draftNext = state.nextParagraphIndex;
-    const draftParagraphs = state.paragraphs;
     const anchor = await promoteDraftPlaybackToWork({ sessionId, workId });
     // 晋升后标题一致性：起播中草稿晋升为正式 Work 时，用作品详情回填
     // 所属作品集标题与作品短标题（读时 join，无 schema 变更）；失败则回退
     // anchor.title（作品标题），播放不中断。
     let promotedCollectionTitle: string | null = null;
     let promotedWorkTitle: string | null = null;
+    let snapshot: WorkPlaybackSnapshot | null = null;
     try {
       const detail = await defaultDeps.getWork(workId);
       if (get().sessionId !== sessionId) return;
+      snapshot = detail.playbackSnapshot;
       promotedCollectionTitle = detail.collectionTitle;
       promotedWorkTitle = typeof detail.title === 'string' && detail.title.length > 0 ? detail.title : null;
     } catch {
-      // 详情回填失败不阻断晋升收尾：标题回退 anchor.title。
+      // 读取失败保留服务端晋升，下面显式进入可重试错误状态。
     }
     if (get().sessionId !== sessionId) return;
-    // Blocking（spec §23 Session.paragraphs[index]==Manifest.segments[index].text）：
-    // server promotion 已返回 Manifest 权威 Anchor（version=Manifest version、total=Manifest segmentCount）；
-    // client 必须同步把 Session 后续 segment provider 切到目标 Work Manifest frozen segments：
-    // Manifest exists → paragraphs=Manifest.segments[].text，version/count 取 Manifest 权威 pair
-    //（与 server Anchor version/count 一致性校验，不一致记 warn 仍以 Manifest 为准）；
-    // Manifest missing（null/segments=[]）→ 保留既有 promotion 行为（paragraphs 沿用 Draft）；
-    // Manifest read throws（unknown）→ fail-closed：不得偷偷把 Draft paragraphs 当 Work Manifest SSOT，
-    // 须显式置 status error 并向上抛错（server Anchor 已切 Work，本地 source 亦切 Work 保持一致，
-    // 但 paragraphs 不可信，须经 hydrate retry 恢复；当前 Blob 不打断）。
-    // 复用 getPlaybackManifest + selectWorkParagraphs，不造新状态；当前 Blob 不 pause/stop/换 URL（§22.4）。
-    // §50 session guard：manifest 晚到时确认仍是同一 session，否则丢弃覆盖。
-    const d = defaultDeps;
-    let manifest: {
-      segments: Array<{ index: number; text: string }>;
-      segmentationVersion?: string;
-      segmentCount?: number;
-    } | null = null;
-    let manifestUnknown = false;
-    try {
-      manifest = await d.getManifest(workId);
-    } catch (err) {
-      manifestUnknown = true;
-      console.warn('[playbackSessionStore] promote manifest read failed, fail-closed', err);
-    }
-    if (get().sessionId !== sessionId) return;
-    if (manifestUnknown) {
+    // A failed detail read leaves the server promotion intact, preserving the
+    // current Draft Blob while requiring a snapshot retry before further playback.
+    if (!snapshot) {
       // fail-closed：source 切 Work 与 server 对齐，但 paragraphs 不可信 → 置 error 并抛错，
       // 绝不以 Draft 切分冒充 Work Manifest SSOT；当前 Blob 不打断，仅清未播预取。
       const preservedOnError = shouldPreserveDraftBreakpointOnPromote(draftHash, anchor.contentHash);
@@ -1154,43 +1062,11 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       } catch {
         // ignore
       }
-      throw new Error('[playbackSessionStore] promote manifest unknown, fail-closed');
+      throw new Error('[playbackSessionStore] promoted Work snapshot unavailable');
     }
-    let paragraphs = draftParagraphs;
-    let effectiveSegmentationVersion = anchor.segmentationVersion;
-    let effectiveTotalParagraphs = anchor.totalParagraphs;
-    if (manifest && Array.isArray(manifest.segments) && manifest.segments.length > 0) {
-      paragraphs = selectWorkParagraphs(draftParagraphs, manifest);
-      if (
-        typeof manifest.segmentationVersion === 'string' &&
-        manifest.segmentationVersion.length > 0
-      ) {
-        if (manifest.segmentationVersion !== anchor.segmentationVersion) {
-          console.warn('[playbackSessionStore] promote manifest version mismatch anchor, use manifest', {
-            manifest: manifest.segmentationVersion,
-            anchor: anchor.segmentationVersion,
-          });
-        }
-        effectiveSegmentationVersion = manifest.segmentationVersion;
-      }
-      if (
-        typeof manifest.segmentCount === 'number' &&
-        Number.isFinite(manifest.segmentCount) &&
-        Math.floor(manifest.segmentCount) >= 1
-      ) {
-        if (Math.floor(manifest.segmentCount) !== anchor.totalParagraphs) {
-          console.warn('[playbackSessionStore] promote manifest count mismatch anchor, use manifest', {
-            manifest: manifest.segmentCount,
-            anchor: anchor.totalParagraphs,
-          });
-        }
-        effectiveTotalParagraphs = Math.floor(manifest.segmentCount);
-      } else {
-        effectiveTotalParagraphs = Math.max(1, paragraphs.length);
-      }
-    } else {
-      // Manifest missing → 行为：paragraphs 沿用 Draft，version/count 沿用 Anchor（无 Manifest 时 Anchor 即当前切分）。
-    }
+    const paragraphs = snapshot.paragraphs;
+    const effectiveSegmentationVersion = snapshot.segmentationVersion;
+    const effectiveTotalParagraphs = snapshot.totalParagraphs;
     // server 已切换 source/title/hash/voiceId（sessionId 不变）；本地按 hash 取舍断点（基于 Manifest 权威 total 钳制）。
     const preserved = shouldPreserveDraftBreakpointOnPromote(draftHash, anchor.contentHash);
     const next = preserved
@@ -1212,8 +1088,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     });
     // Draft→Work promotion continuity（spec §22.4）：
     // 当前正在播放的 Draft Blob（transport currentAudioUrl）不打断、不换音源；
-    // 仅丢弃尚未播放的 Draft 预取（prefetched），下一次需要后续/重播 Work Segment
-    // 时才走 canonical path。transport 侧不做任何 stop/pause。
+    // 仅丢弃尚未播放的 Draft 预取（prefetched），下一次播放正式作品
+    // 时才请求单轨 Asset。transport 侧不做任何 stop/pause。
     try {
       const stalePrefetch = get().prefetchedAudioUrl;
       abortPrefetch();

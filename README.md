@@ -48,6 +48,8 @@ supervisor（路由，分析 user_intent）
 
 ## 快速开始
 
+使用 Node 22（至少 22.12.0）与 Yarn 1.22.22；本地、CI 和 Docker 镜像保持同一 Node 主版本。
+
 ```bash
 # 1. 安装依赖
 yarn install

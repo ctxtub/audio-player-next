@@ -1,13 +1,13 @@
 /* Design Token 汇总入口 */
-@import './colors';
-@import './colors-dark';
-@import './colors-light';
-@import './typography';
-@import './spacing';
-@import './radius';
-@import './shadows';
-@import './blur';
-@import './motion';
-@import './z-index';
-@import './sizing';
-@import './breakpoints';
+@forward './colors';
+@forward './colors-dark';
+@forward './colors-light';
+@forward './typography';
+@forward './spacing';
+@forward './radius';
+@forward './shadows';
+@forward './blur';
+@forward './motion';
+@forward './z-index';
+@forward './sizing';
+@forward './breakpoints';

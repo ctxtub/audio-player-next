@@ -22,8 +22,8 @@ import { purgeExpiredGuestData } from '@/lib/server/guestGc';
 /**
  * 写入登录态 Cookie。
  */
-const setAuthCookie = async (userId: number, nickname: string) => {
-    const cookieStore = await cookies();
+const setAuthCookie = async (userId: number, nickname: string, preparedStore?: Awaited<ReturnType<typeof cookies>>) => {
+    const cookieStore = preparedStore ?? await cookies();
     cookieStore.set({
         name: SESSION_COOKIE,
         value: encodeSession(userId, nickname),
@@ -45,7 +45,7 @@ export const authRouter = router({
             // 前置校验：确保会话密钥有效，避免后续因签名异常残留孤儿用户
             assertSessionSecret();
 
-            let createdUserId: number | null = null;
+            let registrationCommitted = false;
             try {
                 const existing = await prisma.user.findUnique({
                     where: { username: input.username },
@@ -58,23 +58,26 @@ export const authRouter = router({
                 }
 
                 const hashedPassword = await bcrypt.hash(input.password, 10);
-                const user = await prisma.user.create({
-                    data: {
-                        username: input.username,
-                        password: hashedPassword,
-                        nickname: input.nickname ?? input.username,
-                    },
-                });
-                createdUserId = user.id;
-
-                // 访客注册时配置与创作记录迁移：若存在 guestId，将个性化偏好与创作记录拷贝至新用户
-                if (ctx.guestId) {
-                    await migrateGuestConfigToUser(ctx.guestId, user.id);
-                    const migrationRes = await migrateGuestCreativeRecordsToUser(ctx.guestId, user.id);
-                    await migrateGuestPlaybackProgressToUser(ctx.guestId, user.id, migrationRes.storyWorkIdMap);
-                }
-
-                await setAuthCookie(user.id, user.nickname ?? user.username);
+                const cookieStore = await cookies();
+                const user = await prisma.$transaction(async (tx) => {
+                    const created = await tx.user.create({
+                        data: {
+                            username: input.username,
+                            password: hashedPassword,
+                            nickname: input.nickname ?? input.username,
+                        },
+                    });
+                    if (ctx.guestId) {
+                        await migrateGuestConfigToUser(ctx.guestId, created.id, tx);
+                        const migration = await migrateGuestCreativeRecordsToUser(ctx.guestId, created.id, tx);
+                        await migrateGuestPlaybackProgressToUser(ctx.guestId, created.id, migration.storyWorkIdMap, tx);
+                    }
+                    return created;
+                }, { timeout: 30000 });
+                registrationCommitted = true;
+                // Cookie delivery is outside the database transaction. A failure
+                // must preserve the committed account and transferred audio ownership.
+                await setAuthCookie(user.id, user.nickname ?? user.username, cookieStore);
 
                 return {
                     success: true as const,
@@ -84,13 +87,11 @@ export const authRouter = router({
                     },
                 };
             } catch (error) {
-                // 回滚机制：若已写入数据库但后续 Cookie/签名/配置/创作记录设置失败，删除已建用户
-                if (createdUserId !== null) {
-                    try {
-                        await prisma.user.delete({ where: { id: createdUserId } });
-                    } catch (rollbackError) {
-                        console.error('Failed to rollback orphaned user:', rollbackError);
-                    }
+                if (registrationCommitted) {
+                    throw new TRPCError({
+                        code: 'INTERNAL_SERVER_ERROR',
+                        message: '注册已完成，请使用刚设置的账号密码登录',
+                    });
                 }
                 if (error instanceof TRPCError) throw error;
                 throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: '注册失败，请稍后重试' });

@@ -423,6 +423,8 @@ export function reportProgress(payload: { currentTime: number; duration: number 
  */
 export async function handleNearEnd(): Promise<void> {
   const session = usePlaybackSessionStore.getState();
+  if (session.status === 'error' ||
+      (session.source?.kind === 'work' && usePlaybackStore.getState().currentAudioUrl?.startsWith('blob:'))) return;
   // §28 唯一门：有 session 且 finite → 不续写聊天；  改为走连续创作
   // 预生成下一作品（lookahead=1，窗口/预算/开关由状态机守卫）。
   if (
@@ -450,6 +452,9 @@ export function reportTimeUpdate(payload: {
   hasTriggeredPreload: { current: boolean };
 }): void {
   reportProgress({ currentTime: payload.currentTime, duration: payload.duration });
+  const currentSession = usePlaybackSessionStore.getState();
+  if (currentSession.status === 'error' ||
+      (currentSession.source?.kind === 'work' && usePlaybackStore.getState().currentAudioUrl?.startsWith('blob:'))) return;
   // `playing` 只在进入推进态时触发一次；用真实 timeupdate 提供后续采样，
   // 否则连续创作预算只有状态切换时才会扣减。buffering / pause 已把
   // audioActive 置 false，因此这些等待时间不会进入预算。
@@ -531,6 +536,9 @@ export async function handleEnded(play: (audioUrl: string, messageId?: string) =
   const session = usePlaybackSessionStore.getState();
   // An unresolved Work snapshot must not complete a Work or hand off to the next one.
   if (session.status === 'error') return false;
+  if (session.source?.kind === 'work' && usePlaybackStore.getState().currentAudioUrl?.startsWith('blob:')) {
+    return session.handleParagraphEnded();
+  }
   if (session.source && session.totalParagraphs > 0) {
     // 单轨 Work 整轨只有一个 Asset，任意物理 ended 都代表「整 track 播完」，
     // 必须走尾段分支（先试连续创作下一 Work，再整 Work 完播），不得按段落推进。

@@ -846,6 +846,11 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     // 单轨 Work 整篇是一条时间轴，audio ended 即整 Work 完播；绝不按段落推进导致整轨重放。
     // Draft 仍按段落推进。
     if (state.source?.kind === 'work') {
+      // Promotion keeps the current Draft Blob. Its end is not a Work completion.
+      if (usePlaybackStore.getState().currentAudioUrl?.startsWith('blob:')) {
+        set({ status: 'ready' });
+        return false;
+      }
       // 完播前强制落库最终 positionMs（server 端据此置 completedAt）。
       await get().persistSingleTrackProgress({ force: true });
       set({
@@ -901,6 +906,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
   },
 
   applyPendingSingleTrackResume: (durationSeconds) => {
+    if (!usePlaybackStore.getState().currentAudioUrl?.startsWith('/api/audio/assets/')) return;
     const state = get();
     if (state.singleTrackResumePositionMs === null || state.singleTrackResumeSeekApplied) {
       return;
@@ -922,6 +928,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     const state = get();
     if (!state.sessionId || !state.source || state.source.kind !== 'work') return;
     const transport = usePlaybackStore.getState();
+    if (!transport.currentAudioUrl?.startsWith('/api/audio/assets/')) return;
     const durationSeconds = Number.isFinite(transport.duration) ? transport.duration : 0;
     if (!(durationSeconds > 0)) return;
     const positionMs = Math.max(0, Math.round(transport.currentTime * 1000));

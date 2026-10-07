@@ -7,6 +7,8 @@
 
 import { TRPCError } from '@trpc/server';
 import { prisma } from '@/lib/db';
+import type { Prisma } from '@/lib/generated/prisma/client';
+import { transferGuestSingleTrackAssetsTx, migrateGuestSingleTrackProgressTx } from '@/lib/server/singleTrackOwnershipTransfer';
 import { canonicalizeSourceKind } from '@/lib/playback/legacy';
 import { isValidDraftMessageId } from '@/lib/playback/source';
 import { mergeRemappedWorkProgress } from '@/lib/playback/progress';
@@ -35,10 +37,14 @@ export interface MigrationResult {
  */
 export async function migrateGuestCreativeRecordsToUser(
     guestId: string,
-    userId: number
+    userId: number,
+    tx?: Prisma.TransactionClient
 ): Promise<MigrationResult> {
+    if (!tx) {
+        return prisma.$transaction(inner => migrateGuestCreativeRecordsToUser(guestId, userId, inner), { timeout: 30000 });
+    }
     // 0.  会话 / 作品集迁移（确定性 id + upsert，幂等；只搬运归属，Guest 原行保留给 GC）。
-    const guestConversations = await prisma.guestConversation.findMany({ where: { guestId } });
+    const guestConversations = await tx.guestConversation.findMany({ where: { guestId } });
     const conversationIdMap = new Map<string, string>();
     for (const gc of guestConversations) {
         const mappedId = deriveDeterministicId(
@@ -46,13 +52,16 @@ export async function migrateGuestCreativeRecordsToUser(
             `${guestId}:${gc.id}`
         );
         conversationIdMap.set(gc.id, mappedId);
-        await prisma.conversation.upsert({
+        const conversation = await tx.conversation.upsert({
             where: { id: mappedId },
             create: { id: mappedId, userId, state: gc.state, createdAt: gc.createdAt },
             update: {},
         });
+        if (conversation.userId !== userId) {
+            throw new TRPCError({ code: 'CONFLICT', message: 'Guest conversation has already migrated to another account' });
+        }
     }
-    const guestCollections = await prisma.guestStoryCollection.findMany({ where: { guestId } });
+    const guestCollections = await tx.guestStoryCollection.findMany({ where: { guestId } });
     const collectionIdMap = new Map<string, string>();
     for (const gcol of guestCollections) {
         const mappedId = deriveDeterministicId(
@@ -63,7 +72,7 @@ export async function migrateGuestCreativeRecordsToUser(
             conversationIdMap.get(gcol.conversationId) ??
             deriveDeterministicId('guest-migration-conversation', `${guestId}:${gcol.conversationId}`);
         collectionIdMap.set(gcol.id, mappedId);
-        await prisma.storyCollection.upsert({
+        const collection = await tx.storyCollection.upsert({
             where: { id: mappedId },
             create: {
                 id: mappedId,
@@ -77,15 +86,18 @@ export async function migrateGuestCreativeRecordsToUser(
             },
             update: {},
         });
+        if (collection.userId !== userId || collection.conversationId !== mappedConversationId) {
+            throw new TRPCError({ code: 'CONFLICT', message: 'Guest collection has already migrated to another account' });
+        }
     }
 
     // 1. 聊天会话快照迁移（按 position 升序，幂等防重）
-    const guestMessages = await prisma.guestChatMessage.findMany({
+    const guestMessages = await tx.guestChatMessage.findMany({
         where: { guestId },
         orderBy: { position: 'asc' },
     });
     if (guestMessages.length > 0) {
-        const existingMessages = await prisma.chatMessage.findMany({
+        const existingMessages = await tx.chatMessage.findMany({
             where: { userId },
             select: { messageId: true },
         });
@@ -93,7 +105,7 @@ export async function migrateGuestCreativeRecordsToUser(
         const messagesToInsert = guestMessages.filter((m) => !existingMessageIds.has(m.messageId));
 
         if (messagesToInsert.length > 0) {
-            await prisma.chatMessage.createMany({
+            await tx.chatMessage.createMany({
                 data: messagesToInsert.map((m, idx) => {
                     const mappedConversationId = m.conversationId
                         ? conversationIdMap.get(m.conversationId) ?? null
@@ -116,7 +128,7 @@ export async function migrateGuestCreativeRecordsToUser(
     }
 
     // 2. 作品迁移（按时间与 ID 稳定升序逐条创建，无 take:100 限制，记录 guestStoryWorkId → userStoryWorkId 映射）
-    const guestStoryWorks = await prisma.guestStoryWork.findMany({
+    const guestStoryWorks = await tx.guestStoryWork.findMany({
         where: { guestId },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
@@ -124,124 +136,129 @@ export async function migrateGuestCreativeRecordsToUser(
     const storyWorkIdMap = new Map<number, number>();
 
     if (guestStoryWorks.length > 0) {
-        await prisma.$transaction(async (tx) => {
-            // 先查当前 guestId 与 userId 是否已存在持久化迁移记录（幂等性保障）
-            const existingMigrations = await tx.storyWorkMigration.findMany({
-                where: { guestId, userId },
-            });
-            const existingMap = new Map<number, number>(
-                existingMigrations.map((m) => [m.guestStoryWorkId, m.userStoryWorkId])
-            );
+        // 先查当前 guestId 与 userId 是否已存在持久化迁移记录（幂等性保障）
+        const existingMigrations = await tx.storyWorkMigration.findMany({
+            where: { guestId, userId },
+        });
+        const existingMap = new Map<number, number>(
+            existingMigrations.map((m) => [m.guestStoryWorkId, m.userStoryWorkId])
+        );
 
-            // 如果用户已有同 sourceMessageId 的作品，查询包含 contentHash 以保障幂等安全性
-            const existingUserWorks = await tx.storyWork.findMany({
-                where: { userId },
-                select: { id: true, sourceMessageId: true, contentHash: true },
-            });
-            const userWorkBySourceMsg = new Map<string, { id: number; contentHash: string }>();
-            for (const uw of existingUserWorks) {
-                if (uw.sourceMessageId) {
-                    userWorkBySourceMsg.set(uw.sourceMessageId, {
-                        id: uw.id,
-                        contentHash: uw.contentHash ?? '',
-                    });
+        // 如果用户已有同 sourceMessageId 的作品，查询包含 contentHash 以保障幂等安全性
+        const existingUserWorks = await tx.storyWork.findMany({
+            where: { userId },
+            select: { id: true, sourceMessageId: true, contentHash: true },
+        });
+        const userWorkBySourceMsg = new Map<string, { id: number; contentHash: string }>();
+        for (const uw of existingUserWorks) {
+            if (uw.sourceMessageId) {
+                userWorkBySourceMsg.set(uw.sourceMessageId, {
+                    id: uw.id,
+                    contentHash: uw.contentHash ?? '',
+                });
+            }
+        }
+
+        for (const g of guestStoryWorks) {
+            // 若已迁移，直接复用既有映射（同事务内幂等补转 audio ownership；
+            // Guest Manifest 已清则 no-op，等价已存在则清 Guest rows，冲突则整事务 CONFLICT 回滚）
+            if (existingMap.has(g.id)) {
+                const mappedId = existingMap.get(g.id)!;
+                const target = await tx.storyWork.findFirst({ where: { id: mappedId, userId } });
+                if (!target || target.contentHash !== g.contentHash) {
+                    throw new TRPCError({ code: 'CONFLICT', message: 'Invalid persisted Work migration target' });
                 }
+                storyWorkIdMap.set(g.id, mappedId);
+                await transferGuestSingleTrackAssetsTx(tx, g.id, mappedId);
+                await transferGuestAudioOwnershipTx(tx, g.id, mappedId);
+                continue;
             }
 
-            for (const g of guestStoryWorks) {
-                // 若已迁移，直接复用既有映射（同事务内幂等补转 audio ownership；
-                // Guest Manifest 已清则 no-op，等价已存在则清 Guest rows，冲突则整事务 CONFLICT 回滚）
-                if (existingMap.has(g.id)) {
-                    storyWorkIdMap.set(g.id, existingMap.get(g.id)!);
-                    await transferGuestAudioOwnershipTx(tx, g.id, existingMap.get(g.id)!);
-                    continue;
-                }
-
-                // 若存在 sourceMessageId 且用户已存在对应作品，必须校验 contentHash
-                if (g.sourceMessageId && userWorkBySourceMsg.has(g.sourceMessageId)) {
-                    const existing = userWorkBySourceMsg.get(g.sourceMessageId)!;
-                    const guestHash = g.contentHash ?? '';
-                    if (existing.contentHash === guestHash) {
-                        // 同源同 hash：同一作品，建立正确映射，不重复新增
-                        storyWorkIdMap.set(g.id, existing.id);
-                        await tx.storyWorkMigration.upsert({
-                            where: {
-                                guestId_guestStoryWorkId: {
-                                    guestId,
-                                    guestStoryWorkId: g.id,
-                                },
-                            },
-                            create: {
+            // 若存在 sourceMessageId 且用户已存在对应作品，必须校验 contentHash
+            if (g.sourceMessageId && userWorkBySourceMsg.has(g.sourceMessageId)) {
+                const existing = userWorkBySourceMsg.get(g.sourceMessageId)!;
+                const guestHash = g.contentHash ?? '';
+                if (existing.contentHash === guestHash) {
+                    // 同源同 hash：同一作品，建立正确映射，不重复新增
+                    storyWorkIdMap.set(g.id, existing.id);
+                    await tx.storyWorkMigration.upsert({
+                        where: {
+                            guestId_guestStoryWorkId: {
                                 guestId,
-                                userId,
                                 guestStoryWorkId: g.id,
-                                userStoryWorkId: existing.id,
                             },
-                            update: {
-                                userStoryWorkId: existing.id,
-                            },
-                        });
-                        // 复用既有 User Work 时同事务 transfer audio
-                        //（User Manifest 缺席→transfer；等价→幂等清 Guest；冲突→CONFLICT 全回滚）
-                        await transferGuestAudioOwnershipTx(tx, g.id, existing.id);
-                        continue;
-                    } else {
-                        // 同源异 hash：拒绝冲突，严禁建立错误 map，严禁覆盖原 User Work
-                        throw new TRPCError({
-                            code: 'CONFLICT',
-                            message: `StoryWork migration conflict: sourceMessageId ${g.sourceMessageId} already exists with differing contentHash (existing: ${existing.contentHash}, incoming: ${guestHash})`,
-                        });
-                    }
-                }
-
-                // 逐行创建新用户作品（状态原样保持：title/excerpt/contentHash/sourceMessageId/favoritedAt/deletedAt/createdAt 等全部忠实保持）
-                const created = await tx.storyWork.create({
-                    data: {
-                        userId,
-                        prompt: g.prompt,
-                        storyText: g.storyText,
-                        voiceId: g.voiceId ?? '',
-                        title: g.title ?? '',
-                        excerpt: g.excerpt ?? '',
-                        contentHash: g.contentHash ?? '',
-                        sourceMessageId: g.sourceMessageId ?? null,
-                        collectionId: g.collectionId
-                            ? collectionIdMap.get(g.collectionId) ?? null
-                            : null,
-                        position: g.collectionId ? g.position : null,
-                        favoritedAt: g.favoritedAt ?? null,
-                        deletedAt: g.deletedAt ?? null,
-                        createdAt: g.createdAt,
-                        updatedAt: g.updatedAt ?? g.createdAt,
-                    },
-                });
-
-                storyWorkIdMap.set(g.id, created.id);
-                if (g.sourceMessageId) {
-                    userWorkBySourceMsg.set(g.sourceMessageId, {
-                        id: created.id,
-                        contentHash: created.contentHash,
+                        },
+                        create: {
+                            guestId,
+                            userId,
+                            guestStoryWorkId: g.id,
+                            userStoryWorkId: existing.id,
+                        },
+                        update: {
+                            userStoryWorkId: existing.id,
+                        },
+                    });
+                    // 复用既有 User Work 时同事务 transfer audio
+                    //（User Manifest 缺席→transfer；等价→幂等清 Guest；冲突→CONFLICT 全回滚）
+                    await transferGuestSingleTrackAssetsTx(tx, g.id, existing.id);
+                    await transferGuestAudioOwnershipTx(tx, g.id, existing.id);
+                    continue;
+                } else {
+                    // 同源异 hash：拒绝冲突，严禁建立错误 map，严禁覆盖原 User Work
+                    throw new TRPCError({
+                        code: 'CONFLICT',
+                        message: `StoryWork migration conflict: sourceMessageId ${g.sourceMessageId} already exists with differing contentHash (existing: ${existing.contentHash}, incoming: ${guestHash})`,
                     });
                 }
-
-                // 持久化保存 guestStoryWorkId → userStoryWorkId 映射
-                await tx.storyWorkMigration.create({
-                    data: {
-                        guestId,
-                        userId,
-                        guestStoryWorkId: g.id,
-                        userStoryWorkId: created.id,
-                    },
-                });
-
-                // 同一 DB transaction 内 transfer audio ownership
-                //（Guest Manifest→User Manifest(storyWorkId=created.id)，storageKey 不变，
-                // 随后删 Guest Segment/Manifest rows；object/TTS/tombstone 零触达）
-                await transferGuestAudioOwnershipTx(tx, g.id, created.id);
             }
-        }, { timeout: 30000 });
-    }
 
+            // 逐行创建新用户作品（状态原样保持：title/excerpt/contentHash/sourceMessageId/favoritedAt/deletedAt/createdAt 等全部忠实保持）
+            const created = await tx.storyWork.create({
+                data: {
+                    userId,
+                    prompt: g.prompt,
+                    storyText: g.storyText,
+                    voiceId: g.voiceId ?? '',
+                    title: g.title ?? '',
+                    excerpt: g.excerpt ?? '',
+                    contentHash: g.contentHash ?? '',
+                    sourceMessageId: g.sourceMessageId ?? null,
+                    collectionId: g.collectionId
+                        ? collectionIdMap.get(g.collectionId) ?? null
+                        : null,
+                    position: g.collectionId ? g.position : null,
+                    favoritedAt: g.favoritedAt ?? null,
+                    deletedAt: g.deletedAt ?? null,
+                    createdAt: g.createdAt,
+                    updatedAt: g.updatedAt ?? g.createdAt,
+                },
+            });
+
+            storyWorkIdMap.set(g.id, created.id);
+            if (g.sourceMessageId) {
+                userWorkBySourceMsg.set(g.sourceMessageId, {
+                    id: created.id,
+                    contentHash: created.contentHash,
+                });
+            }
+
+            // 持久化保存 guestStoryWorkId → userStoryWorkId 映射
+            await tx.storyWorkMigration.create({
+                data: {
+                    guestId,
+                    userId,
+                    guestStoryWorkId: g.id,
+                    userStoryWorkId: created.id,
+                },
+            });
+
+            // 同一 DB transaction 内 transfer audio ownership
+            //（Guest Manifest→User Manifest(storyWorkId=created.id)，storageKey 不变，
+            // 随后删 Guest Segment/Manifest rows；object/TTS/tombstone 零触达）
+            await transferGuestSingleTrackAssetsTx(tx, g.id, created.id);
+            await transferGuestAudioOwnershipTx(tx, g.id, created.id);
+        }
+    }
     // 3.：Prompt History 前后端退役，注册迁移不再复制访客提示词历史。
     //    Guest 原行保留给 30 天 GC 自然清理；promptsMigrated 恒为 0（字段保留以兼容调用方与观测）。
     const promptsMigrated = 0;
@@ -284,11 +301,15 @@ export async function migrateGuestCreativeRecordsToUser(
 export async function migrateGuestPlaybackProgressToUser(
     guestId: string,
     userId: number,
-    storyWorkIdMap?: Map<number, number>
+    storyWorkIdMap?: Map<number, number>,
+    tx?: Prisma.TransactionClient
 ): Promise<boolean> {
+    if (!tx) {
+        return prisma.$transaction(inner => migrateGuestPlaybackProgressToUser(guestId, userId, storyWorkIdMap, inner), { timeout: 30000 });
+    }
     // 合并传入 map（本次 creative 迁移新鲜结果，优先）与持久化 StoryWorkMigration（guest 域）。
-    const persistedMappings = await prisma.storyWorkMigration.findMany({
-        where: { guestId },
+    const persistedMappings = await tx.storyWorkMigration.findMany({
+        where: { guestId, userId },
         select: { guestStoryWorkId: true, userStoryWorkId: true },
     });
     const workIdMap = new Map<number, number>();
@@ -301,20 +322,33 @@ export async function migrateGuestPlaybackProgressToUser(
         }
     }
 
-    const guestAnchor = await prisma.guestPlaybackAnchor.findUnique({
+    const guestAnchor = await tx.guestPlaybackAnchor.findUnique({
         where: { guestId },
     });
     // Guest Progress 行经 GuestStoryWork → guest 归属（两表 id 序列独立，须先取本 guest
     // 的 work ids 再圈定，绝不按裸 storyWorkId 跨表猜）。
-    const guestWorks = await prisma.guestStoryWork.findMany({
+    const guestWorks = await tx.guestStoryWork.findMany({
         where: { guestId },
-        select: { id: true },
+        select: { id: true, contentHash: true },
     });
     const guestWorkIdSet = new Set(guestWorks.map((w) => w.id));
+    const ownedTargets = new Map((await tx.storyWork.findMany({
+        where: { userId, id: { in: [...workIdMap.values()] } }, select: { id: true, contentHash: true },
+    })).map(work => [work.id, work.contentHash]));
+    const guestHashes = new Map(guestWorks.map(work => [work.id, work.contentHash]));
+    for (const [guestWorkId, userWorkId] of workIdMap) {
+        if (!guestHashes.has(guestWorkId) || !ownedTargets.has(userWorkId) ||
+            guestHashes.get(guestWorkId) !== ownedTargets.get(userWorkId)) workIdMap.delete(guestWorkId);
+    }
+    const guestAudioProgresses = guestWorkIdSet.size === 0 ? [] : await tx.guestStoryAudioProgress.findMany({
+        where: { storyWorkId: { in: [...guestWorkIdSet] } }, select: { storyWorkId: true },
+    });
+    const audioProgressRemaps = guestAudioProgresses.filter(row => workIdMap.has(row.storyWorkId));
+
     const guestProgresses =
         guestWorkIdSet.size === 0
             ? []
-            : await prisma.guestStoryPlaybackProgress.findMany({
+            : await tx.guestStoryPlaybackProgress.findMany({
                   where: { storyWorkId: { in: [...guestWorkIdSet] } },
               });
 
@@ -358,102 +392,101 @@ export async function migrateGuestPlaybackProgressToUser(
         progressRemaps.push({ guestStoryWorkId: p.storyWorkId, userStoryWorkId: userWorkId });
     }
 
-    if (!remappedAnchor && progressRemaps.length === 0) {
+    if (!remappedAnchor && progressRemaps.length === 0 && audioProgressRemaps.length === 0) {
         return false;
     }
 
-    await prisma.$transaction(
-        async (tx) => {
-            // 顺序：Anchor 先，Progress 后（任务 4c）。
-            if (guestAnchor && remappedAnchor) {
-                const anchorState = guestAnchor.anchorState === 'ended' ? 'ended' : 'ready';
-                const anchorData = {
-                    sourceKind: remappedAnchor.sourceKind,
-                    sourceId: remappedAnchor.sourceId,
-                    sessionId: guestAnchor.sessionId,
-                    anchorState,
-                    title: guestAnchor.title,
-                    contentHash: guestAnchor.contentHash,
-                    segmentationVersion: guestAnchor.segmentationVersion,
-                    lastCompletedParagraphIndex: guestAnchor.lastCompletedParagraphIndex,
-                    nextParagraphIndex: guestAnchor.nextParagraphIndex,
-                    totalParagraphs: guestAnchor.totalParagraphs,
-                    voiceId: guestAnchor.voiceId,
-                    speed: guestAnchor.speed,
-                    remainingAllowedMs: guestAnchor.remainingAllowedMs,
-                    totalAllowedMs: guestAnchor.totalAllowedMs,
-                    isOneShot: guestAnchor.isOneShot,
-                };
-                await tx.userPlaybackAnchor.upsert({
-                    where: { userId },
-                    create: { userId, ...anchorData },
-                    update: anchorData,
-                });
-            }
-            for (const pr of progressRemaps) {
-                const guestRow = guestProgresses.find((g) => g.storyWorkId === pr.guestStoryWorkId);
-                if (!guestRow) continue;
-                const incoming = {
-                    contentHash: guestRow.contentHash ?? '',
-                    segmentationVersion: guestRow.segmentationVersion ?? 'v1',
-                    lastCompletedParagraphIndex: guestRow.lastCompletedParagraphIndex,
-                    nextParagraphIndex: guestRow.nextParagraphIndex,
-                    totalParagraphs: guestRow.totalParagraphs,
-                    completedAt: guestRow.completedAt ? guestRow.completedAt.toISOString() : null,
-                    lastPlayedAt: guestRow.lastPlayedAt ? guestRow.lastPlayedAt.toISOString() : null,
-                };
-                const existing = await tx.storyPlaybackProgress.findUnique({
-                    where: { storyWorkId: pr.userStoryWorkId },
-                });
-                if (!existing) {
-                    await tx.storyPlaybackProgress.create({
-                        data: {
-                            storyWorkId: pr.userStoryWorkId,
-                            contentHash: incoming.contentHash,
-                            segmentationVersion: incoming.segmentationVersion,
-                            lastCompletedParagraphIndex: incoming.lastCompletedParagraphIndex,
-                            nextParagraphIndex: incoming.nextParagraphIndex,
-                            totalParagraphs: incoming.totalParagraphs,
-                            completedAt: guestRow.completedAt ?? null,
-                            lastPlayedAt: guestRow.lastPlayedAt ?? new Date(),
-                        },
-                    });
-                } else {
-                    // 任务 4g：User 已有同 work 进度 → max(next) 合并，不覆盖。
-                    const merged = mergeRemappedWorkProgress(
-                        {
-                            contentHash: existing.contentHash ?? '',
-                            segmentationVersion: existing.segmentationVersion ?? 'v1',
-                            lastCompletedParagraphIndex: existing.lastCompletedParagraphIndex,
-                            nextParagraphIndex: existing.nextParagraphIndex,
-                            totalParagraphs: existing.totalParagraphs,
-                            completedAt: existing.completedAt ? existing.completedAt.toISOString() : null,
-                            lastPlayedAt: existing.lastPlayedAt ? existing.lastPlayedAt.toISOString() : null,
-                        },
-                        incoming
-                    );
-                    await tx.storyPlaybackProgress.update({
-                        where: { storyWorkId: pr.userStoryWorkId },
-                        data: {
-                            contentHash: merged.contentHash,
-                            segmentationVersion: merged.segmentationVersion,
-                            lastCompletedParagraphIndex: merged.lastCompletedParagraphIndex,
-                            nextParagraphIndex: merged.nextParagraphIndex,
-                            totalParagraphs: merged.totalParagraphs,
-                            completedAt: merged.completedAt ? new Date(merged.completedAt) : null,
-                            lastPlayedAt: merged.lastPlayedAt ? new Date(merged.lastPlayedAt) : existing.lastPlayedAt,
-                        },
-                    });
-                }
-            }
-            // Guest 侧：Anchor 注册后清理（保持现状）；Progress copy/remap 语义下原记录保留到 Guest GC
-            //（GC 删过期 GuestStoryWork → FK onDelete: Cascade 清理），此处不删除 Guest Progress 行。
-            if (guestAnchor && remappedAnchor) {
-                await tx.guestPlaybackAnchor.delete({ where: { guestId } });
-            }
-        },
-        { timeout: 30000 }
-    );
+    // Anchor 先迁移，随后将进度与当前会话对齐。
+    if (guestAnchor && remappedAnchor) {
+        const anchorState = guestAnchor.anchorState === 'ended' ? 'ended' : 'ready';
+        const anchorData = {
+            sourceKind: remappedAnchor.sourceKind,
+            sourceId: remappedAnchor.sourceId,
+            sessionId: guestAnchor.sessionId,
+            anchorState,
+            title: guestAnchor.title,
+            contentHash: guestAnchor.contentHash,
+            segmentationVersion: guestAnchor.segmentationVersion,
+            lastCompletedParagraphIndex: guestAnchor.lastCompletedParagraphIndex,
+            nextParagraphIndex: guestAnchor.nextParagraphIndex,
+            totalParagraphs: guestAnchor.totalParagraphs,
+            voiceId: guestAnchor.voiceId,
+            speed: guestAnchor.speed,
+            remainingAllowedMs: guestAnchor.remainingAllowedMs,
+            totalAllowedMs: guestAnchor.totalAllowedMs,
+            sleepTimerMode: guestAnchor.sleepTimerMode,
+            isOneShot: guestAnchor.isOneShot,
+        };
+        await tx.userPlaybackAnchor.upsert({
+            where: { userId },
+            create: { userId, ...anchorData },
+            update: anchorData,
+        });
+    }
+    for (const pr of progressRemaps) {
+        const guestRow = guestProgresses.find((g) => g.storyWorkId === pr.guestStoryWorkId);
+        if (!guestRow) continue;
+        const incoming = {
+            contentHash: guestRow.contentHash ?? '',
+            segmentationVersion: guestRow.segmentationVersion ?? 'v1',
+            lastCompletedParagraphIndex: guestRow.lastCompletedParagraphIndex,
+            nextParagraphIndex: guestRow.nextParagraphIndex,
+            totalParagraphs: guestRow.totalParagraphs,
+            completedAt: guestRow.completedAt ? guestRow.completedAt.toISOString() : null,
+            lastPlayedAt: guestRow.lastPlayedAt ? guestRow.lastPlayedAt.toISOString() : null,
+        };
+        const existing = await tx.storyPlaybackProgress.findUnique({
+            where: { storyWorkId: pr.userStoryWorkId },
+        });
+        if (!existing) {
+            await tx.storyPlaybackProgress.create({
+                data: {
+                    storyWorkId: pr.userStoryWorkId,
+                    contentHash: incoming.contentHash,
+                    segmentationVersion: incoming.segmentationVersion,
+                    lastCompletedParagraphIndex: incoming.lastCompletedParagraphIndex,
+                    nextParagraphIndex: incoming.nextParagraphIndex,
+                    totalParagraphs: incoming.totalParagraphs,
+                    completedAt: guestRow.completedAt ?? null,
+                    lastPlayedAt: guestRow.lastPlayedAt ?? new Date(),
+                },
+            });
+        } else {
+            // User 已有同 work 段落进度 → max(next) 合并，不覆盖。
+            const merged = mergeRemappedWorkProgress(
+                {
+                    contentHash: existing.contentHash ?? '',
+                    segmentationVersion: existing.segmentationVersion ?? 'v1',
+                    lastCompletedParagraphIndex: existing.lastCompletedParagraphIndex,
+                    nextParagraphIndex: existing.nextParagraphIndex,
+                    totalParagraphs: existing.totalParagraphs,
+                    completedAt: existing.completedAt ? existing.completedAt.toISOString() : null,
+                    lastPlayedAt: existing.lastPlayedAt ? existing.lastPlayedAt.toISOString() : null,
+                },
+                incoming
+            );
+            await tx.storyPlaybackProgress.update({
+                where: { storyWorkId: pr.userStoryWorkId },
+                data: {
+                    contentHash: merged.contentHash,
+                    segmentationVersion: merged.segmentationVersion,
+                    lastCompletedParagraphIndex: merged.lastCompletedParagraphIndex,
+                    nextParagraphIndex: merged.nextParagraphIndex,
+                    totalParagraphs: merged.totalParagraphs,
+                    completedAt: merged.completedAt ? new Date(merged.completedAt) : null,
+                    lastPlayedAt: merged.lastPlayedAt ? new Date(merged.lastPlayedAt) : existing.lastPlayedAt,
+                },
+            });
+        }
+    }
+    for (const row of audioProgressRemaps) {
+        await migrateGuestSingleTrackProgressTx(tx, row.storyWorkId, workIdMap.get(row.storyWorkId)!, userId);
+    }
+    // Guest 侧：Anchor 注册后清理（保持现状）；Progress copy/remap 语义下原记录保留到 Guest GC
+    //（GC 删过期 GuestStoryWork → FK onDelete: Cascade 清理），此处不删除 Guest Progress 行。
+    if (guestAnchor && remappedAnchor) {
+        await tx.guestPlaybackAnchor.delete({ where: { guestId } });
+    }
 
     return true;
 }

@@ -12,6 +12,7 @@ import { TRPCError } from '@trpc/server';
 
 import type { ThemeMode } from '@/types/theme';
 import { prisma } from '@/lib/db';
+import type { Prisma } from '@/lib/generated/prisma/client';
 import {
     DEFAULT_USER_CONFIG,
     normalizeUserConfigPatch,
@@ -213,16 +214,17 @@ export async function updateConfig(
  */
 export async function migrateGuestConfigToUser(
     guestId: string,
-    userId: number
+    userId: number,
+    db: Prisma.TransactionClient = prisma
 ): Promise<boolean> {
-    const guestConfig = await prisma.guestConfig.findUnique({
+    const guestConfig = await db.guestConfig.findUnique({
         where: { guestId },
     });
     if (!guestConfig) {
         return false;
     }
 
-    await prisma.userConfig.create({
+    await db.userConfig.create({
         data: {
             userId,
             defaultSleepTimerMinutes: guestConfig.defaultSleepTimerMinutes,

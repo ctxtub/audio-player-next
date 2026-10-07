@@ -1,14 +1,11 @@
 'use client';
 
 /**
- *  PlaybackTimeline（spec §17  当前 Segment timeline）。
+ *  PlaybackTimeline：展示当前 Transport 时间轴。
  *
- *  严格为当前 Segment（不是整篇 duration）：
- * - timeline.mode 恒为 'segment'（ 前不展示假整篇 duration，spec §68）；
- * - 数据仅取  Transport currentTime/duration（段内位置），段落 identity
- *（nextParagraphIndex）绝不进入本组件；
- * - UI 必须明确“本段”，如「本段 01:24 / 02:16」+「第 4 / 12 段」（后者由
- *   ParagraphStatus 负责，本组件只渲染时间轴本体 + 本段标签）。
+ * - 数据仅取 Transport currentTime/duration，不复制播放状态。
+ * - 正式 Work 对应完整音频并显示“播放进度”；旧 Draft 由调用方显示“本段”。
+ * - 段落 identity 不进入本组件，兼容定位由 ParagraphStatus 展示。
  * - 点击 seek（§17.1）：pointer / trackWidth * duration → onSeek；
  * - 键盘（§17.2）：ArrowLeft/Down -5s、ArrowRight/Up +5s、Home 段首、End 段尾；
  * - 全 clamp + duration=0/unknown fail-safe（§17.3），ARIA slider 完整。
@@ -94,6 +91,8 @@ export const resolveKeyboardSeekTarget = (input: {
 
 /** PlaybackTimeline props（全部受控，父级经 ViewModel + facade 传入）。 */
 export type PlaybackTimelineProps = {
+    /** 可见及辅助技术标签；旧草稿默认保留本段语义。 */
+    label?: string;
     /** 段内当前时间（秒，Transport）。 */
     currentTime: number;
     /** 段内总时长（秒，Transport；0 表示未知）。 */
@@ -105,6 +104,7 @@ export type PlaybackTimelineProps = {
 };
 
 export const PlaybackTimeline: React.FC<PlaybackTimelineProps> = ({
+    label = '本段',
     currentTime,
     duration,
     onSeek,
@@ -160,13 +160,13 @@ export const PlaybackTimeline: React.FC<PlaybackTimelineProps> = ({
 
     return (
         <div data-testid="expanded-timeline" data-mode={EXPANDED_TIMELINE_MODE}>
-            <div data-testid="expanded-timeline-label">本段</div>
+            <div data-testid="expanded-timeline-label">{label}</div>
             <div
                 data-testid="expanded-timeline-track"
                 onClick={handleClick}
                 onKeyDown={handleKeyDown}
                 role="slider"
-                aria-label={EXPANDED_TIMELINE_ARIA_LABEL}
+                aria-label={label === '本段' ? EXPANDED_TIMELINE_ARIA_LABEL : label}
                 aria-valuemin={0}
                 aria-valuemax={Math.floor(safeDuration)}
                 aria-valuenow={Math.floor(safeCurrent)}

@@ -385,6 +385,7 @@ export const ExpandedNowPlaying: React.FC = () => {
                             ) : null}
                             {/* Work 为完整音频时间轴；只有 legacy Draft 保留当前段时间轴。 */}
                             <PlaybackTimeline
+                                label={viewModel.source?.kind === 'work' ? '播放进度' : '本段'}
                                 currentTime={viewModel.timeline.currentTime}
                                 duration={viewModel.timeline.duration}
                                 onSeek={controls.seekCurrentSegment}

@@ -18,7 +18,10 @@ export type CollectionTitleInput = {
   prompt: string;
 };
 
-export type CollectionTitleGenerator = (input: CollectionTitleInput) => Promise<string | null>;
+export type CollectionTitleGenerator = (
+  input: CollectionTitleInput,
+  options?: { signal?: AbortSignal },
+) => Promise<string | null>;
 
 /**
  * 默认 AI 标题生成器：调用对话模型，要求输出 4–18 字简洁中文标题。
@@ -27,28 +30,31 @@ export type CollectionTitleGenerator = (input: CollectionTitleInput) => Promise<
 export const defaultCollectionTitleGenerator: CollectionTitleGenerator = async ({
   storyText,
   prompt,
-}) => {
+}, options) => {
   const config = getOpenAIConfig();
   const client = getOpenAIClient();
-  const response = await client.chat.completions.create({
-    // 标题是短文本分类/概括任务，使用 Agent 模型可避免阻塞在较慢的长篇故事模型上。
-    model: config.agentModel,
-    temperature: 0.3,
-    max_tokens: 48,
-    messages: [
-      {
-        role: 'system',
-        content:
-          '你是故事作品集标题助手。根据创作意图与首篇正文，生成一个表达整组内容共同主题的简洁中文标题，' +
-          `长度 ${COLLECTION_TITLE_SUGGESTED_MIN}–${COLLECTION_TITLE_SUGGESTED_MAX} 个中文字符。` +
-          '只输出标题本身，不要引号、标点、前后缀或解释。',
-      },
-      {
-        role: 'user',
-        content: `创作意图：${prompt}\n首篇正文：${storyText.slice(0, 600)}`,
-      },
-    ],
-  });
+  const response = await client.chat.completions.create(
+    {
+      // 标题是短文本分类/概括任务，使用 Agent 模型可避免阻塞在较慢的长篇故事模型上。
+      model: config.agentModel,
+      temperature: 0.3,
+      max_tokens: 48,
+      messages: [
+        {
+          role: 'system',
+          content:
+            '你是故事作品集标题助手。根据创作意图与首篇正文，生成一个表达整组内容共同主题的简洁中文标题，' +
+            `长度 ${COLLECTION_TITLE_SUGGESTED_MIN}–${COLLECTION_TITLE_SUGGESTED_MAX} 个中文字符。` +
+            '只输出标题本身，不要引号、标点、前后缀或解释。',
+        },
+        {
+          role: 'user',
+          content: `创作意图：${prompt}\n首篇正文：${storyText.slice(0, 600)}`,
+        },
+      ],
+    },
+    { signal: options?.signal },
+  );
   return response.choices?.[0]?.message?.content ?? '';
 };
 
@@ -69,15 +75,25 @@ export async function generateCollectionTitleSafely(
 ): Promise<string | null> {
   const timeoutMs = options?.timeoutMs ?? COLLECTION_AI_TITLE_TIMEOUT_MS;
   const generate = defaultCollectionTitleGenerator;
+  const controller = new AbortController();
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('collection-title-timeout')), timeoutMs);
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error('collection-title-timeout'));
+      }, timeoutMs);
     });
-    const raw = await Promise.race([generate(input), timeout]);
-    return normalizeGeneratedCollectionTitle(typeof raw === 'string' ? raw : '');
+    const raw = await Promise.race([generate(input, { signal: controller.signal }), timeout]);
+    const normalized = normalizeGeneratedCollectionTitle(typeof raw === 'string' ? raw : '');
+    if (!normalized) {
+      console.warn('[collectionTitle] generated title rejected');
+    }
+    return normalized;
   } catch {
+    const reason = controller.signal.aborted ? 'timeout' : 'upstream';
+    console.warn('[collectionTitle] generation failed', { reason, timeoutMs });
     return null;
   } finally {
     if (timer !== undefined) clearTimeout(timer);

@@ -128,6 +128,10 @@ export const storyAudioRouter = router({
   saveProgress: guardedProcedure
     .input(saveStoryAudioProgressInputSchema)
     .mutation(async ({ ctx, input }) => {
+      enforceProcedureRateLimit('storyAudio:saveProgress', ctx, {
+        guestLimit: 60,
+        authedLimit: 180,
+      });
       const subject = resolveSubject(ctx);
       const written = await saveStoryAudioProgressForSubject(subject, input);
       return { written };

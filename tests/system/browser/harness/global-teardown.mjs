@@ -6,38 +6,54 @@
  */
 
 import { existsSync, readFileSync, rmSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-
-// 中文注释：仓库根（node 运行 cwd；与 reporter/fixtures 同口径，禁用 import.meta）。
-const repoRoot = process.cwd();
-// 中文注释：harness 运行时目录。
-const runtimeDir = join(repoRoot, '.e2e-runtime', 'browser-harness');
-// 中文注释：当次运行指针文件。
-const pointerPath = join(runtimeDir, 'active.json');
+import { join } from 'node:path';
+import { assertRunOwnership, releaseRunLock, runtimeDir, pointerPath, writeJsonAtomic } from './runtime-state.mjs';
 
 /**
  * globalTeardown：按指针与持久化 handle 回收服务。
  */
 async function globalTeardown() {
     if (!existsSync(pointerPath)) {
-        // eslint-disable-next-line no-console
         console.log('[browser-harness] 无指针文件，无服务可收');
         return;
     }
     const pointer = JSON.parse(readFileSync(pointerPath, 'utf8'));
     const runId = pointer.runId;
+    if (process.env.BROWSER_RUN_ID !== runId) {
+        const blocked = new Error('[browser-harness][BLOCKED] teardown run-id 不匹配，拒绝回收其他运行');
+        blocked.code = 'BLOCKED';
+        throw blocked;
+    }
+    assertRunOwnership(runId);
     const { stopAppServerByPorts } = await import('./app-server.mjs');
     const { stopMockServerByPid } = await import('./mock-openai.mjs');
     const appHandlePath = join(runtimeDir, `app-handle-${runId}.json`);
-    if (existsSync(appHandlePath)) {
-        await stopAppServerByPorts(JSON.parse(readFileSync(appHandlePath, 'utf8')));
+    const cleanupErrors = [];
+    try {
+        if (!pointer.appStopped && existsSync(appHandlePath)) {
+            await stopAppServerByPorts(JSON.parse(readFileSync(appHandlePath, 'utf8')));
+        }
+        pointer.appStopped = true;
         rmSync(appHandlePath, { force: true });
+        writeJsonAtomic(pointerPath, pointer);
+    } catch (error) {
+        cleanupErrors.push(error);
     }
-    await stopMockServerByPid(pointer.mockPid, pointer.mockPort);
-    const mockPortFile = join(runtimeDir, `mock-port-${runId}.json`);
-    rmSync(mockPortFile, { force: true });
+    try {
+        if (!pointer.mockStopped) {
+            await stopMockServerByPid(pointer.mockPid, pointer.mockPort);
+        }
+        pointer.mockStopped = true;
+        rmSync(join(runtimeDir, `mock-port-${runId}.json`), { force: true });
+        writeJsonAtomic(pointerPath, pointer);
+    } catch (error) {
+        cleanupErrors.push(error);
+    }
+    if (cleanupErrors.length > 0) {
+        throw new AggregateError(cleanupErrors, '[browser-harness][BLOCKED] 回收未完成，保留运行锁与资源记录');
+    }
     rmSync(pointerPath, { force: true });
-    // eslint-disable-next-line no-console
+    releaseRunLock(runId);
     console.log(`[browser-harness] down run=${runId}`);
 }
 

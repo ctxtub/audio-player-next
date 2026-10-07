@@ -7,7 +7,7 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "test:fast": "yarn lint && yarn tsc --noEmit --incremental false",
     "test:delivery-journeys": "playwright test --config tests/system/browser/playwright.config.ts --project=chromium",
     "docker:build": "docker compose build",

@@ -34,7 +34,7 @@ import {
   finishPromotionAsReady,
   type PromotionSourceArtifact,
 } from '@/lib/client/chatPromotionOrchestration';
-import type { AgentType } from '@/types/agent';
+import type { AgentMessage, AgentType } from '@/types/agent';
 import {
   createAssistantPlaceholder,
   createTempMessageId,
@@ -1252,10 +1252,14 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     // 构造请求 payload
     // 注意：这里需要转换为 AgentMessage 格式 (简单的 role/content 对象)
     // 且只取这部分作为 summarize 的输入
-    const contextForSummary = [
-      ...(existingSummaryMsg ? [{ role: existingSummaryMsg.role, content: existingSummaryMsg.content }] : []),
-      ...messagesToArchive.map(m => ({ role: m.role, content: m.content }))
-    ] as any[]; // cast to AgentMessage[]
+    const toAgentMessage = (message: ChatMessage): AgentMessage => ({
+      role: message.role === 'system' ? 'system' : message.role === 'assistant' ? 'assistant' : 'user',
+      content: message.content,
+    });
+    const contextForSummary: AgentMessage[] = [
+      ...(existingSummaryMsg ? [toAgentMessage(existingSummaryMsg)] : []),
+      ...messagesToArchive.map(toAgentMessage),
+    ];
 
     try {
       const { summarizeContext } = await import('@/app/services/agentFlow');
@@ -1268,7 +1272,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
         summaryText,
         insertAfterMessageId: lastArchivedMsgId,
         oldSummaryId: existingSummaryMsg?.id
-      } as any);
+      });
 
     } catch (error) {
       console.error('[SummaryAgent] Failed to summarize:', error);

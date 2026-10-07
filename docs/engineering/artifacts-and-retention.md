@@ -24,7 +24,7 @@ docs/testing/**    # 当前测试体系权威
 
 ### `.e2e-runtime/`
 
-短命测试环境：隔离数据库、服务 handle、端口文件、mock 状态和合成环境。任务结束应按所有权清理；不得 broad kill/rm。失败时需要保留的数据库先复制到 `.e2e-results/`。
+短命测试环境：隔离数据库、服务 handle、端口文件、mock 状态和合成环境。任务结束应按所有权清理；不得 broad kill/rm。失败时需要保留的数据库先复制到 `.e2e-results/`。浏览器 harness 可保留当前提交和最近两个已完成 production 快照作为有界构建缓存；其余快照在启动/构建时自动淘汰。
 
 ### `.e2e-results/`
 
@@ -55,7 +55,7 @@ Playwright attachment/output 统一放 `.e2e-results/playwright/`。历史默认
 
 ## 保留与清理
 
-- `.e2e-runtime/`：正常运行完成立即清理；BLOCKED 时仅保留无法安全清理的自有资源并报告。
+- `.e2e-runtime/`：正常运行完成立即清理当次数据库、进程和 handle；production 快照缓存最多保留 3 份。BLOCKED 时仅保留无法安全清理的自有资源并报告。
 - PASS 原始证据：至少保留到独立验收和发布决策完成。
 - FAIL/CONCERN 证据：保留到问题关闭及下一轮验收完成。
 - 需要长期解释的内容提炼到当前规范或 `docs/archive/`；不要把整个本地证据目录提交。

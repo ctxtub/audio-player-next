@@ -8,20 +8,16 @@
  */
 
 import { spawn } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { startAppServer } from './app-server.mjs';
+import { startAppServer, stopAppServer } from './app-server.mjs';
+import { acquireRunLock, releaseRunLock, runtimeDir, pointerPath, writeJsonAtomic } from './runtime-state.mjs';
 
 // 中文注释：仓库根（node 运行 cwd；与 reporter/fixtures 同口径，禁用 import.meta）。
 const repoRoot = process.cwd();
 // 中文注释：harness 目录。
 const harnessDir = join(repoRoot, 'tests', 'system', 'browser', 'harness');
-// 中文注释：harness 运行时目录（gitignore，不入库）。
-const runtimeDir = join(repoRoot, '.e2e-runtime', 'browser-harness');
-// 中文注释：当次运行指针文件（跨 globalSetup/用例进程/reporter 的共享通道）。
-const pointerPath = join(runtimeDir, 'active.json');
-
 /**
  * 生成当次运行标识（UTC 时间 + 随机后缀）。
  * @returns run-id
@@ -79,6 +75,7 @@ async function spawnResidentMock(runId) {
         } catch {
             // 已退出即无需回收。
         }
+        rmSync(portFile, { force: true });
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`${message}${detail ? `\n[mock-standalone]\n${detail}` : ''}`);
     }
@@ -90,39 +87,78 @@ async function spawnResidentMock(runId) {
 async function globalSetup() {
     const runId = process.env.BROWSER_RUN_ID ?? makeRunId();
     process.env.BROWSER_RUN_ID = runId;
-    mkdirSync(runtimeDir, { recursive: true });
-    const mock = await spawnResidentMock(runId);
+    acquireRunLock(runId);
+    if (existsSync(pointerPath)) {
+        releaseRunLock(runId);
+        const blocked = new Error('[browser-harness][BLOCKED] 已有运行指针，必须先按所有权回收旧运行');
+        blocked.code = 'BLOCKED';
+        throw blocked;
+    }
+    let mock = null;
+    let pointer = { runId };
     let appHandle = null;
+    const appHandlePath = join(runtimeDir, `app-handle-${runId}.json`);
     try {
+        mock = await spawnResidentMock(runId);
+        pointer = {
+            runId,
+            mockUrl: mock.url,
+            mockPort: mock.port,
+            mockPid: mock.pid,
+            mockMp3Url: `${mock.url}/fixture.mp3`,
+        };
+        // mock 一旦常驻就立即留下回收证据，不能等 app 构建成功后才写。
+        writeJsonAtomic(pointerPath, pointer);
         appHandle = await startAppServer({ mockBaseUrl: `${mock.url}/v1` });
+        // 中文注释：持久化 app handle（teardown 跨进程回收用，仅存可序列化字段）。
+        writeJsonAtomic(appHandlePath, {
+            port: appHandle.port,
+            pgid: appHandle.childPid,
+            dbFile: appHandle.dbFile,
+            runDir: appHandle.runDir,
+            snapshotRef: appHandle.snapshotRef,
+        });
+        writeJsonAtomic(pointerPath, {
+            ...pointer,
+            appUrl: appHandle.url,
+            appPort: appHandle.port,
+            commit: appHandle.commit,
+        });
     } catch (err) {
+        if (!appHandle && err.appHandle) {
+            appHandle = err.appHandle;
+            writeJsonAtomic(appHandlePath, {
+                port: appHandle.port,
+                pgid: appHandle.childPid,
+                dbFile: appHandle.dbFile,
+                runDir: appHandle.runDir,
+                snapshotRef: appHandle.snapshotRef,
+            });
+        }
         const { stopMockServerByPid } = await import('./mock-openai.mjs');
-        await stopMockServerByPid(mock.pid, mock.port);
+        const cleanupErrors = [];
+        try {
+            if (appHandle) await stopAppServer(appHandle);
+            pointer.appStopped = true;
+            rmSync(appHandlePath, { force: true });
+        } catch (error) {
+            cleanupErrors.push(error);
+        }
+        try {
+            if (mock) await stopMockServerByPid(mock.pid, mock.port);
+            pointer.mockStopped = true;
+            if (mock) rmSync(mock.portFile, { force: true });
+        } catch (error) {
+            cleanupErrors.push(error);
+        }
+        if (cleanupErrors.length > 0) {
+            writeJsonAtomic(pointerPath, pointer);
+            throw new AggregateError([err, ...cleanupErrors], '[browser-harness][BLOCKED] 回收未完成，保留运行锁与资源记录');
+        }
+        rmSync(pointerPath, { force: true });
+        releaseRunLock(runId);
         throw err;
     }
-    // 中文注释：持久化 app handle（teardown 跨进程回收用，仅存可序列化字段）。
-    writeFileSync(
-        join(runtimeDir, `app-handle-${runId}.json`),
-        `${JSON.stringify({ port: appHandle.port, pgid: appHandle.childPid, dbFile: appHandle.dbFile }, null, 2)}\n`,
-    );
-    writeFileSync(
-        pointerPath,
-        `${JSON.stringify(
-            {
-                runId,
-                appUrl: appHandle.url,
-                appPort: appHandle.port,
-                mockUrl: mock.url,
-                mockPort: mock.port,
-                mockPid: mock.pid,
-                mockMp3Url: `${mock.url}/fixture.mp3`,
-                commit: appHandle.commit,
-            },
-            null,
-            2,
-        )}\n`,
-    );
-    // eslint-disable-next-line no-console
     console.log(`[browser-harness] up run=${runId} app=${appHandle.url} mock=${mock.url}`);
 }
 

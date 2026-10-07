@@ -22,7 +22,25 @@ const compat = new FlatCompat({
  * 项目使用的扁平化 ESLint 配置数组。
  */
 const eslintConfig = [
+  {
+    ignores: [
+      '.next/**',
+      '.e2e-results/**',
+      '.e2e-runtime/**',
+      '.agent-runs/**',
+      'lib/generated/**',
+      'next-env.d.ts',
+      'node_modules/**',
+    ],
+  },
   ...compat.extends('next/core-web-vitals', 'next/typescript'),
+  {
+    files: ['tests/system/browser/harness/fixtures.ts'],
+    rules: {
+      // Playwright fixture 的第二个参数名为 use，并非 React Hook。
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
 ];
 
 export default eslintConfig;

@@ -15,9 +15,12 @@ import { spawn, execFileSync } from 'node:child_process';
 import { createConnection } from 'node:net';
 import {
     existsSync,
+    lstatSync,
     mkdirSync,
-    readFileSync,
+    readdirSync,
+    rmdirSync,
     rmSync,
+    statSync,
     symlinkSync,
     writeFileSync,
 } from 'node:fs';
@@ -37,6 +40,68 @@ export const APP_PORT_MAX = 31150;
 const READY_TIMEOUT_MS = 60000;
 // 中文注释：停止后端口释放确认超时毫秒。
 const RELEASE_TIMEOUT_MS = 15000;
+// 中文注释：production 快照体积较大，只保留当前提交和最近两个已完成快照。
+export const SNAPSHOT_CACHE_KEEP_COUNT = 3;
+const FULL_SHA_DIR_RE = /^[0-9a-f]{40}$/i;
+
+/**
+ * 有界清理已完成的 commit 快照；跳过当前、构建锁、未完成目录和符号链接。
+ * @param snapshotsBase 快照根目录
+ * @param currentSha 当前使用的完整 SHA
+ * @param keepCount 总保留数量（包含当前）
+ * @returns 被删除的快照绝对路径
+ */
+export function pruneSnapshotCache(
+    snapshotsBase,
+    currentSha,
+    keepCount = SNAPSHOT_CACHE_KEEP_COUNT,
+) {
+    if (!existsSync(snapshotsBase)) return [];
+    const pruneLock = join(snapshotsBase, '.prune.lock');
+    try {
+        mkdirSync(pruneLock);
+    } catch (error) {
+        if (error.code === 'EEXIST') return [];
+        throw error;
+    }
+    try {
+        const safeKeepCount = Math.max(1, Math.floor(Number(keepCount) || SNAPSHOT_CACHE_KEEP_COUNT));
+        const candidates = readdirSync(snapshotsBase, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory() && FULL_SHA_DIR_RE.test(entry.name))
+            .map((entry) => {
+                const path = join(snapshotsBase, entry.name);
+                const readyMarker = join(path, '.snapshot-ready');
+                try {
+                    if (
+                        entry.name === currentSha ||
+                        existsSync(join(snapshotsBase, `${entry.name}.lock`)) ||
+                        existsSync(join(snapshotsBase, `${entry.name}.in-use`)) ||
+                        !existsSync(readyMarker) ||
+                        lstatSync(path).isSymbolicLink()
+                    ) {
+                        return null;
+                    }
+                    return { path, readyAt: statSync(readyMarker).mtimeMs };
+                } catch (error) {
+                    // 另一回收者已淘汰该目录时无需再处理，其他文件系统错误仍透出。
+                    if (error.code === 'ENOENT') return null;
+                    throw error;
+                }
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.readyAt - a.readyAt);
+
+        const removed = [];
+        for (const candidate of candidates.slice(Math.max(0, safeKeepCount - 1))) {
+            if (existsSync(`${candidate.path}.lock`) || existsSync(`${candidate.path}.in-use`)) continue;
+            rmSync(candidate.path, { recursive: true, force: true });
+            removed.push(candidate.path);
+        }
+        return removed;
+    } finally {
+        releaseDirLock(pruneLock);
+    }
+}
 
 /**
  * 判断 TCP 端口当前是否无监听。
@@ -245,14 +310,20 @@ export async function ensureSnapshot(sha, env, opts = {}) {
     assertArchivePreconditions({ cwd: root });
     const snapshotDir = join(snapshotsBase, sha);
     const readyMarker = join(snapshotDir, '.snapshot-ready');
-    if (isSnapshotReady(readyMarker)) return snapshotDir;
+    if (isSnapshotReady(readyMarker)) {
+        pruneSnapshotCache(snapshotsBase, sha);
+        return snapshotDir;
+    }
     const lockDir = join(snapshotsBase, `${sha}.lock`);
     mkdirSync(snapshotsBase, { recursive: true });
     await acquireDirLock(lockDir);
     try {
         // 中文注释：锁内复验守卫 + ready marker（防 TOCTOU）。
         assertArchivePreconditions({ cwd: root });
-        if (isSnapshotReady(readyMarker)) return snapshotDir;
+        if (isSnapshotReady(readyMarker)) {
+            pruneSnapshotCache(snapshotsBase, sha);
+            return snapshotDir;
+        }
             rmSync(snapshotDir, { recursive: true, force: true });
             mkdirSync(snapshotDir, { recursive: true });
             // 中文注释：仅 tracked 文件进快照（.env*/.db/.next/node_modules 天然排除）。
@@ -291,6 +362,7 @@ export async function ensureSnapshot(sha, env, opts = {}) {
             // 中文注释：marker 记录完整提交 SHA，只有构建完整结束后才写入。
             const builtFull = currentFullSha(root);
             writeFileSync(readyMarker, `${builtFull === 'unknown' ? sha : builtFull}\n`);
+            pruneSnapshotCache(snapshotsBase, sha);
             return snapshotDir;
         } finally {
             releaseDirLock(lockDir);
@@ -308,8 +380,14 @@ export async function ensureSnapshot(sha, env, opts = {}) {
  * @returns 合成环境
  */
 export function buildSnapshotEnv(dbFile, mockBaseUrl) {
+    // 只继承工具运行需要的系统变量；宿主 API key、Tracing、代理和业务配置不进入测试。
+    const systemEnv = Object.fromEntries(
+        ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'SYSTEMROOT', 'WINDIR']
+            .filter((key) => process.env[key] !== undefined)
+            .map((key) => [key, process.env[key]]),
+    );
     const env = {
-        ...process.env,
+        ...systemEnv,
         SESSION_SECRET: randomBytes(32).toString('hex'),
         DATABASE_URL: `file:${dbFile}`,
         OPENAI_API_KEY: 'sk-harness-synthetic',
@@ -466,42 +544,96 @@ export async function startAppServer(options = {}) {
     const runTag = `${Date.now()}-${process.pid}-${randomBytes(4).toString('hex')}`;
     // 中文注释：快照目录先算出（构建期隔离库落快照内，与运行时库分离）。
     const snapshotDirPreview = join(runtimeRoot, 'snapshots', sha);
+    // 在快照构建/复用前登记引用；运行期间不能被另一次构建的缓存淘汰删除。
+    const snapshotRef = join(`${snapshotDirPreview}.in-use`, runTag);
     const buildDb = join(snapshotDirPreview, 'prisma', 'harness-build.db');
     // 中文注释：快照构建先行（失败则回收自有 mock，不留孤儿）。
     let snapshotDir;
     try {
+        const snapshotsBase = dirname(snapshotDirPreview);
+        mkdirSync(snapshotsBase, { recursive: true });
+        const pruneLock = join(snapshotsBase, '.prune.lock');
+        await acquireDirLock(pruneLock);
+        try {
+            mkdirSync(dirname(snapshotRef), { recursive: true });
+            writeFileSync(snapshotRef, `${process.pid}\n`);
+        } finally {
+            releaseDirLock(pruneLock);
+        }
         const buildEnv = buildSnapshotEnv(buildDb, mockBaseUrl);
         snapshotDir = await ensureSnapshot(sha, buildEnv);
     } catch (err) {
+        releaseSnapshotReference(snapshotRef);
         if (ownedMock && mockHandle) await stopMockServer(mockHandle);
         throw err;
     }
-    const port = await pickAppPort();
-    const dbFile = join(snapshotDir, 'prisma', `harness-${port}-${runTag}.db`);
-    const env = buildSnapshotEnv(dbFile, mockBaseUrl);
-    const nodeBin = process.execPath;
-    const nextBin = join(snapshotDir, 'node_modules', 'next', 'dist', 'bin', 'next');
-    const prismaBin = join(snapshotDir, 'node_modules', '.bin', 'prisma');
-    runInSnapshot(snapshotDir, nodeBin, [prismaBin, 'migrate', 'deploy'], env, '初始化运行数据库');
-    const child = spawn(nodeBin, [nextBin, 'start', '-p', String(port)], {
-        cwd: snapshotDir,
-        env,
-        stdio: 'ignore',
-        detached: true,
-    });
-    // 中文注释：unref 让服务在拉起进程（globalSetup/自测进程）退出后继续存活，
-    // 由 stopAppServer/stopAppServerByPorts 显式回收（跨 globalSetup→用例进程必需）。
-    child.unref();
-    const url = `http://localhost:${port}`;
+    const runDir = join(runtimeRoot, 'runs', runTag);
+    const dbFile = join(runDir, 'app.db');
+    let child = null;
+    let port = null;
     try {
+        port = await pickAppPort();
+        mkdirSync(runDir, { recursive: true });
+        const env = buildSnapshotEnv(dbFile, mockBaseUrl);
+        const nodeBin = process.execPath;
+        const nextBin = join(snapshotDir, 'node_modules', 'next', 'dist', 'bin', 'next');
+        const prismaBin = join(snapshotDir, 'node_modules', '.bin', 'prisma');
+        runInSnapshot(snapshotDir, nodeBin, [prismaBin, 'migrate', 'deploy'], env, '初始化运行数据库');
+        child = spawn(nodeBin, [nextBin, 'start', '-p', String(port)], {
+            cwd: snapshotDir,
+            env,
+            stdio: 'ignore',
+            detached: true,
+        });
+        // 捕获 spawn 错误，避免未处理的 error 事件跳过回收。
+        let spawnError = null;
+        child.on('error', (error) => { spawnError = error; });
+        // 中文注释：服务跨 setup 进程存活，由持久化 handle 显式回收。
+        child.unref();
+        const url = `http://localhost:${port}`;
         await waitReady(`${url}/`);
+        if (spawnError) throw spawnError;
+        return { port, url, snapshotDir, snapshotRef, runDir, dbFile, commit: sha, childPid: child.pid ?? null, mockHandle, ownedMock, _child: child };
     } catch (err) {
-        await killTree(child);
-        rmSync(dbFile, { force: true });
-        if (ownedMock && mockHandle) await stopMockServer(mockHandle);
+        try {
+            await killTree(child);
+            if (port !== null) await waitReleased(port);
+            cleanupRunDirectory({ runDir, dbFile });
+            releaseSnapshotReference(snapshotRef);
+        } catch (cleanupError) {
+            const failure = new AggregateError([err, cleanupError], '[app-server][BLOCKED] 回收未完成，保留本次资源句柄');
+            failure.appHandle = { port, runDir, dbFile, snapshotRef, childPid: child?.pid ?? null, _child: child, mockHandle, ownedMock };
+            throw failure;
+        } finally {
+            if (ownedMock && mockHandle) await stopMockServer(mockHandle);
+        }
         throw err;
     }
-    return { port, url, snapshotDir, dbFile, commit: sha, childPid: child.pid ?? null, mockHandle, ownedMock, _child: child };
+}
+
+/** 释放本次快照引用；非空目录代表仍有其他运行，仅保留不删除。 */
+function releaseSnapshotReference(snapshotRef) {
+    if (typeof snapshotRef !== 'string') return;
+    const refDir = dirname(snapshotRef);
+    const snapshotsBase = join(runtimeRoot, 'snapshots');
+    if (dirname(refDir) !== snapshotsBase || !/^[0-9a-f]{40}\.in-use$/i.test(refDir.slice(snapshotsBase.length + 1))) {
+        throw new Error('[app-server] 快照引用路径不属于本 harness');
+    }
+    rmSync(snapshotRef, { force: true });
+    try {
+        rmdirSync(refDir);
+    } catch (error) {
+        if (error.code !== 'ENOTEMPTY' && error.code !== 'ENOENT') throw error;
+    }
+}
+
+/** 仅清理当前 harness 创建的独占目录；旧句柄兼容删除明确的数据库文件。 */
+function cleanupRunDirectory({ runDir, dbFile }) {
+    if (typeof runDir === 'string' && dirname(runDir) === join(runtimeRoot, 'runs')) {
+        rmSync(runDir, { recursive: true, force: true });
+    } else if (typeof dbFile === 'string' && dbFile.length > 0) {
+        rmSync(dbFile, { force: true });
+    }
 }
 
 /**
@@ -510,19 +642,26 @@ export async function startAppServer(options = {}) {
  */
 export async function stopAppServer(handle) {
     if (!handle) return;
-    if (handle._child) await killTree(handle._child);
-    await waitReleased(handle.port);
-    if (handle.dbFile) rmSync(handle.dbFile, { force: true });
-    if (handle.ownedMock && handle.mockHandle) await stopMockServer(handle.mockHandle);
+    try {
+        if (handle._child) await killTree(handle._child);
+        await waitReleased(handle.port);
+        cleanupRunDirectory(handle);
+        releaseSnapshotReference(handle.snapshotRef);
+        pruneSnapshotCache(join(runtimeRoot, 'snapshots'), currentFullSha());
+    } finally {
+        if (handle.ownedMock && handle.mockHandle) await stopMockServer(handle.mockHandle);
+    }
 }
 
 /**
  * 跨进程停止 production server（globalTeardown 用：按持久化 handle 回收）。
- * @param saved 持久化句柄 { port, pgid, dbFile }
+ * @param saved 持久化句柄 { port, pgid, dbFile, runDir? }
  */
 export async function stopAppServerByPorts(saved) {
     if (!saved) return;
     if (typeof saved.pgid === 'number') await killPgroup(saved.pgid, 'app');
     if (typeof saved.port === 'number') await waitReleased(saved.port);
-    if (typeof saved.dbFile === 'string' && saved.dbFile.length > 0) rmSync(saved.dbFile, { force: true });
+    cleanupRunDirectory(saved);
+    releaseSnapshotReference(saved.snapshotRef);
+    pruneSnapshotCache(join(runtimeRoot, 'snapshots'), currentFullSha());
 }

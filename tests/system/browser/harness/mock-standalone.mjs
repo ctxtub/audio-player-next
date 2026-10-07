@@ -45,5 +45,4 @@ process.once('SIGINT', shutdown);
 
 handle = await startMockServer(port === undefined ? {} : { port });
 writeFileSync(portFile, `${JSON.stringify({ port: handle.port, pid: process.pid })}\n`);
-// eslint-disable-next-line no-console
 console.log(`[mock-standalone] listening on ${handle.url}`);

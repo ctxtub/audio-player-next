@@ -20,7 +20,7 @@ export interface AgentConfig {
     /**
      * 允许传入其他任意 Key 以保持扩展性
      */
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 /**

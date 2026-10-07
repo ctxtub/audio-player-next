@@ -5,11 +5,6 @@ const protectedPaths = ['/player', '/chat', '/setting', '/dashboard', '/profile'
 
 const GUEST_COOKIE_MAX_AGE = 30 * 24 * 60 * 60; // 30 days
 
-const isAuthenticated = (request: NextRequest): boolean => {
-  const value = request.cookies.get(SESSION_COOKIE)?.value;
-  return !!value && decodeSession(value) !== null;
-};
-
 const isGuest = (request: NextRequest): boolean => {
   const value = request.cookies.get('guest')?.value;
   // 仅承认签名合法且未过期的访客 Cookie；旧式 guest=1、裸 g_<uuid>、伪造/过期一律非访客。

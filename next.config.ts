@@ -9,13 +9,11 @@ const nextConfig: NextConfig = {
     /** 图片优化缓存时长：31 天（秒） */
     minimumCacheTTL: 2678400,
   },
-  experimental: {
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
+  turbopack: {
+    rules: {
+      '*.svg': {
+        loaders: ['@svgr/webpack'],
+        as: '*.js',
       },
     },
   },

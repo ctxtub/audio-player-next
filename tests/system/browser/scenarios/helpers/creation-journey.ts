@@ -14,8 +14,9 @@ import { expect } from "../../harness/fixtures";
 export const CHAT_URL_SUFFIX = "/chat";
 export const LIBRARY_URL_SUFFIX = "/library";
 
-/** 截图输出根（gitignored，提交时只显式加 visual-report.md，不含 png）。 */
-export const VISUAL_DIR = ".e2e-results/product-journey-completion/cross-page-polish/visual";
+/** 每次运行独占截图根，避免覆盖仍需保留的既有验收证据。 */
+const visualRunId = process.env.BROWSER_RUN_ID ?? new Date().toISOString().replace(/[:.]/g, "-");
+export const VISUAL_DIR = `.e2e-results/browser/${visualRunId}/visual`;
 
 /**
  * 截取旅程可视化证据（PNG 只落盘 gitignored 目录，不进断言）。
@@ -23,6 +24,8 @@ export const VISUAL_DIR = ".e2e-results/product-journey-completion/cross-page-po
  * @param name 文件名（不含扩展名）
  */
 export async function captureVisual(page: Page, name: string): Promise<void> {
+    // 等待现有 400ms 入场动画及响应式布局稳定，保持默认产品动效和配置。
+    await page.waitForTimeout(500);
     await page.screenshot({ path: `${VISUAL_DIR}/${name}.png` });
 }
 

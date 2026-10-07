@@ -796,7 +796,8 @@ export async function saveStoryAudioProgressForSubject(
       subject.type === 'user' ? tx.storyAudioProgress : tx.guestStoryAudioProgress
     ) as unknown as TwinDelegate;
     const current = await table.findUnique({ where: { storyWorkId: work.id } });
-    if (current && current.sessionId !== sessionId) return false;
+    // The Anchor above fences the active session. Returning to a Work creates
+    // a new session that must be able to take over its previous progress row.
     const decide = shouldPersistPosition({
       positionMs: clamped,
       previousPositionMs: current?.positionMs ?? null,
@@ -821,7 +822,7 @@ export async function saveStoryAudioProgressForSubject(
       return true;
     }
     const updated = await table.updateMany({
-      where: { storyWorkId: work.id, sessionId },
+      where: { storyWorkId: work.id, sessionId: current.sessionId },
       data: progressData,
     });
     return updated.count === 1;

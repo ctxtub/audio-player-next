@@ -39,7 +39,10 @@ function bind(): void {
   if (!enabled) cancelPendingNextWork();
   const source = usePlaybackSessionStore.getState().source;
   if (source?.kind === 'work' && source.workId === saved?.creationWorkId) {
-    if (enabled) void import('./playbackSessionFlow').then((flow) => flow.synchronizeCreationTimer());
+    if (enabled) void import('./playbackSessionFlow').then((flow) => {
+      if (flow.isCreationPlayback() && useContinuousCreationStore.getState().enabled && useContinuousCreationStore.getState().remainingMs === 0) flow.stopPlayback();
+      else void flow.synchronizeCreationTimer();
+    });
     else void usePlaybackSessionStore.getState().setSleepTimer('off');
   }
 }
@@ -66,6 +69,10 @@ export function resetContinuousCreationDuration(): void {
   cancelPendingNextWork();
   const budgetMs = resolveContinuousCreationBudgetMinutes() * 60000;
   state.restoreSession({ conversationId: chat.conversationId, collectionId: chat.collectionId, enabled: true, budgetMs, remainingMs: budgetMs, creationWorkId: state.creationWorkId, exhausted: false });
-  void import('./playbackSessionFlow').then((flow) => { flow.pausePlayback(); void flow.synchronizeCreationTimer(); });
-  void usePlaybackSessionStore.getState().persistSingleTrackProgress({ force: true });
+  void import('./playbackSessionFlow').then((flow) => {
+    if (!flow.isCreationPlayback()) return;
+    flow.pausePlayback();
+    void flow.synchronizeCreationTimer();
+    void usePlaybackSessionStore.getState().persistSingleTrackProgress({ force: true });
+  });
 }

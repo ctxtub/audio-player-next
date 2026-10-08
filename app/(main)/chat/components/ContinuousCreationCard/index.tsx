@@ -74,7 +74,7 @@ const ContinuousCreationCard: React.FC = () => {
         </span>
         {title ? <span className={styles.title}>{title}</span> : null}
         {isWaiting ? (
-          <span className={styles.hint}>等待期间不消耗播放预算</span>
+          <span className={styles.hint}>等待期间不计入自动播放时长</span>
         ) : null}
       </div>
       {isError ? (

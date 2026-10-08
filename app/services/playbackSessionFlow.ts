@@ -428,11 +428,7 @@ export function reportAudioActive(active: boolean): void {
   usePlaybackStore.getState().reportAudioActive(active);
   // 同一 audio-active 信号驱动连续创作预算；动态 import 避免模块环。
   void import('./continuousCreationFlow')
-    .then((flow) => {
-      const source = usePlaybackSessionStore.getState().source;
-      const belongs = useChatStore.getState().messages.some((message) => source?.kind === 'draft' ? message.id === source.messageId : message.parts?.some((part) => part.type === 'storyArtifact' && source?.kind === 'work' && part.artifact.storyWorkId === source.workId));
-      flow.reportContinuousAudioActive(active && belongs && !useCollectionPlaybackStore.getState().collectionId);
-    })
+    .then((flow) => flow.reportContinuousAudioActive(active && isCreationPlayback()))
     .catch(() => undefined);
 }
 
@@ -616,14 +612,16 @@ export async function handleEnded(play: (audioUrl: string, messageId?: string) =
 }
 
 /** 元信息更新不重建会话、不改变进度与出声状态。 */
-export function refreshPlayingWorkMetadata(work: { id: number; title: string; collectionTitle?: string | null; collectionId?: string | null }): void {
+export function refreshPlayingWorkMetadata(work: { id: number; title: string; collectionTitle?: string | null; collectionId?: string | null; conversationId?: string | null }): void {
   const current = usePlaybackSessionStore.getState();
-  if (current.source?.kind === 'work' && current.source.workId === work.id) usePlaybackSessionStore.setState({ title: work.title, workTitle: work.title, collectionTitle: work.collectionTitle ?? null });
+  if (current.source?.kind === 'work' && current.source.workId === work.id) usePlaybackSessionStore.setState({ title: work.title, workTitle: work.title, collectionTitle: work.collectionTitle === undefined ? current.collectionTitle : work.collectionTitle, collectionId: work.collectionId === undefined ? current.collectionId : work.collectionId, conversationId: work.conversationId === undefined ? current.conversationId : work.conversationId });
 }
 
 /** 当前声音是否来自可继续创作的编辑上下文。 */
 function isCreationPlayback(): boolean {
   const source = usePlaybackSessionStore.getState().source;
   if (useCollectionPlaybackStore.getState().collectionId) return false;
+  const session = usePlaybackSessionStore.getState();
+  if (source?.kind === 'work' && session.collectionId) return session.collectionId === useChatStore.getState().collectionId && session.conversationId === useChatStore.getState().conversationId;
   return useChatStore.getState().messages.some((message) => source?.kind === 'draft' ? message.id === source.messageId : message.parts?.some((part) => part.type === 'storyArtifact' && source?.kind === 'work' && part.artifact.storyWorkId === source.workId));
 }

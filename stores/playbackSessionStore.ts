@@ -100,6 +100,9 @@ interface PlaybackSessionState {
    * 同一字符串）；Session.title 语义不变（作品/草稿标题），副标题用 workTitle。
    */
   collectionTitle: string | null;
+  /** 已验证的内容归属，只用于导航与创作编排匹配。 */
+  collectionId: string | null;
+  conversationId: string | null;
   /**
    * 当前作品短标题（work 会话：作品标题；draft 会话：null）。
    * 播放器副标题表达作品位置或短标题时使用，展示层截断/省略。
@@ -204,6 +207,8 @@ interface RehydrateDeps {
     voiceId: string;
     contentHash: string;
     collectionTitle: string | null;
+    collectionId: string | null;
+    conversationId: string | null;
     playbackSnapshot: WorkPlaybackSnapshot;
   }>;
   ensureChatLoaded: () => Promise<void>;
@@ -221,6 +226,8 @@ const INITIAL_SESSION_STATE: PlaybackSessionState = {
   source: null,
   title: '',
   collectionTitle: null,
+  collectionId: null,
+  conversationId: null,
   workTitle: null,
   storyText: '',
   paragraphs: [],
@@ -367,6 +374,8 @@ const defaultDeps: RehydrateDeps = {
       contentHash: detail.contentHash,
       playbackSnapshot: detail.playbackSnapshot,
       collectionTitle,
+      collectionId: detail.collectionId ?? null,
+      conversationId: detail.conversationId ?? null,
     };
   },
   ensureChatLoaded: async () => {
@@ -466,6 +475,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     let liveVoiceId = anchor.voiceId;
     // 标题一致性：work 会话附带所属作品集标题（一级标题）与作品短标题（副标题）；
     // draft 会话两者均为 null，展示回退既有行为。
+    let liveCollectionId: string | null = null;
+    let liveConversationId: string | null = null;
     let liveCollectionTitle: string | null = null;
     let liveWorkTitle: string | null = null;
     let workSnapshot: WorkPlaybackSnapshot | null = null;
@@ -525,6 +536,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       liveTitle = work.title;
       liveWorkTitle = typeof work.title === 'string' && work.title.length > 0 ? work.title : null;
       liveCollectionTitle = work.collectionTitle;
+      liveCollectionId = work.collectionId;
+      liveConversationId = work.conversationId;
       if (!liveVoiceId && work.voiceId) liveVoiceId = work.voiceId;
     }
 
@@ -582,6 +595,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         : { kind: 'work', workId: anchor.source.workId },
       title,
       collectionTitle: liveCollectionTitle,
+      collectionId: liveCollectionId,
+      conversationId: liveConversationId,
       workTitle: liveWorkTitle,
       storyText: normalized,
       paragraphs,
@@ -1021,6 +1036,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     // 晋升后标题一致性：起播中草稿晋升为正式 Work 时，用作品详情回填
     // 所属作品集标题与作品短标题（读时 join，无 schema 变更）；失败则回退
     // anchor.title（作品标题），播放不中断。
+    let promotedCollectionId: string | null = null;
+    let promotedConversationId: string | null = null;
     let promotedCollectionTitle: string | null = null;
     let promotedWorkTitle: string | null = null;
     let snapshot: WorkPlaybackSnapshot | null = null;
@@ -1029,6 +1046,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       if (get().sessionId !== sessionId) return;
       snapshot = detail.playbackSnapshot;
       promotedCollectionTitle = detail.collectionTitle;
+      promotedCollectionId = detail.collectionId;
+      promotedConversationId = detail.conversationId;
       promotedWorkTitle = typeof detail.title === 'string' && detail.title.length > 0 ? detail.title : null;
     } catch {
       // 读取失败保留服务端晋升，下面显式进入可重试错误状态。
@@ -1047,6 +1066,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         source: { kind: 'work', workId },
         title: anchor.title,
         collectionTitle: promotedCollectionTitle,
+      collectionId: promotedCollectionId,
+      conversationId: promotedConversationId,
         workTitle: promotedWorkTitle ?? anchor.title,
         contentHash: anchor.contentHash,
         segmentationVersion: anchor.segmentationVersion,
@@ -1086,6 +1107,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       source: { kind: 'work', workId },
       title: anchor.title,
       collectionTitle: promotedCollectionTitle,
+      collectionId: promotedCollectionId,
+      conversationId: promotedConversationId,
       workTitle: promotedWorkTitle ?? anchor.title,
       contentHash: anchor.contentHash,
       segmentationVersion: effectiveSegmentationVersion,

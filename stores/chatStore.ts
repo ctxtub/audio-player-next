@@ -48,6 +48,7 @@ import {
   fetchConversationMessages,
   saveConversationSnapshot,
 } from '@/lib/client/conversation';
+import { getQueryClient } from '@/lib/client/queryClient';
 import { getCollection } from '@/lib/client/collection';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 import {
@@ -430,6 +431,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
           const conversationId =
             kick.conversationId ?? (await ensureActiveConversation()).id;
           const dto = await executePromotionCreate(kick.source, conversationId);
+          void getQueryClient().invalidateQueries({ queryKey: ['collections'] });
+          void getQueryClient().invalidateQueries({ queryKey: ['conversation-record', conversationId] });
           get().dispatch({
             type: 'promotion.resolved',
             messageId: kick.messageId,

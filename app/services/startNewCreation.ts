@@ -11,6 +11,7 @@
  * 远端失败保持无声安全态并允许重试，绝不恢复旧播放。
  */
 
+import { getQueryClient } from '@/lib/client/queryClient';
 import { createNewConversation } from '@/lib/client/conversation';
 import { resolveContinuousCreationBudgetMinutes } from '@/lib/continuous-creation/budget';
 import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
@@ -125,6 +126,7 @@ export async function startNewCreation(
     const created = await createNewConversation(expectedOldId);
     conversationId = created.id;
     collectionId = created.collectionId ?? null;
+    void getQueryClient().invalidateQueries({ queryKey: ['conversation-record'] });
   } catch {
     reason = 'remote-failed';
   }

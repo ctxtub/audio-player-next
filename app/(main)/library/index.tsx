@@ -107,6 +107,7 @@ const LibraryPage: React.FC = () => {
         {isEmpty ? (
           <LibraryEmptyState
             view={view}
+            scope={isWorks ? 'works' : 'collections'}
             query={q}
             onClearSearch={clearSearch}
           />

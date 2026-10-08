@@ -106,7 +106,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
           <div className={styles.errorIconWrapper}>
             <AlertCircle size={28} />
           </div>
-          <h2 className={styles.errorTitle}>作品集加载失败</h2>
+          <h2 className={styles.errorTitle}>故事集加载失败</h2>
           <p className={styles.errorMessage}>
             {error instanceof Error ? error.message : '网络或服务异常，请稍后重试'}
           </p>
@@ -215,7 +215,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
               >
                 <input
                   className={styles.renameInput}
-                  aria-label="作品集标题"
+                  aria-label="故事集标题"
                   data-testid="collection-rename-input"
                   value={draftTitle}
                   onChange={(e) => setDraftTitle(e.target.value)}
@@ -289,7 +289,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
               onClick={handleDelete}
             >
               <Trash2 size={14} />
-              <span>{isDeleting ? '删除中…' : '删除作品集'}</span>
+              <span>{isDeleting ? '删除中…' : '删除故事集'}</span>
             </button>
             </details>
           </div>
@@ -300,7 +300,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
         <div className={styles.sectionHeading}>
           <div>
             <p className={styles.eyebrow}>播放列表</p>
-            <h2>集内作品</h2>
+            <h2>集内故事</h2>
           </div>
           <span>{data.workCount} 篇</span>
         </div>
@@ -317,11 +317,11 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
         {data.works.length === 0 ? (
           <div className={styles.emptyMembers}>
             <BookOpen size={24} />
-            <p>这个作品集还没有完整作品</p>
+            <p>这个故事集还没有已保存故事</p>
           </div>
         ) : (
           <div className={styles.memberList}>
-            {data.works.map((work) => {
+            {data.works.map((work, visibleIndex) => {
               const isCurrent = currentWorkId === work.id;
               const heardSeconds = isCurrent ? currentTime : (work.progress?.positionMs ?? 0) / 1000;
               const isPreparing =
@@ -339,7 +339,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                     ? '重新播放'
                     : isCurrent
                       ? '继续播放'
-                      : '播放';
+                      : work.progress?.positionMs ? work.progress.durationMs && work.progress.positionMs >= work.progress.durationMs - 1000 ? '重新播放' : '继续播放' : '播放';
               const ButtonIcon = isPreparing
                 ? LoaderCircle
                 : isCurrentPlaying
@@ -359,7 +359,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                   }
                 >
                   <div className={styles.memberPosition} aria-hidden="true">
-                    {String(work.position + 1).padStart(2, '0')}
+                    {String(visibleIndex + 1).padStart(2, '0')}
                   </div>
                   <div className={styles.memberBody}>
                     <div className={styles.memberTitleRow}>

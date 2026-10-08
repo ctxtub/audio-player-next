@@ -39,7 +39,7 @@ test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) 
   await page.getByRole('tab', { name: '回收站', exact: true }).click();
   await page.waitForURL(/\/library\/trash(?:\?|$)/);
   await page.getByRole('link', { name: '故事集', exact: true }).click();
-  await page.getByRole('button', { name: `恢复作品集《${title}》` }).click();
+  await page.getByRole('button', { name: `恢复故事集《${title}》` }).click();
   await page.getByRole('tab', { name: '全部', exact: true }).click();
   await page.getByRole('link', { name: title, exact: true }).click();
   await expect(members).toHaveCount(1);

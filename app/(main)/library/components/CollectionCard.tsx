@@ -152,7 +152,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
             onClick={handleMoveToTrash}
             disabled={isTrashing}
             data-testid={`collection-trash-btn-${collection.id}`}
-            aria-label={`删除作品集《${collection.title}》`}
+            aria-label={`删除故事集《${collection.title}》`}
           >
             <Trash2 size={14} />
             <span>移入回收站</span>
@@ -165,7 +165,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
               onClick={handleRestore}
               disabled={isRestoring}
               data-testid="collection-restore-btn"
-              aria-label={`恢复作品集《${collection.title}》`}
+              aria-label={`恢复故事集《${collection.title}》`}
             >
               <RotateCcw size={14} />
               <span>恢复</span>
@@ -175,7 +175,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
               className={styles.deletePermanentlyBtn}
               onClick={() => setIsDeleteConfirmOpen(true)}
               data-testid="collection-permanent-delete-btn"
-              aria-label={`永久删除作品集《${collection.title}》`}
+              aria-label={`永久删除故事集《${collection.title}》`}
             >
               <Trash2 size={14} />
               <span>永久删除</span>
@@ -197,7 +197,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
               id={`collection-delete-title-${collection.id}`}
               className={styles.confirmTitle}
             >
-              永久删除作品集？
+              永久删除故事集？
             </h4>
             <p className={styles.confirmMessage}>
               《{collection.title}》及其中全部作品将被永久删除，此操作不可撤销。

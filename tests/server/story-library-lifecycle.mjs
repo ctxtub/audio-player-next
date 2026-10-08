@@ -19,6 +19,7 @@ process.env.OPENAI_MODEL_STORY = 'synthetic-model';
 process.env.OPENAI_MODEL_AGENT = 'synthetic-model';
 const jiti = require('jiti')(path.join(root, 'index.js'), { alias: { '@': root } });
 const { prisma } = await jiti(path.join(root, 'lib/db.ts'));
+const collectionViewModel = await jiti(path.join(root, 'lib/client/collectionViewModel.ts'));
 const collection = await jiti(path.join(root, 'lib/server/storyCollection.ts'));
 const work = await jiti(path.join(root, 'lib/server/storyWork.ts'));
 const conversation = await jiti(path.join(root, 'lib/server/conversation.ts'));
@@ -36,6 +37,7 @@ try {
     const second = await works.create({ data: { ...ownerField, collectionId: group.id, position: 1, title: '随集删除', prompt: 'synthetic', storyText: '完全合成的验证正文', contentHash: 'synthetic-second' } });
     await work.trashStoryWorkForSubject(subject, first.id);
     const detail = await collection.getCollectionForSubject(subject, group.id);
+    assert.equal(collectionViewModel.areMemberPositionsOrdered(detail.works), true);
     assert.equal(detail.workCount, 1); assert.deepEqual(detail.works.map((item) => item.id), [second.id]);
     const hidden = await collection.listCollectionsForSubject(subject, { query: '已单独删除' });
     assert.equal(hidden.items.length, 0);

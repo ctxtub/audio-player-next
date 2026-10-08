@@ -8,8 +8,8 @@ import { trpc } from '@/lib/trpc/client';
 export const ensureAsset = async (input: {
   workId: number;
   sessionId: string;
-}): Promise<import('@/lib/trpc/schemas/storyAudio').EnsureStoryAudioOutput> => {
-  return trpc.storyAudio.ensure.mutate(input);
+}, signal?: AbortSignal): Promise<import('@/lib/trpc/schemas/storyAudio').EnsureStoryAudioOutput> => {
+  return trpc.storyAudio.ensure.mutate(input, { signal });
 };
 
 /**  单轨投影读取（只读）。 */

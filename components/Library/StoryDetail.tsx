@@ -247,7 +247,7 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
           )}
 
           <div className={styles.actionsGroup}>
-            <WorkPlaybackButton workId={work.id} title={work.title} />
+            <WorkPlaybackButton workId={work.id} title={work.title} progress={work.progress} />
             <button
               type="button"
               className={work.favoritedAt ? styles.favoriteBtnActive : styles.favoriteBtn}

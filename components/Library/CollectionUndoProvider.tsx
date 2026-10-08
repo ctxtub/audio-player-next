@@ -177,7 +177,7 @@ export const CollectionUndoProvider: React.FC<CollectionUndoProviderProps> = ({
           data-collection-id={activeUndo.collectionId}
         >
           <span className={styles.undoMessage} data-testid="library-undo-message">
-            已将作品集《{activeUndo.collectionTitle}》移入回收站
+            已将故事集《{activeUndo.collectionTitle}》移入回收站
           </span>
           <button
             type="button"

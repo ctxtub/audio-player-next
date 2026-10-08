@@ -40,7 +40,8 @@ export function areMemberPositionsOrdered(
   works: CollectionWorkSummaryDTO[],
 ): boolean {
   for (let i = 0; i < works.length; i += 1) {
-    if (works[i]!.position !== i) return false;
+    const position = works[i]!.position;
+    if (!Number.isInteger(position) || position < 0 || (i > 0 && position <= works[i - 1]!.position)) return false;
   }
   return true;
 }
@@ -55,7 +56,7 @@ export function findLastCollectionCardId(
 
 /** 集合成员计数文案（零复数形态，中文恒定）。 */
 export function formatCollectionWorkCount(workCount: number): string {
-  return `${Math.max(0, Math.floor(workCount))} 个作品`;
+  return `${Math.max(0, Math.floor(workCount))} 篇故事`;
 }
 
 /** 集合是否被收藏。 */

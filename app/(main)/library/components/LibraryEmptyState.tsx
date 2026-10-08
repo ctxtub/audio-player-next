@@ -10,6 +10,7 @@ export interface LibraryEmptyStateProps {
   view: LibraryView;
   query?: string;
   onClearSearch?: () => void;
+  scope?: 'collections' | 'works';
 }
 
 /**
@@ -19,7 +20,9 @@ export const LibraryEmptyState: React.FC<LibraryEmptyStateProps> = ({
   view,
   query,
   onClearSearch,
+  scope = 'collections',
 }) => {
+  const noun = scope === 'works' ? '故事' : '故事集';
   // 1. 搜索空状态（优先级最高，适用于任意视图下的搜索无匹配）
   if (query) {
     return (
@@ -27,7 +30,7 @@ export const LibraryEmptyState: React.FC<LibraryEmptyStateProps> = ({
         <div className={styles.emptyIconWrapper}>
           <Search size={24} />
         </div>
-        <h3 className={styles.emptyTitle}>没有找到匹配“{query}”的作品集</h3>
+        <h3 className={styles.emptyTitle}>没有找到匹配“{query}”的{noun}</h3>
         <p className={styles.emptySubtitle}>尝试搜索其他关键词或清除搜索条件</p>
         {onClearSearch ? (
           <button
@@ -50,8 +53,8 @@ export const LibraryEmptyState: React.FC<LibraryEmptyStateProps> = ({
         <div className={styles.emptyIconWrapper}>
           <Star size={24} />
         </div>
-        <h3 className={styles.emptyTitle}>还没有收藏的作品集</h3>
-        <p className={styles.emptySubtitle}>在故事库中点击收藏，喜欢的作品集会保存在这里。</p>
+        <h3 className={styles.emptyTitle}>还没有收藏的{noun}</h3>
+        <p className={styles.emptySubtitle}>在故事库中点击收藏，喜欢的{noun}会保存在这里。</p>
       </div>
     );
   }
@@ -64,7 +67,7 @@ export const LibraryEmptyState: React.FC<LibraryEmptyStateProps> = ({
           <Trash2 size={24} />
         </div>
         <h3 className={styles.emptyTitle}>回收站为空</h3>
-        <p className={styles.emptySubtitle}>移入回收站的作品会在 30 天后永久删除。</p>
+        <p className={styles.emptySubtitle}>误删内容可以恢复，永久删除前会再次确认。</p>
       </div>
     );
   }
@@ -75,8 +78,8 @@ export const LibraryEmptyState: React.FC<LibraryEmptyStateProps> = ({
       <div className={styles.emptyIconWrapper}>
         <BookOpen size={24} />
       </div>
-      <h3 className={styles.emptyTitle}>还没有作品集</h3>
-      <p className={styles.emptySubtitle}>完成一次创作后，作品会归入作品集并保存在这里。</p>
+      <h3 className={styles.emptyTitle}>还没有故事集</h3>
+      <p className={styles.emptySubtitle}>完成一次创作后，故事会归入故事集并保存在这里。</p>
       <Link
         href="/chat"
         className={styles.emptyCtaBtn}

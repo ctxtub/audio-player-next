@@ -61,6 +61,7 @@ import {
   resolveDefaultSessionTimer,
   type SleepTimerMode,
 } from '@/lib/playback/sleepTimer';
+import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useConfigStore } from '@/stores/configStore';
@@ -1308,6 +1309,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
   },
 
   reset: () => {
+    useCollectionPlaybackStore.getState().clear();
     clearDebounceTimer();
     abortPrefetch();
     lastSingleTrackPersistMs = 0;

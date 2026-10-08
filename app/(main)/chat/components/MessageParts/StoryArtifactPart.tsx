@@ -103,7 +103,7 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
       case 'complete':
         return '故事正文已完成，准备保存';
       case 'promoting':
-        return '正在保存到作品库';
+        return '正在保存到故事集';
       case 'ready':
         // 保存成功只用播放区状态行弱提示，不占头部主语义。
         return null;

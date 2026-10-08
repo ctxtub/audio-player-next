@@ -257,7 +257,7 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
       <div className={styles.cardActions}>
         {!isTrash ? (
           <>
-            <WorkPlaybackButton workId={work.id} title={work.title} testId={`story-card-play-btn-${work.id}`} />
+            <WorkPlaybackButton workId={work.id} title={work.title} progress={work.progress} testId={`story-card-play-btn-${work.id}`} />
             <button
               type="button"
               className={styles.trashBtn}

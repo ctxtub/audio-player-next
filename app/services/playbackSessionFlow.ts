@@ -246,7 +246,7 @@ export async function playStoryWork(
   if (options?.origin !== 'queue' && options?.origin !== 'autoplay') {
     const queue = useCollectionPlaybackStore.getState();
     const index = queue.works.findIndex((work) => work.id === workId);
-    if (queue.collectionId && index >= 0) useCollectionPlaybackStore.setState({ index, epoch: queue.epoch + 1, error: null });
+    if (queue.collectionId && index >= 0) useCollectionPlaybackStore.setState({ index, epoch: queue.epoch + 1, error: null, preparingWorkId: null, readyWorkId: null });
     else queue.clear();
     const current = usePlaybackSessionStore.getState().source;
     if (current?.kind !== 'work' || current.workId !== workId) useContinuousCreationStore.getState().disable();
@@ -306,6 +306,9 @@ export async function playStoryWork(
     return { source, sessionId: live.sessionId, nextIndex: live.nextParagraphIndex };
   });
   await playPlanned(planned);
+  if (token === playRequestSeq && options?.origin !== 'autoplay' && options?.origin !== 'queue' && useCollectionPlaybackStore.getState().collectionId) {
+    void import('./collectionPlaybackFlow').then((flow) => { if (token === playRequestSeq) void flow.prepareCollectionNextWork(); });
+  }
 }
 
 /**

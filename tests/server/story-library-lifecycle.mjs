@@ -14,9 +14,9 @@ const env = buildSnapshotEnv(db, 'http://127.0.0.1:1');
 const config = path.join(directory, 'prisma.config.ts');
 writeFileSync(config, `import { defineConfig } from ${JSON.stringify(path.join(root, 'node_modules/prisma/config'))}; export default defineConfig({ schema: ${JSON.stringify(path.join(root, 'prisma/schema.prisma'))}, migrations: { path: ${JSON.stringify(path.join(root, 'prisma/migrations'))} }, datasource: { url: ${JSON.stringify('file:' + db)} } });`);
 execFileSync(process.execPath, [path.join(root, 'node_modules/prisma/build/index.js'), 'migrate', 'deploy', '--config', config], { cwd: directory, env, stdio: 'pipe' });
-process.env.DATABASE_URL = `file:${db}`;
-process.env.OPENAI_MODEL_STORY = 'synthetic-model';
-process.env.OPENAI_MODEL_AGENT = 'synthetic-model';
+// 服务导入也只使用合成业务配置，不继承宿主 API/Tracing 凭据。
+for (const key of Object.keys(process.env)) if (!(key in env)) delete process.env[key];
+Object.assign(process.env, env);
 const jiti = require('jiti')(path.join(root, 'index.js'), { alias: { '@': root } });
 const { prisma } = await jiti(path.join(root, 'lib/db.ts'));
 const collectionViewModel = await jiti(path.join(root, 'lib/client/collectionViewModel.ts'));

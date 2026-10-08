@@ -153,8 +153,14 @@ export async function setContinuousEnabled(page: Page, enabled: boolean): Promis
     await page.getByRole('tab', { name: '设置', exact: true }).click();
     const toggle = page.getByRole('switch', { name: '自动播放与连续创作开关', exact: true });
     await expect(toggle).toBeVisible();
-    if ((await toggle.getAttribute('aria-checked')) !== String(enabled)) await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-checked', String(enabled));
+    if ((await toggle.isChecked()) !== enabled) {
+        await toggle.focus();
+        await page.keyboard.press('Space');
+    }
+    if (enabled) await expect(toggle).toBeChecked();
+    else await expect(toggle).not.toBeChecked();
+    // 云端设置按现有500ms防抖保存；完成保存窗口后再测试整页刷新。
+    await page.waitForTimeout(1000);
     await page.getByRole('tab', { name: '创作', exact: true }).click();
     if (!enabled) await expect(continuousStatusText(page)).toHaveText('连续创作已关闭');
     else await expect(continuousStatusText(page)).not.toHaveText('连续创作已关闭');

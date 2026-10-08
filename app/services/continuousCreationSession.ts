@@ -40,7 +40,7 @@ function bind(): void {
   const source = usePlaybackSessionStore.getState().source;
   if (source?.kind === 'work' && source.workId === saved?.creationWorkId) {
     if (enabled) void import('./playbackSessionFlow').then((flow) => {
-      if (flow.isCreationPlayback() && useContinuousCreationStore.getState().enabled && useContinuousCreationStore.getState().remainingMs === 0) flow.stopPlayback();
+      if (flow.isCreationPlayback() && useContinuousCreationStore.getState().enabled && useContinuousCreationStore.getState().remainingMs === 0) flow.pausePlayback();
       else void flow.synchronizeCreationTimer();
     });
     else void usePlaybackSessionStore.getState().setSleepTimer('off');

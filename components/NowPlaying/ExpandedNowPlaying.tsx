@@ -54,6 +54,7 @@
  *   onContinueCreation 缝合即可，不改播放架构。
  */
 
+import { PlayingWorkContext } from './PlayingWorkContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, Modal as AriaModal, ModalOverlay } from 'react-aria-components';
 import { useDrag } from '@use-gesture/react';
@@ -427,6 +428,7 @@ export const ExpandedNowPlaying: React.FC = () => {
                                 Work 继续创作隐藏（spec §36.2 fail-closed：本文件不传
                                 onContinueCreation，不拼 continuation Prompt）。
                                 transcript view 下不渲染（互斥，与「打开作品详情」不并存）。 */}
+                            <PlayingWorkContext close={handleClose} />
                             <NowPlayingActions
                                 source={viewModel.source}
                                 onViewStory={handleViewStory}

@@ -310,3 +310,10 @@ export async function expectExpandedTimelineAdvancing(page: Page): Promise<void>
         })
         .toBe("advanced");
 }
+
+/** 新建只有在未保存内容存在时出现应用内确认。 */
+export async function startNewStoryCollection(page: Page): Promise<void> {
+  await page.getByRole('button', { name: '新建故事集', exact: true }).click();
+  const confirm = page.getByRole('button', { name: '开始新故事集', exact: true });
+  if (await confirm.waitFor({ state: 'visible', timeout: 1500 }).then(() => true, () => false)) await confirm.click();
+}

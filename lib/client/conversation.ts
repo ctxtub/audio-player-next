@@ -61,3 +61,6 @@ export const saveConversationSnapshot = (
 
 export const closeConversation = (id: string): Promise<ConversationDTO> =>
   trpc.conversation.close.mutate({ id });
+
+/** 显式切换编辑目标；返回记录页面不会调用此操作。 */
+export const resumeConversation = (id: string, expectedOldId: string | null): Promise<ConversationDTO> => trpc.conversation.resume.mutate({ id, expectedOldId });

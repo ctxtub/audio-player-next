@@ -13,6 +13,7 @@
  * - 集合永久删除级联 Work/进度/音频元数据，音频对象经统一 tombstone outbox 清理。
  */
 
+import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/db';
 import { TRPCError } from '@trpc/server';
 import type { Subject } from './subject';
@@ -34,6 +35,8 @@ import {
   toDetailDto,
   toSummaryDto,
   type StoryWorkRow,
+  progressProjection,
+  isUnfinished,
 } from './storyWork';
 import { isUniqueViolation } from './conversation';
 import { generateCollectionTitleSafely } from './collectionTitle';
@@ -55,6 +58,7 @@ const PROMOTE_MAX_ATTEMPTS = 3;
 
 type CollectionSummaryRow = {
   id: string;
+  conversationId?: string;
   title: string;
   titleSource: string;
   favoritedAt: Date | null;
@@ -69,6 +73,7 @@ export const toCollectionSummaryDto = (
   row: CollectionSummaryRow,
 ): StoryCollectionSummaryDTO => ({
   id: row.id,
+  conversationId: row.conversationId,
   title: row.title,
   titleSource: normalizeTitleSource(row.titleSource),
   workCount: row._count?.works ?? 0,
@@ -106,6 +111,7 @@ export async function listCollectionsForSubject(
         {
           works: {
             some: {
+              deletedAt: input.view === 'trash' ? { not: null } : null,
               OR: [
                 { title: { contains: query } },
                 { prompt: { contains: query } },
@@ -136,13 +142,13 @@ export async function listCollectionsForSubject(
         where: { userId: subject.id, AND: andFilters },
         orderBy,
         take: input.limit + 1,
-        include: { _count: { select: { works: true } } },
+        include: { _count: { select: { works: { where: { deletedAt: input.view === 'trash' ? { not: null } : null } } } } },
       })
     : prisma.guestStoryCollection.findMany({
         where: { guestId: subject.id, AND: andFilters },
         orderBy,
         take: input.limit + 1,
-        include: { _count: { select: { works: true } } },
+        include: { _count: { select: { works: { where: { deletedAt: input.view === 'trash' ? { not: null } : null } } } } },
       }))) as unknown as CollectionSummaryRow[];
 
   const hasMore = rows.length > input.limit;
@@ -157,8 +163,21 @@ export async function listCollectionsForSubject(
       })
     : null;
 
+  const ids = page.map((row) => row.id);
+  const members = input.view === 'trash' ? [] : subject.type === 'user'
+    ? await prisma.storyWork.findMany({ where: { userId: subject.id, collectionId: { in: ids }, deletedAt: null }, orderBy: { position: 'asc' }, select: { id: true, collectionId: true, title: true, excerpt: true, audioProgress: true } })
+    : await prisma.guestStoryWork.findMany({ where: { guestId: subject.id, collectionId: { in: ids }, deletedAt: null }, orderBy: { position: 'asc' }, select: { id: true, collectionId: true, title: true, excerpt: true, audioProgress: true } });
   return {
-    items: page.map(toCollectionSummaryDto),
+    items: page.map((row) => {
+      const summary = toCollectionSummaryDto(row);
+      if (input.view === 'trash') return summary;
+      const works = members.filter((work) => work.collectionId === row.id).map((work) => ({ ...work, progress: progressProjection(work.audioProgress) }));
+      const incomplete = (work: typeof works[number]) => !work.progress || !work.progress.durationMs || work.progress.positionMs < work.progress.durationMs - 1000;
+      const recent = [...works].filter((work) => isUnfinished(work.progress)).sort((a, b) => (b.progress?.lastPlayedAt ?? '').localeCompare(a.progress?.lastPlayedAt ?? ''))[0];
+      const target = recent ?? works.find(incomplete) ?? works[0];
+      const match = query ? works.find((work) => work.title.includes(query) || work.excerpt.includes(query)) : null;
+      return { ...summary, excerpt: match ? `命中故事：${match.title} · ${match.excerpt}` : works[0]?.excerpt ?? '', resumeWorkId: target?.id ?? null, hasUnfinished: works.some(incomplete) };
+    }),
     nextCursor,
     hasMore: nextCursor !== null,
   };
@@ -175,9 +194,9 @@ export async function getCollectionForSubject(
     const row = await prisma.storyCollection.findFirst({
       where: { id, userId: subject.id, deletedAt: null },
       include: {
-        _count: { select: { works: true } },
+        _count: { select: { works: { where: { deletedAt: null } } } },
         works: {
-          where: { position: { not: null } },
+          where: { position: { not: null }, deletedAt: null },
           orderBy: [{ position: 'asc' }, { id: 'asc' }],
           select: {
             id: true,
@@ -190,6 +209,8 @@ export async function getCollectionForSubject(
             createdAt: true,
             updatedAt: true,
             position: true,
+            collectionId: true,
+            audioProgress: true,
           },
         },
       },
@@ -203,6 +224,7 @@ export async function getCollectionForSubject(
       ...toCollectionSummaryDto(row),
       works: row.works.map((w) => ({
         ...toSummaryDto(w, audio.get(w.id)),
+        progress: progressProjection(w.audioProgress),
         position: w.position ?? 0,
       })),
     };
@@ -211,9 +233,9 @@ export async function getCollectionForSubject(
   const row = await prisma.guestStoryCollection.findFirst({
     where: { id, guestId: subject.id, deletedAt: null },
     include: {
-      _count: { select: { works: true } },
+      _count: { select: { works: { where: { deletedAt: null } } } },
       works: {
-        where: { position: { not: null } },
+        where: { position: { not: null }, deletedAt: null },
         orderBy: [{ position: 'asc' }, { id: 'asc' }],
         select: {
           id: true,
@@ -226,6 +248,8 @@ export async function getCollectionForSubject(
           createdAt: true,
           updatedAt: true,
           position: true,
+          collectionId: true,
+          audioProgress: true,
         },
       },
     },
@@ -239,6 +263,7 @@ export async function getCollectionForSubject(
     ...toCollectionSummaryDto(row),
     works: row.works.map((w) => ({
       ...toSummaryDto(w, audio.get(w.id)),
+        progress: progressProjection(w.audioProgress),
       position: w.position ?? 0,
     })),
   };
@@ -306,34 +331,35 @@ export async function softDeleteCollectionForSubject(
   id: string,
 ): Promise<{ success: true; id: string }> {
   const now = new Date();
+  const batch = randomUUID();
   if (subject.type === 'user') {
     await prisma.$transaction(async (tx) => {
       const current = await tx.storyCollection.findFirst({
         where: { id, userId: subject.id },
-        select: { id: true, deletedAt: true },
+        select: { id: true, deletedAt: true, deletionBatch: true },
       });
       if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: '作品集不存在' });
       if (current.deletedAt !== null) return;
       await tx.storyWork.updateMany({
         where: { collectionId: id, deletedAt: null },
-        data: { deletedAt: now },
+        data: { deletedAt: now, collectionDeletionBatch: batch },
       });
-      await tx.storyCollection.update({ where: { id }, data: { deletedAt: now } });
+      await tx.storyCollection.update({ where: { id }, data: { deletedAt: now, deletionBatch: batch } });
     });
     return { success: true, id };
   }
   await prisma.$transaction(async (tx) => {
     const current = await tx.guestStoryCollection.findFirst({
       where: { id, guestId: subject.id },
-      select: { id: true, deletedAt: true },
+      select: { id: true, deletedAt: true, deletionBatch: true },
     });
     if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: '作品集不存在' });
     if (current.deletedAt !== null) return;
     await tx.guestStoryWork.updateMany({
       where: { collectionId: id, deletedAt: null },
-      data: { deletedAt: now },
+      data: { deletedAt: now, collectionDeletionBatch: batch },
     });
-    await tx.guestStoryCollection.update({ where: { id }, data: { deletedAt: now } });
+    await tx.guestStoryCollection.update({ where: { id }, data: { deletedAt: now, deletionBatch: batch } });
   });
   return { success: true, id };
 }
@@ -349,34 +375,34 @@ export async function restoreCollectionForSubject(
     await prisma.$transaction(async (tx) => {
       const current = await tx.storyCollection.findFirst({
         where: { id, userId: subject.id },
-        select: { id: true, deletedAt: true },
+        select: { id: true, deletedAt: true, deletionBatch: true },
       });
       if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: '作品集不存在' });
       if (current.deletedAt === null) {
         throw new TRPCError({ code: 'CONFLICT', message: '仅允许恢复回收站中的作品集' });
       }
       await tx.storyWork.updateMany({
-        where: { collectionId: id, deletedAt: { not: null } },
-        data: { deletedAt: null },
+        where: { collectionId: id, collectionDeletionBatch: current.deletionBatch ?? 'legacy-unknown-never-match', deletedAt: { not: null } },
+        data: { deletedAt: null, collectionDeletionBatch: null },
       });
-      await tx.storyCollection.update({ where: { id }, data: { deletedAt: null } });
+      await tx.storyCollection.update({ where: { id }, data: { deletedAt: null, deletionBatch: null } });
     });
     return getCollectionForSubject(subject, id);
   }
   await prisma.$transaction(async (tx) => {
     const current = await tx.guestStoryCollection.findFirst({
       where: { id, guestId: subject.id },
-      select: { id: true, deletedAt: true },
+      select: { id: true, deletedAt: true, deletionBatch: true },
     });
     if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: '作品集不存在' });
     if (current.deletedAt === null) {
       throw new TRPCError({ code: 'CONFLICT', message: '仅允许恢复回收站中的作品集' });
     }
     await tx.guestStoryWork.updateMany({
-      where: { collectionId: id, deletedAt: { not: null } },
-      data: { deletedAt: null },
+      where: { collectionId: id, collectionDeletionBatch: current.deletionBatch ?? 'legacy-unknown-never-match', deletedAt: { not: null } },
+      data: { deletedAt: null, collectionDeletionBatch: null },
     });
-    await tx.guestStoryCollection.update({ where: { id }, data: { deletedAt: null } });
+    await tx.guestStoryCollection.update({ where: { id }, data: { deletedAt: null, deletionBatch: null } });
   });
   return getCollectionForSubject(subject, id);
 }

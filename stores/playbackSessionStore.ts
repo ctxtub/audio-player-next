@@ -318,6 +318,7 @@ async function fetchCanonicalAudioUrlWithRetry(
   for (;;) {
     singleAttempts += 1;
     const output = await ensureCanonicalAsset({ workId, sessionId });
+    if (usePlaybackSessionStore.getState().sessionId !== sessionId) throw new Error('播放目标已变化');
     if (output.status === 'ready') {
       // 服务端 positionMs 作为待恢复位，等 duration 已知后一次性 seek。
       try {
@@ -853,6 +854,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       }
       // 完播前强制落库最终 positionMs（server 端据此置 completedAt）。
       await get().persistSingleTrackProgress({ force: true });
+      if (get().sessionId !== state.sessionId) return false;
       set({
         lastCompletedParagraphIndex: Math.max(0, state.totalParagraphs - 1),
         nextParagraphIndex: state.totalParagraphs,
@@ -863,6 +865,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       } catch (err) {
         console.warn('[playbackSessionStore] completeSession failed', err);
       }
+      if (get().sessionId !== state.sessionId) return false;
       set({ sleepTimerMode: 'off' });
       try {
         usePlaybackStore.getState().setSleepTimerState('off', null, null);
@@ -1261,6 +1264,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     } catch (err) {
       console.warn('[playbackSessionStore] clearSession failed', err);
     }
+    if (get().sessionId !== sessionId) return;
     get().reset();
     try {
       usePlaybackStore.getState().reset();

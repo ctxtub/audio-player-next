@@ -9,8 +9,13 @@
  * - 删除成功后自动导航回 /library（Undo 跨路由留存于 layout provider）。
  */
 
-import React, { useContext, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { libraryReturnPath } from '@/components/Library/LibraryNavigationMemory';
+import { WorkManagement } from '@/components/Library/WorkManagement';
+import { conversationPath, workPath } from '@/lib/navigation/storyRoutes';
+import { playCollection } from '@/app/services/collectionPlaybackFlow';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import {
   AlertCircle,
@@ -44,6 +49,8 @@ export interface CollectionDetailPageProps {
 const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
   const isValidId = typeof id === 'string' && id.length > 0 && id.length <= 64;
   const router = useContext(AppRouterContext);
+  const searchParams = useSearchParams();
+  const focusWork = searchParams?.get('focusWork');
   const mutations = useCollectionMutations();
 
   const [isRenaming, setIsRenaming] = useState(false);
@@ -63,6 +70,14 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
   const { data, isLoading, isError, error, refetch } = useCollectionDetailQuery(id, {
     enabled: isValidId,
   });
+
+  useEffect(() => {
+    if (data && focusWork && data.works.some((work) => String(work.id) === focusWork)) document.getElementById(`work-${focusWork}`)?.scrollIntoView({ block: 'center' });
+  }, [data, focusWork]);
+  const handlePlayCollection = async (mode: 'resume' | 'restart') => {
+    setActionError(null);
+    try { await playCollection(id, mode); } catch (err) { setActionError(err instanceof Error ? err.message : '暂时无法播放，请重试'); }
+  };
 
   if (!isValidId) {
     return <LibraryUnavailable />;
@@ -104,7 +119,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
               <RefreshCw size={14} />
               <span>重试</span>
             </button>
-            <Link href="/library" className={styles.backLink} data-testid="collection-back-btn">
+            <Link href={libraryReturnPath()} className={styles.backLink} data-testid="collection-back-btn">
               返回故事库
             </Link>
           </div>
@@ -150,7 +165,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
     setIsDeleting(true);
     try {
       await mutations.moveToTrash(data.id, data.title);
-      if (router) router.push('/library');
+      if (router) router.push(libraryReturnPath());
     } catch (err) {
       console.error('Collection delete failed:', err);
     } finally {
@@ -181,13 +196,13 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
   return (
     <div className={styles.storyDetailPage} data-testid="collection-detail-page">
       <header className={styles.detailHero}>
-        <Link href="/library" className={styles.backLink} data-testid="collection-back-btn">
+        <Link href={libraryReturnPath()} className={styles.backLink} data-testid="collection-back-btn">
           <ChevronLeft size={16} />
           <span>返回故事库</span>
         </Link>
         <div className={styles.heroPanel}>
           <div className={styles.titleArea}>
-            <p className={styles.eyebrow}>作品集</p>
+            <p className={styles.eyebrow}>故事集</p>
             {isRenaming ? (
               <form
                 className={styles.renameForm}
@@ -234,6 +249,9 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
             </p>
           </div>
           <div className={styles.collectionActions}>
+            <button className={styles.primaryButton} disabled={!data.works.length} onClick={() => handlePlayCollection('resume')}>继续听整集</button>
+            <button className={styles.secondaryButton} disabled={!data.works.length} onClick={() => handlePlayCollection('restart')}>从头听整集</button>
+            {data.conversationId && <Link className={styles.secondaryButton} href={conversationPath(data.conversationId)}>查看创作记录</Link>}
             {!isRenaming ? (
               <button
                 type="button"
@@ -327,6 +345,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
               return (
                 <article
                   key={work.id}
+                  id={`work-${work.id}`}
                   className={`${styles.memberCard} ${isCurrent ? styles.memberCardCurrent : ''}`}
                   data-testid={`member-work-${work.id}`}
                   data-position={work.position}
@@ -339,10 +358,11 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                   </div>
                   <div className={styles.memberBody}>
                     <div className={styles.memberTitleRow}>
-                      <h3 data-testid={`member-title-${work.id}`}>{work.title}</h3>
+                      <h3 data-testid={`member-title-${work.id}`}><Link href={workPath(work.id, id)}>{work.title}</Link></h3>
                       {isCurrent ? <span className={styles.currentBadge}>当前作品</span> : null}
                     </div>
                     {work.excerpt ? <p className={styles.memberExcerpt}>{work.excerpt}</p> : null}
+                    <p className={styles.memberExcerpt}>{work.progress?.positionMs ? `听到 ${Math.floor(work.progress.positionMs / 60000)}分${Math.floor(work.progress.positionMs / 1000) % 60}秒` : '未听'}{work.audio.durationMs ? ` · 时长 ${Math.ceil(work.audio.durationMs / 60000)}分钟` : ' · 播放时准备语音'}</p>
                   </div>
                   <button
                     type="button"
@@ -359,6 +379,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                     />
                     <span>{buttonLabel}</span>
                   </button>
+                  <WorkManagement work={{ ...work, collectionId: id }} />
                 </article>
               );
             })}

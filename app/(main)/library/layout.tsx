@@ -1,4 +1,5 @@
 import React from 'react';
+import { LibraryNavigationMemory } from '@/components/Library/LibraryNavigationMemory';
 import LibraryUndoProvider from '@/components/Library/LibraryUndoProvider';
 import CollectionUndoProvider from '@/components/Library/CollectionUndoProvider';
 
@@ -22,7 +23,7 @@ export default function LibraryLayout({
 }) {
   return (
     <LibraryUndoProvider>
-      <CollectionUndoProvider>{children}</CollectionUndoProvider>
+      <CollectionUndoProvider><LibraryNavigationMemory />{children}</CollectionUndoProvider>
     </LibraryUndoProvider>
   );
 }

@@ -99,6 +99,22 @@ test.describe("集合详情起播跨页播放", () => {
         await page.setViewportSize(initialViewport);
         await closeExpanded(page);
 
+        // 播放器 → 正文 → 所属故事集闭环，导航不改变声音。
+        await openExpandedFromMini(page);
+        await page.getByRole('button', { name: '查看正文', exact: true }).click();
+        await page.waitForURL(/\/library\/collections\/[^/]+\/works\/\d+$/);
+        await expect(page.getByTestId('story-detail-title')).toHaveText(firstWorkTitle);
+        await expect(page.getByTestId('mini-playback-button')).toHaveAttribute('aria-label', '暂停播放');
+        await page.getByRole('link', { name: `返回《${collectionTitle}》`, exact: true }).click();
+        await expect(page.getByTestId('collection-detail-page')).toBeVisible();
+        await page.getByRole('link', { name: '查看创作记录', exact: true }).click();
+        await expect(page.getByRole('heading', { name: collectionTitle, exact: true })).toBeVisible();
+        await page.getByRole('button', { name: '返回创作', exact: true }).click();
+        await page.waitForURL('**/chat');
+        await expect(page.getByTestId('continuous-collection-title')).toHaveText(collectionTitle);
+        await page.getByTestId('continuous-collection-title').getByRole('link').click();
+        await expect(page.getByTestId('collection-detail-page')).toBeVisible();
+
         // ⑤-B 重命名集合（用户可见改名）：作品标题不变；reload 后 Mini 显示新
         // 集合标题，证明 Mini 一级标题取自集合（hydrate 活读）而非作品标题。
         const renamedTitle = "月光穿过很长很长的山谷，照亮归途上每一座安静的小屋与仍在等待故事的人";

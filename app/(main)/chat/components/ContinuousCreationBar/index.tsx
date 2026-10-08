@@ -1,5 +1,9 @@
 'use client';
 
+import Link from 'next/link';
+import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
+import { useChatStore } from '@/stores/chatStore';
+import { collectionPath } from '@/lib/navigation/storyRoutes';
 import React, { useCallback } from 'react';
 
 import {
@@ -27,6 +31,7 @@ export type ContinuousCreationBarProps = {
  * @returns 状态卡 JSX。
  */
 const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectionTitle }) => {
+  const collectionId = useChatStore((state) => state.collectionId);
   const enabled = useContinuousCreationStore((state) => state.enabled);
   const status = useContinuousCreationStore((state) => state.status);
   const remainingMs = useContinuousCreationStore((state) => state.remainingMs);
@@ -37,6 +42,7 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
     if (enabled) {
       disable();
     } else {
+      useCollectionPlaybackStore.getState().clear();
       enable();
     }
   }, [enabled, enable, disable]);
@@ -46,9 +52,9 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
   return (
     <section className={styles.container} aria-label="连续创作">
       <div className={styles.titleRow}>
-        <span className={styles.collectionLabel}>作品集</span>
+        <span className={styles.collectionLabel}>正在创作</span>
         <span className={styles.collectionTitle} data-testid="continuous-collection-title">
-          {title}
+          {collectionId ? <Link href={collectionPath(collectionId)}>{title}</Link> : title}
         </span>
       </div>
 
@@ -61,7 +67,7 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
         </div>
 
         <span className={styles.budget} data-testid="continuous-remaining-budget">
-          剩余 {formatRemainingMs(remainingMs)}
+          本次自动创作收听预算 {formatRemainingMs(remainingMs)}
         </span>
 
         <button

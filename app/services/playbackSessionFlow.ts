@@ -32,7 +32,10 @@
 
 import { usePlaybackStore, clampSegmentSeekTarget } from '@/stores/playbackStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
+import { useChatStore } from '@/stores/chatStore';
 import { useConfigStore } from '@/stores/configStore';
+import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
+import { get as getWorkDetail } from '@/lib/client/library';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 import { isValidWorkId } from '@/lib/playback/source';
 import type { PlaybackSourceRef } from '@/lib/playback/source';
@@ -234,10 +237,18 @@ async function playPlanned(planned: PlannedPlay): Promise<void> {
  */
 export async function playStoryWork(
   workId: number,
-  options?: { origin?: 'user' | 'autoplay' },
+  options?: { origin?: 'user' | 'autoplay' | 'queue'; mode?: 'resume' | 'restart'; timer?: { remaining: number; total: number | null } },
 ): Promise<void> {
   if (!isValidWorkId(workId)) return;
   const source: PlaybackSourceRef = { kind: 'work', workId };
+  if (options?.origin !== 'queue' && options?.origin !== 'autoplay') {
+    const queue = useCollectionPlaybackStore.getState();
+    const index = queue.works.findIndex((work) => work.id === workId);
+    if (queue.collectionId && index >= 0) useCollectionPlaybackStore.setState({ index, epoch: queue.epoch + 1, error: null });
+    else queue.clear();
+    const current = usePlaybackSessionStore.getState().source;
+    if (current?.kind !== 'work' || current.workId !== workId) useContinuousCreationStore.getState().disable();
+  }
   const token = ++playRequestSeq;
   const planned = await runSerialized(async (): Promise<PlannedPlay> => {
     if (token !== playRequestSeq) return null;
@@ -249,7 +260,7 @@ export async function playStoryWork(
       if (options?.origin === 'autoplay') {
         return null;
       }
-      const intent = planSameSourceIntent(session, transport);
+      const intent = options?.mode === 'restart' ? 'restart' : planSameSourceIntent(session, transport);
       if (intent === 'noop') {
         return null;
       }
@@ -268,6 +279,7 @@ export async function playStoryWork(
     // Transport 投影重置为空闲，而旧 <audio> 仍继续出声，形成声画分裂。
     if (session.source !== null) {
       pausePlayback();
+      await session.persistSingleTrackProgress({ force: true });
     }
     let speed = 1.0;
     try {
@@ -276,9 +288,18 @@ export async function playStoryWork(
     } catch {
       // 缺省 1.0。
     }
-    await beginPlayback({ source, mode: 'restart', speed });
+    const detail = await getWorkDetail({ id: workId });
+    if (token !== playRequestSeq) return null;
+    const finished = detail.progress?.durationMs && detail.progress.positionMs >= detail.progress.durationMs - 1000;
+    await beginPlayback({ source, mode: options?.mode === 'restart' || finished ? 'restart' : 'resume', speed });
     if (token !== playRequestSeq) return null;
     if (!isCurrentSource(source)) return null;
+    if (options?.timer) {
+      await usePlaybackSessionStore.getState().setSleepTimer('minutes', Math.max(10, Math.ceil(options.timer.remaining / 60000)));
+      if (token !== playRequestSeq || !isCurrentSource(source)) return null;
+      usePlaybackStore.getState().setSleepTimerState('minutes', options.timer.remaining, options.timer.total);
+      await usePlaybackSessionStore.getState().saveCheckpointImmediate({ forceReset: false });
+    }
     const live = usePlaybackSessionStore.getState();
     return { source, sessionId: live.sessionId, nextIndex: live.nextParagraphIndex };
   });
@@ -346,6 +367,8 @@ export async function setSleepTimer(mode: SleepTimerMode, minutes?: number): Pro
  * checkpoint 持久化 + Toast。Session 保留 paused，之后 Play 正常继续。
  */
 export async function handleSleepTimerExpired(): Promise<void> {
+  useCollectionPlaybackStore.getState().clear();
+  useContinuousCreationStore.getState().disable();
   await usePlaybackSessionStore.getState().handleSleepTimerExpired();
 }
 
@@ -371,6 +394,7 @@ export async function promoteDraftToWork(workId: number): Promise<void> {
 
 /** 停止（本地停驻，不清 server Anchor；显式清理请用 clear）。 */
 export function stopPlayback(): void {
+  useCollectionPlaybackStore.getState().clear();
   usePlaybackSessionStore.getState().stop();
 }
 
@@ -402,7 +426,11 @@ export function reportAudioActive(active: boolean): void {
   usePlaybackStore.getState().reportAudioActive(active);
   // 同一 audio-active 信号驱动连续创作预算；动态 import 避免模块环。
   void import('./continuousCreationFlow')
-    .then((flow) => flow.reportContinuousAudioActive(active))
+    .then((flow) => {
+      const source = usePlaybackSessionStore.getState().source;
+      const belongs = useChatStore.getState().messages.some((message) => source?.kind === 'draft' ? message.id === source.messageId : message.parts?.some((part) => part.type === 'storyArtifact' && source?.kind === 'work' && part.artifact.storyWorkId === source.workId));
+      flow.reportContinuousAudioActive(active && belongs && !useCollectionPlaybackStore.getState().collectionId);
+    })
     .catch(() => undefined);
 }
 
@@ -433,7 +461,7 @@ export async function handleNearEnd(): Promise<void> {
     !shouldAllowAiContinuation(session.continuationMode)
   ) {
     const { scheduleContinuousNextWork } = await import('@/app/services/continuousCreationFlow');
-    await scheduleContinuousNextWork();
+    if (isCreationPlayback()) await scheduleContinuousNextWork();
     return;
   }
   // 到达此处仅两种情形：无 session 的 legacy 音频，或 extendable 会话尾段
@@ -460,7 +488,7 @@ export function reportTimeUpdate(payload: {
   // audioActive 置 false，因此这些等待时间不会进入预算。
   if (usePlaybackStore.getState().audioActive) {
     void import('./continuousCreationFlow')
-      .then((flow) => flow.reportContinuousAudioActive(true))
+      .then((flow) => flow.reportContinuousAudioActive(isCreationPlayback()))
       .catch(() => undefined);
   }
   const { currentTime, duration } = payload;
@@ -477,12 +505,12 @@ export function reportTimeUpdate(payload: {
     !shouldAllowAiContinuation(session.continuationMode)
   ) {
     const continuous = useContinuousCreationStore.getState();
-    if (remaining * 1000 > continuous.windowMs) return;
+    if (!isCreationPlayback() || remaining * 1000 > continuous.windowMs) return;
     if (payload.hasTriggeredPreload.current) return;
     if (!continuous.canSchedule({ nowPlaying: playback.isPlaying, epoch: continuous.epoch })) return;
     payload.hasTriggeredPreload.current = true;
     void import('@/app/services/continuousCreationFlow')
-      .then((flow) => flow.scheduleContinuousNextWork())
+      .then((flow) => isCreationPlayback() ? flow.scheduleContinuousNextWork() : undefined)
       .catch((error) => {
         console.error('连续创作调度下一作品失败:', error);
       });
@@ -508,7 +536,7 @@ export function reportTimeUpdate(payload: {
     if (!shouldAllowAiContinuation(session.continuationMode)) {
       payload.hasTriggeredPreload.current = true;
       void import('@/app/services/continuousCreationFlow')
-        .then((flow) => flow.scheduleContinuousNextWork())
+        .then((flow) => isCreationPlayback() ? flow.scheduleContinuousNextWork() : undefined)
         .catch((error) => {
           console.error('连续创作调度下一作品失败:', error);
         });
@@ -549,16 +577,23 @@ export async function handleEnded(play: (audioUrl: string, messageId?: string) =
       // 非尾段：会话段落机推进，不碰连续创作。
       return await session.handleParagraphEnded();
     }
+    if (isWorkSingleTrack && useCollectionPlaybackStore.getState().collectionId) {
+      const { advanceCollectionPlayback } = await import('./collectionPlaybackFlow');
+      if (await advanceCollectionPlayback(session.sessionId)) return true;
+    }
     if (!shouldAllowAiContinuation(session.continuationMode)) {
       // finite 整轨结束 → 连续创作正式交接：next_ready 原子取出并经
       // playStoryWork 续播；在途则进入 waiting_next（准备完成后自动续播）；
       // error/终态保持当前页面（绝不复活旧结果）。
       const epoch = useContinuousCreationStore.getState().epoch;
       const { handleTrackEnded } = await import('@/app/services/continuousCreationFlow');
-      const continued = await handleTrackEnded(epoch);
+      await session.persistSingleTrackProgress({ force: true });
+      if (usePlaybackSessionStore.getState().sessionId !== session.sessionId) return true;
+      const continued = isCreationPlayback() ? await handleTrackEnded(epoch) : false;
       if (continued) {
         return true;
       }
+      if (usePlaybackSessionStore.getState().sessionId !== session.sessionId) return true;
       return await session.handleParagraphEnded();
     }
     // extendable 尾段（唯一例外）：先试 legacy AI 续写链，取不到才收尾。
@@ -576,4 +611,17 @@ export async function handleEnded(play: (audioUrl: string, messageId?: string) =
   if (!nextSegment) return false;
   await play(nextSegment.audioUrl, nextSegment.messageId);
   return true;
+}
+
+/** 元信息更新不重建会话、不改变进度与出声状态。 */
+export function refreshPlayingWorkMetadata(work: { id: number; title: string; collectionTitle?: string | null; collectionId?: string | null }): void {
+  const current = usePlaybackSessionStore.getState();
+  if (current.source?.kind === 'work' && current.source.workId === work.id) usePlaybackSessionStore.setState({ title: work.title, workTitle: work.title, collectionTitle: work.collectionTitle ?? null });
+}
+
+/** 当前声音是否来自可继续创作的编辑上下文。 */
+function isCreationPlayback(): boolean {
+  const source = usePlaybackSessionStore.getState().source;
+  if (useCollectionPlaybackStore.getState().collectionId) return false;
+  return useChatStore.getState().messages.some((message) => source?.kind === 'draft' ? message.id === source.messageId : message.parts?.some((part) => part.type === 'storyArtifact' && source?.kind === 'work' && part.artifact.storyWorkId === source.workId));
 }

@@ -13,6 +13,7 @@
 
 import { createNewConversation } from '@/lib/client/conversation';
 import { resolveContinuousCreationBudgetMinutes } from '@/lib/continuous-creation/budget';
+import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 import { useGenerationStore } from '@/stores/generationStore';
@@ -73,6 +74,7 @@ export async function startNewCreation(
 
   // 2) 确认后立即切断旧运行态，不等待任何网络初始化：旧生成、下一作品回调和
   // 底层音频都必须在用户点击后立刻停止。
+  useCollectionPlaybackStore.getState().clear();
   useContinuousCreationStore.getState().advanceEpoch();
   cancelPendingNextWork();
   try {

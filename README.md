@@ -28,7 +28,9 @@
 - **故事库**（/library）：顶层为作品集（Collection）卡片，集合详情按 position 列出成员作品并支持逐 Work 播放；集合级重命名/收藏/软删除/恢复/永久删除（含 Undo）；滚动容器消费 MainChrome 三占位变量，Mini 出现与否末卡均不被遮挡
 - **认证**：注册 / 登录 / Guest 模式
 
-创作、作品集与连续播放的现行行为和验收标准见 [产品契约](docs/specs/2026-10-07-creation-and-playback-contract.md)。
+故事库导航、单篇管理、整集回听与来源续写见[交互契约](docs/specs/2026-10-08-story-library-navigation-and-listening-contract.md)。
+
+创作、作品集与连续播放的基础行为和验收标准见 [产品契约](docs/specs/2026-10-07-creation-and-playback-contract.md)。
 
 ## LangGraph Agent 架构
 

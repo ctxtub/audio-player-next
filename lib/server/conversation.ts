@@ -78,6 +78,10 @@ export async function getConversationForSubject(
   if (!row) {
     throw new TRPCError({ code: 'NOT_FOUND', message: '会话不存在' });
   }
+  if (row.collections?.length) {
+    const collection = subject.type === 'user' ? await prisma.storyCollection.findFirst({ where: { conversationId: id, userId: subject.id, deletedAt: null } }) : await prisma.guestStoryCollection.findFirst({ where: { conversationId: id, guestId: subject.id, deletedAt: null } });
+    if (!collection) throw new TRPCError({ code: 'NOT_FOUND', message: '会话不存在' });
+  }
   return toConversationDto(row);
 }
 
@@ -95,7 +99,7 @@ export async function getConversationMessagesForSubject(
   subject: Subject,
   conversationId: string,
 ): Promise<ChatMessageDTO[]> {
-  await assertConversationOwned(subject, conversationId);
+  await getConversationForSubject(subject, conversationId);
   if (subject.type === 'user') {
     const rows = await prisma.chatMessage.findMany({
       where: { conversationId },
@@ -260,6 +264,8 @@ export async function saveConversationSnapshotForSubject(
 
   if (subject.type === 'user') {
     await prisma.$transaction(async (tx) => {
+      const active = await tx.conversation.findFirst({ where: { id: conversationId, userId: subject.id, state: 'active' } });
+      if (!active) throw new TRPCError({ code: 'CONFLICT', message: '该创作已不再是当前编辑目标' });
       const current = await tx.chatMessage.findMany({
         where: { conversationId },
         orderBy: { position: 'asc' },
@@ -287,6 +293,8 @@ export async function saveConversationSnapshotForSubject(
   }
 
   await prisma.$transaction(async (tx) => {
+    const active = await tx.guestConversation.findFirst({ where: { id: conversationId, guestId: subject.id, state: 'active' } });
+    if (!active) throw new TRPCError({ code: 'CONFLICT', message: '该创作已不再是当前编辑目标' });
     const current = await tx.guestChatMessage.findMany({
       where: { conversationId },
       orderBy: { position: 'asc' },
@@ -320,4 +328,35 @@ export function isUniqueViolation(error: unknown): boolean {
     'code' in error &&
     (error as { code: unknown }).code === 'P2002'
   );
+}
+
+/** 原子恢复历史集编辑；纯读取从不激活会话。 */
+export async function resumeConversationForSubject(subject: Subject, id: string, expectedOldId: string | null): Promise<ConversationDTO> {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      if (subject.type === 'user') {
+        const target = await tx.conversation.findFirst({ where: { id, userId: subject.id }, include: { collections: { select: { id: true, deletedAt: true } } } });
+        if (!target || target.collections.some((collection) => collection.deletedAt)) throw new TRPCError({ code: 'NOT_FOUND', message: '创作记录不可用' });
+        const active = await tx.conversation.findFirst({ where: { userId: subject.id, state: 'active' } });
+        if ((active?.id ?? null) !== expectedOldId) throw new TRPCError({ code: 'CONFLICT', message: '当前创作已变化，请刷新后重试' });
+        if (active?.id !== id) {
+          if (active) await tx.conversation.update({ where: { id: active.id }, data: { state: 'closed' } });
+          await tx.conversation.update({ where: { id }, data: { state: 'active' } });
+        }
+        return toConversationDto({ ...target, state: 'active' });
+      }
+      const target = await tx.guestConversation.findFirst({ where: { id, guestId: subject.id }, include: { collections: { select: { id: true, deletedAt: true } } } });
+      if (!target || target.collections.some((collection) => collection.deletedAt)) throw new TRPCError({ code: 'NOT_FOUND', message: '创作记录不可用' });
+      const active = await tx.guestConversation.findFirst({ where: { guestId: subject.id, state: 'active' } });
+      if ((active?.id ?? null) !== expectedOldId) throw new TRPCError({ code: 'CONFLICT', message: '当前创作已变化，请刷新后重试' });
+      if (active?.id !== id) {
+        if (active) await tx.guestConversation.update({ where: { id: active.id }, data: { state: 'closed' } });
+        await tx.guestConversation.update({ where: { id }, data: { state: 'active' } });
+      }
+      return toConversationDto({ ...target, state: 'active' });
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new TRPCError({ code: 'CONFLICT', message: '当前创作已变化，请刷新后重试' });
+    throw error;
+  }
 }

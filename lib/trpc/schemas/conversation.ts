@@ -46,3 +46,9 @@ export const conversationSaveSnapshotInputSchema = z.object({
 export type ConversationSaveSnapshotInput = z.infer<
   typeof conversationSaveSnapshotInputSchema
 >;
+
+/** 显式恢复原会话编辑，旧 active 必须准确匹配。 */
+export const conversationResumeInputSchema = z.object({
+  id: z.string().min(1).max(64),
+  expectedOldId: z.string().min(1).max(64).nullable(),
+});

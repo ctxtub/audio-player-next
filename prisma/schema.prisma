@@ -59,6 +59,8 @@ model StoryCollection {
   favoritedAt    DateTime?
   /// 软删除时间（NULL 表示未删除）
   deletedAt      DateTime?
+  /// 本次整集删除批次；旧数据不推测删除来源。
+  deletionBatch String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -97,6 +99,8 @@ model GuestStoryCollection {
   titleSource    String            @default("fallback")
   favoritedAt    DateTime?
   deletedAt      DateTime?
+  /// 本次整集删除批次；旧数据不推测删除来源。
+  deletionBatch String?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 
@@ -164,6 +168,8 @@ model StoryWork {
   favoritedAt     DateTime?
   /// 软删除时间（NULL 表示未删除）
   deletedAt       DateTime?
+  /// 随集合删除的批次；NULL 表示单独删除或旧数据。
+  collectionDeletionBatch String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @default(now()) @updatedAt
   /// 每作品长期播放进度（per-Work 0/1；ownership 经本表 → User，不重复存 userId）
@@ -283,6 +289,8 @@ model GuestStoryWork {
   favoritedAt     DateTime?
   /// 软删除时间
   deletedAt       DateTime?
+  /// 随集合删除的批次；NULL 表示单独删除或旧数据。
+  collectionDeletionBatch String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   /// 每作品长期播放进度（per-Work 0/1；ownership 经本表 → guest，不重复存 guestId）

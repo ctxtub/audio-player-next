@@ -26,6 +26,10 @@ import {
   type StoryWorkSummaryDTO,
   type LibraryDeletePermanentlyOutput,
 } from '@/lib/client/library';
+import { collectionKeys } from '@/lib/client/collectionQueries';
+import { refreshPlayingWorkMetadata, stopPlayback } from '@/app/services/playbackSessionFlow';
+import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
+import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
 import { libraryKeys } from '@/lib/client/libraryQueries';
 import { useLibraryUndo } from '@/components/Library/LibraryUndoProvider';
 
@@ -599,7 +603,10 @@ export async function mutateToggleFavorite(
   } finally {
     // onSettled: 失效相关列表与详情缓存
     await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
+    await queryClient.invalidateQueries({ queryKey: collectionKeys.all });
     await queryClient.invalidateQueries({ queryKey: libraryKeys.detail(id) });
+    const detail = queryClient.getQueryData<StoryWorkDetailDTO>(libraryKeys.detail(id));
+    if (detail) refreshPlayingWorkMetadata(detail);
   }
 }
 
@@ -676,7 +683,10 @@ export async function mutateRename(
   } finally {
     // onSettled: 失效列表与详情缓存，由服务端 refetch 决定搜索与集合成员资格 (membership)
     await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
+    await queryClient.invalidateQueries({ queryKey: collectionKeys.all });
     await queryClient.invalidateQueries({ queryKey: libraryKeys.detail(id) });
+    const detail = queryClient.getQueryData<StoryWorkDetailDTO>(libraryKeys.detail(id));
+    if (detail) refreshPlayingWorkMetadata(detail);
   }
 }
 
@@ -718,6 +728,8 @@ export async function mutateMoveToTrash(
   });
 
   // 4. 发起 RPC
+  const current = usePlaybackSessionStore.getState();
+  if (current.source?.kind === 'work' && current.source.workId === id) await current.persistSingleTrackProgress({ force: true });
   const movePromise = libraryClient.moveToTrash({ id });
 
   // 5. 注册 Undo 句柄并保存 token
@@ -735,9 +747,20 @@ export async function mutateMoveToTrash(
 
   try {
     const result = await movePromise;
+    const currentSource = usePlaybackSessionStore.getState().source;
+    if (currentSource?.kind === 'work' && currentSource.workId === id) {
+      stopPlayback();
+      await usePlaybackSessionStore.getState().clearSession();
+    }
+    const queue = useCollectionPlaybackStore.getState();
+    if (queue.works.some((work) => work.id === id)) {
+      const works = queue.works.filter((work) => work.id !== id);
+      useCollectionPlaybackStore.setState({ works, index: Math.max(0, queue.index - (queue.works.findIndex((work) => work.id === id) < queue.index ? 1 : 0)), epoch: queue.epoch + 1 });
+    }
     // move RPC success: 立即清除 active detail 缓存（严禁 invalidate detail(id)，避免对已进 Trash 的作品发起注定 404 的 refetch）
     queryClient.removeQueries({ queryKey: libraryKeys.detail(id) });
     await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
+    await queryClient.invalidateQueries({ queryKey: collectionKeys.all });
     return result;
   } catch (error) {
     // 局部逆向回滚
@@ -785,7 +808,10 @@ export async function mutateRestore(
   try {
     const result = await libraryClient.restore({ id });
     await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
+    await queryClient.invalidateQueries({ queryKey: collectionKeys.all });
     await queryClient.invalidateQueries({ queryKey: libraryKeys.detail(id) });
+    const detail = queryClient.getQueryData<StoryWorkDetailDTO>(libraryKeys.detail(id));
+    if (detail) refreshPlayingWorkMetadata(detail);
     return result;
   } catch (error) {
     // 局部逆向回滚
@@ -835,6 +861,7 @@ export async function mutateDeletePermanently(
   }
 
   await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
+    await queryClient.invalidateQueries({ queryKey: collectionKeys.all });
   queryClient.removeQueries({ queryKey: libraryKeys.detail(id) });
 
   return result;

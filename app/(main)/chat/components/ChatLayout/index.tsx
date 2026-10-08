@@ -1,4 +1,5 @@
 'use client';
+import { CreationConfirmation } from '@/components/Library/CreationConfirmation';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import GlassToast from '@/components/ui/GlassToast';
@@ -6,6 +7,8 @@ import GlassToast from '@/components/ui/GlassToast';
 import { beginChatStream, retryChatStream } from '@/app/services/chatFlow';
 import { preemptContinuousCreationForUserInput } from '@/app/services/continuousCreationFlow';
 import { startNewCreation } from '@/app/services/startNewCreation';
+import Link from 'next/link';
+import { conversationPath } from '@/lib/navigation/storyRoutes';
 import { getCollection } from '@/lib/client/collection';
 import { useChatStore } from '@/stores/chatStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
@@ -53,6 +56,8 @@ const defaultSuggestions: HeaderSuggestion[] = [
 const ChatLayout: React.FC<ChatLayoutProps> = () => {
   const [isCreationReady, setIsCreationReady] = useState(false);
   const [isStartingNewCreation, setIsStartingNewCreation] = useState(false);
+  const [confirmNewCreation, setConfirmNewCreation] = useState(false);
+  const confirmResolver = useRef<((approved: boolean) => void) | null>(null);
   const newCreationPromiseRef = useRef<Promise<boolean> | null>(null);
   const messages = useChatStore((state) => state.messages);
   const inputValue = useChatStore((state) => state.inputValue);
@@ -63,6 +68,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
   const collectionTitle = useChatStore((state) => state.collectionTitle);
   /** 当前 active Conversation 对应的集合 id。 */
   const collectionId = useChatStore((state) => state.collectionId);
+  const previousConversationId = useChatStore((state) => state.previousConversationId);
   /** 是否存在发送中的消息，用于控制输入区禁用状态 */
   const isSending = useMemo(
     () => messages.some((m) => m.status === 'sending'),
@@ -240,17 +246,15 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     if (newCreationPromiseRef.current) {
       return;
     }
-    const needsConfirm = useChatStore.getState().messages.length > 0;
+    const current = useChatStore.getState();
+    const needsConfirm = Boolean(current.inputValue.trim()) || current.messages.some((message) => message.status === 'sending' || message.parts?.some((part) => part.type === 'storyArtifact' && part.artifact.status !== 'ready'));
     setIsStartingNewCreation(true);
     const task = startNewCreation({
       confirm: () => {
         if (!needsConfirm) {
           return true;
         }
-        if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
-          return true;
-        }
-        return window.confirm('开始新建创作？当前会话内容将被清空。');
+        return new Promise<boolean>((resolve) => { confirmResolver.current = resolve; setConfirmNewCreation(true); });
       },
       })
       .then((result) => {
@@ -270,6 +274,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
   return (
     <div className={styles.chatLayout}>
       <OnboardingModal />
+      <CreationConfirmation open={confirmNewCreation} resolve={(approved) => { setConfirmNewCreation(false); confirmResolver.current?.(approved); confirmResolver.current = null; }} />
 
       <HeaderArea
         visible={shouldShowHeader}
@@ -277,6 +282,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         onSuggestionSelect={handleSuggestionSelect}
       />
       <ContinuousCreationBar collectionTitle={collectionTitle} />
+      {previousConversationId && <Link href={conversationPath(previousConversationId)}>返回上一份创作（已保留输入）</Link>}
       <MessageArea
         messages={messages}
         isLoading={false}
@@ -290,7 +296,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         value={inputValue}
         onChange={handleInputChange}
         onClear={handleNewCreation}
-        clearText="新建创作"
+        clearText="新建故事集"
       />
     </div>
   );

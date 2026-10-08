@@ -55,6 +55,9 @@ import {
   serializePartsForHistory,
 } from '@/lib/client/chatArtifactHistory';
 
+/** 会话输入草稿仅驻留本次登录内存，不进入跨账号存储。 */
+const creationDrafts = new Map<string, string>();
+
 /**
  * 聊天 Store 的 Action 定义，统一管理所有对单条目消息状态的变更操作。
  */
@@ -159,6 +162,8 @@ type ChatStoreBaseState = {
    * null = 尚未建立会话（访客未登录首屏等）。
    */
   conversationId: string | null;
+  /** 最近切走的编辑目标，用于找回保留输入。 */
+  previousConversationId: string | null;
   /** 当前 Conversation 对应集合 id；null = 首作晋升前。 */
   collectionId: string | null;
   /** 当前集合标题（创作页展示）；null = 未知/无集合。 */
@@ -188,6 +193,8 @@ type ChatStoreActions = {
     collectionId: string | null;
     collectionTitle?: string | null;
   }) => void;
+  /** 恢复编辑成功后载入已取得的来源快照，原草稿按会话保留。 */
+  loadConversation: (identity: { conversationId: string; collectionId: string | null; collectionTitle: string | null }, messages: ChatMessageDTO[]) => void;
   /** 登录后：拉取服务端会话并恢复，开启持久化。 */
   initForUser: () => Promise<void>;
   /** 登出：仅清本地并关闭持久化，不动服务端。 */
@@ -635,9 +642,11 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       const snapshot = toSnapshot(state.messages);
       const baselineAtSend = baselineMessageIds;
       persistConversationSnapshot(snapshot, baselineAtSend).then(() => {
+        if (saveEpochAtSchedule !== conversationSaveEpoch) return;
         baselineMessageIds = snapshot.map((message) => message.messageId);
         set({ saveError: null });
       }).catch((error) => {
+        if (saveEpochAtSchedule !== conversationSaveEpoch) return;
         // 中文注释：CONFLICT 不静默丢——置标记位＋toast＋initForUser 刷新。
         if (isConflictError(error)) {
           const reason = error instanceof Error ? error.message : String(error);
@@ -759,6 +768,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
   saveError: null,
   pendingAutoSend: null,
   conversationId: null,
+  previousConversationId: null,
   collectionId: null,
   collectionTitle: null,
   epoch: 0,
@@ -1304,6 +1314,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       pendingAutoSend: null,
       hasUnviewedResponse: false,
       conversationId: null,
+      previousConversationId: null,
       collectionId: null,
       collectionTitle: null,
       epoch: state.epoch + 1,
@@ -1328,6 +1339,16 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
             : state.collectionTitle,
       epoch: changed ? state.epoch + 1 : state.epoch,
     }));
+  },
+  loadConversation: (identity, messages) => {
+    const previous = get();
+    if (previous.conversationId) creationDrafts.set(previous.conversationId, previous.inputValue);
+    invalidateInflightPromotions();
+    conversationSaveEpoch += 1;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    baselineMessageIds = messages.map((message) => message.messageId);
+    get().applyConversationIdentity(identity);
+    set({ previousConversationId: previous.conversationId, messages: rehydrateServerMessages(messages), inputValue: creationDrafts.get(identity.conversationId) ?? '', pendingAutoSend: null, hasUnviewedResponse: false, saveError: null });
   },
   initForUser: () => {
     if (get().syncEnabled) {
@@ -1408,6 +1429,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     return userInitPromise;
   },
   reset: () => {
+    creationDrafts.clear();
     accountEpoch++; // 作废在途 initForUser 的回写
     // 登出同步作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op）。
     invalidateInflightPromotions();
@@ -1425,6 +1447,7 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
       syncEnabled: false,
       saveError: null,
       conversationId: null,
+      previousConversationId: null,
       collectionId: null,
       collectionTitle: null,
       epoch: state.epoch + 1,

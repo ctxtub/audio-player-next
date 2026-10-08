@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { workPath } from '@/lib/navigation/storyRoutes';
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
 import { Loader2, Pause, Play, RotateCcw, RotateCw, Sparkles } from 'lucide-react';
 import type { StoryArtifactPart } from '@/types/chat';
@@ -55,6 +57,7 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
     (state) => Boolean(messageId) && state.pendingAutoplayMessageId === messageId,
   );
 
+  const collectionId = useChatStore((state) => state.collectionId);
   const artifact = part.artifact;
   const status = artifact.status;
   const isDraft = status === 'draft';
@@ -177,7 +180,8 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
               {playback.actionLabel}
             </button>
           )}
-          {needsTruncation && (
+          {readyWorkId && <Link href={workPath(readyWorkId, collectionId)} className={styles.expandButton}>查看全文</Link>}
+          {needsTruncation && !readyWorkId && (
             <button
               type="button"
               className={styles.expandButton}

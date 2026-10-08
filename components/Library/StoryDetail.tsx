@@ -7,13 +7,15 @@ import {
   Clock,
   Mic,
   FileText,
-  Hash,
   Bookmark,
   Sparkles,
   Pencil,
   Trash2,
 } from 'lucide-react';
 import type { LibraryDetailViewModel } from '@/lib/client/libraryViewModel';
+import { collectionPath, conversationPath } from '@/lib/navigation/storyRoutes';
+import { libraryReturnPath } from './LibraryNavigationMemory';
+import { WorkPlaybackButton } from './WorkPlaybackButton';
 import styles from './storyDetail.module.scss';
 
 export interface StoryDetailProps {
@@ -158,16 +160,14 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
       {/* 顶部导航与返回 */}
       <nav className={styles.topNav}>
         <Link
-          href="/library"
+          href={work.collectionId ? collectionPath(work.collectionId) : libraryReturnPath()}
           className={styles.backLink}
           data-testid="back-to-library-link"
         >
           <ArrowLeft size={16} />
-          <span>返回故事库</span>
+          <span>{work.collectionTitle ? `返回《${work.collectionTitle}》` : '返回故事库'}</span>
         </Link>
-        <span className={styles.idBadge} data-testid="story-detail-id">
-          #{work.id}
-        </span>
+        {work.conversationId && <Link href={`${conversationPath(work.conversationId)}${work.sourceMessageId ? `?focusMessage=${encodeURIComponent(work.sourceMessageId)}` : ''}`}>查看创作记录</Link>}
       </nav>
 
       {/* 标题与元信息 Hero */}
@@ -247,6 +247,7 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
           )}
 
           <div className={styles.actionsGroup}>
+            <WorkPlaybackButton workId={work.id} title={work.title} />
             <button
               type="button"
               className={work.favoritedAt ? styles.favoriteBtnActive : styles.favoriteBtn}
@@ -283,15 +284,12 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
             <span>音色: {work.voiceId}</span>
           </span>
           <span className={styles.metaItem} data-testid="story-detail-audio-status">
-            <span>音频: {work.audio?.status ?? 'none'}</span>
+            <span>音频: {{ ready: '语音已就绪', preparing: '准备语音中', failed: '语音准备失败', missing: '播放时准备语音' }[work.audio?.status ?? 'missing']}</span>
             {work.audio?.durationMs ? (
               <span> ({formatDuration(work.audio.durationMs)})</span>
             ) : null}
           </span>
-          <span className={styles.metaItem} data-testid="story-detail-hash">
-            <Hash size={14} />
-            <span>Hash: {work.contentHash ? work.contentHash.slice(0, 10) : 'none'}</span>
-          </span>
+
         </div>
       </header>
 
@@ -315,7 +313,8 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
 
       {/* 原始生成提示词 Prompt */}
       {work.prompt ? (
-        <section className={styles.promptSection}>
+        <details className={styles.promptSection}>
+          <summary>创作提示词</summary>
           <h2 className={styles.sectionHeading}>
             <Sparkles size={18} />
             <span>创作提示词</span>
@@ -323,15 +322,10 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
           <div className={styles.promptBox} data-testid="story-detail-prompt">
             {work.prompt}
           </div>
-        </section>
+        </details>
       ) : null}
 
-      {/* 消息来源追踪 */}
-      {work.sourceMessageId ? (
-        <footer className={styles.footerInfo} data-testid="story-detail-source-message">
-          <span>来源对话消息: {work.sourceMessageId}</span>
-        </footer>
-      ) : null}
+
     </div>
   );
 };

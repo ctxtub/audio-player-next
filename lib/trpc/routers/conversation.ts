@@ -8,11 +8,13 @@
 import { router, guardedProcedure } from '../init';
 import {
   conversationIdInputSchema,
+  conversationResumeInputSchema,
   conversationCreateNewInputSchema,
   conversationSaveSnapshotInputSchema,
 } from '../schemas/conversation';
 import {
   getActiveConversationForSubject,
+  resumeConversationForSubject,
   getConversationForSubject,
   getConversationMessagesForSubject,
   createNewConversationForSubject,
@@ -24,6 +26,12 @@ import { enforceProcedureRateLimit } from '@/lib/server/rateLimit';
 import { handleLibraryError } from './library';
 
 export const conversationRouter = router({
+  resume: guardedProcedure.input(conversationResumeInputSchema).mutation(async ({ ctx, input }) => {
+    try {
+      enforceProcedureRateLimit('conversation:resume', ctx, { guestLimit: 20, authedLimit: 60 });
+      return await resumeConversationForSubject(resolveSubject(ctx), input.id, input.expectedOldId);
+    } catch (error) { handleLibraryError(error); }
+  }),
   /**
    * 读取当前主体的 active 会话（无则 null）。
    */

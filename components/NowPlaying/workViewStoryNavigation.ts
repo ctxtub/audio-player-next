@@ -1,3 +1,4 @@
+import { workPath } from '@/lib/navigation/storyRoutes';
 /**
  *  Work 查看正文导航副作用纯 helper（spec §33-§34 / §44）。
  *
@@ -39,7 +40,7 @@ export const resolveWorkLibraryTarget = (
     if (!isValidWorkId(workId)) {
         return null;
     }
-    return `${LIBRARY_ROUTE_BASE}/${workId}`;
+    return workPath(workId);
 };
 
 /**

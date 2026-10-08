@@ -27,6 +27,12 @@ import {
   type StoryCollectionDetailDTO,
   type StoryCollectionSummaryDTO,
 } from '@/lib/client/collection';
+import { libraryKeys } from '@/lib/client/libraryQueries';
+import { get as getWork } from '@/lib/client/library';
+import { useChatStore } from '@/stores/chatStore';
+import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
+import { stopPlayback, refreshPlayingWorkMetadata } from '@/app/services/playbackSessionFlow';
+import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
 import { collectionKeys } from '@/lib/client/collectionQueries';
 import { useCollectionUndo } from '@/components/Library/CollectionUndoProvider';
 
@@ -109,8 +115,17 @@ async function invalidateCollection(
   queryClient: QueryClient,
   id: string,
 ): Promise<void> {
+  await queryClient.invalidateQueries({ queryKey: libraryKeys.all });
   await queryClient.invalidateQueries({ queryKey: collectionKeys.lists() });
   await queryClient.invalidateQueries({ queryKey: collectionKeys.detail(id) });
+  const collection = queryClient.getQueryData<StoryCollectionDetailDTO>(collectionKeys.detail(id));
+  if (collection && useChatStore.getState().collectionId === id) useChatStore.getState().applyConversationIdentity({ conversationId: useChatStore.getState().conversationId, collectionId: id, collectionTitle: collection.title });
+  const source = usePlaybackSessionStore.getState().source;
+  if (source?.kind === 'work') {
+    const work = await getWork({ id: source.workId }).catch(() => null);
+    if (work) refreshPlayingWorkMetadata(work);
+
+  }
 }
 
 export interface CollectionMutations {
@@ -185,7 +200,19 @@ export function useCollectionMutations(): CollectionMutations {
       applyToLists(queryClient, (data) => removeFromInfinite(data, id));
       const movePromise = (async () => {
         try {
+          const currentSource = usePlaybackSessionStore.getState().source;
+          const currentWork = currentSource?.kind === 'work' ? await getWork({ id: currentSource.workId }).catch(() => null) : null;
+          if (currentWork?.collectionId === id) await usePlaybackSessionStore.getState().persistSingleTrackProgress({ force: true });
           await softDeleteCollection(id);
+          const live = usePlaybackSessionStore.getState().source;
+          if (currentWork?.collectionId === id && live?.kind === 'work' && live.workId === currentWork.id) {
+            stopPlayback(); await usePlaybackSessionStore.getState().clearSession();
+          }
+          if (useChatStore.getState().collectionId === id) {
+            const { useContinuousCreationStore } = await import('@/stores/continuousCreationStore');
+            useContinuousCreationStore.getState().disable();
+          }
+          if (useCollectionPlaybackStore.getState().collectionId === id) useCollectionPlaybackStore.getState().clear();
         } catch (err) {
           restoreSnapshot(queryClient, snapshot);
           throw err;

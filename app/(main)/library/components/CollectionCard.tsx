@@ -18,6 +18,9 @@ import {
   formatCollectionWorkCount,
   isCollectionFavorited,
 } from '@/lib/client/collectionViewModel';
+import { collectionPath } from '@/lib/navigation/storyRoutes';
+import { playCollection } from '@/app/services/collectionPlaybackFlow';
+import GlassToast from '@/components/ui/GlassToast';
 import styles from './libraryComponents.module.scss';
 
 export interface CollectionCardProps {
@@ -100,7 +103,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
           </div>
         ) : (
           <Link
-            href={`/library/collections/${collection.id}`}
+            href={collectionPath(collection.id)}
             className={styles.cardTitleLink}
             data-testid={`collection-link-${collection.id}`}
           >
@@ -139,9 +142,11 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
         {formatCollectionWorkCount(collection.workCount)}
       </p>
 
+      {collection.excerpt && <p className={styles.cardExcerpt}>{collection.excerpt}</p>}
       <div className={styles.cardActions}>
+        {!isTrash && collection.workCount > 0 && <button className={styles.playBtn} onClick={async () => { try { await playCollection(collection.id, collection.hasUnfinished ? 'resume' : 'restart'); } catch { GlassToast.show({ icon: 'fail', content: '暂时无法播放，请重试' }); } }}>{collection.hasUnfinished ? '继续听' : '重新听'}</button>}
         {!isTrash ? (
-          <button
+          <details><summary>管理故事集</summary><button
             type="button"
             className={styles.trashBtn}
             onClick={handleMoveToTrash}
@@ -150,8 +155,8 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
             aria-label={`删除作品集《${collection.title}》`}
           >
             <Trash2 size={14} />
-            <span>删除</span>
-          </button>
+            <span>移入回收站</span>
+          </button></details>
         ) : (
           <>
             <button

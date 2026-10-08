@@ -54,6 +54,7 @@ export type StoryWorkRow = {
   sourceMessageId: string | null;
   /** 所属作品集 id（首作晋升建集后回填；悬空作品为 null）。 */
   collectionId: string | null;
+  position?: number | null;
   favoritedAt: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
@@ -94,6 +95,8 @@ export const toSummaryDto = (
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
   audio: audio ?? createMissingAudioProjection(),
+  collectionId: 'collectionId' in row ? row.collectionId as string | null : null,
+  position: 'position' in row ? row.position as number | null : null,
 });
 
 /**
@@ -113,6 +116,8 @@ export const toDetailDto = (
   createdAt: row.createdAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
   audio: audio ?? createMissingAudioProjection(),
+  collectionId: 'collectionId' in row ? row.collectionId as string | null : null,
+  position: 'position' in row ? row.position as number | null : null,
   prompt: row.prompt,
   storyText: row.storyText,
   sourceMessageId: row.sourceMessageId ?? null,
@@ -155,22 +160,11 @@ export async function getAudioProjectionsForSubject(
   const ids = [...new Set(workIds.filter((id) => Number.isInteger(id) && id > 0))];
   if (ids.length === 0) return out;
   try {
-    if (subject.type === 'user') {
-      const rows = await prisma.storyAudioManifest.findMany({
-        where: { storyWorkId: { in: ids } },
-        select: { storyWorkId: true, status: true, totalDurationMs: true },
-      });
-      for (const r of rows) {
-        out.set(r.storyWorkId, toAudioProjectionFromManifest(r));
-      }
-    } else {
-      const rows = await prisma.guestStoryAudioManifest.findMany({
-        where: { storyWorkId: { in: ids } },
-        select: { storyWorkId: true, status: true, totalDurationMs: true },
-      });
-      for (const r of rows) {
-        out.set(r.storyWorkId, toAudioProjectionFromManifest(r));
-      }
+    const rows = subject.type === 'user'
+      ? await prisma.storyAudioAsset.findMany({ where: { storyWorkId: { in: ids }, supersededAt: null }, orderBy: { version: 'desc' }, select: { storyWorkId: true, status: true, durationMs: true } })
+      : await prisma.guestStoryAudioAsset.findMany({ where: { storyWorkId: { in: ids }, supersededAt: null }, orderBy: { version: 'desc' }, select: { storyWorkId: true, status: true, durationMs: true } });
+    for (const row of rows) {
+      if (!out.has(row.storyWorkId)) out.set(row.storyWorkId, toAudioProjectionFromManifest({ status: row.status, totalDurationMs: row.durationMs }));
     }
   } catch {
     // 投影读取失败不阻断列表/详情（回落 missing），由 canonical 播放侧按需重建。
@@ -343,6 +337,8 @@ export async function listStoryWorksForSubject(
     andFilters.push({ deletedAt: null });
   }
 
+  andFilters.push({ OR: [{ collectionId: null }, { collection: { deletedAt: null } }] });
+
   // 搜索关键词条件（严格不得扫描 storyText！）
   const trimmedQuery = normalizeQuery(query);
   if (trimmedQuery.length > 0) {
@@ -376,10 +372,14 @@ export async function listStoryWorksForSubject(
     deletedAt: true,
     createdAt: true,
     updatedAt: true,
+    collectionId: true,
+    position: true,
+    collection: { select: { title: true, conversationId: true } },
+    audioProgress: true,
   };
 
   // 4. 执行受控查询（take = limit + 1 判定是否存在下页）
-  let rawRows: StoryWorkSummaryRow[];
+  let rawRows;
   if (subject.type === 'user') {
     rawRows = await prisma.storyWork.findMany({
       where: {
@@ -434,7 +434,7 @@ export async function listStoryWorksForSubject(
 
   return {
     items: pageRows.map((row) =>
-      toSummaryDto(row, audioMap.get(row.id) ?? createMissingAudioProjection()),
+      ({ ...toSummaryDto(row, audioMap.get(row.id) ?? createMissingAudioProjection()), collectionTitle: row.collection?.title ?? null, conversationId: row.collection?.conversationId ?? null, progress: progressProjection(row.audioProgress) }),
     ),
     nextCursor,
     hasMore,
@@ -535,7 +535,18 @@ export async function getStoryWorkForSubject(
   const dto = toDetailDto(row, audioMap.get(row.id) ?? createMissingAudioProjection());
   // 标题一致性：附带所属作品集标题（读时 join，无 schema 变更）；
   // 播放器一级标题优先用它，作品短标题走副标题。
-  dto.collectionTitle = await resolveWorkCollectionTitle(subject, row.collectionId);
+  if (row.collectionId) {
+    const collection = subject.type === 'user'
+      ? await prisma.storyCollection.findFirst({ where: { id: row.collectionId, userId: subject.id, deletedAt: null }, select: { title: true, conversationId: true } })
+      : await prisma.guestStoryCollection.findFirst({ where: { id: row.collectionId, guestId: subject.id, deletedAt: null }, select: { title: true, conversationId: true } });
+    if (!collection) throw new TRPCError({ code: 'NOT_FOUND', message: '作品不存在' });
+    dto.collectionTitle = collection.title;
+    dto.conversationId = collection.conversationId;
+  }
+  const progress = subject.type === 'user'
+    ? await prisma.storyAudioProgress.findUnique({ where: { storyWorkId: id } })
+    : await prisma.guestStoryAudioProgress.findUnique({ where: { storyWorkId: id } });
+  dto.progress = progressProjection(progress);
   return dto;
 }
 
@@ -1124,6 +1135,7 @@ export async function trashStoryWorkForSubject(
       },
       data: {
         deletedAt: new Date(),
+        collectionDeletionBatch: null,
       },
     });
 
@@ -1165,6 +1177,7 @@ export async function trashStoryWorkForSubject(
       },
       data: {
         deletedAt: new Date(),
+        collectionDeletionBatch: null,
       },
     });
 
@@ -1220,6 +1233,11 @@ export async function restoreStoryWorkForSubject(
   testHooks?: StoryWorkMutationTestHooks
 ): Promise<StoryWorkDetailDTO> {
   const validId = assertValidWorkId(workId);
+  const parent = subject.type === 'user'
+    ? await prisma.storyWork.findFirst({ where: { id: validId, userId: subject.id }, select: { collection: { select: { deletedAt: true } } } })
+    : await prisma.guestStoryWork.findFirst({ where: { id: validId, guestId: subject.id }, select: { collection: { select: { deletedAt: true } } } });
+  if (parent?.collection?.deletedAt) throw new TRPCError({ code: 'CONFLICT', message: '请先恢复所属故事集' });
+
 
   if (testHooks?.__testBeforeMutationHook) {
     await testHooks.__testBeforeMutationHook();
@@ -1232,9 +1250,11 @@ export async function restoreStoryWorkForSubject(
         id: validId,
         userId: subject.id,
         deletedAt: { not: null },
+        OR: [{ collectionId: null }, { collection: { deletedAt: null } }],
       },
       data: {
         deletedAt: null,
+        collectionDeletionBatch: null,
       },
     });
 
@@ -1276,9 +1296,11 @@ export async function restoreStoryWorkForSubject(
         id: validId,
         guestId: subject.id,
         deletedAt: { not: null },
+        OR: [{ collectionId: null }, { collection: { deletedAt: null } }],
       },
       data: {
         deletedAt: null,
+        collectionDeletionBatch: null,
       },
     });
 
@@ -1994,3 +2016,13 @@ export async function permanentlyDeleteStoryWorkForSubject(
 }
 
 
+
+/** 统一毫秒进度投影，不暴露内部会话身份。 */
+export function progressProjection(row: { positionMs: number; durationMs: number | null; completedAt: Date | null; lastPlayedAt: Date } | null | undefined) {
+  return row ? { positionMs: row.positionMs, durationMs: row.durationMs, completedAt: row.completedAt?.toISOString() ?? null, lastPlayedAt: row.lastPlayedAt.toISOString() } : null;
+}
+
+/** 本轮是否仍有断点；历史听过标识不覆盖重播位置。 */
+export function isUnfinished(progress: { positionMs: number; durationMs: number | null; completedAt: string | null } | null | undefined): boolean {
+  return Boolean(progress && progress.positionMs > 0 && (!progress.durationMs || progress.positionMs < progress.durationMs - 1000));
+}

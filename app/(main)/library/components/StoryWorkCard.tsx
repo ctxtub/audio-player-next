@@ -2,10 +2,12 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Star, Play, Mic, Clock, Trash2, RotateCcw } from 'lucide-react';
+import { Star, Mic, Clock, Trash2, RotateCcw } from 'lucide-react';
 import type { LibraryView } from '@/lib/client/library';
 import type { LibraryItemViewModel } from '@/lib/client/libraryViewModel';
 import { useLibraryMutationsSafe } from '@/lib/client/libraryMutations';
+import { workPath } from '@/lib/navigation/storyRoutes';
+import { WorkPlaybackButton } from '@/components/Library/WorkPlaybackButton';
 import styles from './libraryComponents.module.scss';
 
 export interface StoryWorkCardProps {
@@ -158,7 +160,7 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
       <div className={styles.cardHeader}>
         {canLinkDetail ? (
           <Link
-            href={`/library/${work.id}`}
+            href={workPath(work.id, work.collectionId)}
             className={styles.cardTitleLink}
             data-testid={`story-card-link-${work.id}`}
           >
@@ -216,6 +218,7 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
         {work.excerpt}
       </p>
 
+      {work.collectionTitle && <p className={styles.cardExcerpt}>所属故事集：{work.collectionTitle}</p>}
       {/* 元数据行 */}
       <div className={styles.cardMeta}>
         {work.voiceId ? (
@@ -254,17 +257,7 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
       <div className={styles.cardActions}>
         {!isTrash ? (
           <>
-            <button
-              type="button"
-              className={styles.playBtn}
-              disabled
-              data-testid={`story-card-play-btn-${work.id}`}
-              aria-label={`播放 ${work.title}（功能开发中）`}
-              title="播放功能将在后续版本开放"
-            >
-              <Play size={12} fill="currentColor" />
-              <span>播放</span>
-            </button>
+            <WorkPlaybackButton workId={work.id} title={work.title} testId={`story-card-play-btn-${work.id}`} />
             <button
               type="button"
               className={styles.trashBtn}

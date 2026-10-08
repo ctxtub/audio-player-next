@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
 import Link from 'next/link';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { AlertCircle, RefreshCw } from 'lucide-react';
@@ -9,10 +9,13 @@ import { composeLibraryDetailViewModel } from '@/lib/client/libraryViewModel';
 import { useLibraryMutationsSafe } from '@/lib/client/libraryMutations';
 import { StoryDetail } from '@/components/Library/StoryDetail';
 import { LibraryUnavailable, isUnavailableError } from '@/components/Library/LibraryUnavailable';
+import { usePathname } from 'next/navigation';
+import { workPath, collectionPath } from '@/lib/navigation/storyRoutes';
 import styles from './index.module.scss';
 
 export interface StoryDetailPageProps {
   id: string;
+  expectedCollectionId?: string;
 }
 
 /**
@@ -30,11 +33,12 @@ export interface StoryDetailPageProps {
  * - 仅支持 Rename / Favorite / Move to Trash，严禁在详情暴露 Restore / Permanent Delete；
  * - progress 经由 VM seam 严格注入为 null，为  留出干净接入点。
  */
-const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id }) => {
-  const numericId = Number.parseInt(id, 10);
-  const isValidId = !Number.isNaN(numericId) && numericId > 0;
+const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id, expectedCollectionId }) => {
+  const numericId = /^[1-9]\d*$/.test(id) ? Number(id) : NaN;
+  const isValidId = Number.isSafeInteger(numericId) && numericId > 0;
 
   const router = useContext(AppRouterContext);
+  const pathname = usePathname();
 
   const mutations = useLibraryMutationsSafe();
 
@@ -52,7 +56,8 @@ const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id }) => {
     if (!mutations) return;
     await mutations.moveToTrash({ id: workId, title });
     if (router) {
-      router.push('/library');
+      const parent = data?.collectionId;
+      router.push(parent ? collectionPath(parent) : '/library');
     }
   };
 
@@ -65,6 +70,11 @@ const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id }) => {
   } = useLibraryDetailQuery(numericId, {
     enabled: isValidId,
   });
+
+  useEffect(() => {
+    if (data && !expectedCollectionId && pathname !== workPath(data.id, data.collectionId)) router?.replace(workPath(data.id, data.collectionId));
+  }, [data, expectedCollectionId, router, pathname]);
+  if (data && expectedCollectionId && data.collectionId !== expectedCollectionId) return <LibraryUnavailable />;
 
   // 非法 ID 直接统一渲染不可用视图
   if (!isValidId) {

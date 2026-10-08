@@ -2,6 +2,7 @@ import { test, expect } from "../harness/fixtures";
 import { enterGuestChat } from "./helpers/guest";
 import {
     cardActionButtons,
+    startNewStoryCollection,
     chatContent,
     composerInput,
     continuousStatusText,
@@ -30,13 +31,6 @@ test.describe("播放与准备中新创作强重置", () => {
         await enterGuestChat(page, harnessEnv.appUrl);
         const appUrl = harnessEnv.appUrl;
 
-        // 原生确认框：一律接受并记录（三次重置都有旧消息，都会弹框）。
-        const dialogs: string[] = [];
-        page.on("dialog", (dialog) => {
-            dialogs.push(dialog.message());
-            void dialog.accept();
-        });
-
         // ① 先关开关（证明重置后默认回到开启）。
         await setContinuousEnabled(page, false);
         await sendStory(page, "写一个关于旧钟楼的故事");
@@ -54,9 +48,7 @@ test.describe("播放与准备中新创作强重置", () => {
         await playCardWhenSettled(page, 0);
         const miniBefore = await readMiniTitles(page);
         expect(miniBefore.title).toBe(collectionTitle);
-        await page.getByRole("button", { name: "新建创作" }).click();
-        expect(dialogs.length).toBeGreaterThanOrEqual(1);
-        expect(dialogs[dialogs.length - 1]).toContain("新建创作");
+        await startNewStoryCollection(page);
 
         // ③ 立即回到空对话初始态：无 Mini、无卡片按钮、空态文案、输入框清空可用，
         // 空内容不能发送；开关回到默认开启、新作品集占位。
@@ -96,7 +88,7 @@ test.describe("播放与准备中新创作强重置", () => {
             .getByRole("status")
             .filter({ hasText: /正在创作下一篇|正在保存下一篇|正在准备下一篇语音/ });
         await expect(nextPreparingStatus).toBeVisible({ timeout: 60000 });
-        await page.getByRole("button", { name: "新建创作" }).click();
+        await startNewStoryCollection(page);
         await page.waitForTimeout(12000);
         await expect(page.getByTestId("mini-now-playing")).toBeHidden({ timeout: 10000 });
         expect(await cardActionButtons(page).count()).toBe(0);
@@ -109,7 +101,7 @@ test.describe("播放与准备中新创作强重置", () => {
         await expect(
             chatContent(page).locator("span").filter({ hasText: "写一个关于白塔湖的故事" }).first(),
         ).toBeVisible({ timeout: 15000 });
-        await page.getByRole("button", { name: "新建创作" }).click();
+        await startNewStoryCollection(page);
         await page.waitForTimeout(10000);
         expect(await cardActionButtons(page).count()).toBe(0);
         await expect(page.getByTestId("mini-now-playing")).toBeHidden();

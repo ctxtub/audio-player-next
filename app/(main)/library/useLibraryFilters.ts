@@ -5,9 +5,9 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import {
   canonicalizeQuery,
   parseLibraryView,
-  serializeLibraryUrl,
   SEARCH_DEBOUNCE_MS,
 } from '@/lib/client/libraryFilters';
+import { libraryPath } from '@/lib/navigation/storyRoutes';
 import type { LibraryView } from '@/lib/client/library';
 
 export {
@@ -56,7 +56,7 @@ export function useLibraryFilters(
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname() || '/library';
-  const basePath = options.basePath ?? pathname;
+  void options;
   // 契约严格冻结为 300ms，不允许外部 override
   const debounceMs = SEARCH_DEBOUNCE_MS;
 
@@ -64,7 +64,8 @@ export function useLibraryFilters(
   const rawView = searchParams?.get('view') ?? null;
   const rawQ = searchParams?.get('q') ?? null;
 
-  const view = parseLibraryView(rawView);
+  const view = pathname.endsWith('/favorites') ? 'favorites' : pathname.endsWith('/trash') ? 'trash' : parseLibraryView(rawView);
+  const type = searchParams?.get('type') === 'works' ? 'works' : 'collections';
   const q = canonicalizeQuery(rawQ);
 
   // 2. 本地草稿与 IME 组合状态
@@ -106,11 +107,11 @@ export function useLibraryFilters(
     (textToCommit: string) => {
       const canonical = canonicalizeQuery(textToCommit);
       if (canonical !== q) {
-        const nextUrl = serializeLibraryUrl({ view, q: canonical }, basePath);
+        const nextUrl = libraryPath(view, canonical, type);
         router.replace(nextUrl);
       }
     },
-    [basePath, q, router, view]
+    [q, router, view, type]
   );
 
   // 5. 输入框草稿变更触发防抖
@@ -164,10 +165,10 @@ export function useLibraryFilters(
     (nextView: LibraryView) => {
       clearTimer();
       const validNextView = parseLibraryView(nextView);
-      const nextUrl = serializeLibraryUrl({ view: validNextView, q }, basePath);
+      const nextUrl = libraryPath(validNextView, q, type);
       router.push(nextUrl);
     },
-    [basePath, clearTimer, q, router]
+    [clearTimer, q, router, type]
   );
 
   // 9. 清空搜索

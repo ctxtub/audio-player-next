@@ -51,6 +51,14 @@ export function createMissingAudioProjection(): StoryAudioProjection {
   };
 }
 
+/** 单篇真实播放进度投影。 */
+export const libraryProgressSchema = z.object({
+  positionMs: z.number().nonnegative(),
+  durationMs: z.number().nullable(),
+  completedAt: z.string().nullable(),
+  lastPlayedAt: z.string(),
+});
+
 /**
  * 故事摘要 DTO（用于 Library List 列表渲染，刻意不包含庞大正文与 prompt）
  */
@@ -65,6 +73,11 @@ export const storyWorkSummaryDtoSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   audio: storyAudioProjectionSchema,
+  collectionId: z.string().nullable().optional(),
+  collectionTitle: z.string().nullable().optional(),
+  conversationId: z.string().nullable().optional(),
+  position: z.number().nullable().optional(),
+  progress: libraryProgressSchema.nullable().optional(),
 });
 export type StoryWorkSummaryDTO = z.infer<typeof storyWorkSummaryDtoSchema>;
 

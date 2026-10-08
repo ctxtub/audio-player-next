@@ -9,15 +9,15 @@ import type {
  * 封装稳定 DTO，并预留注入播放进度（）的缝隙。
  *  阶段 progress 注入恒为 null； 将根据 storyId 批量装配进度投影，无需重写 Query 或缓存。
  */
-export type LibraryItemViewModel<TProgress = null> = StoryWorkSummaryDTO & {
-  progress: TProgress | null;
+export type LibraryItemViewModel<TProgress = null> = Omit<StoryWorkSummaryDTO, 'progress'> & {
+  progress?: TProgress | StoryWorkSummaryDTO['progress'] | null;
 };
 
 /**
  * 故事库详情展示模型（ViewModel）
  */
-export type LibraryDetailViewModel<TProgress = null> = StoryWorkDetailDTO & {
-  progress: TProgress | null;
+export type LibraryDetailViewModel<TProgress = null> = Omit<StoryWorkDetailDTO, 'progress'> & {
+  progress?: TProgress | StoryWorkSummaryDTO['progress'] | null;
 };
 
 /**
@@ -35,7 +35,7 @@ export function composeLibraryItemViewModel<TProgress = null>(
   return {
     ...story,
     audio: story.audio,
-    progress: progress ?? null,
+    progress: progress ?? story.progress ?? null,
   };
 }
 
@@ -49,7 +49,7 @@ export function composeLibraryDetailViewModel<TProgress = null>(
   return {
     ...story,
     audio: story.audio,
-    progress: progress ?? null,
+    progress: progress ?? story.progress ?? null,
   };
 }
 

@@ -1,6 +1,11 @@
 'use client';
 
 import React, { useMemo } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useLibraryListInfiniteQuery } from '@/lib/client/libraryQueries';
+import { composeLibraryItemViewModel } from '@/lib/client/libraryViewModel';
+import { libraryPath } from '@/lib/navigation/storyRoutes';
 import { useLibraryFilters } from './useLibraryFilters';
 import { useCollectionListInfiniteQuery } from '@/lib/client/collectionQueries';
 import { flattenCollectionPages } from '@/lib/client/collectionViewModel';
@@ -11,6 +16,7 @@ import {
   LibraryLoadingSkeleton,
   LibraryErrorState,
   CollectionCard,
+  StoryWorkCard,
 } from './components';
 import styles from './index.module.scss';
 
@@ -37,17 +43,13 @@ const LibraryPage: React.FC = () => {
     onCompositionEnd,
   } = useLibraryFilters();
 
-  // 2. 无限滚动查询接入（集合分页流）
-  const {
-    data,
-    error,
-    isLoading,
-    isError,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
-    refetch,
-  } = useCollectionListInfiniteQuery({ view, query: q });
+  const searchParams = useSearchParams();
+  const isWorks = view !== 'active' && searchParams?.get('type') === 'works';
+  const collectionQuery = useCollectionListInfiniteQuery({ view, query: q }, { enabled: !isWorks });
+  const workQuery = useLibraryListInfiniteQuery({ view, query: q }, { enabled: isWorks });
+  const { error, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage, refetch } = isWorks ? workQuery : collectionQuery;
+  const data = collectionQuery.data;
+  const works = workQuery.data?.pages.flatMap((page) => page.items) ?? [];
 
   // 3. 数据流水线：打平多页 -> 集合 id 防重
   const collections = useMemo(() => {
@@ -58,7 +60,7 @@ const LibraryPage: React.FC = () => {
   }, [data?.pages]);
 
   // 4. UI 状态判定
-  const hasItems = collections.length > 0;
+  const hasItems = isWorks ? works.length > 0 : collections.length > 0;
   const isInitialLoading = isLoading && !hasItems;
   const isInitialError = isError && !hasItems;
   const isEmpty = !isLoading && !isError && !hasItems;
@@ -82,6 +84,10 @@ const LibraryPage: React.FC = () => {
         onCompositionEnd={onCompositionEnd}
       />
 
+      {view !== 'active' && <nav aria-label="管理范围">
+        <Link href={libraryPath(view, q)} aria-current={!isWorks ? 'page' : undefined}>故事集</Link>{' · '}
+        <Link href={libraryPath(view, q, 'works')} aria-current={isWorks ? 'page' : undefined}>单篇故事</Link>
+      </nav>}
       {/* 内容区域状态渲染 */}
       <main
         className={styles.libraryContent}
@@ -109,7 +115,7 @@ const LibraryPage: React.FC = () => {
         {/* 4.4 集合列表内容渲染（服务端顺序直出，禁止客户端重排） */}
         {hasItems ? (
           <>
-            {collections.map((collection) => (
+            {isWorks ? works.map((work) => <StoryWorkCard key={work.id} work={composeLibraryItemViewModel(work)} view={view} />) : collections.map((collection) => (
               <CollectionCard
                 key={collection.id}
                 collection={collection}

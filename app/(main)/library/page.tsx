@@ -1,11 +1,9 @@
-import React from 'react';
+import { redirect } from 'next/navigation';
+import { libraryPath } from '@/lib/navigation/storyRoutes';
 import LibraryPage from './index';
-
-/**
- * 故事库路由入口组件（ 骨架）。
- * 遵循 App Router 结构规范，转发至客户端 LibraryPage 组件。
- * @returns 故事库路由节点
- */
-export default function Page() {
+/** 旧视图参数归一到明确的管理路径。 */
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = await searchParams;
+  if (typeof params.view === 'string') redirect(libraryPath(params.view, typeof params.q === 'string' ? params.q : undefined, typeof params.type === 'string' ? params.type : undefined));
   return <LibraryPage />;
 }

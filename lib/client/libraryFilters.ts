@@ -1,3 +1,4 @@
+import { libraryPath } from '@/lib/navigation/storyRoutes';
 import type { LibraryView } from '@/lib/client/library';
 
 /** 故事库允许的所有合法视图列表 */
@@ -72,19 +73,8 @@ export function serializeLibraryUrl(
   filters: { view?: LibraryView | string | null; q?: string | null },
   basePath = '/library'
 ): string {
-  const view = parseLibraryView(filters.view);
-  const canonicalQ = canonicalizeQuery(filters.q);
-
-  const searchParams = new URLSearchParams();
-  if (view !== DEFAULT_LIBRARY_VIEW) {
-    searchParams.set('view', view);
-  }
-  if (canonicalQ) {
-    searchParams.set('q', canonicalQ);
-  }
-
-  const queryString = searchParams.toString();
-  return queryString ? `${basePath}?${queryString}` : basePath;
+  void basePath;
+  return libraryPath(parseLibraryView(filters.view), canonicalizeQuery(filters.q));
 }
 
 /**
@@ -110,7 +100,7 @@ export function parseLibraryUrl(
   }
 
   return {
-    view: parseLibraryView(params.get('view')),
+    view: typeof urlOrParams === 'string' && urlOrParams.split('?')[0].endsWith('/favorites') ? 'favorites' : typeof urlOrParams === 'string' && urlOrParams.split('?')[0].endsWith('/trash') ? 'trash' : parseLibraryView(params.get('view')),
     q: canonicalizeQuery(params.get('q')),
   };
 }

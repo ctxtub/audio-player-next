@@ -2,6 +2,7 @@ import { test, expect } from "../harness/fixtures";
 import { enterGuestChat } from "./helpers/guest";
 import {
     captureVisual,
+    startNewStoryCollection,
     cardActionButtons,
     composerInput,
     continuousStatusText,
@@ -43,7 +44,7 @@ test.describe("连续创作下一篇准备与自动续播", () => {
         await page.keyboard.press("Home");
         await page.waitForTimeout(1500);
         await page.goto(`${appUrl}/chat`, { waitUntil: "networkidle", timeout: 60000 });
-        await page.getByRole("button", { name: "新建创作" }).click();
+        await startNewStoryCollection(page);
         await expect(budget).toHaveText("剩余 10:00", { timeout: 15000 });
         await expect(composerInput(page)).toBeEnabled({ timeout: 15000 });
         await page.waitForTimeout(500);

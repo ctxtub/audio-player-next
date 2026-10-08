@@ -8,6 +8,7 @@
  * - 登出/会话失效清理键于 authStore 的 isLogin 下降沿自动触发（401/会话过期复用，零额外接线）。
  */
 
+import { clearContinuousCreationSessions } from '@/app/services/continuousCreationSession';
 import { useAuthStore } from '@/stores/authStore';
 import { useConfigStore } from '@/stores/configStore';
 import { useChatStore } from '@/stores/chatStore';
@@ -100,6 +101,7 @@ export function initAccountForGuest(): void {
  * try/finally 永不阻断登出——单块 reset 抛错仅告警并继续其余块。
  */
 export function resetAccountData(): void {
+  clearContinuousCreationSessions();
   for (const p of participants) {
     try {
       p.reset();

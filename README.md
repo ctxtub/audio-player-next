@@ -149,3 +149,5 @@ git diff --check
 - 提交遵循 Conventional Commits：`feat:` / `fix:` / `refactor:` 等
 - PR 描述需说明：变更动机、核心修改、测试影响、潜在影响与真实验证命令/退出码
 - 所有 Agent 与协作者统一遵循 [AGENTS.md](AGENTS.md)，测试规范见 [docs/testing/README.md](docs/testing/README.md)
+
+自动播放时长与刷新继承规则见 [统一契约](docs/specs/2026-10-08-continuous-creation-duration-contract.md)。

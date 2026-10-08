@@ -47,6 +47,9 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
 
         // ② 关开关，连续生成两篇（互不干扰，各自出现播放按钮）。
         await setContinuousEnabled(page, false);
+        await page.reload({ waitUntil: 'networkidle' });
+        await expect(continuousStatusText(page)).toHaveText('连续创作已关闭');
+        await expect(page.getByRole('switch', { name: '连续创作开关' })).toHaveCount(0);
         await sendStory(page, "写一个关于山间小屋的短故事");
         const firstAction = cardActionButton(page, 0);
         await expect(firstAction).toHaveText("正在准备语音", { timeout: 90000 });

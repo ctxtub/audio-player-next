@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
+import { resetContinuousCreationDuration } from '@/app/services/continuousCreationSession';
 import { useChatStore } from '@/stores/chatStore';
 import { collectionPath } from '@/lib/navigation/storyRoutes';
-import React, { useCallback } from 'react';
+import React from 'react';
 
 import {
   CONTINUOUS_CREATION_STATUS_LABEL,
@@ -35,17 +35,8 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
   const enabled = useContinuousCreationStore((state) => state.enabled);
   const status = useContinuousCreationStore((state) => state.status);
   const remainingMs = useContinuousCreationStore((state) => state.remainingMs);
-  const enable = useContinuousCreationStore((state) => state.enable);
-  const disable = useContinuousCreationStore((state) => state.disable);
-
-  const handleToggle = useCallback(() => {
-    if (enabled) {
-      disable();
-    } else {
-      useCollectionPlaybackStore.getState().clear();
-      enable();
-    }
-  }, [enabled, enable, disable]);
+  const ready = useContinuousCreationStore((state) => state.ready);
+  const budgetMs = useContinuousCreationStore((state) => state.budgetMs);
 
   const title = collectionTitle && collectionTitle.trim().length > 0 ? collectionTitle : '新作品集';
 
@@ -62,25 +53,16 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
         <div className={styles.statusCard} data-testid="continuous-status-card">
           <span className={`${styles.statusDot} ${enabled ? styles.statusDotOn : styles.statusDotOff}`} />
           <span className={styles.statusText} role="status">
-            {CONTINUOUS_CREATION_STATUS_LABEL[status]}
+            {ready ? CONTINUOUS_CREATION_STATUS_LABEL[status] : '正在恢复本次创作…'}
           </span>
         </div>
 
         <span className={styles.budget} data-testid="continuous-remaining-budget">
-          自动创作预算 · 剩余 {formatRemainingMs(remainingMs)}
+          自动播放时长 · {budgetMs ? `${Math.round(budgetMs / 60000)}分钟` : '加载中'} · 剩余 {ready ? formatRemainingMs(remainingMs) : '—'}
         </span>
 
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
-          aria-label="连续创作开关"
-          className={`${styles.switch} ${enabled ? styles.switchOn : ''}`}
-          onClick={handleToggle}
-          data-testid="continuous-switch"
-        >
-          <span className={styles.switchThumb} />
-        </button>
+        {ready && enabled && status === 'ended_budget' && <button type="button" className={styles.action} onClick={resetContinuousCreationDuration}>重置时长</button>}
+        <Link className={styles.action} href="/setting">前往设置</Link>
       </div>
     </section>
   );

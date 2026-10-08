@@ -22,6 +22,9 @@ import {
 
 /** store 状态 = 状态机快照 + 当前集合身份 + 下一篇身份。 */
 export type ContinuousCreationStoreState = ContinuousCreationState & {
+  ready: boolean;
+  conversationId: string | null;
+  creationWorkId: number | null;
   /** 当前集合 id；null = 尚未有集合（首作晋升前）。 */
   collectionId: string | null;
   /**
@@ -45,6 +48,8 @@ export type ContinuousNextWorkIdentity = {
 
 /** store 动作。 */
 export type ContinuousCreationStoreActions = {
+  restoreSession: (input: { conversationId: string; collectionId: string | null; enabled: boolean; budgetMs: number; remainingMs: number; creationWorkId: number | null; exhausted: boolean }) => void;
+  setCreationWork: (workId: number | null) => void;
   /** 打开开关。 */
   enable: () => void;
   /** 关闭开关并清除 next job。 */
@@ -97,16 +102,20 @@ export type ContinuousCreationStore = ContinuousCreationStoreState &
   ContinuousCreationStoreActions;
 
 const INITIAL_STATE: ContinuousCreationStoreState = {
-  ...createInitialState(),
+  ...createInitialState({ enabled: false, budgetMinutes: 30 }),
+  ready: false,
+  conversationId: null,
+  creationWorkId: null,
   collectionId: null,
   nextWork: null,
 };
 
 /** 从 store 状态取出纯状态机快照。 */
 function machineStateOf(state: ContinuousCreationStoreState): ContinuousCreationState {
-  const { collectionId: _collectionId, nextWork: _nextWork, ...machine } = state;
+  const { collectionId: _collectionId, nextWork: _nextWork, ready: _ready, conversationId: _conversationId, creationWorkId: _creationWorkId, ...machine } = state;
   void _collectionId;
   void _nextWork;
+  void _ready; void _conversationId; void _creationWorkId;
   return machine;
 }
 
@@ -119,6 +128,9 @@ function applyEvent(
     ...reduce(machineStateOf(state), event),
     collectionId: state.collectionId,
     nextWork: state.nextWork,
+    ready: state.ready,
+    conversationId: state.conversationId,
+    creationWorkId: state.creationWorkId,
   };
 }
 
@@ -170,6 +182,12 @@ export function registerContinuousCreationCancelHandler(
 const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (set, get) => ({
   ...INITIAL_STATE,
 
+  restoreSession: (input) => {
+    cancelHandler?.();
+    set((state) => ({ ...createInitialState({ enabled: input.enabled, budgetMinutes: input.budgetMs / 60000, epoch: state.epoch + 1 }), conversationId: input.conversationId, collectionId: input.collectionId, creationWorkId: input.creationWorkId, remainingMs: input.remainingMs, ready: true, nextWork: null, status: !input.enabled ? 'disabled' : input.exhausted || input.remainingMs <= 0 ? 'ended_budget' : 'enabled_idle' }));
+  },
+  setCreationWork: (creationWorkId) => set({ creationWorkId }),
+
   enable: () => set((state) => applyEvent(state, { type: 'enable' })),
   disable: () => {
     // 关闭开关必须先走真取消 seam（abort 在途传输 + 清 prepared/
@@ -216,6 +234,7 @@ const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (s
   },
 
   switchCollection: (collectionId) => {
+    set({ ready: false, creationWorkId: null });
     // 切换会话/集合必须「真取消」在途 next 并清 prepared，
     // 不能只靠 epoch 失配做逻辑 no-op（否则 prepared/调度锁会占住 lookahead=1 槽位，
     // 导致新会话无法立即重新调度）。真实取消 + 重新初始化由编排服务钩子完成。
@@ -231,7 +250,7 @@ const continuousCreationStoreCreator: StateCreator<ContinuousCreationStore> = (s
     return get().epoch;
   },
 
-  canSchedule: (context) => canScheduleNext(machineStateOf(get()), context),
+  canSchedule: (context) => get().ready && canScheduleNext(machineStateOf(get()), context),
   isStale: (epoch) => isStaleCallback(machineStateOf(get()), epoch),
   hasNextJob: () => hasNextJob(machineStateOf(get())),
   reset: () => {
@@ -256,7 +275,7 @@ export const CONTINUOUS_CREATION_STATUS_LABEL: Record<ContinuousCreationStatus, 
   preparing_audio: '正在准备下一篇语音',
   next_ready: '下一篇已准备好',
   waiting_next: '当前故事已结束，正在等待下一篇',
-  ended_budget: '本次连续创作已结束',
+  ended_budget: '本次自动播放已结束',
   error: '下一篇准备失败',
 };
 

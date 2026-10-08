@@ -31,7 +31,7 @@ test.describe("播放与准备中新创作强重置", () => {
         await enterGuestChat(page, harnessEnv.appUrl);
         const appUrl = harnessEnv.appUrl;
 
-        // ① 先关开关（证明重置后默认回到开启）。
+        // ① 在设置关闭功能（新建仍遵守设置）。
         await setContinuousEnabled(page, false);
         await sendStory(page, "写一个关于旧钟楼的故事");
         await waitStoryCardReady(page, 0);
@@ -51,13 +51,13 @@ test.describe("播放与准备中新创作强重置", () => {
         await startNewStoryCollection(page);
 
         // ③ 立即回到空对话初始态：无 Mini、无卡片按钮、空态文案、输入框清空可用，
-        // 空内容不能发送；开关回到默认开启、新作品集占位。
+        // 空内容不能发送；设置仍关闭、新作品集占位。
         await expect(page.getByTestId("mini-now-playing")).toBeHidden({ timeout: 10000 });
         await expect(page.getByText("暂未开始任何对话")).toBeVisible({ timeout: 10000 });
         await expect(composerInput(page)).toHaveValue("");
         await expect(composerInput(page)).toBeEnabled();
         await expect(page.getByRole("button", { name: "发送" })).toBeDisabled();
-        await expect(continuousStatusText(page)).toHaveText("连续创作已开启", { timeout: 10000 });
+        await expect(continuousStatusText(page)).toHaveText("连续创作已关闭", { timeout: 10000 });
         expect((await page.getByTestId("continuous-collection-title").innerText()).trim()).toBe(
             "新作品集",
         );
@@ -80,6 +80,7 @@ test.describe("播放与准备中新创作强重置", () => {
 
         // ⑥ 下一篇准备中重置：重置后的连续创作默认开启；首篇正式播放后，
         // 等页面明确展示下一篇正在生成/保存/准备语音，再新建创作。
+        await setContinuousEnabled(page, true);
         await sendStory(page, "写一个关于青石巷的故事");
         await waitStoryCardReady(page, 0);
         await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 60000 });

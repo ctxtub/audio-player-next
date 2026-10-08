@@ -8,6 +8,7 @@ import {
   initAccountForGuest,
   initAccountForUser,
 } from '@/stores/accountSync';
+import { ensureContinuousCreationSession } from '@/app/services/continuousCreationSession';
 import { PageLoading } from '@/components/PageLoading';
 
 /**
@@ -31,6 +32,7 @@ export const AccountSyncProvider: React.FC<PropsWithChildren> = ({ children }) =
 
   // 2) 一次性挂载登出订阅（isLogin 下降沿自动清理账号数据）
   useEffect(() => {
+    ensureContinuousCreationSession();
     ensureAccountSyncSubscribed();
   }, []);
 

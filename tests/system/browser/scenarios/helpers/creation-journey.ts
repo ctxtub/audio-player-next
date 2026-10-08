@@ -44,7 +44,7 @@ export function composerInput(page: Page): Locator {
 
 /** 连续创作开关（AT 角色定位，可见开关）。 */
 export function continuousSwitch(page: Page): Locator {
-    return page.getByRole("switch", { name: "连续创作开关" });
+    return page.getByRole("switch", { name: "自动播放与连续创作开关" });
 }
 
 /** 状态卡可见文案（连续创作状态唯一可见断言口）。 */
@@ -150,14 +150,14 @@ export async function waitCardEnded(page: Page, index: number, timeoutMs = 60000
  * @param enabled 目标态
  */
 export async function setContinuousEnabled(page: Page, enabled: boolean): Promise<void> {
-    const status = continuousStatusText(page);
-    const isOff = ((await status.innerText()).trim() === "连续创作已关闭");
-    if (enabled === isOff) {
-        await continuousSwitch(page).click();
-    }
-    await expect(continuousStatusText(page)).toHaveText(enabled ? "连续创作已开启" : "连续创作已关闭", {
-        timeout: 10000,
-    });
+    await page.getByRole('tab', { name: '设置', exact: true }).click();
+    const toggle = page.getByRole('switch', { name: '自动播放与连续创作开关', exact: true });
+    await expect(toggle).toBeVisible();
+    if ((await toggle.getAttribute('aria-checked')) !== String(enabled)) await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', String(enabled));
+    await page.getByRole('tab', { name: '创作', exact: true }).click();
+    if (!enabled) await expect(continuousStatusText(page)).toHaveText('连续创作已关闭');
+    else await expect(continuousStatusText(page)).not.toHaveText('连续创作已关闭');
 }
 
 /**

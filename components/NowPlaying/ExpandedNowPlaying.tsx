@@ -54,6 +54,9 @@
  *   onContinueCreation 缝合即可，不改播放架构。
  */
 
+import Link from 'next/link';
+import { useContinuousCreationStore, formatRemainingMs } from '@/stores/continuousCreationStore';
+import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { PlayingWorkContext } from './PlayingWorkContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, Modal as AriaModal, ModalOverlay } from 'react-aria-components';
@@ -113,6 +116,10 @@ export const formatExpandedSubtitle = (
  * 未打开时返回 null（不挂载 Modal，不抢焦点）；打开时挂载 Modal。
  */
 export const ExpandedNowPlaying: React.FC = () => {
+    const creation = useContinuousCreationStore();
+    const playbackSource = usePlaybackSessionStore((state) => state.source);
+    const playbackConversationId = usePlaybackSessionStore((state) => state.conversationId);
+    const isCreationTimer = creation.ready && creation.enabled && playbackSource?.kind === 'work' && playbackSource.workId === creation.creationWorkId && playbackConversationId === creation.conversationId;
     const isExpanded = useNowPlayingUiStore((state) => state.isExpanded);
     const closeExpanded = useNowPlayingUiStore((state) => state.closeExpanded);
     const viewModel = useExpandedNowPlayingViewModel();
@@ -413,13 +420,13 @@ export const ExpandedNowPlaying: React.FC = () => {
                                 disabled={!viewModel.hasSession}
                             />
                             {/*   Expanded 快捷 Timer（spec §31.1/§32：只改当前 Session，不改 Settings 默认）。 */}
-                            <SleepTimerControl
+                            {isCreationTimer ? <p>自动播放时长 · 剩余 {formatRemainingMs(creation.remainingMs)} <Link href="/setting" onClick={handleClose}>前往设置</Link></p> : <SleepTimerControl
                                 mode={viewModel.sleepTimer.mode}
                                 remainingMs={viewModel.sleepTimer.remainingMs}
                                 isWork={viewModel.sleepTimer.isWork}
                                 onSelect={controls.setSleepTimer}
                                 disabled={!viewModel.hasSession}
-                            />
+                            />}
                             {/*  Work 查看正文（spec §34：Work 导航口冻结）+
                                  Draft 查看正文（spec §35：Transcript 口，
                                 同文案独立 testid，点击只切局部 view，不导航）+

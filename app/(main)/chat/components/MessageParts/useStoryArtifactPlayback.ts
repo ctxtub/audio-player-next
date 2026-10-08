@@ -299,7 +299,7 @@ export function useStoryArtifactPlaybackViewModel(
     if (actingRef.current) return;
     actingRef.current = true;
     setActing(true);
-    void playStoryWork(workId)
+    void playStoryWork(workId, { context: 'creation' })
       .catch(() => {
         // 失败态已由 Session 置 error 并落在对应卡片展示，此处不抛。
       })

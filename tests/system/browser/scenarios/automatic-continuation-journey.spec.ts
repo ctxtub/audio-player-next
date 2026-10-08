@@ -30,10 +30,10 @@ test.describe("连续创作下一篇准备与自动续播", () => {
         await enterGuestChat(page, harnessEnv.appUrl);
         const appUrl = harnessEnv.appUrl;
 
-        // ① 连续创作默认开启；预算默认不限（秒级预算断言需先经设置页设为有限）。
+        // ① 连续创作默认开启；预算与默认自动播放时长一致。
         await expect(continuousStatusText(page)).toHaveText("连续创作已开启", { timeout: 15000 });
         const budget = page.getByTestId("continuous-remaining-budget");
-        await expect(budget).toHaveText("自动创作预算 · 剩余 不限", { timeout: 10000 });
+        await expect(budget).toHaveText("自动播放时长 · 30分钟 · 剩余 30:00", { timeout: 10000 });
 
         // ② 设置页把默认睡眠定时设为 10 分钟（可见滑块 Home 键直达最小值），
         // 回创作页新建会话使预算快照为有限值。
@@ -45,9 +45,13 @@ test.describe("连续创作下一篇准备与自动续播", () => {
         await page.waitForTimeout(1500);
         await page.goto(`${appUrl}/chat`, { waitUntil: "networkidle", timeout: 60000 });
         await startNewStoryCollection(page);
-        await expect(budget).toHaveText("自动创作预算 · 剩余 10:00", { timeout: 15000 });
+        await expect(budget).toHaveText("自动播放时长 · 10分钟 · 剩余 10:00", { timeout: 15000 });
         await expect(composerInput(page)).toBeEnabled({ timeout: 15000 });
         await page.waitForTimeout(500);
+
+        // 刷新继承设置与本次预算，不把默认时长重新解释成不限。
+        await page.reload({ waitUntil: 'networkidle' });
+        await expect(budget).toHaveText('自动播放时长 · 10分钟 · 剩余 10:00');
 
         // ③ 发起第一篇并等其就绪，记下集合标题（晋升成功后收敛）。
         await sendStory(page, "讲一个关于森林邮递员的故事");
@@ -139,17 +143,26 @@ test.describe("连续创作下一篇准备与自动续播", () => {
 
         // ⑦ 保持无人干预直到 10 分钟可见预算真实耗尽：当前音频停止、预算归零，
         // 且沉淀一个上游准备周期后不再生成或播放新作品。
-        await expect(continuousStatusText(page)).toHaveText("本次连续创作已结束", {
+        await expect(continuousStatusText(page)).toHaveText("本次自动播放已结束", {
             timeout: 13 * 60 * 1000,
         });
-        await expect(budget).toHaveText("自动创作预算 · 剩余 00:00");
+        await expect(budget).toHaveText("自动播放时长 · 10分钟 · 剩余 00:00");
         const cardsAtBudgetEnd = await cardActionButtons(page).count();
         await expect(
             cardActionButtons(page).filter({ hasText: /^暂停$/ }),
         ).toHaveCount(0);
         await page.waitForTimeout(12000);
         expect(await cardActionButtons(page).count()).toBe(cardsAtBudgetEnd);
-        await expect(continuousStatusText(page)).toHaveText("本次连续创作已结束");
-        await expect(budget).toHaveText("自动创作预算 · 剩余 00:00");
+        await expect(continuousStatusText(page)).toHaveText("本次自动播放已结束");
+        await expect(budget).toHaveText("自动播放时长 · 10分钟 · 剩余 00:00");
+        await page.reload({ waitUntil: 'networkidle' });
+        await expect(continuousStatusText(page)).toHaveText('本次自动播放已结束');
+        await expect(budget).toHaveText('自动播放时长 · 10分钟 · 剩余 00:00');
+        await page.getByRole('button', { name: '重置时长', exact: true }).click();
+        await expect(budget).toHaveText('自动播放时长 · 10分钟 · 剩余 10:00');
+        await expect(continuousStatusText(page)).toHaveText('连续创作已开启');
+        await expect(cardActionButtons(page).filter({ hasText: /^暂停$/ })).toHaveCount(0);
+        await page.waitForTimeout(3000);
+        await expect(budget).toHaveText('自动播放时长 · 10分钟 · 剩余 10:00');
     });
 });

@@ -66,7 +66,7 @@ test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) 
   await page.getByRole('button', { name: '保留草稿并切换', exact: true }).click();
   await page.waitForURL('**/chat');
   await expect(page.getByTestId('continuous-collection-title')).toHaveText(title);
-  await expect(page.getByRole('switch', { name: '连续创作开关' })).not.toBeChecked();
+  await expect(page.getByTestId('continuous-status-card')).toContainText('连续创作已关闭');
   await sendStory(page, '续写这个故事集，让邮差回到灯塔');
   await waitStoryCardReady(page, 2);
   await page.getByTestId('continuous-collection-title').getByRole('link').click();

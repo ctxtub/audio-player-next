@@ -147,9 +147,7 @@ export async function startNewCreation(
     budgetMinutes,
     epoch,
   });
-  if (!useContinuousCreationStore.getState().enabled) {
-    useContinuousCreationStore.getState().enable();
-  }
+
 
   return { started: true, reason, epoch, conversationId, collectionId };
 }

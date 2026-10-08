@@ -1,3 +1,4 @@
+import { cancelPendingNextWork } from './continuousCreationFlow';
 import { usePlaybackIntentStore } from '@/stores/playbackIntentStore';
 import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
@@ -17,7 +18,8 @@ export async function playCollection(collectionId: string, mode: 'resume' | 'res
   const detail = await getCollection(collectionId);
   if (store.getState().epoch !== epoch) return;
   if (!detail.works.length) throw new Error('这个故事集还没有可播放的故事');
-  useContinuousCreationStore.getState().disable();
+  cancelPendingNextWork();
+  useContinuousCreationStore.getState().setCreationWork(null);
   const unfinished = [...detail.works].filter((work) => work.progress && work.progress.positionMs > 0 && (!work.progress.durationMs || work.progress.positionMs < work.progress.durationMs - 1000)).sort((a, b) => b.progress!.lastPlayedAt.localeCompare(a.progress!.lastPlayedAt))[0];
   const target = mode === 'restart' ? detail.works[0] : unfinished ?? detail.works.find((work) => !work.progress || !work.progress.durationMs || work.progress.positionMs < work.progress.durationMs - 1000) ?? detail.works[0];
   store.setState({ collectionId, works: detail.works.map(({ id, title }) => ({ id, title })), index: detail.works.findIndex((work) => work.id === target.id) });

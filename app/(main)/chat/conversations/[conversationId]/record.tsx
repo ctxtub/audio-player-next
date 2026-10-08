@@ -8,6 +8,7 @@ import { getCollection } from '@/lib/client/collection';
 import { rehydrateServerMessages } from '@/lib/client/chatArtifactHistory';
 import { collectionPath } from '@/lib/navigation/storyRoutes';
 import { useChatStore } from '@/stores/chatStore';
+import { cancelPendingNextWork } from '@/app/services/continuousCreationFlow';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 import { useGenerationStore } from '@/stores/generationStore';
 import styles from '@/components/Library/storyControls.module.scss';
@@ -39,10 +40,12 @@ export default function ConversationRecord({ id }: { id: string }) {
       // 读取阶段保留原上下文，远端切换成功后才应用已取得快照。
       const messages = await fetchConversationMessages(id);
       const target = await resumeConversation(id, expectedOldId);
-      useContinuousCreationStore.getState().disable();
+      cancelPendingNextWork();
+      useContinuousCreationStore.getState().setCreationWork(null);
       useGenerationStore.getState().reset();
       useChatStore.getState().loadConversation({ conversationId: target.id, collectionId: target.collectionId, collectionTitle: query.data.collection?.title ?? null }, messages);
-      useContinuousCreationStore.getState().disable();
+      cancelPendingNextWork();
+      useContinuousCreationStore.getState().setCreationWork(null);
       router.push('/chat');
     } catch (err) { setError(err instanceof Error ? err.message : '无法恢复创作，请重试'); } finally { setBusy(false); }
   };

@@ -65,17 +65,18 @@ const DefaultSleepTimerSection: React.FC<DefaultSleepTimerSectionProps> = ({
 
     return (
         <div className={styles.configSection}>
-            <h3><MoonStar className={styles.rowIcon} strokeWidth={1.8} />默认睡眠定时</h3>
+            <h3><MoonStar className={styles.rowIcon} strokeWidth={1.8} />自动播放与连续创作</h3>
             <div className={styles.configActionRow}>
-                <p className={styles.configDescription}>开启后，新播放默认在设定时长后暂停。关闭后，新播放默认不限时（可在播放页单独设置本次定时）。</p>
+                <p className={styles.configDescription}>开启后，按自动播放时长连续创作和播放，到期暂停并停止创作。暂停、生成和缓冲不计时；刷新保留本次剩余时长。关闭后停止连续创作，已保存故事仍可手动播放。</p>
                 <GlassSwitch
                     isSelected={enabled}
                     onChange={handleEnabledChange}
-                    label="默认睡眠定时开关"
+                    label="自动播放与连续创作开关"
                 />
             </div>
             {enabled ? (
                 <div className={styles.configField}>
+                    <p className={styles.configDescription}>自动播放时长 · {minutes}分钟（同时作为默认睡眠定时）</p>
                     <GlassSlider
                         min={SLEEP_TIMER_MIN_MINUTES}
                         max={SLEEP_TIMER_MAX_MINUTES}

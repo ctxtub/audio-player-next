@@ -62,6 +62,8 @@ export async function beginPlayback(params: {
 
 /** 恢复已水合的断点（§25.5 Ready → 合成当前 paragraph → play）。 */
 export async function resumePlayback(): Promise<void> {
+  if (isCreationPlayback() && useContinuousCreationStore.getState().status === 'ended_budget') return;
+  await synchronizeCreationTimer();
   await usePlaybackSessionStore.getState().resumeRehydratedPlayback();
 }
 
@@ -70,6 +72,8 @@ export async function playParagraph(
   paragraphIndex: number,
   options?: { explicit?: boolean },
 ): Promise<void> {
+  if (isCreationPlayback() && useContinuousCreationStore.getState().status === 'ended_budget') return;
+  await synchronizeCreationTimer();
   await usePlaybackSessionStore.getState().playParagraph(paragraphIndex, options);
 }
 
@@ -115,7 +119,9 @@ export function pausePlayback(): void {
 
 /** 从头重播（§30 restart 语义由 server + store 持有）。 */
 export async function restartPlayback(): Promise<void> {
+  if (isCreationPlayback() && useContinuousCreationStore.getState().status === 'ended_budget') return;
   await usePlaybackSessionStore.getState().restart();
+  await synchronizeCreationTimer();
 }
 
 /**
@@ -238,18 +244,28 @@ async function playPlanned(planned: PlannedPlay): Promise<void> {
  */
 export async function playStoryWork(
   workId: number,
-  options?: { origin?: 'user' | 'autoplay' | 'queue'; mode?: 'resume' | 'restart'; timer?: { remaining: number; total: number | null } },
+  options?: { context?: 'creation'; origin?: 'user' | 'autoplay' | 'queue'; mode?: 'resume' | 'restart'; timer?: { remaining: number; total: number | null } },
 ): Promise<void> {
   if (!isValidWorkId(workId)) return;
   if (options?.origin !== 'autoplay') usePlaybackIntentStore.getState().clearAutoplay();
   const source: PlaybackSourceRef = { kind: 'work', workId };
+  const creation = options?.context === 'creation' || options?.origin === 'autoplay';
+  if (creation) {
+    const state = useContinuousCreationStore.getState();
+    if (!state.ready || (state.enabled && state.status === 'ended_budget')) return;
+    state.setCreationWork(workId);
+  } else {
+    useContinuousCreationStore.getState().setCreationWork(null);
+    useContinuousCreationStore.getState().advanceEpoch();
+    const { cancelPendingNextWork } = await import('./continuousCreationFlow');
+    cancelPendingNextWork();
+  }
   if (options?.origin !== 'queue' && options?.origin !== 'autoplay') {
     const queue = useCollectionPlaybackStore.getState();
     const index = queue.works.findIndex((work) => work.id === workId);
     if (queue.collectionId && index >= 0) useCollectionPlaybackStore.setState({ index, epoch: queue.epoch + 1, error: null, preparingWorkId: null, readyWorkId: null });
     else queue.clear();
-    const current = usePlaybackSessionStore.getState().source;
-    if (current?.kind !== 'work' || current.workId !== workId) useContinuousCreationStore.getState().disable();
+
   }
   const token = ++playRequestSeq;
   const planned = await runSerialized(async (): Promise<PlannedPlay> => {
@@ -373,7 +389,10 @@ export async function setSleepTimer(mode: SleepTimerMode, minutes?: number): Pro
  */
 export async function handleSleepTimerExpired(): Promise<void> {
   useCollectionPlaybackStore.getState().clear();
-  useContinuousCreationStore.getState().disable();
+  const continuous = useContinuousCreationStore.getState();
+  if (isCreationPlayback() && continuous.enabled && continuous.remainingMs !== null) continuous.audioActiveTick(continuous.remainingMs);
+  const { cancelPendingNextWork } = await import('./continuousCreationFlow');
+  cancelPendingNextWork();
   await usePlaybackSessionStore.getState().handleSleepTimerExpired();
 }
 
@@ -395,6 +414,7 @@ export function registerSleepTimerExpiryHandler(): void {
 /** Draft→Work 提升（§24，sessionId 不变，hash 不一致 reset 0）。 */
 export async function promoteDraftToWork(workId: number): Promise<void> {
   await usePlaybackSessionStore.getState().promoteDraftToWork(workId);
+  useContinuousCreationStore.getState().setCreationWork(workId);
 }
 
 /** 停止（本地停驻，不清 server Anchor；显式清理请用 clear）。 */
@@ -621,10 +641,27 @@ export function refreshPlayingWorkMetadata(work: { id: number; title: string; co
 }
 
 /** 当前声音是否来自可继续创作的编辑上下文。 */
-function isCreationPlayback(): boolean {
+export function isCreationPlayback(): boolean {
   const source = usePlaybackSessionStore.getState().source;
   if (useCollectionPlaybackStore.getState().collectionId) return false;
   const session = usePlaybackSessionStore.getState();
-  if (source?.kind === 'work' && session.collectionId) return session.collectionId === useChatStore.getState().collectionId && session.conversationId === useChatStore.getState().conversationId;
+  const continuous = useContinuousCreationStore.getState();
+  if (!continuous.ready) return false;
+  if (source?.kind === 'work' && session.collectionId) return source.workId === continuous.creationWorkId && session.collectionId === useChatStore.getState().collectionId && session.conversationId === useChatStore.getState().conversationId;
   return useChatStore.getState().messages.some((message) => source?.kind === 'draft' ? message.id === source.messageId : message.parts?.some((part) => part.type === 'storyArtifact' && source?.kind === 'work' && part.artifact.storyWorkId === source.workId));
+}
+
+/** 创作与默认睡眠定时共用同一剩余时长，跨篇不重新计满。 */
+export async function synchronizeCreationTimer(): Promise<void> {
+  const state = useContinuousCreationStore.getState();
+  const session = usePlaybackSessionStore.getState();
+  if (!isCreationPlayback() || !state.enabled || !session.sessionId || state.remainingMs === null || state.remainingMs <= 0) return;
+  const transport = usePlaybackStore.getState();
+  if (session.sleepTimerMode !== 'minutes') {
+    const accepted = await session.setSleepTimer('minutes', Math.max(10, Math.ceil((state.budgetMs ?? state.remainingMs) / 60000)));
+    if (!accepted || usePlaybackSessionStore.getState().sessionId !== session.sessionId) return;
+  }
+  const live = useContinuousCreationStore.getState();
+  transport.setSleepTimerState('minutes', live.remainingMs, live.budgetMs);
+  await usePlaybackSessionStore.getState().saveCheckpointImmediate({ forceReset: false });
 }

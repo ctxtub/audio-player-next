@@ -16,7 +16,6 @@ test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) 
   const title = (await page.getByTestId('continuous-collection-title').innerText()).trim();
   await page.getByTestId('continuous-collection-title').getByRole('link').click();
   await page.waitForURL(/\/library\/collections\/[^/]+$/);
-  const groupUrl = page.url();
   const members = page.getByTestId(/^member-work-/);
   await expect(members).toHaveCount(2);
   const firstTitle = (await members.first().getByRole('heading').innerText()).trim();
@@ -46,8 +45,11 @@ test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) 
   await page.getByRole('tab', { name: '故事库', exact: true }).click();
   await page.getByRole('tab', { name: '回收站', exact: true }).click();
   await page.getByRole('link', { name: '单篇故事', exact: true }).click();
-  await page.getByRole('button', { name: `恢复《${firstTitle}》`, exact: true }).click();
-  await page.goto(groupUrl);
+  const restoreButton = page.getByRole('button', { name: `恢复《${firstTitle}》`, exact: true });
+  await restoreButton.click();
+  await expect(restoreButton).toHaveCount(0);
+  await page.getByRole('tab', { name: '全部', exact: true }).click();
+  await page.getByRole('link', { name: title, exact: true }).click();
   await expect(members).toHaveCount(2);
   await captureVisual(page, 'library-restored-members');
   await page.getByRole('link', { name: '查看创作记录', exact: true }).click();

@@ -52,7 +52,7 @@ function formatDuration(ms?: number | null): string | null {
  * 2. trash 视图：严格禁止渲染 Detail Link（卡片内绝无任何指向 /library/[id] 的 <a> 链接）；
  * 3. 收藏切换：乐观更新，收藏 active 项绝不追加至 favorites 缓存；
  * 4. 移入回收站：无二次确认，触发乐观移除，通过 Undo 句柄支持安全撤销；
- * 5. 恢复：从回收站乐观移除，绝不向 active 列表本地拼接；
+ * 5. 恢复：服务端成功后从回收站移除，绝不向 active 列表本地拼接；
  * 6. 永久删除：必须二次确认（未确认前零 RPC），悲观执行。
  */
 export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
@@ -71,6 +71,7 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [isMovingToTrash, setIsMovingToTrash] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
   const [isDeletingPermanently, setIsDeletingPermanently] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
@@ -118,6 +119,7 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
 
   const handleRestore = async () => {
     try {
+      setRestoreError(null);
       setIsRestoring(true);
       if (onRestore) {
         await onRestore(work);
@@ -125,7 +127,7 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
         await mutations.restore({ id: work.id });
       }
     } catch (err) {
-      console.error('Restore failed:', err);
+      setRestoreError(err instanceof Error ? err.message : '恢复失败，请重试');
     } finally {
       setIsRestoring(false);
     }
@@ -283,7 +285,7 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
               title="恢复"
             >
               <RotateCcw size={12} />
-              <span>恢复</span>
+              <span>{isRestoring ? '正在恢复…' : '恢复'}</span>
             </button>
             <button
               type="button"
@@ -299,6 +301,8 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
           </>
         )}
       </div>
+
+      {restoreError && <p role="alert">{restoreError}</p>}
 
       {/* 永久删除二次确认模态弹窗 */}
       {isDeleteConfirmOpen ? (

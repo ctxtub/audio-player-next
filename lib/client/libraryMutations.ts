@@ -779,48 +779,24 @@ export interface RestoreOptions {
 }
 
 /**
- * 从回收站恢复：
- * - 采用 view-aware 变更规划与局部回滚机制（与 Move/Favorite 复用同一套局部回滚算子）；
- * - 绝不在本地向 active/favorites 列表 append；
- * - 失败时局部回滚。
+ * 从回收站恢复：服务端成功后才移除回收站卡片，让消失表示恢复完成。
+ * 不向 active/favorites 分页列表拼接，成功后失效相关查询。
  */
 export async function mutateRestore(
   queryClient: QueryClient,
   options: RestoreOptions
 ): Promise<StoryWorkDetailDTO> {
   const { id } = options;
-
-  // 1. 取消在途列表与详情查询
   await queryClient.cancelQueries({ queryKey: libraryKeys.lists() });
   await queryClient.cancelQueries({ queryKey: libraryKeys.detail(id) });
-
-  // 2. 截取详情快照
-  const previousDetail = queryClient.getQueryData<StoryWorkDetailDTO>(
-    libraryKeys.detail(id)
-  );
-
-  // 3. 应用 view-aware 乐观更新并生成局部日志
-  const journal = applyOptimisticMutationToQueries(queryClient, id, {
-    kind: 'restore',
-  });
-
-  // 4. 发起 RPC
-  try {
-    const result = await libraryClient.restore({ id });
-    await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
-    await queryClient.invalidateQueries({ queryKey: collectionKeys.all });
-    await queryClient.invalidateQueries({ queryKey: libraryKeys.detail(id) });
-    const detail = queryClient.getQueryData<StoryWorkDetailDTO>(libraryKeys.detail(id));
-    if (detail) refreshPlayingWorkMetadata(detail);
-    return result;
-  } catch (error) {
-    // 局部逆向回滚
-    rollbackMutationJournal(queryClient, journal);
-    if (previousDetail !== undefined) {
-      queryClient.setQueryData(libraryKeys.detail(id), previousDetail);
-    }
-    throw error;
-  }
+  const result = await libraryClient.restore({ id });
+  applyOptimisticMutationToQueries(queryClient, id, { kind: 'restore' });
+  await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
+  await queryClient.invalidateQueries({ queryKey: collectionKeys.all });
+  await queryClient.invalidateQueries({ queryKey: libraryKeys.detail(id) });
+  const detail = queryClient.getQueryData<StoryWorkDetailDTO>(libraryKeys.detail(id));
+  if (detail) refreshPlayingWorkMetadata(detail);
+  return result;
 }
 
 export interface DeletePermanentlyOptions {

@@ -44,7 +44,7 @@ export const libraryKeys = {
       },
     ] as const,
   details: () => [...libraryKeys.all, 'detail'] as const,
-  detail: (id: number) => [...libraryKeys.details(), id] as const,
+  detail: (id: number, collectionId?: string) => [...libraryKeys.details(), id, ...(collectionId ? [{ collectionId }] : [])] as const,
 };
 
 /**
@@ -88,16 +88,16 @@ export function libraryListInfiniteQueryOptions(
 /**
  * 构造作品详情查询选项 (Detail Query Options)
  */
-export function libraryDetailQueryOptions(id: number) {
+export function libraryDetailQueryOptions(id: number, collectionId?: string) {
   return queryOptions<
     StoryWorkDetailDTO,
     Error,
     StoryWorkDetailDTO,
     ReturnType<typeof libraryKeys.detail>
   >({
-    queryKey: libraryKeys.detail(id),
+    queryKey: libraryKeys.detail(id, collectionId),
     queryFn: async () => {
-      return libraryClient.get({ id });
+      return libraryClient.get({ id, collectionId });
     },
   });
 }
@@ -121,9 +121,9 @@ export function useLibraryListInfiniteQuery(
  */
 export function useLibraryDetailQuery(
   id: number,
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean; collectionId?: string }
 ) {
-  const queryOpts = libraryDetailQueryOptions(id);
+  const queryOpts = libraryDetailQueryOptions(id, options?.collectionId);
   return useQuery({
     ...queryOpts,
     enabled: options?.enabled ?? (typeof id === 'number' && id > 0),

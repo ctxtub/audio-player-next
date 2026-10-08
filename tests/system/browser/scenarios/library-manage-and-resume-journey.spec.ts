@@ -5,6 +5,8 @@ import { sendStory, setContinuousEnabled, waitStoryCardReady, startNewStoryColle
 /** 用可见页面完成单篇整理、整集恢复、历史续写与回听。 */
 test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) => {
   test.setTimeout(300000);
+  page.setDefaultTimeout(20000);
+  page.setDefaultNavigationTimeout(20000);
   await enterGuestChat(page, harnessEnv.appUrl);
   await setContinuousEnabled(page, false);
   await sendStory(page, '写一个关于藏在树梢上的邮局的故事');
@@ -35,7 +37,8 @@ test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) 
   await page.getByText('管理故事集', { exact: true }).click();
   await page.getByTestId('collection-delete-btn').click();
   await page.getByRole('tab', { name: '回收站', exact: true }).click();
-  await page.waitForURL('**/library/trash');
+  await page.waitForURL(/\/library\/trash(?:\?|$)/);
+  await page.getByRole('link', { name: '故事集', exact: true }).click();
   await page.getByRole('button', { name: `恢复作品集《${title}》` }).click();
   await page.getByRole('tab', { name: '全部', exact: true }).click();
   await page.getByRole('link', { name: title, exact: true }).click();
@@ -46,6 +49,7 @@ test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) 
   await page.getByRole('button', { name: `恢复《${firstTitle}》`, exact: true }).click();
   await page.goto(groupUrl);
   await expect(members).toHaveCount(2);
+  await captureVisual(page, 'library-restored-members');
   await page.getByRole('link', { name: '查看创作记录', exact: true }).click();
   await page.waitForURL('**/chat/conversations/**');
   await page.getByRole('button', { name: '返回创作', exact: true }).click();
@@ -65,6 +69,7 @@ test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) 
   await waitStoryCardReady(page, 2);
   await page.getByTestId('continuous-collection-title').getByRole('link').click();
   await expect(members).toHaveCount(3);
+  await captureVisual(page, 'library-resumed-original-collection');
   await page.getByRole('button', { name: '从头听整集', exact: true }).click();
   await openExpandedFromMini(page);
   await expect(page.getByRole('region', { name: '集内播放列表' })).toBeVisible();

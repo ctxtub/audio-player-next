@@ -150,7 +150,7 @@ export type LibraryIdInput = z.infer<typeof libraryIdInputSchema>;
 /**
  * library.get 入参
  */
-export const libraryGetInputSchema = libraryIdInputSchema;
+export const libraryGetInputSchema = libraryIdInputSchema.extend({ collectionId: z.string().min(1).max(64).optional() });
 export type LibraryGetInput = z.infer<typeof libraryGetInputSchema>;
 
 /**

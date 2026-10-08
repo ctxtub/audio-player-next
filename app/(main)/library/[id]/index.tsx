@@ -69,6 +69,7 @@ const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id, expectedCollectio
     refetch,
   } = useLibraryDetailQuery(numericId, {
     enabled: isValidId,
+    collectionId: expectedCollectionId,
   });
 
   useEffect(() => {

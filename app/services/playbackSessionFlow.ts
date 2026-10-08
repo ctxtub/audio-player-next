@@ -34,6 +34,7 @@ import { usePlaybackStore, clampSegmentSeekTarget } from '@/stores/playbackStore
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { useChatStore } from '@/stores/chatStore';
 import { useConfigStore } from '@/stores/configStore';
+import { usePlaybackIntentStore } from '@/stores/playbackIntentStore';
 import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
 import { get as getWorkDetail } from '@/lib/client/library';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
@@ -240,6 +241,7 @@ export async function playStoryWork(
   options?: { origin?: 'user' | 'autoplay' | 'queue'; mode?: 'resume' | 'restart'; timer?: { remaining: number; total: number | null } },
 ): Promise<void> {
   if (!isValidWorkId(workId)) return;
+  if (options?.origin !== 'autoplay') usePlaybackIntentStore.getState().clearAutoplay();
   const source: PlaybackSourceRef = { kind: 'work', workId };
   if (options?.origin !== 'queue' && options?.origin !== 'autoplay') {
     const queue = useCollectionPlaybackStore.getState();

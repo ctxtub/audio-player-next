@@ -46,7 +46,7 @@ try {
     assert.notEqual((await works.findUnique({ where: { id: first.id } })).deletedAt, null);
     assert.equal((await works.findUnique({ where: { id: second.id } })).deletedAt, null);
     const resolved = await work.getStoryWorkForSubject(subject, second.id);
-    assert.equal(resolved.collectionId, group.id); assert.equal(resolved.conversationId, old.id);
+    await assert.rejects(() => work.getStoryWorkForSubject(subject, second.id, 'wrong-parent')); assert.equal(resolved.collectionId, group.id); assert.equal(resolved.conversationId, old.id);
     const next = await conversation.createNewConversationForSubject(subject, old.id);
     const viewed = await conversation.getConversationForSubject(subject, old.id);
     assert.equal(viewed.state, 'closed'); assert.equal((await conversation.getActiveConversationForSubject(subject)).id, next.id);

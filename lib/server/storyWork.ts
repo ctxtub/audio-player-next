@@ -490,7 +490,8 @@ export async function resolveWorkCollectionTitle(
  */
 export async function getStoryWorkForSubject(
   subject: Subject,
-  id: number
+  id: number,
+  expectedCollectionId?: string
 ): Promise<StoryWorkDetailDTO> {
   if (typeof id !== 'number' || !Number.isInteger(id) || id <= 0) {
     throw new TRPCError({
@@ -523,11 +524,8 @@ export async function getStoryWorkForSubject(
   }
 
   // foreign / missing / trash 统一 NOT_FOUND（对外不可区分）
-  if (!row) {
-    throw new TRPCError({
-      code: 'NOT_FOUND',
-      message: '作品不存在',
-    });
+  if (!row || (expectedCollectionId !== undefined && row.collectionId !== expectedCollectionId)) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: '作品不存在' });
   }
 
   //  Library audio projection（spec §12.4）：单条按需 enrichment，无则 missing。

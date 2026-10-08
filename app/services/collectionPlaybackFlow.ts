@@ -1,3 +1,4 @@
+import { usePlaybackIntentStore } from '@/stores/playbackIntentStore';
 import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
@@ -7,6 +8,7 @@ import { playStoryWork } from './playbackSessionFlow';
 
 /** 建立按创作顺序的回听快照，显式替换自动创作编排。 */
 export async function playCollection(collectionId: string, mode: 'resume' | 'restart' = 'resume'): Promise<void> {
+  usePlaybackIntentStore.getState().clearAutoplay();
   const store = useCollectionPlaybackStore;
   store.getState().clear();
   const epoch = store.getState().epoch;

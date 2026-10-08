@@ -160,7 +160,7 @@ export const libraryRouter = router({
     .query(async ({ ctx, input }) => {
       try {
         const subject = resolveSubject(ctx);
-        const work = await getStoryWorkForSubject(subject, input.id);
+        const work = await getStoryWorkForSubject(subject, input.id, input.collectionId);
         return {
           ...work,
           playbackSnapshot: await resolveWorkPlaybackSnapshot(subject, work.id, work.storyText),

@@ -489,6 +489,7 @@ export function consumePreparedNextWork(epoch: number): PreparedNextWork | null 
  * @returns 是否实际续播（无/过期返回 false）。
  */
 export async function playReadyNextWork(): Promise<boolean> {
+  const tokenAtStart = runToken;
   const epoch = prepared?.epoch;
   if (epoch === undefined) {
     return false;
@@ -498,6 +499,7 @@ export async function playReadyNextWork(): Promise<boolean> {
     return false;
   }
   const { playStoryWork } = await import('./playbackSessionFlow');
+  if (runToken !== tokenAtStart || !useContinuousCreationStore.getState().enabled || useContinuousCreationStore.getState().epoch !== epoch || useChatStore.getState().conversationId !== work.conversationId) return false;
   await playStoryWork(work.workId, { origin: 'autoplay' });
   return true;
 }

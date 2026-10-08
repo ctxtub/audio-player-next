@@ -74,7 +74,7 @@ function scheduleFirstWorkAutoplay(messageId: string, expectedStreamSeq: number)
       const workId = await waitForReadyStoryWork(messageId, expectedStreamSeq);
       if (workId === null || expectedStreamSeq !== streamSeq) return;
       await useChatStore.getState().flushPendingSave().catch(() => false);
-      if (expectedStreamSeq !== streamSeq) return;
+      if (expectedStreamSeq !== streamSeq || usePlaybackIntentStore.getState().pendingAutoplayMessageId !== messageId) return;
       await playStoryWork(workId, { origin: 'autoplay' });
     } catch {
       // PlaybackSession 已负责错误态与 Toast；后台任务不得形成未处理拒绝。

@@ -141,6 +141,17 @@ test.describe("连续创作下一篇准备与自动续播", () => {
         expect(mini.title).toBe(collectionTitle);
         await expect(budget).toContainText("剩余", { timeout: 10000 });
 
+        // 播放中的创作刷新后继承已消耗预算；保持暂停，不恢复旧异步任务。
+        await page.getByTestId('mini-playback-button').click();
+        await page.waitForTimeout(1000);
+        const inheritedBudget = (await budget.innerText()).trim();
+        await page.reload({ waitUntil: 'networkidle' });
+        await expect(budget).toHaveText(inheritedBudget);
+        await expect(cardActionButtons(page).filter({ hasText: /^暂停$/ })).toHaveCount(0);
+        await page.waitForTimeout(2000);
+        await expect(budget).toHaveText(inheritedBudget);
+        await page.getByTestId('mini-playback-button').click();
+
         // ⑦ 保持无人干预直到 10 分钟可见预算真实耗尽：当前音频停止、预算归零，
         // 且沉淀一个上游准备周期后不再生成或播放新作品。
         await expect(continuousStatusText(page)).toHaveText("本次自动播放已结束", {

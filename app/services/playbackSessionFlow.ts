@@ -253,6 +253,7 @@ export async function playStoryWork(
   if (creation) {
     const state = useContinuousCreationStore.getState();
     if (!state.ready || (state.enabled && state.status === 'ended_budget')) return;
+    useCollectionPlaybackStore.getState().clear();
     state.setCreationWork(workId);
   } else {
     useContinuousCreationStore.getState().setCreationWork(null);

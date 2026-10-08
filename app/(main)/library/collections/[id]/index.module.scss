@@ -196,7 +196,7 @@
 
 .memberCard {
   display: grid;
-  grid-template-columns: var(--space-10) minmax(0, 1fr) auto auto;
+  grid-template-columns: var(--space-10) minmax(0, 1fr);
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-4);
@@ -265,6 +265,8 @@
 }
 
 .playButton {
+  grid-column: 2;
+  justify-self: start;
   min-width: 98px;
   color: var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-primary));

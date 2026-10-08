@@ -25,6 +25,7 @@ import {
 test.describe("集合详情起播跨页播放", () => {
     test("集合详情起播跨页播放", async ({ page, harnessEnv }) => {
         test.setTimeout(240000);
+        page.setDefaultTimeout(20000);
         await enterGuestChat(page, harnessEnv.appUrl);
         const appUrl = harnessEnv.appUrl;
         const initialViewport = page.viewportSize() ?? { width: 1280, height: 720 };

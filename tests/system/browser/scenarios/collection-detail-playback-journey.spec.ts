@@ -118,6 +118,7 @@ test.describe("集合详情起播跨页播放", () => {
         // ⑤-B 重命名集合（用户可见改名）：作品标题不变；reload 后 Mini 显示新
         // 集合标题，证明 Mini 一级标题取自集合（hydrate 活读）而非作品标题。
         const renamedTitle = "月光穿过很长很长的山谷，照亮归途上每一座安静的小屋与仍在等待故事的人";
+        await page.getByText("管理故事集", { exact: true }).click();
         await page.getByTestId("collection-rename-btn").click();
         await page.getByTestId("collection-rename-input").fill(renamedTitle);
         await page.getByTestId("collection-rename-save").click();
@@ -125,6 +126,7 @@ test.describe("集合详情起播跨页播放", () => {
             timeout: 15000,
         });
         expect(((await memberTitles.first().innerText()).trim())).toBe(firstWorkTitle);
+        await page.getByText("管理故事集", { exact: true }).click();
 
         // 长标题详情在亮色、暗色与移动/桌面均保持完整层级，不出现原生控件或横向溢出。
         const detailUrl = page.url();

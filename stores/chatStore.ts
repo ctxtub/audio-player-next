@@ -1300,6 +1300,8 @@ const chatStoreCreator: StateCreator<ChatStore> = (set, get) => {
     scheduleSave();
   },
   resetChat: () => {
+    baselineMessageIds = [];
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     // 清空作废在途 promotion（旧 resolve/reject 凭 epoch 失配 no-op，绝不复活）。
     invalidateInflightPromotions();
     // 强重置推进保存代次——任何在途防抖保存不得把旧会话快照写入新会话。

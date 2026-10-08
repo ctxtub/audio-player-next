@@ -32,6 +32,7 @@ test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) 
   await members.first().getByText('更多', { exact: true }).click();
   await members.first().getByRole('button', { name: '移入回收站', exact: true }).click();
   await expect(members).toHaveCount(1);
+  await page.getByText('管理故事集', { exact: true }).click();
   await page.getByTestId('collection-delete-btn').click();
   await page.getByRole('tab', { name: '回收站', exact: true }).click();
   await page.waitForURL('**/library/trash');

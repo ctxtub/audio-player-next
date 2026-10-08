@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 /**
  * Collection Library React Query 层（）。
  *
@@ -98,10 +100,11 @@ export function useCollectionListInfiniteQuery(
   options?: { enabled?: boolean }
 ) {
   const queryOpts = collectionListInfiniteQueryOptions(filters);
-  return useInfiniteQuery({
-    ...queryOpts,
-    enabled: options?.enabled,
-  });
+  const result = useInfiniteQuery({ ...queryOpts, enabled: options?.enabled });
+  const nextId = useContinuousCreationStore((state) => state.nextWork?.workId);
+  const refetch = result.refetch;
+  useEffect(() => { if (nextId && options?.enabled !== false) void refetch(); }, [nextId, options?.enabled, refetch]);
+  return result;
 }
 
 export function useCollectionDetailQuery(
@@ -109,8 +112,9 @@ export function useCollectionDetailQuery(
   options?: { enabled?: boolean }
 ) {
   const queryOpts = collectionDetailQueryOptions(id);
-  return useQuery({
-    ...queryOpts,
-    enabled: options?.enabled ?? (typeof id === 'string' && id.length > 0),
-  });
+  const result = useQuery({ ...queryOpts, enabled: options?.enabled ?? (typeof id === 'string' && id.length > 0) });
+  const nextId = useContinuousCreationStore((state) => state.collectionId === id ? state.nextWork?.workId : undefined);
+  const refetch = result.refetch;
+  useEffect(() => { if (nextId && options?.enabled !== false) void refetch(); }, [nextId, options?.enabled, refetch]);
+  return result;
 }

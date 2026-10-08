@@ -43,3 +43,9 @@
   --mini-player-occupied-height: var(--size-mini-now-playing-height);
   --bottom-chrome-gap: var(--space-2);
 }
+
+/* 桌面浮动 Mini 同样占用默认停靠区域，滚动定位须避让真实控制层。 */
+.app[data-layoutmode='wide-floating'][data-mini-visible='true'] .content {
+  padding-bottom: calc(var(--main-tabbar-occupied-height) + var(--size-mini-now-playing-height) + var(--size-mini-now-playing-height) + var(--space-8));
+  scroll-padding-bottom: calc(var(--main-tabbar-occupied-height) + var(--size-mini-now-playing-height) + var(--size-mini-now-playing-height) + var(--space-8));
+}

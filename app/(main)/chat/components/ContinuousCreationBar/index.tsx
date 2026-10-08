@@ -67,7 +67,7 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
         </div>
 
         <span className={styles.budget} data-testid="continuous-remaining-budget">
-          本次自动创作收听预算 {formatRemainingMs(remainingMs)}
+          自动创作预算 · 剩余 {formatRemainingMs(remainingMs)}
         </span>
 
         <button

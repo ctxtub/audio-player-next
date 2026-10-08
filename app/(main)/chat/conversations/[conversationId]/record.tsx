@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getConversation, fetchConversationMessages, resumeConversation } from '@/lib/client/conversation';
 import { getCollection } from '@/lib/client/collection';
+import { rehydrateServerMessages } from '@/lib/client/chatArtifactHistory';
 import { collectionPath } from '@/lib/navigation/storyRoutes';
 import { useChatStore } from '@/stores/chatStore';
 import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
@@ -53,6 +54,6 @@ export default function ConversationRecord({ id }: { id: string }) {
     <button className={styles.play} disabled={busy} onClick={resume}>{busy ? '正在准备创作…' : conversation.state === 'active' ? '返回创作' : '续写这个故事集'}</button>
     {confirmSwitch && <div role="dialog" aria-label="切换创作"><p>当前输入会保留。切换后停止旧自动创作，已保存故事和当前收听会保留。</p><button disabled={busy} onClick={resume}>保留草稿并切换</button><button onClick={() => setConfirmSwitch(false)}>留在当前创作</button></div>}
     {error && <p role="alert">{error}</p>}
-    {messages.map((message) => <article key={message.messageId} id={`message-${message.messageId}`}><h2>{message.role === 'user' ? '你的想法' : '创作内容'}</h2><p style={{ whiteSpace: 'pre-wrap' }}>{message.content}</p></article>)}
+    {rehydrateServerMessages(messages).map((message) => <article key={message.id} id={`message-${message.id}`}><h2>{message.role === 'user' ? '你的想法' : '创作内容'}</h2><p style={{ whiteSpace: 'pre-wrap' }}>{message.content}</p></article>)}
   </section>;
 }

@@ -66,6 +66,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
   );
   const playbackStatus = usePlaybackSessionStore((state) => state.status);
   const isPlaying = usePlaybackStore((state) => state.isPlaying);
+  const currentTime = usePlaybackStore((state) => state.currentTime);
 
   const { data, isLoading, isError, error, refetch } = useCollectionDetailQuery(id, {
     enabled: isValidId,
@@ -189,6 +190,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
       // 旧请求晚到不得清掉更新目标的 preparing 状态。
       if (playRequestSeqRef.current === requestSeq) {
         setStartingWorkId(null);
+        void refetch();
       }
     }
   };
@@ -252,6 +254,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
             <button className={styles.primaryButton} disabled={!data.works.length} onClick={() => handlePlayCollection('resume')}>继续听整集</button>
             <button className={styles.secondaryButton} disabled={!data.works.length} onClick={() => handlePlayCollection('restart')}>从头听整集</button>
             {data.conversationId && <Link className={styles.secondaryButton} href={conversationPath(data.conversationId)}>查看创作记录</Link>}
+            <details className={styles.management}><summary>管理故事集</summary>
             {!isRenaming ? (
               <button
                 type="button"
@@ -288,6 +291,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
               <Trash2 size={14} />
               <span>{isDeleting ? '删除中…' : '删除作品集'}</span>
             </button>
+            </details>
           </div>
         </div>
       </header>
@@ -319,6 +323,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
           <div className={styles.memberList}>
             {data.works.map((work) => {
               const isCurrent = currentWorkId === work.id;
+              const heardSeconds = isCurrent ? currentTime : (work.progress?.positionMs ?? 0) / 1000;
               const isPreparing =
                 startingWorkId === work.id ||
                 (startingWorkId === null &&
@@ -362,7 +367,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                       {isCurrent ? <span className={styles.currentBadge}>当前作品</span> : null}
                     </div>
                     {work.excerpt ? <p className={styles.memberExcerpt}>{work.excerpt}</p> : null}
-                    <p className={styles.memberExcerpt}>{work.progress?.positionMs ? `听到 ${Math.floor(work.progress.positionMs / 60000)}分${Math.floor(work.progress.positionMs / 1000) % 60}秒` : '未听'}{work.audio.durationMs ? ` · 时长 ${Math.ceil(work.audio.durationMs / 60000)}分钟` : ' · 播放时准备语音'}</p>
+                    <p className={styles.memberExcerpt}>{heardSeconds > 0 ? `听到 ${Math.floor(heardSeconds / 60)}分${Math.floor(heardSeconds) % 60}秒` : '未听'}{work.audio.durationMs ? ` · 时长 ${Math.ceil(work.audio.durationMs / 60000)}分钟` : ' · 播放时准备语音'}</p>
                   </div>
                   <button
                     type="button"

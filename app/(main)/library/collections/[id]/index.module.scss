@@ -434,3 +434,9 @@
 .memberCard h3 a { color: inherit; text-decoration: none; }
 .memberCard h3 a:hover { text-decoration: underline; }
 @media (max-width: 700px) { .memberCard > details { grid-column: 2; justify-self: start; } }
+
+.management summary { cursor: pointer; color: var(--text-secondary); padding: var(--space-2); }
+.management[open] { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.management[open] summary { margin-bottom: var(--space-2); }
+/* 行内管理留在正文下方，避免桌面浮层遮住最右侧的更多入口。 */
+.memberCard > details { grid-column: 2; justify-self: start; }

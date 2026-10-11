@@ -53,6 +53,24 @@ const Composer: React.FC<ComposerProps> = ({
   /** 同步提交锁，与 isLocalSending 双保险，堵住同 tick 双发的竞态窗口（setState 同 tick 内不可见，ref 置位同步可见）。 */
   const submittingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /** 输入栏外框：向全局播放入口发布实际高度，避免浮层遮挡多行编辑区。 */
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const chrome = container?.closest<HTMLElement>('[data-main-chrome]');
+    if (!container || !chrome) return;
+    const measure = () => {
+      chrome.style.setProperty('--composer-occupied-height', `${Math.ceil(container.getBoundingClientRect().height)}px`);
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(container);
+    return () => {
+      observer?.disconnect();
+      chrome.style.removeProperty('--composer-occupied-height');
+    };
+  }, []);
 
   /**
    * 同步外部受控的 value 变化，保持内部状态一致。
@@ -186,7 +204,7 @@ const Composer: React.FC<ComposerProps> = ({
   );
 
   return (
-    <div className={styles.container}>
+    <div ref={containerRef} className={styles.container} data-chat-composer="">
       {leftSlot ? <div className={styles.leftSlot}>{leftSlot}</div> : null}
       <div className={styles.editorArea}>
         <div className={styles.textAreaWrapper}>

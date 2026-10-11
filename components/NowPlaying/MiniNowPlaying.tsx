@@ -12,7 +12,7 @@
  *   睡眠预算字段不在 Mini 展示。
  * - 动作一律走  PlaybackSessionFlow（pausePlayback/resumePlayback/restartPlayback），
  *   不直调 AudioControllerHost，不知晓水合技术状态。
- * - Metadata 点击经 useNowPlayingEntry → /player（ 兼容， 只换 facade）。
+ * - Metadata 点击经 useNowPlayingEntry 打开全局 Expanded，不改变 URL。
  * - Draft / Work 不做视觉分叉（§33）。
  * - Wide Floating（§18）：viewport>=768 且 desktopFloatingPlayerEnabled=true →
  *   wide-floating（position:fixed、width:var(--size-mini-now-playing-wide)、
@@ -23,7 +23,8 @@
  *   持久化 + refresh restore（useMiniFloatingDrag，容错 fallback 默认右下）；
  *   纯 presentation，不 mutation
  *   session/transport。
- * - Wide Docked（§19）：pref=false → wide-docked，固定 TabBar 上方（与移动端一致）；
+ * - Wide Docked（§19）：pref=false → wide-docked，固定 TabBar 上方；
+ * - Compact Floating：移动端紧凑悬浮，避让输入栏，不绑定桌面拖拽坐标；
  *   配置只决定桌面是否漂浮，不决定 Now Playing 是否存在。
  *
  * 本文件只做 presentation + Flow delegation；历史播放面（旧进度/历史/卡片）

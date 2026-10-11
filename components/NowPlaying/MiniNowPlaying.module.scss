@@ -1,9 +1,10 @@
 /*  MiniNowPlaying 语义核心样式（spec §2.1/§26/§27）
- * +  docked App Chrome（mobile/wide-docked 固定 TabBar 上方）
+ * +  docked App Chrome（wide-docked 固定 TabBar 上方）
  * +  Wide Floating（spec §18：默认右下 CSS，drag 后 left/top，grip 拖拽，edge snap）。
  *
  * 布局三态由 data-layoutmode 区分（JS 三态 hook 派生，CSS 只做 presentation）：
- * - compact-docked / wide-docked：固定 TabBar 上方，不可拖，无 grip；
+ * - compact-floating：靠右悬浮，避让输入栏，不可拖，无 grip；
+ * - wide-docked：固定 TabBar 上方，不可拖，无 grip；
  * - wide-floating：position:fixed、width:var(--size-mini-now-playing-wide)、
  *   z-index:var(--z-floating)；默认 right:var(--space-4) +
  *   bottom:calc(tab-bar-safe-bottom + Mini 高度 + var(--space-8))；data-dragged=true 时
@@ -14,7 +15,7 @@
   position: fixed;
   left: var(--space-3);
   right: var(--space-3);
-  /*  mobile/wide docked：固定 TabBar 上方（复用 tab-bar token，不重复加 safe-area）；不可拖。 */
+  /*  wide docked：固定 TabBar 上方（复用 tab-bar token，不重复加 safe-area）；不可拖。 */
   bottom: calc(var(--tab-bar-safe-bottom) + var(--space-2));
   max-width: var(--size-mini-now-playing-docked-max);
   margin-left: auto;
@@ -31,6 +32,29 @@
   box-shadow: var(--glass-highlight), var(--shadow-xl);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
+}
+
+/* 手机胶囊不参与输入栏占位，按真实输入栏高度抬高悬浮位置。 */
+.miniRoot[data-layoutmode='compact-floating'] {
+  left: auto;
+  right: var(--space-3);
+  bottom: calc(max(var(--tab-bar-safe-bottom), var(--composer-occupied-height, 0px)) + var(--space-3));
+  width: var(--size-mini-now-playing-compact);
+  max-width: calc(100vw - var(--space-3) - var(--space-3));
+  min-height: var(--size-mini-now-playing-compact-height);
+  margin: 0;
+  gap: var(--space-2);
+
+  .miniArtwork {
+    display: none;
+  }
+
+  .metadataText [data-testid='mini-secondary-label'] {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 /*  wide-floating 默认态：右下 CSS（无 JS 固定像素；首次 drag 前 pos=null 即此态）。 */

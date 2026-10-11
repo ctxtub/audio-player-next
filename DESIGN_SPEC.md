@@ -308,7 +308,7 @@ iOS 26 Liquid Glass 风格，使用更高强度的模糊 + 饱和度增强。
 | `--size-input-height` | `48px` | 标准输入框高度 |
 | `--size-disc` | `200px` | 播放器唱片尺寸（旧 Player 页遗留，不再搬进 Expanded） |
 | `--size-play-button` | `56px` | 播放按钮尺寸 |
-| `--size-now-playing-sheet-max-height` | `85vh` | Expanded Bottom Sheet 最大高度 |
+| `--size-now-playing-sheet-max-height` | `60dvh` | Expanded Bottom Sheet 默认高度与最大高度 |
 | `--size-now-playing-panel-width` | `400px` | Expanded Side Panel 宽度（`>=768`） |
 | `--size-now-playing-handle` | `36px` | Expanded Drag Handle 视觉宽度（仅 `<768` 可见） |
 
@@ -413,7 +413,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 
 ### 3.7 Mini Now Playing — 胶囊风格
 
-全局迷你播放入口：是否存在由播放 Session 派生（`source 非空且 status 非 idle`），标题仅取 Session.title，睡眠预算字段不在 Mini 展示，粗进度为段落加权近似（不可 seek），主动作经 Flow 委托。移动端与宽屏关闭态固定 TabBar 上方（不可拖），宽屏开启态为可拖悬浮（仅 Grip 绑定 `useDrag`，播放/元数据按钮不参与；位置 localStorage 持久化 + refresh restore，无值回默认右下，非法值容错）。
+全局迷你播放入口：是否存在由播放 Session 派生（`source 非空且 status 非 idle`），标题仅取 Session.title，睡眠预算字段不在 Mini 展示，粗进度为段落加权近似（不可 seek），主动作经 Flow 委托。移动端使用靠右紧凑悬浮胶囊，避让输入栏（不可拖）；宽屏关闭态固定 TabBar 上方，宽屏开启态为可拖悬浮（仅 Grip 绑定 `useDrag`，播放/元数据按钮不参与；位置 localStorage 持久化 + refresh restore，无值回默认右下，非法值容错）。
 
 | 属性 | Token |
 |------|-------|
@@ -431,10 +431,12 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 | 元数据按钮 | 独立可达 `展开正在播放：{title}`（禁止 button 嵌套 button） |
 | Docked 高度 | `var(--size-mini-now-playing-height)` = 68px（参与 `--bottom-chrome-safe-bottom` 预留计算，页面不得 hardcode） |
 | Floating 宽度 | `var(--size-mini-now-playing-wide)` = 360px（`wide-floating` 固定宽，`max-width: calc(100vw - 32px)` 防溢出） |
+| 手机悬浮尺寸 | 宽 `var(--size-mini-now-playing-compact)` = 232px，最小高 `var(--size-mini-now-playing-compact-height)` = 64px；标题与状态单行省略，完整标题保留在展开按钮可访问名称中 |
+| 手机悬浮位置 | 右侧 `var(--space-3)`，底部为 `max(var(--tab-bar-safe-bottom), var(--composer-occupied-height)) + var(--space-3)`；Composer 发布实际外框高度，键盘展开时隐藏 |
 | Docked 最大宽 | `var(--size-mini-now-playing-docked-max)` = 776px（居中胶囊上限） |
 | Floating 默认位 | `right: var(--space-4)` + `bottom: calc(var(--tab-bar-safe-bottom) + var(--space-4))`（无 JS 固定像素；首次 drag 后转 `left/top`，localStorage 持久化 + refresh restore） |
 | DragGrip | 克制竖点（`var(--space-6)` 宽、`touch-action: none`、`cursor: grab/grabbing`，`focus-visible` 描边），仅 `wide-floating` 渲染 |
-| 断点 | `<768` compact-docked / `>=768` wide（`--breakpoint-lg` = 768px，与 `$breakpoint-lg` / `NOW_PLAYING_BREAKPOINT_PX` 三方同值） |
+| 断点 | `<768` compact-floating / `>=768` wide（`--breakpoint-lg` = 768px，与 `$breakpoint-lg` / `NOW_PLAYING_BREAKPOINT_PX` 三方同值） |
 
 ### 3.8 表单区域 (Auth Page)
 
@@ -552,7 +554,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
 | 元素 | 规格 |
 |------|------|
 | **遮罩** | `bg: var(--bg-overlay)`, `blur: 12px saturate(120%)`, `z-index: var(--z-modal)`，点击关闭（播放继续），拖 Slider / Speed / Timer popover 不冒泡误关 |
-| **移动 Sheet（`<768`）** | `width: min(100%, 800px)`, `max-height: var(--size-now-playing-sheet-max-height)` = 85vh，底部弹出，`radius: var(--radius-xl) var(--radius-xl) 0 0`，`bg: var(--bg-elevated)` + `var(--glass-blur)`，`border: 0.5px solid var(--glass-border)`，`shadow: var(--glass-highlight), var(--shadow-xl)` |
+| **移动 Sheet（`<768`）** | `width: min(100%, 800px)`, `height: var(--size-now-playing-sheet-max-height)` = 60dvh（限制在可视屏幕内），底部弹出，`radius: var(--radius-xl) var(--radius-xl) 0 0`，`bg: var(--bg-elevated)` + `var(--glass-blur)`，`border: 0.5px solid var(--glass-border)`，`shadow: var(--glass-highlight), var(--shadow-xl)` |
 | **桌面 Panel（`>=768`）** | `width: var(--size-now-playing-panel-width)` = 400px（`max-width: calc(100vw - 32px)` 防溢出），右侧 anchored，全高（`100dvh`），`radius: var(--radius-xl) 0 0 var(--radius-xl)`，glass elevated，body 可滚动；仍为 modal（背景不可交互，V1 不做 persistent split pane） |
 | **Handle** | 顶部居中 `width: var(--size-now-playing-handle)` = 36px × `4px` bar，`radius: var(--radius-full)`，`bg: var(--border-strong)`；命中区 `min-height: var(--size-touch-target)`，仅 Handle 发起 drag dismiss（内容滚动 / Speed / Timer 与其不冲突）；桌面隐藏 |
 | **Header** | `padding: var(--space-2) var(--space-4) var(--space-3)`，标题 `size: var(--text-md)` + `weight: var(--weight-semibold)`，副标题 `size: var(--text-sm)` + `color: var(--text-secondary)`（`voice · 第 X / Y 段`，不伪装整篇） |
@@ -593,7 +595,7 @@ iOS 26 风格浮动胶囊，脱离文档流悬浮在内容上方。
      ┌───────────────────┐
      │   TabBar 胶囊       │  ← fixed bottom, z-sticky
      └───────────────────┘      浮动在内容上方
-  Mini Now Playing         ← fixed, z-floating；docked 固定 TabBar 上方（预留），floating 默认右下可拖（Grip-only）；Expanded open 时 suppress（presentation 隐藏，不改变 Session/Transport）
+  Mini Now Playing         ← fixed, z-floating；桌面 docked 固定 TabBar 上方（预留），桌面 floating 默认右下可拖（Grip-only），手机 compact-floating 靠右避让输入栏；Expanded open 时 suppress（presentation 隐藏，不改变 Session/Transport）
   Expanded Now Playing     ← z-modal；<768 Bottom Sheet，>=768 Right Side Panel（NowPlayingLayer，全局 single instance，导航不卸载）
 ```
 
@@ -692,13 +694,15 @@ Home/Page 不拥有播放器；播放 presentation 统一由全局 Mini + Expand
 
 当前阶段只做 375–428px 适配。页面最大宽度 `480px`，居中展示。
 
+移动端展示与验收以 [悬浮播放器契约](docs/specs/2026-10-11-mobile-floating-player-contract.md) 为准：半屏详情隐藏装饰封面，优先展示时间轴和播放控制，更多操作在面板内滚动访问。
+
 ### 5.1 Mini Now Playing 三态
 
 | 视口 + 偏好 | 形态 | 位置 | 预留 |
 |-------------|------|------|------|
-| `<768`（偏好无关） | `compact-docked` | 固定 TabBar 上方，不可拖，无 Grip | `--bottom-chrome-safe-bottom` 抬高（Mini 高 + 间距） |
+| `<768`（偏好无关） | `compact-floating` | 靠右悬浮，按实际输入栏高度避让，不可拖，无 Grip | 输入栏不额外占位；其他页面为列表末项预留滚动空间 |
 | `>=768` + `desktopFloatingPlayerEnabled=true` | `wide-floating` | 默认右下悬浮，仅 Grip 可拖（clamp + 水平吸附 + resize repair，localStorage 持久化 + refresh restore） | 不占位（兼容浮层） |
-| `>=768` + `desktopFloatingPlayerEnabled=false` | `wide-docked` | 固定 TabBar 上方，不可拖，无 Grip（与移动端一致） | 同 docked 预留（Mini 不因关闭而消失） |
+| `>=768` + `desktopFloatingPlayerEnabled=false` | `wide-docked` | 固定 TabBar 上方，不可拖，无 Grip | 同 docked 预留（Mini 不因关闭而消失） |
 
 BottomChrome 统一承载 Mini slot + TabBar（`display: contents`，不引入额外布局盒）；内容区与 Composer 一律消费 `--bottom-chrome-safe-bottom`，禁止各自 hardcode Mini 高度。
 
@@ -708,7 +712,7 @@ BottomChrome 统一承载 Mini slot + TabBar（`display: contents`，不引入�
 
 | 视口 | 形态 | 定位与交互 |
 |------|------|------------|
-| `<768` compact | Modal Bottom Sheet | 底部弹出，`max-height: var(--size-now-playing-sheet-max-height)`；顶部 Handle 向下拖超 `80px` 释放关闭，不足回弹；内容区滚动不触发 dismiss |
+| `<768` compact | Modal Bottom Sheet | 底部弹出，默认高度 `var(--size-now-playing-sheet-max-height)` = 60dvh，限制在可视屏幕内，内容可滚动；顶部 Handle 向下拖超 `80px` 释放关闭，不足回弹；内容区滚动不触发 dismiss |
 | `>=768` wide | Modal Right Side Panel | 右侧 anchored，全高，`width: var(--size-now-playing-panel-width)`，左侧大圆角，glass elevated，body 可滚动；仍为 modal（背景 dimmed 不可交互） |
 
 断点 `768px` 与 Mini `--breakpoint-lg` / `$breakpoint-lg` / `NOW_PLAYING_BREAKPOINT_PX` 三方同值，禁止第二边界。

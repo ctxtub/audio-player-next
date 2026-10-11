@@ -3,6 +3,7 @@ import { enterGuestChat } from "./helpers/guest";
 import {
     captureVisual,
     closeExpanded,
+    composerInput,
     expectExpandedTimelineAdvancing,
     openExpandedFromMini,
     readExpandedTitles,
@@ -176,6 +177,56 @@ test.describe("集合详情起播跨页播放", () => {
         expect(miniOnChat.title).toBe(renamedTitle);
         await captureVisual(page, "1280-chat-bar-on");
         await page.setViewportSize({ width: 375, height: 812 });
+        // 手机悬浮入口避让输入区，多行编辑不会重新挤高输入栏。
+        const mobileMini = page.getByTestId("mini-now-playing");
+        const input = composerInput(page);
+        await expect.poll(async () => {
+            const mini = await mobileMini.boundingBox();
+            const editor = await input.boundingBox();
+            return mini && editor ? mini.y + mini.height <= editor.y : false;
+        }).toBe(true);
+        const mobileBox = await mobileMini.boundingBox();
+        expect(mobileBox!.width).toBeLessThan(375 * 0.75);
+        const editorBefore = await input.boundingBox();
+        await input.fill("调整下一篇故事的方向\n让主人公走进山谷\n遇见一位新的朋友");
+        await expect.poll(async () => {
+            const mini = await mobileMini.boundingBox();
+            const editor = await input.boundingBox();
+            return mini && editor ? mini.y + mini.height <= editor.y : false;
+        }).toBe(true);
+        const editorAfter = await input.boundingBox();
+        expect(editorAfter!.height).toBeGreaterThan(editorBefore!.height);
+        await input.fill("");
+
+        // 暂停按钮独立操作；点标题展开半屏，收起后声音继续。
+        await page.getByTestId("mini-playback-button").click();
+        await expect(page.getByTestId("mini-playback-button")).toHaveAttribute("aria-label", "播放");
+        await expect(page.getByRole("dialog", { name: "正在播放详情" })).not.toBeVisible();
+        await page.getByTestId("mini-playback-button").click();
+        await openExpandedFromMini(page);
+        await expectExpandedTimelineAdvancing(page);
+        const sheet = page.getByTestId("expanded-sheet");
+        const sheetBox = await sheet.boundingBox();
+        expect(sheetBox!.height).toBeGreaterThan(812 * 0.5);
+        expect(sheetBox!.height).toBeLessThan(812 * 0.7);
+        const controlBox = await page.getByTestId("expanded-play-button").boundingBox();
+        expect(controlBox!.y).toBeGreaterThanOrEqual(sheetBox!.y);
+        expect(controlBox!.y + controlBox!.height).toBeLessThanOrEqual(sheetBox!.y + sheetBox!.height);
+        await captureVisual(page, "375-player-half-sheet");
+        await closeExpanded(page);
+        await expect(page.getByTestId("mini-playback-button")).toHaveAttribute("aria-label", "暂停播放");
+        await openExpandedFromMini(page);
+        await page.getByTestId("expanded-overlay").click({ position: { x: 12, y: 12 } });
+        await expect(mobileMini).toBeVisible();
+        await expect(page.getByTestId("mini-playback-button")).toHaveAttribute("aria-label", "暂停播放");
+        await openExpandedFromMini(page);
+        const handle = await page.getByRole("button", { name: "向下拖动关闭" }).boundingBox();
+        await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + handle!.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(handle!.x + handle!.width / 2, handle!.y + handle!.height / 2 + 100, { steps: 10 });
+        await page.mouse.up();
+        await expect(mobileMini).toBeVisible();
+        await expect(page.getByTestId("mini-playback-button")).toHaveAttribute("aria-label", "暂停播放");
         await captureVisual(page, "375-chat-bar-on");
         await page.setViewportSize({ width: 430, height: 932 });
         await captureVisual(page, "430-chat-bar-on");

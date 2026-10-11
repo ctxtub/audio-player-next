@@ -500,6 +500,7 @@
   }
 
   .sheet {
+    height: min(var(--size-now-playing-sheet-max-height), calc(100dvh - var(--space-6)));
     max-height: calc(100dvh - var(--space-6));
   }
 
@@ -515,8 +516,7 @@
   }
 
   .artworkStage {
-    min-height: var(--size-now-playing-artwork-mobile);
-    margin-block: var(--space-1);
+    display: none;
   }
 
   .artworkGlow,

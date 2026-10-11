@@ -18,7 +18,7 @@ export type MainChromeVisibilityInput = {
     source: MiniSessionSnapshot['source'];
     /** Session status（含 idle/hydrating 等  全量）。 */
     status: MiniSessionSnapshot['status'];
-    /** 三态 layoutMode（ 契约：767→compact-docked；768→wide-*）。 */
+    /** 三态 layoutMode（ 契约：767→compact-floating；768→wide-*）。 */
     layoutMode: MiniNowPlayingLayoutMode;
     /** 软键盘是否展开（useSoftKeyboardState().isOpen）。 */
     isKeyboardOpen: boolean;
@@ -33,15 +33,15 @@ export type MainChromeVisibilityInput = {
 export type MainChromeVisibility = {
     /** 是否存在可展示 session（source 非空且非 idle）。 */
     hasNowPlaying: boolean;
-    /** 键盘抑制（仅 compact-docked + open）。 */
+    /** 键盘抑制（仅 compact-floating + open）。 */
     keyboardSuppressed: boolean;
     /** Expanded 抑制（isExpanded 时 Mini presentation 隐藏，spec §7）。 */
     expandedSuppressed: boolean;
     /** 是否渲染 Mini（hasNowPlaying && !keyboardSuppressed && !expandedSuppressed）。 */
     visible: boolean;
-    /** 是否预留 docked 空间（visible && 非 wide-floating）。 */
+    /** 是否预留 docked 空间（visible && wide-docked）。 */
     hasDockedMini: boolean;
-    /** 是否为兼容浮层（visible && wide-floating，不占位）。 */
+    /** 是否为兼容浮层（visible && 非 wide-docked，不占输入栏空间）。 */
     hasFloatingMini: boolean;
 };
 
@@ -66,11 +66,11 @@ export const resolveMainChromeVisibility = (
         totalParagraphs: 1,
     });
     const keyboardSuppressed =
-        input.layoutMode === 'compact-docked' && input.isKeyboardOpen;
+        input.layoutMode === 'compact-floating' && input.isKeyboardOpen;
     const expandedSuppressed = input.isExpanded === true;
     const visible = hasNowPlaying && !keyboardSuppressed && !expandedSuppressed;
-    const hasDockedMini = visible && input.layoutMode !== 'wide-floating';
-    const hasFloatingMini = visible && input.layoutMode === 'wide-floating';
+    const hasDockedMini = visible && input.layoutMode === 'wide-docked';
+    const hasFloatingMini = visible && input.layoutMode !== 'wide-docked';
     return {
         hasNowPlaying,
         keyboardSuppressed,

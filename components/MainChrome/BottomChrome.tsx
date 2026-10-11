@@ -11,7 +11,7 @@
  *   不 clear Session、不 pause、不改 Anchor（ owner 边界）；
  * - Mini 点击语义为  useNowPlayingEntry → nowPlayingUiStore.openExpanded()
  *（URL 不变；/player 物理保留至，本层不包路由、不改 entry 契约）；
- * - 移动端 docked Mini 不可拖：本层与 Mini 均不绑定任何 drag 手势
+ * - 移动端 compact-floating Mini 不可拖：本层与 Mini 均不绑定任何 drag 手势
  *（桌面 drag 归，Expanded Sheet drag 归 NowPlayingLayer/Handle）。
  */
 

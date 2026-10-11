@@ -91,6 +91,7 @@ export const MainChrome: React.FC<MainChromeProps> = ({ children }) => {
         <div
             ref={appRef}
             className={appClassName}
+            data-main-chrome=""
             data-testid="main-chrome"
             data-has-docked-mini={state.hasDockedMini ? 'true' : 'false'}
             data-mini-visible={state.visible ? 'true' : 'false'}

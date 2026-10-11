@@ -24,6 +24,7 @@
   --main-tabbar-occupied-height: var(--tab-bar-safe-bottom);
   --mini-player-occupied-height: 0px;
   --bottom-chrome-gap: 0px;
+  --composer-occupied-height: 0px;
   --bottom-chrome-safe-bottom: calc(
     var(--main-tabbar-occupied-height) + var(--mini-player-occupied-height) +
       var(--bottom-chrome-gap)
@@ -37,6 +38,12 @@
     /* 统一底部 Chrome 预留：无 Mini 时等于 TabBar，有 docked Mini 时自动抬高 */
     padding-bottom: var(--bottom-chrome-safe-bottom);
   }
+}
+
+/* 手机列表末项可滚动到悬浮入口之上；只加滚动空间，不抬高 Composer。 */
+.app[data-layoutmode='compact-floating'][data-mini-visible='true'] .content:not(:has([data-chat-composer])) {
+  padding-bottom: calc(var(--main-tabbar-occupied-height) + var(--size-mini-now-playing-compact-height) + var(--space-3));
+  scroll-padding-bottom: calc(var(--main-tabbar-occupied-height) + var(--size-mini-now-playing-compact-height) + var(--space-3));
 }
 
 .appWithDockedNowPlaying {

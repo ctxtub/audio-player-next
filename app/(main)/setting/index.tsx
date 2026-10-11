@@ -96,7 +96,7 @@ const ConfigPage: React.FC = () => {
   );
 
   /**
-   * 是否在宽屏启用悬浮迷你播放器（ 语义；移动端始终 docked）。
+   * 是否在宽屏启用悬浮迷你播放器（ 语义；移动端始终 compact-floating）。
    */
   const isDesktopFloatingPlayerEnabled = useMemo(
     () => apiConfig.desktopFloatingPlayerEnabled,

@@ -3,7 +3,7 @@
 /**
  *  Mini Now Playing — Responsive Hook（ foundation）。
  *
- * 冻结契约：mobile/docked <768px；desktop >=768px。
+ * 冻结契约：mobile/floating <768px；desktop >=768px。
  * 同一契约来源：SCSS styles/tokens/_breakpoints.scss 的 $breakpoint-lg
  * 与此文件的 NOW_PLAYING_BREAKPOINT_PX 必须同为 768（单测锁定，禁止 1024 第二边界）。
  *
@@ -30,7 +30,7 @@ export const resolveViewportMode = (width: number): NowPlayingViewportMode =>
 
 /**
  * 纯函数：viewport 宽度 + 桌面偏好 → 三态 layoutMode。
- * - compact → compact-docked（偏好不影响移动端）；
+ * - compact → compact-floating（偏好不影响移动端）；
  * - wide + pref true → wide-floating；
  * - wide + pref false → wide-docked。
  */
@@ -40,7 +40,7 @@ export const resolveNowPlayingLayoutMode = (
 ): MiniNowPlayingLayoutMode => {
     const mode = resolveViewportMode(width);
     if (mode === 'compact') {
-        return 'compact-docked';
+        return 'compact-floating';
     }
     return desktopFloatingPlayerEnabled ? 'wide-floating' : 'wide-docked';
 };
@@ -97,7 +97,7 @@ export const useNowPlayingLayoutMode = (
 ): MiniNowPlayingLayoutMode => {
     const viewportMode = useViewportMode();
     if (viewportMode === 'compact') {
-        return 'compact-docked';
+        return 'compact-floating';
     }
     return desktopFloatingPlayerEnabled ? 'wide-floating' : 'wide-docked';
 };

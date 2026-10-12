@@ -251,7 +251,9 @@ export const deriveExpandedTimeline = (
         typeof currentTime === 'number' && Number.isFinite(currentTime) ? currentTime : 0;
     return {
         mode: EXPANDED_TIMELINE_MODE,
-        currentTime: Math.min(Math.max(rawCurrent, 0), safeDuration),
+        currentTime: safeDuration > 0
+            ? Math.min(Math.max(rawCurrent, 0), safeDuration)
+            : Math.max(rawCurrent, 0),
         duration: safeDuration,
     };
 };
@@ -427,13 +429,22 @@ export const useExpandedNowPlayingViewModel = (): ExpandedNowPlayingViewModel =>
     const isPlaying = usePlaybackStore((state) => state.isPlaying);
     const currentTime = usePlaybackStore((state) => state.currentTime);
     const duration = usePlaybackStore((state) => state.duration);
+    const savedWorkPositionMs = usePlaybackSessionStore((state) => state.savedWorkPositionMs);
+    const savedWorkDurationMs = usePlaybackSessionStore((state) => state.savedWorkDurationMs);
     const playbackRate = usePlaybackStore((state) => state.playbackRate);
     const remainingMs = usePlaybackStore((state) => state.remainingMs);
     const voiceOptions = useConfigStore((state) => state.voiceOptions);
+    const hasLiveDuration = Number.isFinite(duration) && duration > 0;
+    const projectedCurrentTime = hasLiveDuration
+        ? currentTime
+        : (savedWorkPositionMs ?? 0) / 1000;
+    const projectedDuration = hasLiveDuration
+        ? duration
+        : (savedWorkDurationMs ?? 0) / 1000;
 
     return deriveExpandedNowPlayingViewModel(
         { source, status, title, collectionTitle, workTitle, voiceId, nextParagraphIndex, totalParagraphs, speed, sleepTimerMode, storyText, sessionId },
-        { isPlaying, currentTime, duration, playbackRate, remainingMs } as unknown as ExpandedTransportSnapshot,
+        { isPlaying, currentTime: projectedCurrentTime, duration: projectedDuration, playbackRate, remainingMs } as unknown as ExpandedTransportSnapshot,
         voiceOptions
     );
 };

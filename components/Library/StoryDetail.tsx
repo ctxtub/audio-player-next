@@ -16,6 +16,7 @@ import type { LibraryDetailViewModel } from '@/lib/client/libraryViewModel';
 import { collectionPath, conversationPath } from '@/lib/navigation/storyRoutes';
 import { libraryReturnPath } from './LibraryNavigationMemory';
 import { WorkPlaybackButton } from './WorkPlaybackButton';
+import { formatPlaybackTime } from '@/lib/playback/formatTime';
 import styles from './storyDetail.module.scss';
 
 export interface StoryDetailProps {
@@ -26,14 +27,11 @@ export interface StoryDetailProps {
 }
 
 /**
- * 格式化持续时间（毫秒转为分:秒）
+ * 格式化持续时间（毫秒转为 M:SS）
  */
 function formatDuration(durationMs?: number): string {
   if (!durationMs || durationMs <= 0) return '0:00';
-  const totalSeconds = Math.floor(durationMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  return formatPlaybackTime(Math.floor(durationMs / 1000));
 }
 
 /**

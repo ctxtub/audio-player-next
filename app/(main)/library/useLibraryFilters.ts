@@ -10,6 +10,27 @@ import {
 import { libraryPath } from '@/lib/navigation/storyRoutes';
 import type { LibraryView } from '@/lib/client/library';
 
+const LIBRARY_SCOPE_STORAGE_KEY = 'library:scope';
+type LibraryScope = 'collections' | 'works';
+
+function readRememberedScope(): LibraryScope {
+  if (typeof window === 'undefined') return 'collections';
+  try {
+    return window.sessionStorage.getItem(LIBRARY_SCOPE_STORAGE_KEY) === 'works' ? 'works' : 'collections';
+  } catch {
+    return 'collections';
+  }
+}
+
+function rememberScope(scope: LibraryScope): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(LIBRARY_SCOPE_STORAGE_KEY, scope);
+  } catch {
+    // The URL and in-memory selection remain usable when storage is unavailable.
+  }
+}
+
 export {
   canonicalizeQuery,
   parseLibraryView,
@@ -29,10 +50,13 @@ export interface UseLibraryFiltersOptions {
 export interface UseLibraryFiltersResult {
   view: LibraryView;
   q?: string;
+  scope: LibraryScope;
+  scopeReady: boolean;
   draftQ: string;
   isComposing: boolean;
   setDraftQ: (nextText: string) => void;
   setView: (nextView: LibraryView) => void;
+  setScope: (nextScope: LibraryScope) => void;
   onCompositionStart: () => void;
   onCompositionEnd: (e?: React.CompositionEvent<HTMLInputElement>) => void;
   clearSearch: () => void;
@@ -63,9 +87,28 @@ export function useLibraryFilters(
   // 1. 从权威 URL 响应式读取当前 view 与 canonical q
   const rawView = searchParams?.get('view') ?? null;
   const rawQ = searchParams?.get('q') ?? null;
+  const rawType = searchParams?.get('type') ?? null;
 
   const view = pathname.endsWith('/favorites') ? 'favorites' : pathname.endsWith('/trash') ? 'trash' : parseLibraryView(rawView);
-  const type = searchParams?.get('type') === 'works' ? 'works' : 'collections';
+  const explicitScope: LibraryScope | null = rawType === 'works'
+    ? 'works'
+    : rawType === 'collections'
+      ? 'collections'
+      : null;
+  const [rememberedScope, setRememberedScope] = useState<LibraryScope>('collections');
+  const [scopeReady, setScopeReady] = useState(false);
+  const scope: LibraryScope = explicitScope ?? rememberedScope;
+  const type = scope;
+
+  useEffect(() => {
+    if (explicitScope) {
+      setRememberedScope(explicitScope);
+      rememberScope(explicitScope);
+    } else {
+      setRememberedScope(readRememberedScope());
+    }
+    setScopeReady(true);
+  }, [explicitScope]);
   const q = canonicalizeQuery(rawQ);
 
   // 2. 本地草稿与 IME 组合状态
@@ -171,6 +214,13 @@ export function useLibraryFilters(
     [clearTimer, q, router, type]
   );
 
+  const setScope = useCallback((nextScope: LibraryScope) => {
+    setRememberedScope(nextScope);
+    rememberScope(nextScope);
+    const nextUrl = libraryPath(view, q, nextScope);
+    router.push(nextUrl);
+  }, [q, router, view]);
+
   // 9. 清空搜索
   const clearSearch = useCallback(() => {
     clearTimer();
@@ -182,10 +232,13 @@ export function useLibraryFilters(
   return {
     view,
     q,
+    scope,
+    scopeReady,
     draftQ,
     isComposing,
     setDraftQ,
     setView,
+    setScope,
     onCompositionStart,
     onCompositionEnd,
     clearSearch,

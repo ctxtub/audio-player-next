@@ -15,6 +15,7 @@
  */
 
 import React, { useCallback } from 'react';
+import { formatPlaybackTime } from '@/lib/playback/formatTime';
 
 /**  timeline 固定模式（ 前恒 segment，不伪装整篇）。 */
 export const EXPANDED_TIMELINE_MODE = 'segment' as const;
@@ -28,12 +29,7 @@ export const EXPANDED_TIMELINE_ARIA_LABEL = '本段播放进度';
 /**
  * 纯函数：分段时间格式化 M:SS（非有限/负数回退 0:00）。
  */
-export const formatSegmentTime = (seconds: number): string => {
-    const safe = typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
-    const minutes = Math.floor(safe / 60);
-    const secs = Math.floor(safe % 60);
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
-};
+export const formatSegmentTime = formatPlaybackTime;
 
 /**
  * 纯函数：点击换算（pointerX/trackWidth * duration）。
@@ -111,10 +107,10 @@ export const PlaybackTimeline: React.FC<PlaybackTimelineProps> = ({
     disabled = false,
 }) => {
     const safeDuration = typeof duration === 'number' && Number.isFinite(duration) && duration > 0 ? duration : 0;
-    const safeCurrent =
-        typeof currentTime === 'number' && Number.isFinite(currentTime)
-            ? Math.min(Math.max(currentTime, 0), safeDuration)
-            : 0;
+    const rawCurrent = typeof currentTime === 'number' && Number.isFinite(currentTime)
+        ? Math.max(currentTime, 0)
+        : 0;
+    const safeCurrent = safeDuration > 0 ? Math.min(rawCurrent, safeDuration) : rawCurrent;
     const hasAudio = safeDuration > 0 && !disabled;
     const progressPercent = safeDuration > 0 ? (safeCurrent / safeDuration) * 100 : 0;
 
@@ -169,8 +165,8 @@ export const PlaybackTimeline: React.FC<PlaybackTimelineProps> = ({
                 aria-label={label === '本段' ? EXPANDED_TIMELINE_ARIA_LABEL : label}
                 aria-valuemin={0}
                 aria-valuemax={Math.floor(safeDuration)}
-                aria-valuenow={Math.floor(safeCurrent)}
-                aria-valuetext={`${formatSegmentTime(safeCurrent)} / ${formatSegmentTime(safeDuration)}`}
+                aria-valuenow={safeDuration > 0 ? Math.floor(safeCurrent) : 0}
+                aria-valuetext={`${formatSegmentTime(safeCurrent)} / ${safeDuration > 0 ? formatSegmentTime(safeDuration) : '未知时长'}`}
                 aria-disabled={!hasAudio}
                 tabIndex={hasAudio ? 0 : -1}
             >
@@ -181,7 +177,7 @@ export const PlaybackTimeline: React.FC<PlaybackTimelineProps> = ({
             </div>
             <div data-testid="expanded-timeline-times">
                 <span data-testid="expanded-timeline-current">{formatSegmentTime(safeCurrent)}</span>
-                <span data-testid="expanded-timeline-duration">{formatSegmentTime(safeDuration)}</span>
+                <span data-testid="expanded-timeline-duration">{safeDuration > 0 ? formatSegmentTime(safeDuration) : '—:——'}</span>
             </div>
         </div>
     );

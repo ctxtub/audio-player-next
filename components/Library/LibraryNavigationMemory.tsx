@@ -15,7 +15,10 @@ export function LibraryNavigationMemory() {
   const key = `${pathname}${params?.size ? `?${params}` : ''}`;
   useEffect(() => {
     const unsubscribe = useChatStore.subscribe((state, previous) => {
-      if (previous.syncEnabled && !state.syncEnabled) { positions.clear(); lastList = '/library'; }
+      if (previous.syncEnabled && !state.syncEnabled) {
+        positions.clear();
+        lastList = '/library';
+      }
     });
     return unsubscribe;
   }, []);

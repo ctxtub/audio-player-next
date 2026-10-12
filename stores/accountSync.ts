@@ -17,6 +17,18 @@ import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { cancelPendingNextWork } from '@/app/services/continuousCreationFlow';
 
+const LIBRARY_SCOPE_STORAGE_KEY = 'library:scope';
+
+/** Clear per-login library UI preference at an auth boundary without touching the URL. */
+function clearLibraryScopePreference(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(LIBRARY_SCOPE_STORAGE_KEY);
+  } catch {
+    // Storage may be unavailable; account cleanup must still complete.
+  }
+}
+
 /**
  * 参与账号数据同步的一块数据的生命周期契约。
  */
@@ -125,7 +137,13 @@ export function ensureAccountSyncSubscribed(): void {
   subscribed = true;
   useAuthStore.subscribe((state, prevState) => {
     if (prevState.isLogin !== state.isLogin) {
+      // Initial profile hydration can move false → true for the same signed-in
+      // account. Preserve its session choice; only clear when leaving an account.
+      if (prevState.isLogin && !state.isLogin) clearLibraryScopePreference();
       resetAccountData();
+    }
+    if (prevState.isLogin && state.isLogin && prevState.username !== state.username) {
+      clearLibraryScopePreference();
     }
   });
 }

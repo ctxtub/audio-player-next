@@ -122,6 +122,7 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
         >
           {voicesList.map(option => {
             const isPlaying = playingVoice === option.value;
+            const voiceMeta = [option.gender, option.locale].filter(Boolean).join(' · ');
             return (
               <Radio
                 key={option.value}
@@ -137,10 +138,7 @@ const VoiceServiceSection: React.FC<VoiceServiceSectionProps> = ({
                     </div>
                     <div className={styles.voiceDescription}>
                       <div>{option.description ?? '暂无描述'}</div>
-                      <div className={styles.voiceMeta}>
-                        {(option.gender ?? '未知')} ·{' '}
-                        {(option.locale ?? '未知')}
-                      </div>
+                      {voiceMeta ? <div className={styles.voiceMeta}>{voiceMeta}</div> : null}
                     </div>
                   </div>
                   <GlassButton

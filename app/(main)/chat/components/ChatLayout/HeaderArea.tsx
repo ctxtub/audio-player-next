@@ -27,10 +27,10 @@ const HeaderArea: React.FC<HeaderAreaProps> = ({ visible, suggestions, onSuggest
   return (
     <div className={styles.headerArea}>
       <div className={styles.heroRow}>
-        <div className={styles.avatar}>A</div>
+        <div className={styles.avatar}>书</div>
         <div className={styles.textBlock}>
-          <h2 className={styles.title}>你好，我是Agent助手</h2>
-          <p className={styles.subtitle}>告诉我你感兴趣的主题，马上为你定制专属故事剧集。</p>
+          <h2 className={styles.title}>想听什么故事？</h2>
+          <p className={styles.subtitle}>选一个主题，开始创作；准备好后，就能在这里收听。</p>
         </div>
       </div>
       {suggestions.length > 0 ? (

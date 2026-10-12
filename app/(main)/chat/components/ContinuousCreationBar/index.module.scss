@@ -35,6 +35,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .statusCard {
@@ -84,6 +85,37 @@
   cursor: pointer;
 }
 
+.directControls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.toggleLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  font-size: 12px;
+}
+
+.durationControl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 220px;
+  min-width: 160px;
+  font-size: 12px;
+}
+
+.scopeHint {
+  flex: 1 1 100%;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+  font-size: 11px;
+}
+
 @media (max-width: 480px) {
   .controlRow {
     flex-wrap: wrap;
@@ -91,6 +123,12 @@
 
   .budget {
     margin-left: 0;
+  }
+
+  .directControls,
+  .durationControl {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

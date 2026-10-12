@@ -92,6 +92,8 @@ export const MiniNowPlaying: React.FC = () => {
     const collectionTitle = usePlaybackSessionStore((state) => state.collectionTitle);
     const workTitle = usePlaybackSessionStore((state) => state.workTitle);
     const sessionStatus = usePlaybackSessionStore((state) => state.status);
+    const savedWorkPositionMs = usePlaybackSessionStore((state) => state.savedWorkPositionMs);
+    const savedWorkDurationMs = usePlaybackSessionStore((state) => state.savedWorkDurationMs);
     const lastCompletedParagraphIndex = usePlaybackSessionStore(
         (state) => state.lastCompletedParagraphIndex
     );
@@ -101,6 +103,14 @@ export const MiniNowPlaying: React.FC = () => {
     const isPlaying = usePlaybackStore((state) => state.isPlaying);
     const currentTime = usePlaybackStore((state) => state.currentTime);
     const duration = usePlaybackStore((state) => state.duration);
+
+    const hasLiveDuration = Number.isFinite(duration) && duration > 0;
+    const projectedCurrentTime = hasLiveDuration
+        ? currentTime
+        : (savedWorkPositionMs ?? 0) / 1000;
+    const projectedDuration = hasLiveDuration
+        ? duration
+        : (savedWorkDurationMs ?? 0) / 1000;
 
     const desktopFloatingPlayerEnabled = useConfigStore(
         (state) => state.apiConfig.desktopFloatingPlayerEnabled
@@ -123,7 +133,7 @@ export const MiniNowPlaying: React.FC = () => {
             nextParagraphIndex,
             totalParagraphs,
         },
-        { isPlaying, currentTime, duration },
+        { isPlaying, currentTime: projectedCurrentTime, duration: projectedDuration },
         layoutMode
     );
 

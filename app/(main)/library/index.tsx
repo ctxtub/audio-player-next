@@ -1,11 +1,8 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { useLibraryListInfiniteQuery } from '@/lib/client/libraryQueries';
 import { composeLibraryItemViewModel } from '@/lib/client/libraryViewModel';
-import { libraryPath } from '@/lib/navigation/storyRoutes';
 import { useLibraryFilters } from './useLibraryFilters';
 import { useCollectionListInfiniteQuery } from '@/lib/client/collectionQueries';
 import { flattenCollectionPages } from '@/lib/client/collectionViewModel';
@@ -34,19 +31,21 @@ const LibraryPage: React.FC = () => {
   // 1. URL 视图与搜索控制器接入（与作品库同枚举 active | favorites | trash）
   const {
     view,
+    scope,
+    scopeReady,
     q,
     draftQ,
     setDraftQ,
     setView,
+    setScope,
     clearSearch,
     onCompositionStart,
     onCompositionEnd,
   } = useLibraryFilters();
 
-  const searchParams = useSearchParams();
-  const isWorks = view !== 'active' && searchParams?.get('type') === 'works';
-  const collectionQuery = useCollectionListInfiniteQuery({ view, query: q }, { enabled: !isWorks });
-  const workQuery = useLibraryListInfiniteQuery({ view, query: q }, { enabled: isWorks });
+  const isWorks = view !== 'active' && scope === 'works';
+  const collectionQuery = useCollectionListInfiniteQuery({ view, query: q }, { enabled: scopeReady && !isWorks });
+  const workQuery = useLibraryListInfiniteQuery({ view, query: q }, { enabled: scopeReady && isWorks });
   const { error, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage, refetch } = isWorks ? workQuery : collectionQuery;
   const data = collectionQuery.data;
   const works = workQuery.data?.pages.flatMap((page) => page.items) ?? [];
@@ -84,10 +83,10 @@ const LibraryPage: React.FC = () => {
         onCompositionEnd={onCompositionEnd}
       />
 
-      {view !== 'active' && <nav aria-label="管理范围">
-        <Link href={libraryPath(view, q)} aria-current={!isWorks ? 'page' : undefined}>故事集</Link>{' · '}
-        <Link href={libraryPath(view, q, 'works')} aria-current={isWorks ? 'page' : undefined}>单篇故事</Link>
-      </nav>}
+      {view !== 'active' && <div className={styles.scopeSegment} role="group" aria-label="管理范围">
+        <button type="button" aria-pressed={!isWorks} className={!isWorks ? styles.scopeSegmentActive : ''} onClick={() => setScope('collections')}>故事集</button>
+        <button type="button" aria-pressed={isWorks} className={isWorks ? styles.scopeSegmentActive : ''} onClick={() => setScope('works')}>单篇故事</button>
+      </div>}
       {/* 内容区域状态渲染 */}
       <main
         className={styles.libraryContent}

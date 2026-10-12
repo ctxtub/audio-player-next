@@ -1,6 +1,6 @@
 import { test, expect } from '../harness/fixtures';
 import { enterGuestChat } from './helpers/guest';
-import { sendStory, setContinuousEnabled, waitStoryCardReady, startNewStoryCollection, openExpandedFromMini, closeExpanded, composerInput, captureVisual } from './helpers/creation-journey';
+import { sendStory, setContinuousEnabled, waitStoryCardReady, startNewStoryCollection, openExpandedFromMini, closeExpanded, composerInput, captureVisual, expectExpandedTimelineAdvancing } from './helpers/creation-journey';
 
 /** 用可见页面完成单篇整理、整集恢复、历史续写与回听。 */
 test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) => {
@@ -25,7 +25,7 @@ test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) 
   await page.getByRole('tab', { name: '故事库', exact: true }).click();
   await page.getByRole('tab', { name: '收藏', exact: true }).click();
   await page.waitForURL('**/library/favorites');
-  await page.getByRole('link', { name: '单篇故事', exact: true }).click();
+  await page.getByRole('button', { name: '单篇故事', exact: true }).click();
   await expect(page.getByRole('heading', { name: firstTitle, exact: true })).toBeVisible();
   await page.getByRole('link', { name: firstTitle, exact: true }).click();
   await page.waitForURL(/\/collections\/[^/]+\/works\/\d+$/);
@@ -37,20 +37,44 @@ test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) 
   await page.getByTestId('collection-delete-btn').click();
   await page.getByRole('tab', { name: '回收站', exact: true }).click();
   await page.waitForURL(/\/library\/trash(?:\?|$)/);
-  await page.getByRole('link', { name: '故事集', exact: true }).click();
+  await page.getByRole('button', { name: '故事集', exact: true }).click();
   await page.getByRole('button', { name: `恢复故事集《${title}》` }).click();
   await page.getByRole('tab', { name: '全部', exact: true }).click();
   await page.getByRole('link', { name: title, exact: true }).click();
   await expect(members).toHaveCount(1);
   await page.getByRole('tab', { name: '故事库', exact: true }).click();
   await page.getByRole('tab', { name: '回收站', exact: true }).click();
-  await page.getByRole('link', { name: '单篇故事', exact: true }).click();
+  await page.getByRole('button', { name: '单篇故事', exact: true }).click();
   const restoreButton = page.getByRole('button', { name: `恢复《${firstTitle}》`, exact: true });
   await restoreButton.click();
   await expect(restoreButton).toHaveCount(0);
   await page.getByRole('tab', { name: '全部', exact: true }).click();
   await page.getByRole('link', { name: title, exact: true }).click();
   await expect(members).toHaveCount(2);
+  // 以可见单篇播放入口推进并暂停，刷新后先核对保存的时间投影，
+  // 再由用户点击继续并确认时间线从断点推进。
+  const resumedWork = members.first();
+  const resumedWorkPlay = resumedWork.getByTestId(/^member-play-/);
+  if ((await resumedWorkPlay.innerText()).trim() !== '暂停') {
+    await resumedWorkPlay.click();
+  }
+  await expect(resumedWorkPlay).toContainText('暂停', { timeout: 60000 });
+  await page.waitForTimeout(1200);
+  await resumedWorkPlay.click();
+  await expect(resumedWorkPlay).toContainText('继续播放', { timeout: 15000 });
+  await page.waitForTimeout(500);
+  await page.reload({ waitUntil: 'networkidle', timeout: 60000 });
+  await expect(page.getByTestId('mini-now-playing')).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId('mini-now-playing')).toHaveAttribute('data-status', 'ready');
+  await openExpandedFromMini(page);
+  await expect(page.getByTestId('expanded-timeline-current')).not.toHaveText('0:00');
+  await expect(page.getByTestId('expanded-timeline-duration')).not.toHaveText('—:——');
+  await expect(page.getByRole('slider', { name: '播放进度', exact: true })).toBeEnabled();
+  await closeExpanded(page);
+  await page.getByTestId('mini-playback-button').click();
+  await openExpandedFromMini(page);
+  await expectExpandedTimelineAdvancing(page);
+  await closeExpanded(page);
   await captureVisual(page, 'library-restored-members');
   await page.getByRole('link', { name: '查看创作记录', exact: true }).click();
   await page.waitForURL('**/chat/conversations/**');

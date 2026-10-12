@@ -3,8 +3,16 @@
 import Link from 'next/link';
 import { resetContinuousCreationDuration } from '@/app/services/continuousCreationSession';
 import { useChatStore } from '@/stores/chatStore';
+import { useConfigStore } from '@/stores/configStore';
 import { collectionPath } from '@/lib/navigation/storyRoutes';
 import React from 'react';
+import GlassSlider from '@/components/ui/GlassSlider';
+import GlassSwitch from '@/components/ui/GlassSwitch';
+import {
+  SLEEP_TIMER_MAX_MINUTES,
+  SLEEP_TIMER_MIN_MINUTES,
+  SLEEP_TIMER_STEP_MINUTES,
+} from '@/lib/playback/sleepTimer';
 
 import {
   CONTINUOUS_CREATION_STATUS_LABEL,
@@ -25,8 +33,8 @@ export type ContinuousCreationBarProps = {
 /**
  *   连续创作状态卡。
  *
- * 与编排同源：开关、状态文案与剩余预算全部只读 `continuousCreationStore`（薄封装纯状态机），
- * 组件自身不推导状态、不做 IO。开关带可访问名称。
+ * 本次状态与剩余预算只读 `continuousCreationStore`；启停和时长复用配置 store，
+ * 与设置页保持一致。开关和滑块带可访问名称。
  * @param props.collectionTitle 当前集合标题。
  * @returns 状态卡 JSX。
  */
@@ -37,6 +45,9 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
   const remainingMs = useContinuousCreationStore((state) => state.remainingMs);
   const ready = useContinuousCreationStore((state) => state.ready);
   const budgetMs = useContinuousCreationStore((state) => state.budgetMs);
+  const config = useConfigStore((state) => state.apiConfig);
+  const configReady = useConfigStore((state) => state.isLoaded);
+  const updateConfig = useConfigStore((state) => state.update);
 
   const title = collectionTitle && collectionTitle.trim().length > 0 ? collectionTitle : '新作品集';
 
@@ -60,6 +71,30 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
         <span className={styles.budget} data-testid="continuous-remaining-budget">
           自动播放时长 · {budgetMs ? `${Math.round(budgetMs / 60000)}分钟` : '加载中'} · 剩余 {ready ? formatRemainingMs(remainingMs) : '—'}
         </span>
+
+        {ready && configReady ? <div className={styles.directControls}>
+          <div className={styles.toggleLabel}>
+            <span>连续创作</span>
+            <GlassSwitch
+              isSelected={config.defaultSleepTimerEnabled}
+              onChange={(next) => updateConfig({ defaultSleepTimerEnabled: next })}
+              label="连续创作开关"
+            />
+          </div>
+          <div className={styles.durationControl}>
+            <span>本次时长 · {config.defaultSleepTimerMinutes}分钟</span>
+            <GlassSlider
+              min={SLEEP_TIMER_MIN_MINUTES}
+              max={SLEEP_TIMER_MAX_MINUTES}
+              step={SLEEP_TIMER_STEP_MINUTES}
+              value={config.defaultSleepTimerMinutes || 30}
+              onChange={(minutes) => updateConfig({ defaultSleepTimerMinutes: minutes })}
+              label="选择本次自动播放时长"
+            />
+          </div>
+        </div> : <span className={styles.scopeHint}>正在恢复本次控制…</span>}
+
+        <span className={styles.scopeHint}>与设置同步；调整时长保留已消耗时间，暂停、生成和准备期间不计时，到期停止。</span>
 
         {ready && enabled && status === 'ended_budget' && <button type="button" className={styles.action} onClick={resetContinuousCreationDuration}>重置时长</button>}
         <Link className={styles.action} href="/setting">前往设置</Link>

@@ -134,6 +134,9 @@ interface PlaybackSessionState {
   singleTrackResumePositionMs: number | null;
   /** 单轨恢复位是否已应用（防重复 seek）。 */
   singleTrackResumeSeekApplied: boolean;
+  /** Work 上次保存的单轨位置/时长，仅在 Transport 尚无真实媒体元数据时用于投影。 */
+  savedWorkPositionMs: number | null;
+  savedWorkDurationMs: number | null;
 }
 
 interface PlaybackSessionActions {
@@ -211,6 +214,8 @@ interface RehydrateDeps {
     collectionId: string | null;
     conversationId: string | null;
     playbackSnapshot: WorkPlaybackSnapshot;
+    audioDurationMs: number | null;
+    progress: { positionMs: number; durationMs: number | null } | null;
   }>;
   ensureChatLoaded: () => Promise<void>;
   /**
@@ -248,6 +253,8 @@ const INITIAL_SESSION_STATE: PlaybackSessionState = {
   hydrationEpoch: 0,
   singleTrackResumePositionMs: null,
   singleTrackResumeSeekApplied: false,
+  savedWorkPositionMs: null,
+  savedWorkDurationMs: null,
 };
 
 let debounceSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -374,6 +381,10 @@ const defaultDeps: RehydrateDeps = {
       voiceId: detail.voiceId,
       contentHash: detail.contentHash,
       playbackSnapshot: detail.playbackSnapshot,
+      audioDurationMs: detail.audio?.durationMs ?? null,
+      progress: detail.progress
+        ? { positionMs: detail.progress.positionMs, durationMs: detail.progress.durationMs }
+        : null,
       collectionTitle,
       collectionId: detail.collectionId ?? null,
       conversationId: detail.conversationId ?? null,
@@ -481,6 +492,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     let liveCollectionTitle: string | null = null;
     let liveWorkTitle: string | null = null;
     let workSnapshot: WorkPlaybackSnapshot | null = null;
+    let savedWorkPositionMs: number | null = null;
+    let savedWorkDurationMs: number | null = null;
 
     if (anchor.source.kind === 'draft') {
       try {
@@ -533,6 +546,13 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
         );
       }
       workSnapshot = work.playbackSnapshot;
+      savedWorkPositionMs = work.progress?.positionMs ?? null;
+      savedWorkDurationMs =
+        typeof work.progress?.durationMs === 'number' && work.progress.durationMs > 0
+          ? work.progress.durationMs
+          : typeof work.audioDurationMs === 'number' && work.audioDurationMs > 0
+            ? work.audioDurationMs
+            : null;
       storyText = work.storyText;
       liveTitle = work.title;
       liveWorkTitle = typeof work.title === 'string' && work.title.length > 0 ? work.title : null;
@@ -613,6 +633,8 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
       // Anchor.sleepTimerMode 运行时镜像（off/minutes/story_end，§22/§23）。
       sleepTimerMode: anchor.sleepTimerMode,
       lastSavedKey: `${anchor.sessionId}:${position.nextParagraphIndex}`,
+      savedWorkPositionMs,
+      savedWorkDurationMs,
     });
 
     try {

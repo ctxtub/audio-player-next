@@ -8,6 +8,7 @@ import type { LibraryItemViewModel } from '@/lib/client/libraryViewModel';
 import { useLibraryMutationsSafe } from '@/lib/client/libraryMutations';
 import { workPath } from '@/lib/navigation/storyRoutes';
 import { WorkPlaybackButton } from '@/components/Library/WorkPlaybackButton';
+import { formatPlaybackTime } from '@/lib/playback/formatTime';
 import styles from './libraryComponents.module.scss';
 
 export interface StoryWorkCardProps {
@@ -31,17 +32,6 @@ function formatDisplayDate(dateStr?: string | null): string {
   const hours = String(d.getHours()).padStart(2, '0');
   const minutes = String(d.getMinutes()).padStart(2, '0');
   return `${month}-${day} ${hours}:${minutes}`;
-}
-
-/**
- * 格式化持续时间毫秒数（分:秒）
- */
-function formatDuration(ms?: number | null): string | null {
-  if (typeof ms !== 'number' || ms <= 0) return null;
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}分${seconds > 0 ? `${seconds}秒` : ''}`;
 }
 
 /**
@@ -79,7 +69,9 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
   const displayTime = formatDisplayDate(
     isTrash ? (work.deletedAt ?? work.createdAt) : work.createdAt
   );
-  const durationText = formatDuration(work.audio?.durationMs);
+  const durationText = work.audio?.durationMs && work.audio.durationMs > 0
+    ? formatPlaybackTime(Math.floor(work.audio.durationMs / 1000))
+    : null;
 
   const handleToggleFavorite = async () => {
     try {

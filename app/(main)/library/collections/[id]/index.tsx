@@ -16,6 +16,7 @@ import { libraryReturnPath } from '@/components/Library/LibraryNavigationMemory'
 import { WorkManagement } from '@/components/Library/WorkManagement';
 import { conversationPath, workPath } from '@/lib/navigation/storyRoutes';
 import { playCollection } from '@/app/services/collectionPlaybackFlow';
+import { formatPlaybackTime } from '@/lib/playback/formatTime';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import {
   AlertCircle,
@@ -367,7 +368,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                       {isCurrent ? <span className={styles.currentBadge}>当前作品</span> : null}
                     </div>
                     {work.excerpt ? <p className={styles.memberExcerpt}>{work.excerpt}</p> : null}
-                    <p className={styles.memberExcerpt}>{heardSeconds > 0 ? `听到 ${Math.floor(heardSeconds / 60)}分${Math.floor(heardSeconds) % 60}秒` : '未听'}{work.audio.durationMs ? ` · 时长 ${Math.ceil(work.audio.durationMs / 60000)}分钟` : ' · 播放时准备语音'}</p>
+                    <p className={styles.memberExcerpt}>{heardSeconds > 0 ? `听到 ${formatPlaybackTime(Math.floor(heardSeconds))}` : '未听'}{work.audio.durationMs && work.audio.durationMs > 0 ? ` · 时长 ${formatPlaybackTime(Math.floor(work.audio.durationMs / 1000))}` : ' · 播放时准备语音'}</p>
                   </div>
                   <button
                     type="button"

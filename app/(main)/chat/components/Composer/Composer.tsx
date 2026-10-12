@@ -179,11 +179,17 @@ const Composer: React.FC<ComposerProps> = ({
     if (disabled || isSending || isLocalSending) {
       return;
     }
+    // A caller-provided clear action may need confirmation (for example, starting
+    // a new story collection). Let that flow decide when the controlled draft is
+    // reset; clearing here would make canceling the confirmation destructive.
+    if (onClear) {
+      onClear();
+      return;
+    }
     handleChange('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    onClear?.();
   }, [disabled, isSending, isLocalSending, handleChange, onClear]);
 
   /**

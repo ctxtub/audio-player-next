@@ -1,3 +1,4 @@
+@use '../../../../../styles/controls' as controls;
 /* 消息片段渲染器共享样式 */
 
 /* 文本片段 */
@@ -396,3 +397,15 @@
     transition: none;
   }
 }
+
+/* Shared action geometry across all visible states. */
+.playButton, .retryButton { @include controls.action(primary); }
+.expandButton { @include controls.action(outline); }
+.storyActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; max-width: calc(var(--size-touch-target) * 8); margin-left: auto; align-items: stretch; }
+.storyActions > :only-child { grid-column: 1 / -1; justify-self: end; }
+.storyActions > button, .storyActions > a { width: 100%; min-width: 0; }
+
+@media (max-width: 480px) { .storyActions { --action-padding-inline: var(--space-2); } }
+@media (max-width: 360px) { .storyActions .playButton:disabled .spinner { display: none; } }
+
+.summaryContainer:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }

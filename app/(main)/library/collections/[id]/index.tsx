@@ -1,4 +1,5 @@
 'use client';
+import { userFacingError } from '@/lib/client/userFacingError';
 
 /**
  * Collection 详情页客户端 Shell（）。
@@ -81,7 +82,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
   }, [data, focusWork]);
   const handlePlayCollection = async (mode: 'resume' | 'restart') => {
     setActionError(null);
-    try { await playCollection(id, mode); } catch (err) { setActionError(err instanceof Error ? err.message : '暂时无法播放，请重试'); }
+    try { await playCollection(id, mode); } catch (err) { setActionError(userFacingError(err, '暂时无法播放，请重试')); }
   };
 
   if (!isValidId) {
@@ -112,7 +113,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
           </div>
           <h2 className={styles.errorTitle}>故事集加载失败</h2>
           <p className={styles.errorMessage}>
-            {error instanceof Error ? error.message : '网络或服务异常，请稍后重试'}
+            {userFacingError(error, '网络或服务异常，请稍后重试')}
           </p>
           <div className={styles.errorActions}>
             <button

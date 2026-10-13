@@ -1,3 +1,4 @@
+@use '../../styles/controls' as controls;
 /* GlassButton — Liquid Glass 风格按钮 */
 .glassButton {
   display: inline-flex;
@@ -122,3 +123,15 @@
     transform: rotate(360deg);
   }
 }
+
+.glassButton { @include controls.action; }
+.primary { @include controls.action(primary); }
+.outline { @include controls.action(outline); }
+.ghost { @include controls.action; }
+.sm, .md { min-height: var(--size-touch-target); padding: var(--space-2) var(--space-4); font-size: var(--text-sm); line-height: var(--leading-sm); }
+.lg { min-height: var(--size-touch-target); padding: var(--space-3) var(--space-5); }
+
+.glassButton { position: relative; }
+.buttonLabel { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); }
+.loading .buttonLabel { opacity: 0; }
+.spinner { position: absolute; left: calc(50% - var(--space-2)); top: calc(50% - var(--space-2)); }

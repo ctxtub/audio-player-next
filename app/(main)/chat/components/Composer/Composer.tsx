@@ -1,4 +1,5 @@
 'use client';
+import { userFacingError } from '@/lib/client/userFacingError';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import GlassToast from '@/components/ui/GlassToast';
@@ -165,9 +166,7 @@ const Composer: React.FC<ComposerProps> = ({
       }
     } catch (error) {
       const message =
-        error instanceof Error && error.message
-          ? error.message
-          : '发送失败，请稍后重试';
+        userFacingError(error, '发送失败，请稍后重试');
       GlassToast.show({ icon: 'fail', content: message });
     } finally {
       submittingRef.current = false;

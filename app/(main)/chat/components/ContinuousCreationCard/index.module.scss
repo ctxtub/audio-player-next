@@ -1,3 +1,4 @@
+@use '../../../../../styles/controls' as controls;
 .card {
   display: flex;
   align-items: center;
@@ -113,3 +114,7 @@
     justify-content: flex-end;
   }
 }
+
+/* Shared action geometry across all visible states. */
+.retryButton { @include controls.action(primary); }
+.closeButton { @include controls.action; }

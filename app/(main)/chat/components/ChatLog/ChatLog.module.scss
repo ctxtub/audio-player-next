@@ -32,6 +32,18 @@
   scroll-padding-bottom: 0;
 }
 
+/* Compact Mini floats above the Composer. Keep the last message actions
+   scrollable above it without moving the Composer or shortening the card. */
+:global([data-layoutmode='compact-floating'][data-mini-visible='true'])
+  .scrollContainer:not(.scrollContainerEmpty) {
+  padding-bottom: calc(var(--size-mini-now-playing-compact-height) + var(--space-6));
+  scroll-padding-bottom: calc(var(--size-mini-now-playing-compact-height) + var(--space-6));
+}
+
+.messagesList {
+  flex-shrink: 0;
+}
+
 .messagesList {
   display: flex;
   flex-direction: column;

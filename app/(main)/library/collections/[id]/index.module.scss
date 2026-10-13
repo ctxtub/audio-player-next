@@ -1,3 +1,4 @@
+@use '../../../../../styles/controls' as controls;
 .storyDetailPage {
   width: min(100%, 860px);
   min-height: 100%;
@@ -459,3 +460,12 @@
 .management[open] summary { margin-bottom: var(--space-2); }
 /* 行内管理留在正文下方，避免桌面浮层遮住最右侧的更多入口。 */
 .memberCard > details { grid-column: 2; justify-self: start; }
+
+/* Shared action geometry across all visible states. */
+.primaryButton, .playButton, .retryButton { @include controls.action(primary); }
+.secondaryButton, .management > summary { @include controls.action; }
+.dangerButton { @include controls.action(danger); }
+.renameInput { @include controls.field; }
+.renameActions > button { flex: 1; }
+.collectionActions { align-items: stretch; }
+.actionError { color: var(--status-error); overflow-wrap: anywhere; }

@@ -1,5 +1,14 @@
+@use '../../styles/controls' as controls;
 .overlay { position: fixed; inset: 0; z-index: var(--z-modal); display: flex; align-items: center; justify-content: center; padding: var(--space-4); background: var(--bg-overlay); }
 .modal { width: var(--size-now-playing-panel-width); max-width: 100%; background: var(--bg-secondary); color: var(--text-primary); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg); }
 .dialog { padding: var(--space-6); outline: none; }
 .dialog div { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .dialog button { padding: var(--space-3); border: none; border-radius: var(--radius-md); background: var(--bg-tertiary); color: var(--text-primary); cursor: pointer; }
+
+/* Shared action geometry across all visible states. */
+.dialog { display: flex; flex-direction: column; gap: var(--space-4); }
+.dialog h2 { font-size: var(--text-xl); line-height: var(--leading-xl); }
+.dialog p { color: var(--text-secondary); font-size: var(--text-base); line-height: var(--leading-base); overflow-wrap: anywhere; }
+.dialog button { @include controls.action; flex: 1; }
+.dialog button:last-child { @include controls.action(primary); }
+.modal { max-height: calc(100dvh - var(--space-8)); overflow-y: auto; }

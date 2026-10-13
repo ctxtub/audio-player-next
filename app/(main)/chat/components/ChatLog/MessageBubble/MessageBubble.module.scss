@@ -1,3 +1,4 @@
+@use '../../../../../../styles/controls' as controls;
 /* 消息气泡 — spec 3.4 */
 .row {
   display: flex;
@@ -224,7 +225,7 @@
 .bubbleFailed {
   border-color: var(--status-error);
   background: color-mix(in srgb, var(--status-error) 18%, transparent);
-  color: color-mix(in srgb, #ffffff 85%, var(--status-error));
+  color: var(--text-primary);
 }
 
 .metaRow {
@@ -273,3 +274,6 @@
   background: color-mix(in srgb, var(--accent-primary) 45%, transparent);
   transform: translateY(0);
 }
+
+/* Shared action geometry across all visible states. */
+.retryButton { @include controls.action(outline); }

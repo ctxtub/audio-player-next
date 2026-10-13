@@ -1,4 +1,5 @@
 'use client';
+import { userFacingError } from '@/lib/client/userFacingError';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -49,7 +50,7 @@ export function useConversationResume() {
       if (result && !controller.signal.aborted) router.push('/chat');
     } catch (cause) {
       if ((cause as Error)?.name !== 'AbortError') {
-        setError(cause instanceof Error ? cause.message : '无法恢复创作，请重试');
+        setError(userFacingError(cause, '无法恢复创作，请重试'));
       }
     } finally {
       if (operationRef.current === controller) operationRef.current = null;

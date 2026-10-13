@@ -1,4 +1,5 @@
 'use client';
+import { userFacingError } from '@/lib/client/userFacingError';
 
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -119,7 +120,7 @@ export const StoryWorkCard: React.FC<StoryWorkCardProps> = ({
         await mutations.restore({ id: work.id });
       }
     } catch (err) {
-      setRestoreError(err instanceof Error ? err.message : '恢复失败，请重试');
+      setRestoreError(userFacingError(err, '恢复失败，请重试'));
     } finally {
       setIsRestoring(false);
     }

@@ -180,6 +180,15 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
               {playback.actionLabel}
             </button>
           )}
+          {showRetry && (
+            <button
+              type="button"
+              className={styles.retryButton}
+              onClick={handleRetryPromotion}
+            >
+              重试保存
+            </button>
+          )}
           {readyWorkId && <Link href={workPath(readyWorkId, collectionId)} className={styles.expandButton}>查看全文</Link>}
           {needsTruncation && !readyWorkId && (
             <button
@@ -190,15 +199,7 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
               查看全文
             </button>
           )}
-          {showRetry && (
-            <button
-              type="button"
-              className={styles.retryButton}
-              onClick={handleRetryPromotion}
-            >
-              重试保存
-            </button>
-          )}
+
         </div>
       )}
 

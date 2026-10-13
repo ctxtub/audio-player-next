@@ -1,3 +1,4 @@
+@use '../../styles/controls' as controls;
 /*  Expanded Now Playing Surface（spec §10/§11/§12）。
  * 响应式单一 Modal 语义 + CSS 断点切换形态（JS 不重挂载，resize 时 isExpanded 不变）：
  * - <768px：Modal Bottom Sheet（底部弹出，顶部 Handle 发起 drag dismiss）；
@@ -709,3 +710,22 @@
     opacity: 0;
   }
 }
+
+.closeButton { @include controls.icon-action; }
+.body [data-testid='expanded-view-story-button'], .body .playingWorkContextNav button,
+.body [data-testid='expanded-view-transcript-button'], .body [data-testid='expanded-transcript-back-button'],
+.body [data-testid='expanded-open-work-detail-button'], .body [data-testid='expanded-back-to-creation-button'],
+.body [data-testid='expanded-continue-creation-button'],
+.body [data-testid='expanded-sleep-timer-pill'], .body [data-testid='expanded-rate-pill'] { @include controls.action; }
+.body [data-testid='expanded-rate-menu'] button, .body [data-testid='expanded-sleep-timer-menu'] button { @include controls.action; width: 100%; }
+.body [data-testid='expanded-rate-menu'] [aria-checked='true'], .body [data-testid='expanded-sleep-timer-menu'] [aria-checked='true'] { color: var(--accent-primary); background: var(--accent-primary-subtle); }
+.body [data-testid='expanded-sleep-timer-menu'] input { @include controls.field; }
+.body [data-testid='expanded-rate-menu'], .body [data-testid='expanded-sleep-timer-menu'] { max-height: calc(100dvh - var(--space-12)); overflow-y: auto; }
+
+/* Keep every option inside the scrollable sheet instead of clipping an upward popup. */
+.body [data-testid='expanded-rate-menu'], .body [data-testid='expanded-sleep-timer-menu'] {
+  position: static; max-height: calc(var(--size-touch-target) * 5); margin-block: var(--space-2); overflow-y: auto;
+}
+.body [data-testid='expanded-sleep-timer-menu'] [data-testid='expanded-sleep-timer-custom-apply'] { @include controls.action(primary); }
+
+.dragHandleZone { min-height: var(--size-touch-target); }

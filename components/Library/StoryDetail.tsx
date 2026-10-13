@@ -1,4 +1,5 @@
 'use client';
+import { userFacingError } from '@/lib/client/userFacingError';
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -114,7 +115,7 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
       }
       setIsEditingTitle(false);
     } catch (err) {
-      setRenameError(err instanceof Error ? err.message : '重命名失败');
+      setRenameError(userFacingError(err, '重命名失败'));
     } finally {
       setIsRenaming(false);
     }

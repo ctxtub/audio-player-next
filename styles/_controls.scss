@@ -1,0 +1,78 @@
+/* Shared geometry and interaction states for ordinary frontend actions. */
+@mixin action($variant: secondary) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  min-height: var(--size-touch-target);
+  max-width: 100%;
+  padding: var(--space-2) var(--action-padding-inline, var(--space-4));
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-sm);
+  text-align: center;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  transform: none;
+  box-shadow: none;
+  transition: background-color var(--duration-fast) var(--ease-default), color var(--duration-fast) var(--ease-default), border-color var(--duration-fast) var(--ease-default);
+
+  @if $variant == primary {
+    color: var(--text-on-primary);
+    background: var(--accent-primary);
+    border-color: transparent;
+  } @else if $variant == outline {
+    color: var(--accent-primary);
+    background: transparent;
+  } @else if $variant == danger {
+    color: var(--status-error);
+    background: transparent;
+    border-color: color-mix(in srgb, var(--status-error) 35%, transparent);
+  }
+
+  &:hover:not(:disabled):not([data-disabled]), &[data-hovered]:not([data-disabled]) {
+    transform: none;
+    box-shadow: none;
+    @if $variant == primary { color: var(--text-on-primary); background: var(--accent-primary-hover); }
+    @else if $variant == danger { color: var(--status-error); background: color-mix(in srgb, var(--status-error) 10%, transparent); }
+    @else if $variant == outline { color: var(--accent-primary); background: var(--accent-primary-subtle); }
+    @else { color: var(--text-primary); background: var(--accent-primary-subtle); }
+  }
+  &:active:not(:disabled):not([data-disabled]), &[data-pressed]:not([data-disabled]) { transform: scale(0.98); }
+  &:disabled, &[data-disabled] { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+  &:focus-visible, &[data-focus-visible] { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { transition: none; }
+}
+
+@mixin icon-action {
+  @include action;
+  width: var(--size-touch-target);
+  height: var(--size-touch-target);
+  min-width: var(--size-touch-target);
+  padding: 0;
+  flex: none;
+}
+
+@mixin field {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--size-touch-target);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-input);
+  line-height: var(--leading-base);
+  &:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}

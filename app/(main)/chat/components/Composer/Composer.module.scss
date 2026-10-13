@@ -1,3 +1,4 @@
+@use '../../../../../styles/controls' as controls;
 /* 聊天输入栏 — spec 3.11, Liquid Glass */
 .container {
   position: relative;
@@ -105,3 +106,6 @@
   background: var(--gradient-brand);
   box-shadow: 0 4px 16px var(--accent-glow);
 }
+
+.sendButton { min-height: var(--size-touch-target); padding-inline: var(--space-2); }
+.textArea { min-width: 0; }

@@ -8,3 +8,15 @@
   justify-content: center;
   pointer-events: none;
 }
+
+.toast {
+  display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-lg); background: var(--bg-elevated); backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border); box-shadow: var(--shadow-lg); color: var(--text-primary);
+  font-size: var(--text-sm); line-height: var(--leading-sm); max-width: calc(100vw - var(--space-8));
+  overflow-wrap: anywhere; opacity: 0; transform: translateY(var(--space-2));
+  transition: opacity var(--duration-normal) var(--ease-default), transform var(--duration-normal) var(--ease-default);
+  pointer-events: auto;
+}
+.visible { opacity: 1; transform: translateY(0); }
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }

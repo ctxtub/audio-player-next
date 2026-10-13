@@ -1,4 +1,5 @@
 'use client';
+import { userFacingError } from '@/lib/client/userFacingError';
 import { CreationConfirmation } from '@/components/Library/CreationConfirmation';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -152,7 +153,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
       await usePlaybackStore.getState().ensureUnlocked();
       await beginChatStream(content);
     } catch (error) {
-      const message = error instanceof Error ? error.message : '发送失败，请稍后重试';
+      const message = userFacingError(error, '发送失败，请稍后重试');
       GlassToast.show({ icon: 'fail', content: message });
     }
   }, []);
@@ -233,7 +234,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
       await retryChatStream();
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : '重试失败，请稍后再试';
+        userFacingError(error, '重试失败，请稍后再试');
       GlassToast.show({ icon: 'fail', content: message });
     }
   }, []);

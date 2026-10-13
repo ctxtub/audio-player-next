@@ -9,6 +9,8 @@
 }
 
 .selectorItem {
+  min-width: 0;
+  min-height: var(--size-touch-target);
   display: flex;
   align-items: center;
   padding: var(--space-3) var(--space-4);

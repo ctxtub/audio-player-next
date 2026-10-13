@@ -1,4 +1,5 @@
 'use client';
+import { userFacingError } from '@/lib/client/userFacingError';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useLibraryMutationsSafe } from '@/lib/client/libraryMutations';
@@ -15,7 +16,7 @@ export function WorkManagement({ work }: { work: StoryWorkSummaryDTO }) {
   const [error, setError] = useState('');
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true); setError('');
-    try { await action(); } catch (err) { const message = err instanceof Error ? err.message : '操作失败，请重试'; setError(message); GlassToast.show({ icon: 'fail', content: message }); } finally { setBusy(false); }
+    try { await action(); } catch (err) { const message = userFacingError(err, '操作失败，请重试'); setError(message); GlassToast.show({ icon: 'fail', content: message }); } finally { setBusy(false); }
   };
   return <details className={styles.menu}>
     <summary aria-label={`管理《${work.title}》`}>更多</summary>
@@ -25,10 +26,10 @@ export function WorkManagement({ work }: { work: StoryWorkSummaryDTO }) {
       <button disabled={busy} onClick={() => run(() => mutations?.toggleFavorite({ id: work.id, favorite: !work.favoritedAt }) ?? Promise.resolve())}>{work.favoritedAt ? '取消收藏单篇' : '收藏单篇'}</button>
       <form onSubmit={(event) => { event.preventDefault(); void run(() => mutations?.rename({ id: work.id, title }) ?? Promise.resolve()); }}>
         <label>故事标题<input aria-label={`修改《${work.title}》标题`} value={title} maxLength={100} onChange={(event) => setTitle(event.target.value)} /></label>
-        <button disabled={busy || !title.trim()}>保存标题</button>
+        <button className={styles.primaryAction} disabled={busy || !title.trim()}>保存标题</button>
       </form>
-      <button disabled={busy} onClick={() => run(() => mutations?.moveToTrash({ id: work.id, title: work.title }) ?? Promise.resolve())}>移入回收站</button>
-      {error && <p role="alert">{error}</p>}
+      <button className={styles.dangerAction} disabled={busy} onClick={() => run(() => mutations?.moveToTrash({ id: work.id, title: work.title }) ?? Promise.resolve())}>移入回收站</button>
+      {error && <p className={styles.recordError} role="alert">{error}</p>}
     </div>
   </details>;
 }

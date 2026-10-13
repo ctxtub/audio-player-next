@@ -108,6 +108,8 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
     [hasMessages, isLoading],
   );
 
+  const retryableId = messages.findLast((message) => message.status === 'failed')?.id;
+
   return (
     <div className={containerClassName}>
       <div ref={scrollContainerRef} className={scrollContainerClassName}>
@@ -117,7 +119,7 @@ const ChatLog = forwardRef<HTMLDivElement | null, ChatLogProps>((props, ref) => 
               <MessageBubble
                 key={message.id}
                 message={message}
-                onRetry={onRetry}
+                onRetry={message.id === retryableId ? onRetry : undefined}
               />
             ))}
           </div>

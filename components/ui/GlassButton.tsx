@@ -52,10 +52,12 @@ const GlassButton: React.FC<GlassButtonProps> = ({
   return (
     <AriaButton
       isDisabled={isDisabled || loading}
+      aria-busy={loading || undefined}
       className={classNames}
       {...rest}
     >
-      {loading ? <span className={styles.spinner} /> : children}
+      {loading && <span className={styles.spinner} aria-hidden="true" />}
+      <span className={styles.buttonLabel}>{children}</span>
     </AriaButton>
   );
 };

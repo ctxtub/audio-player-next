@@ -1,3 +1,4 @@
+@use '../../styles/controls' as controls;
 .unavailableContainer {
   display: flex;
   flex-direction: column;
@@ -60,3 +61,6 @@
     opacity: 0.88;
   }
 }
+
+/* Shared action geometry across all visible states. */
+.backButton { @include controls.action(primary); }

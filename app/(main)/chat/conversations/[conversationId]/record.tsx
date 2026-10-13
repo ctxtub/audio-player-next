@@ -22,10 +22,10 @@ export default function ConversationRecord({ id }: { id: string }) {
     return { conversation, messages, collection };
   } });
   useEffect(() => { if (query.data && focusMessage) document.getElementById(`message-${focusMessage}`)?.scrollIntoView({ block: 'center' }); }, [query.data, focusMessage]);
-  if (query.isPending) return <p role="status">正在读取创作记录…</p>;
-  if (!query.data) return <section><h1>创作记录暂不可用</h1><button onClick={() => query.refetch()}>重试</button><Link href="/library">返回故事库</Link></section>;
+  if (query.isPending) return <section className={styles.recordPage}><div className={styles.recordState} role="status">正在读取创作记录…</div></section>;
+  if (!query.data) return <section className={styles.recordPage}><div className={styles.recordState}><h1>创作记录暂不可用</h1><div><button onClick={() => query.refetch()}>重试</button><Link href="/library">返回故事库</Link></div></div></section>;
   const { conversation, collection, messages } = query.data;
-  return <section className={styles.menuBody}>
+  return <section className={styles.recordPage}>
     <ConversationSwitchConfirmation
       open={resumeFlow.confirmationOpen}
       collectionTitle={resumeFlow.confirmationTitle}
@@ -34,7 +34,7 @@ export default function ConversationRecord({ id }: { id: string }) {
     <nav className={styles.recordNav}><Link className={styles.navLink} href={collection ? collectionPath(collection.id) : '/library'}>{collection ? `返回《${collection.title}》` : '返回故事库'}</Link></nav>
     <h1>{collection?.title ?? '创作记录'}</h1><p>创作记录 · 查看不会生成新故事</p>
     <button className={styles.play} disabled={resumeFlow.busy} onClick={() => void resumeFlow.resume(conversation.id, collection?.title ?? null)}>{resumeFlow.busy ? '正在准备创作…' : editingConversationId === conversation.id ? '返回创作' : '续写这个故事集'}</button>
-    {resumeFlow.error && <p role="alert">{resumeFlow.error}</p>}
+    {resumeFlow.error && <p className={styles.recordError} role="alert">{resumeFlow.error}</p>}
     {rehydrateServerMessages(messages).map((message) => <article key={message.id} id={`message-${message.id}`}><h2>{message.role === 'user' ? '你的想法' : '创作内容'}</h2><p style={{ whiteSpace: 'pre-wrap' }}>{message.content}</p></article>)}
   </section>;
 }

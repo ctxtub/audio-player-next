@@ -1,3 +1,4 @@
+@use '../../styles/controls' as controls;
 .undoToast {
   position: fixed;
   // 撤销提示坐于底部 Chrome（TabBar + docked Mini 真实高度 + 间距 + 设备安全区）之上，
@@ -80,3 +81,8 @@
     transform: translate(-50%, 0);
   }
 }
+
+.undoToast { z-index: var(--z-popover); gap: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-xl); background: var(--bg-elevated); color: var(--text-primary); backdrop-filter: var(--glass-blur); font-size: var(--text-sm); box-shadow: var(--shadow-lg); }
+.undoMessage { white-space: normal; overflow-wrap: anywhere; }
+.undoButton { @include controls.action(outline); flex: none; }
+.undoDismissBtn { @include controls.icon-action; }

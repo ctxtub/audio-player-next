@@ -1,3 +1,4 @@
+@use '../../../../styles/controls' as controls;
 /* Library 列表组件样式 — Liquid Glass 风格 */
 
 /* 1. 工具栏 (Toolbar) */
@@ -28,8 +29,9 @@
 .searchInput {
   width: 100%;
   height: 40px;
-  padding: 0 var(--space-9) 0 var(--space-9);
-  font-size: var(--text-sm);
+  padding: 0 var(--size-touch-target);
+  padding-inline-end: calc(var(--size-touch-target) + var(--space-3));
+  font-size: var(--text-input);
   color: var(--text-primary);
   background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
   backdrop-filter: var(--glass-blur);
@@ -793,3 +795,16 @@
     background-position: 0 50%;
   }
 }
+
+/* Shared action geometry across all visible states. */
+.playBtn, .emptyCtaBtn { @include controls.action(primary); }
+.restoreBtn, .retryBtn, .clearSearchBtnAction, .manualLoadButton { @include controls.action(outline); }
+.trashBtn, .deletePermanentlyBtn, .dangerBtn { @include controls.action(danger); }
+.cancelBtn, .cardActions details > summary { @include controls.action; }
+.clearSearchBtn, .favoriteBtn { @include controls.icon-action; }
+.confirmActions > button { flex: 1; }
+.searchInput { min-width: 0; min-height: var(--size-touch-target); }
+.searchBar { min-height: var(--size-touch-target); }
+.emptySubtitle, .confirmMessage { overflow-wrap: anywhere; }
+
+.tabBtn { min-height: var(--size-touch-target); }

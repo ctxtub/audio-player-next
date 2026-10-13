@@ -1,3 +1,4 @@
+@use '../../../styles/controls' as controls;
 /* Auth 页 — iOS 26 Liquid Glass 风格 */
 .page {
   display: flex;
@@ -371,3 +372,9 @@
     outline-offset: 2px;
   }
 }
+
+/* Shared action geometry across all visible states. */
+.submitButton { @include controls.action(primary); width: 100%; }
+.guestButton { @include controls.action; width: 100%; }
+.input { min-width: 0; min-height: var(--size-touch-target); }
+.apiErrorBar, .fieldError { overflow-wrap: anywhere; }

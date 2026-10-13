@@ -1,6 +1,8 @@
 /* 全局加载状态 */
 .loadingContainer {
-  min-height: 100vh;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -34,3 +36,5 @@
     transform: rotate(360deg);
   }
 }
+
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }

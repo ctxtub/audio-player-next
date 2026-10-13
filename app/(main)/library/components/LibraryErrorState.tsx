@@ -1,4 +1,5 @@
 'use client';
+import { userFacingError } from '@/lib/client/userFacingError';
 
 import React from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
@@ -23,7 +24,7 @@ export const LibraryErrorState: React.FC<LibraryErrorStateProps> = ({
       </div>
       <h3 className={styles.errorTitle}>故事库加载失败</h3>
       <p className={styles.emptySubtitle}>
-        {error?.message || '网络或服务异常，无法获取故事列表'}
+        {userFacingError(error, '网络或服务异常，无法获取故事列表')}
       </p>
       <button
         type="button"

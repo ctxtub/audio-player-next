@@ -27,7 +27,16 @@ const SummaryPartRenderer: FC<SummaryPartRendererProps> = ({ part }) => {
         <>
             <div
                 className={`${styles.summaryContainer} ${shouldTruncate ? styles.clickable : ''}`}
+                role={shouldTruncate ? 'button' : undefined}
+                tabIndex={shouldTruncate ? 0 : undefined}
+                aria-label={shouldTruncate ? '查看完整摘要' : undefined}
                 onClick={handleClick}
+                onKeyDown={(event) => {
+                    if (shouldTruncate && (event.key === 'Enter' || event.key === ' ')) {
+                        event.preventDefault();
+                        handleClick();
+                    }
+                }}
             >
                 <div className={styles.summaryIcon}><FileText size={20} strokeWidth={1.8} /></div>
                 <div className={styles.summaryContent}>

@@ -226,6 +226,8 @@
     }
 
     @media (max-width: 480px) {
+      .themeSelector > div { gap: var(--space-2); }
+      .themeSelector [role='radio'] { padding-inline: var(--space-1); }
       .themeOption {
         width: 100%;
         flex-direction: column;
@@ -246,3 +248,5 @@
     }
   }
 }
+
+.voiceSelectorOption > button { min-width: calc(var(--size-touch-target) * 2); }

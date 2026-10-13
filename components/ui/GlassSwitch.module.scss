@@ -1,6 +1,7 @@
 /* GlassSwitch — Liquid Glass 风格开关 */
 .switchRoot {
   display: inline-flex;
+  min-height: var(--size-touch-target);
   align-items: center;
   cursor: pointer;
   outline: none;

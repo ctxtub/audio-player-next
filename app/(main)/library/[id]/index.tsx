@@ -1,4 +1,5 @@
 'use client';
+import { userFacingError } from '@/lib/client/userFacingError';
 
 import React, { useContext, useEffect } from 'react';
 import Link from 'next/link';
@@ -113,7 +114,7 @@ const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id, expectedCollectio
           </div>
           <h2 className={styles.errorTitle}>故事详情加载失败</h2>
           <p className={styles.errorMessage}>
-            {error instanceof Error ? error.message : '网络或服务异常，请稍后重试'}
+            {userFacingError(error, '网络或服务异常，请稍后重试')}
           </p>
           <div className={styles.errorActions}>
             <button

@@ -49,7 +49,7 @@ function GlassSelector<T extends string = string>({
       {label && <Label className={styles.srOnly}>{label}</Label>}
       <div
         className={styles.selectorGrid}
-        style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
       >
         {options.map((option) => (
           <Radio

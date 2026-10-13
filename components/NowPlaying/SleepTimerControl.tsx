@@ -209,6 +209,7 @@ export const SleepTimerControl: React.FC<SleepTimerControlProps> = ({
                             type="number"
                             data-testid="expanded-sleep-timer-custom-input"
                             aria-label="自定义分钟数（10到120）"
+                            placeholder="自定义分钟"
                             min={SLEEP_TIMER_MIN_MINUTES}
                             max={SLEEP_TIMER_MAX_MINUTES}
                             step={SLEEP_TIMER_STEP_MINUTES}

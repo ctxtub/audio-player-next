@@ -1,7 +1,8 @@
 @use '../../../../../styles/controls' as controls;
 .storyDetailPage {
   width: min(100%, 860px);
-  min-height: 100%;
+  flex: 1 0 auto;
+  min-height: auto;
   margin: 0 auto;
   padding: var(--page-padding);
   padding-bottom: var(--space-8);

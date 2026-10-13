@@ -141,10 +141,10 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
         </p>
       </div>
 
-      {showPlayback && (
+      {showPlayback && playback.state === 'error' && (
         <div className={styles.playbackMeta}>
           <span
-            className={`${styles.playbackStatus} ${playback.state === 'error' ? styles.playbackStatusError : ''}`}
+            className={`${styles.playbackStatus} ${styles.playbackStatusError}`}
             aria-live="polite"
           >
             {playback.statusText}

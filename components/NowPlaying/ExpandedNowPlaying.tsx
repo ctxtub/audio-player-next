@@ -62,7 +62,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dialog, Modal as AriaModal, ModalOverlay } from 'react-aria-components';
 import { useDrag } from '@use-gesture/react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Headphones } from 'lucide-react';
+import { Clock, Headphones } from 'lucide-react';
 
 import { useNowPlayingUiStore } from '@/stores/nowPlayingUiStore';
 
@@ -420,13 +420,27 @@ export const ExpandedNowPlaying: React.FC = () => {
                                 disabled={!viewModel.hasSession}
                             />
                             {/*   Expanded 快捷 Timer（spec §31.1/§32：只改当前 Session，不改 Settings 默认）。 */}
-                            {isCreationTimer ? <p>自动播放时长 · 剩余 {formatRemainingMs(creation.remainingMs)} <Link href="/setting" onClick={handleClose}>前往设置</Link></p> : <SleepTimerControl
-                                mode={viewModel.sleepTimer.mode}
-                                remainingMs={viewModel.sleepTimer.remainingMs}
-                                isWork={viewModel.sleepTimer.isWork}
-                                onSelect={controls.setSleepTimer}
-                                disabled={!viewModel.hasSession}
-                            />}
+                            {isCreationTimer ? (
+                                <div className={styles.creationTimerRow} data-testid="expanded-creation-timer-row">
+                                    <div className={styles.creationTimerLeft}>
+                                        <Clock size={16} className={styles.creationTimerIcon} aria-hidden="true" />
+                                        <span className={styles.creationTimerText}>
+                                            自动播放时长 · 剩余 {formatRemainingMs(creation.remainingMs)}
+                                        </span>
+                                    </div>
+                                    <Link href="/setting" className={styles.creationTimerLink} onClick={handleClose}>
+                                        前往设置
+                                    </Link>
+                                </div>
+                            ) : (
+                                <SleepTimerControl
+                                    mode={viewModel.sleepTimer.mode}
+                                    remainingMs={viewModel.sleepTimer.remainingMs}
+                                    isWork={viewModel.sleepTimer.isWork}
+                                    onSelect={controls.setSleepTimer}
+                                    disabled={!viewModel.hasSession}
+                                />
+                            )}
                             {/*  Work 查看正文（spec §34：Work 导航口冻结）+
                                  Draft 查看正文（spec §35：Transcript 口，
                                 同文案独立 testid，点击只切局部 view，不导航）+

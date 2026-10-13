@@ -121,13 +121,17 @@ const parseStoredPosition = (raw: string | null): MiniFloatingPosition | null =>
     }
 };
 
+/** 根据环境与后缀解析 localStorage key。 */
+const getStorageKey = (suffix: string) =>
+    suffix ? `${MINI_FLOATING_POSITION_STORAGE_KEY}-${suffix}` : MINI_FLOATING_POSITION_STORAGE_KEY;
+
 /** 读取持久化位置并 clamp 到当前 viewport（容错：任何异常 → null）。 */
-const loadPersistedFloatingPosition = (): MiniFloatingPosition | null => {
+const loadPersistedFloatingPosition = (storageKey: string): MiniFloatingPosition | null => {
     try {
         if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
             return null;
         }
-        const raw = window.localStorage.getItem(MINI_FLOATING_POSITION_STORAGE_KEY);
+        const raw = window.localStorage.getItem(storageKey);
         const parsed = parseStoredPosition(raw);
         if (!parsed) {
             return null;
@@ -150,7 +154,7 @@ const loadPersistedFloatingPosition = (): MiniFloatingPosition | null => {
 };
 
 /** 持久化当前位置（容错：绝不 throw；null=默认态不写，保留缺省语义）。 */
-const persistFloatingPosition = (pos: MiniFloatingPosition | null): void => {
+const persistFloatingPosition = (pos: MiniFloatingPosition | null, storageKey: string): void => {
     try {
         if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
             return;
@@ -162,7 +166,7 @@ const persistFloatingPosition = (pos: MiniFloatingPosition | null): void => {
             return;
         }
         window.localStorage.setItem(
-            MINI_FLOATING_POSITION_STORAGE_KEY,
+            storageKey,
             JSON.stringify({ x: pos.x, y: pos.y })
         );
     } catch {
@@ -171,18 +175,23 @@ const persistFloatingPosition = (pos: MiniFloatingPosition | null): void => {
 };
 
 /**
- * Wide Floating 拖拽 hook。
- * @param enabled 仅 wide-floating 为 true（其它 mode 下手势禁用、坐标保留但不应用）。
+ * Floating 拖拽 hook（支持 wide-floating 与 compact-floating）。
+ * @param enabled 浮动模式下为 true。
+ * @param storageKeySuffix 存储键后缀（如 'compact' 或 'wide'）。
  */
-export const useMiniFloatingDrag = (enabled: boolean): MiniFloatingDrag => {
+export const useMiniFloatingDrag = (enabled: boolean, storageKeySuffix: string = ''): MiniFloatingDrag => {
+    const storageKey = getStorageKey(storageKeySuffix);
     const [position, setPosition] = useState<MiniFloatingPosition | null>(
-        () => loadPersistedFloatingPosition()
+        () => loadPersistedFloatingPosition(storageKey)
     );
     const [isDragging, setIsDragging] = useState(false);
     const panelRef = useRef<HTMLDivElement | null>(null);
     const positionRef = useRef<MiniFloatingPosition | null>(null);
     positionRef.current = position;
     const enabledRef = useRef(enabled);
+    enabledRef.current = enabled;
+    const storageKeyRef = useRef(storageKey);
+    storageKeyRef.current = storageKey;
     enabledRef.current = enabled;
 
     // 挂载后二次 re-clamp：以实测面板尺寸修正初始化回退尺寸的钳制误差。
@@ -197,7 +206,7 @@ export const useMiniFloatingDrag = (enabled: boolean): MiniFloatingDrag => {
             const clamped = clampFloatingPosition(cur.x, cur.y, viewport, panel);
             if (clamped.x !== cur.x || clamped.y !== cur.y) {
                 setPosition(clamped);
-                persistFloatingPosition(clamped);
+                persistFloatingPosition(clamped, storageKeyRef.current);
             }
         } catch {
             // 容错：保持已加载坐标。
@@ -206,7 +215,7 @@ export const useMiniFloatingDrag = (enabled: boolean): MiniFloatingDrag => {
 
     // 位置变更即持久化（drag end / resize repair / 初始化修正统一经此落盘）。
     useEffect(() => {
-        persistFloatingPosition(position);
+        persistFloatingPosition(position, storageKeyRef.current);
     }, [position]);
 
     // Resize repair（spec §18.4）：窗口缩小 re-clamp 现有位置防出界。
@@ -226,7 +235,7 @@ export const useMiniFloatingDrag = (enabled: boolean): MiniFloatingDrag => {
                 const clamped = clampFloatingPosition(cur.x, cur.y, viewport, panel);
                 if (clamped.x !== cur.x || clamped.y !== cur.y) {
                     setPosition(clamped);
-                    persistFloatingPosition(clamped);
+                    persistFloatingPosition(clamped, storageKeyRef.current);
                 }
             } catch {
                 // 容错：保留旧坐标。
@@ -285,7 +294,7 @@ export const useMiniFloatingDrag = (enabled: boolean): MiniFloatingDrag => {
                 const end = resolveFloatingDragEnd(nextX, nextY, viewport, panel);
                 setPosition(end);
                 // 同步落盘：保证 drag→即时 reload 仍可恢复（不依赖 effect 刷新时序）。
-                persistFloatingPosition(end);
+                persistFloatingPosition(end, storageKeyRef.current);
                 return undefined;
             }
             if (state.active) {

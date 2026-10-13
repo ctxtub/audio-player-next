@@ -25,9 +25,11 @@ const PLAYABLE_FIXTURE_REPEAT = 8;
 const INITIAL_STORY_FIXTURE_REPEAT = 24;
 const CONTINUATION_TTS_DELAY_MS = 10000;
 
-// 中文注释：Agent 非流固定响应（确定性文本，不访问真实上游）。
-const AGENT_FIXED_REPLY = 'harness 固定 mock 回复';
-const CONTINUATION_FIXED_REPLY = 'harness 连续 mock 回复';
+// 中文注释：Agent 非流固定响应（真实长文本故事样本，模拟真实用户创作体验）。
+const AGENT_FIXED_REPLY =
+    '在微光闪烁的宁静森林深处，小松鼠皮皮戴着红围巾，在厚厚的松针落叶间寻觅着传说中的金色橡果。微风吹过古老的橡树林，金黄色的树叶在月光下轻盈起舞。小动物们围坐在树洞图书馆前，聆听着猫头鹰学者讲述百年前森林守护者的奇妙历险物语。随着夜幕低垂，一盏盏萤火虫提灯在树梢悄然点亮，整个森林沉浸在温暖而安详的晚安梦境之中。';
+const CONTINUATION_FIXED_REPLY =
+    '深海潜航员阿布驾驶着微光潜艇，缓缓穿梭在一千米幽蓝静谧的深海珊瑚峡谷。窗外漫天漂浮的发光水母宛如深海繁星，在静止的洋流中变幻着绚烂的蓝紫光晕。忽然，一只友善的荧光小海龟轻轻拍打着舷窗，示意阿布跟随着它探索失落的水下梦境神殿。海水在静默中流动，古老的珊瑚石柱上刻满了海底星空的秘密图腾。';
 const COLLECTION_TITLE_FIXED_REPLY = '山间小屋故事集';
 
 // 中文注释：运行中的 mock 实例表（stop 时按 handle id 回收）。

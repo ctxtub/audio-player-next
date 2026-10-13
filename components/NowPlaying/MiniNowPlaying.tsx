@@ -118,9 +118,10 @@ export const MiniNowPlaying: React.FC = () => {
 
     const layoutMode = useNowPlayingLayoutMode(desktopFloatingPlayerEnabled);
     const { openDetails } = useNowPlayingEntry();
-    //  floating drag：hook 恒挂载（跨 mode 保留内存坐标），手势仅 floating 生效。
-    const isFloating = layoutMode === 'wide-floating';
-    const floating = useMiniFloatingDrag(isFloating);
+    // floating drag：在 wide-floating 与 compact-floating 两种悬浮模式下均支持手势拖拽
+    const isFloating = layoutMode === 'wide-floating' || layoutMode === 'compact-floating';
+    const isCompact = layoutMode === 'compact-floating';
+    const floating = useMiniFloatingDrag(isFloating, isCompact ? 'compact' : 'wide');
 
     const viewModel = deriveMiniNowPlayingViewModel(
         {

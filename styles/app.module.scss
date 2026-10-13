@@ -40,10 +40,10 @@
   }
 }
 
-/* 手机列表末项可滚动到悬浮入口之上；只加滚动空间，不抬高 Composer。 */
+/* 手机列表末项可滚动到悬浮入口之上；配合可拖拽 Mini，底距保持紧凑自然，消除过度留白。 */
 .app[data-layoutmode='compact-floating'][data-mini-visible='true'] .content:not(:has([data-chat-composer])) {
-  padding-bottom: calc(var(--main-tabbar-occupied-height) + var(--size-mini-now-playing-compact-height) + var(--space-12));
-  scroll-padding-bottom: calc(var(--main-tabbar-occupied-height) + var(--size-mini-now-playing-compact-height) + var(--space-12));
+  padding-bottom: calc(var(--main-tabbar-occupied-height) + var(--size-mini-now-playing-compact-height) + var(--space-3));
+  scroll-padding-bottom: calc(var(--main-tabbar-occupied-height) + var(--size-mini-now-playing-compact-height) + var(--space-3));
 }
 
 .appWithDockedNowPlaying {
@@ -60,8 +60,9 @@
   scroll-padding-bottom: var(--space-3);
 }
 
+/* 桌面悬浮播放器为自由拖拽浮层，不挤占静态排版高度；仅需为底部固定导航保留基准高度，让输入栏紧贴底部导航栏自然停靠。 */
 .app[data-layoutmode='wide-floating'][data-mini-visible='true'] .content {
-  margin-bottom: var(--bottom-chrome-safe-bottom);
+  margin-bottom: var(--main-tabbar-occupied-height);
   padding-bottom: var(--space-3);
   scroll-padding-bottom: var(--space-3);
 }

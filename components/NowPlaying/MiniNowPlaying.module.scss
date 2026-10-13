@@ -69,7 +69,8 @@
 }
 
 /*  floating 已拖拽：释放右下锚点，left/top 内联坐标生效。 */
-.miniRoot[data-layoutmode='wide-floating'][data-dragged='true'] {
+.miniRoot[data-layoutmode='wide-floating'][data-dragged='true'],
+.miniRoot[data-layoutmode='compact-floating'][data-dragged='true'] {
   right: auto;
   bottom: auto;
 }
@@ -80,14 +81,16 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .miniRoot[data-layoutmode='wide-floating'] {
+  .miniRoot[data-layoutmode='wide-floating'],
+  .miniRoot[data-layoutmode='compact-floating'] {
     transition:
       left var(--duration-normal, 200ms) var(--ease-default, ease),
       top var(--duration-normal, 200ms) var(--ease-default, ease),
       opacity var(--duration-normal, 200ms) var(--ease-default, ease);
   }
 
-  .miniRoot[data-layoutmode='wide-floating'][data-dragging='true'] {
+  .miniRoot[data-layoutmode='wide-floating'][data-dragging='true'],
+  .miniRoot[data-layoutmode='compact-floating'][data-dragging='true'] {
     transition: none;
   }
 }

@@ -282,7 +282,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         onSuggestionSelect={handleSuggestionSelect}
       />
       <ContinuousCreationBar collectionTitle={collectionTitle} />
-      {previousConversationId && <Link href={conversationPath(previousConversationId)}>返回上一份创作（已保留输入）</Link>}
+      {previousConversationId && <Link className={styles.previousConversationLink} href={conversationPath(previousConversationId)}>返回上一份创作（已保留输入）</Link>}
       <MessageArea
         messages={messages}
         isLoading={false}

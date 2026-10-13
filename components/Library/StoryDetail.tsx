@@ -165,7 +165,7 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
           <ArrowLeft size={16} />
           <span>{work.collectionTitle ? `返回《${work.collectionTitle}》` : '返回故事库'}</span>
         </Link>
-        {work.conversationId && <Link href={`${conversationPath(work.conversationId)}${work.sourceMessageId ? `?focusMessage=${encodeURIComponent(work.sourceMessageId)}` : ''}`}>查看创作记录</Link>}
+        {work.conversationId && <Link className={styles.recordLink} href={`${conversationPath(work.conversationId)}${work.sourceMessageId ? `?focusMessage=${encodeURIComponent(work.sourceMessageId)}` : ''}`}>查看创作记录</Link>}
       </nav>
 
       {/* 标题与元信息 Hero */}

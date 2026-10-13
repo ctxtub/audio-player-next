@@ -224,5 +224,25 @@
       font-weight: var(--weight-semibold);
       color: var(--text-primary);
     }
+
+    @media (max-width: 480px) {
+      .themeOption {
+        width: 100%;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--space-2);
+        text-align: center;
+      }
+
+      .themeOptionContent {
+        align-items: center;
+        min-width: 0;
+      }
+
+      .themeOptionLabel {
+        white-space: nowrap;
+        word-break: keep-all;
+      }
+    }
   }
 }

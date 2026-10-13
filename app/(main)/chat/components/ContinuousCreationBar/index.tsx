@@ -69,16 +69,18 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
         </div>
 
         <span className={styles.budget} data-testid="continuous-remaining-budget">
-          自动播放时长 · {budgetMs ? `${Math.round(budgetMs / 60000)}分钟` : '加载中'} · 剩余 {ready ? formatRemainingMs(remainingMs) : '—'}
+          {enabled
+            ? `自动播放时长 · ${budgetMs ? `${Math.round(budgetMs / 60000)}分钟` : '加载中'} · 剩余 ${ready ? formatRemainingMs(remainingMs) : '—'}`
+            : `时长偏好 · ${config.defaultSleepTimerMinutes || 30}分钟`}
         </span>
 
         {ready && configReady ? <div className={styles.directControls}>
           <div className={styles.toggleLabel}>
-            <span>连续创作</span>
+            <span>自动播放与连续创作</span>
             <GlassSwitch
               isSelected={config.defaultSleepTimerEnabled}
               onChange={(next) => updateConfig({ defaultSleepTimerEnabled: next })}
-              label="连续创作开关"
+              label="自动播放与连续创作开关"
             />
           </div>
           <div className={styles.durationControl}>
@@ -94,7 +96,10 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
           </div>
         </div> : <span className={styles.scopeHint}>正在恢复本次控制…</span>}
 
-        <span className={styles.scopeHint}>与设置同步；调整时长保留已消耗时间，暂停、生成和准备期间不计时，到期停止。</span>
+        <details className={styles.help}>
+          <summary>自动播放与连续创作说明</summary>
+          <p>开启后，按本次时长自动播放并连续创作；暂停、生成和语音准备期间不计时，刷新保留剩余时长。时长耗尽后停止自动播放与连续创作，可重置时长。关闭后停止自动续播与连续创作，已保存故事仍可手动收听。</p>
+        </details>
 
         {ready && enabled && status === 'ended_budget' && <button type="button" className={styles.action} onClick={resetContinuousCreationDuration}>重置时长</button>}
         <Link className={styles.action} href="/setting">前往设置</Link>

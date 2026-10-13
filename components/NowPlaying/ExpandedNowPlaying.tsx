@@ -450,12 +450,18 @@ export const ExpandedNowPlaying: React.FC = () => {
                                     className={styles.endedBadge}
                                     data-testid="expanded-ended-badge"
                                 >
-                                    播放完成 · 再次播放请回 Mini
+                                    播放完成
                                 </div>
                             ) : null}
-                            <div className={styles.hintLine} data-testid="expanded-hint">
-                                关闭后播放继续
-                            </div>
+                            {viewModel.isPlaying ? (
+                                <div className={styles.hintLine} data-testid="expanded-hint">
+                                    关闭后播放继续
+                                </div>
+                            ) : viewModel.sessionStatus === 'paused' ? (
+                                <div className={styles.hintLine} data-testid="expanded-hint">
+                                    当前已暂停
+                                </div>
+                            ) : null}
                                 </>
                             )}
                         </div>

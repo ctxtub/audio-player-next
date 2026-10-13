@@ -85,6 +85,31 @@ test.describe("集合详情起播跨页播放", () => {
         expect(mini.secondary).not.toBeNull();
         expect(mini.secondary as string).toContain(firstWorkTitle);
 
+        // Wide floating Mini occupies a shared Chrome shelf; it must not cover
+        // settings actions while a story is active.
+        await page.getByRole("tab", { name: "设置" }).click();
+        await page.waitForURL("**/setting", { timeout: 15000 });
+        const floatingMini = page.getByTestId("mini-now-playing");
+        const settingsContent = page.getByTestId("main-chrome-content");
+        const floatingSwitch = page.getByRole("switch", { name: "自动播放与连续创作开关" });
+        const floatingSwitchControl = floatingSwitch.locator("xpath=ancestor::label[1]");
+        await floatingSwitchControl.scrollIntoViewIfNeeded();
+        await expect(floatingSwitchControl).toBeInViewport();
+        const wideMiniBox = await floatingMini.boundingBox();
+        const contentBox = await settingsContent.boundingBox();
+        expect(wideMiniBox).not.toBeNull();
+        expect(contentBox).not.toBeNull();
+        expect((contentBox as { y: number; height: number }).y + (contentBox as { height: number }).height)
+            .toBeLessThanOrEqual((wideMiniBox as { y: number }).y);
+        await page.getByRole("tab", { name: "故事库" }).click();
+        await page.waitForURL("**/library", { timeout: 15000 });
+        const collectionCardForReturn = page.getByTestId(/^collection-card-/)
+            .filter({ hasText: collectionTitle }).first();
+        await expect(collectionCardForReturn).toBeVisible();
+        await collectionCardForReturn.getByTestId(/^collection-link-/).click();
+        await page.waitForURL("**/library/collections/**", { timeout: 15000 });
+        await expect(page.getByTestId("collection-detail-page")).toBeVisible();
+
         // ⑤ 打开 Expanded：标题/副标题一致，时间线秒级可见。
         await openExpandedFromMini(page);
         const expanded = await readExpandedTitles(page);
@@ -96,6 +121,10 @@ test.describe("集合详情起播跨页播放", () => {
         await expect(page.getByTestId("expanded-timeline-duration")).toContainText(":", {
             timeout: 10000,
         });
+        const collectionNav = page.getByRole("button", { name: "查看故事集", exact: true });
+        await expect(collectionNav).toBeVisible({ timeout: 15000 });
+        const collectionNavBox = await collectionNav.boundingBox();
+        expect(collectionNavBox!.height).toBeGreaterThanOrEqual(44);
         await page.setViewportSize({ width: 1440, height: 900 });
         await captureVisual(page, "1440-expanded");
         await page.setViewportSize(initialViewport);

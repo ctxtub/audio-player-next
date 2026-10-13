@@ -12,6 +12,13 @@
     color var(--duration-normal) var(--ease-default);
 }
 
+/* Wide MainChrome now removes the complete shared shelf from the scroll viewport.
+   The chat page must not cancel that reservation a second time. */
+:global([data-layoutmode='wide-floating'][data-mini-visible='true']) .chatPage,
+:global([data-layoutmode='wide-docked'][data-mini-visible='true']) .chatPage {
+  margin-bottom: 0;
+}
+
 .mainContent {
   flex: 1 1 auto;
   display: flex;

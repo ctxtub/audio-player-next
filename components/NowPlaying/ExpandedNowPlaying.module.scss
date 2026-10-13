@@ -490,6 +490,38 @@
   cursor: pointer;
 }
 
+.body .playingWorkContextNav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.body .playingWorkContextNav button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: var(--size-touch-target);
+  padding: var(--space-2) var(--space-3);
+  border: 0.5px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.body .playingWorkContextNav button:hover {
+  background: var(--accent-primary-subtle);
+}
+
+.body .playingWorkContextNav button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
 .body [data-testid='expanded-actions'] > :only-child {
   grid-column: 1 / -1;
 }

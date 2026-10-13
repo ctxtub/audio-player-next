@@ -7,8 +7,10 @@ import { useLibraryDetailQuery } from '@/lib/client/libraryQueries';
 import { collectionPath, conversationPath } from '@/lib/navigation/storyRoutes';
 import { refreshPlayingWorkMetadata } from '@/app/services/playbackSessionFlow';
 import { selectCollectionWork } from '@/app/services/collectionPlaybackFlow';
+import { BookOpen, MessageCircle } from 'lucide-react';
 import GlassToast from '@/components/ui/GlassToast';
 import styles from '@/components/Library/storyControls.module.scss';
+import playerStyles from './ExpandedNowPlaying.module.scss';
 /** 播放内容导航和回听队列只消费正式归属及编排入口。 */
 export function PlayingWorkContext({ close }: { close: () => void }) {
   const router = useRouter();
@@ -20,8 +22,10 @@ export function PlayingWorkContext({ close }: { close: () => void }) {
   const navigate = (path: string) => { close(); router.push(path); };
   const select = async (index: number) => { try { await selectCollectionWork(index); } catch { GlassToast.show({ icon: 'fail', content: '准备语音失败，请重试或跳过' }); } };
   return <div className={styles.menuBody}>
-    {data?.collectionId && <button onClick={() => navigate(`${collectionPath(data.collectionId!)}?focusWork=${workId}`)}>查看故事集</button>}
-    {data?.conversationId && <button onClick={() => navigate(`${conversationPath(data.conversationId!)}${data.sourceMessageId ? `?focusMessage=${encodeURIComponent(data.sourceMessageId)}` : ''}`)}>查看创作记录</button>}
+    {data?.collectionId || data?.conversationId ? <div className={playerStyles.playingWorkContextNav} data-testid="playing-work-context-nav">
+      {data?.collectionId && <button type="button" onClick={() => navigate(`${collectionPath(data.collectionId!)}?focusWork=${workId}`)}><BookOpen size={18} aria-hidden="true" /><span>查看故事集</span></button>}
+      {data?.conversationId && <button type="button" onClick={() => navigate(`${conversationPath(data.conversationId!)}${data.sourceMessageId ? `?focusMessage=${encodeURIComponent(data.sourceMessageId)}` : ''}`)}><MessageCircle size={18} aria-hidden="true" /><span>查看创作记录</span></button>}
+    </div> : null}
     {queue.collectionId && <section aria-label="集内播放列表">
       <p>整集回听 · 第 {queue.index + 1} / {queue.works.length} 篇</p>
       {queue.preparingWorkId && <p role="status">正在准备下一篇语音…</p>}

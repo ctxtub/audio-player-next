@@ -67,7 +67,7 @@ export type PlaybackControlsProps = {
 const actionLabel: Record<ExpandedPlaybackAction, string> = {
     play: '播放',
     pause: '暂停',
-    restart: '再次播放',
+    restart: '重新播放',
     retry: '重试播放',
     disabled: '正在准备语音',
 };
@@ -83,9 +83,8 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
 }) => {
     const isBusy = primaryAction === 'disabled';
     const isEnded = primaryAction === 'restart';
-    // ended 时主播放键置灰（需经从头播放重开）；其余按动作映射。
-    const playDisabled = isBusy || isEnded;
-    const pauseDisabled = isBusy || primaryAction !== 'pause';
+    // ended 时主播放键执行同一重播回调；仅准备中或不可重启的异常态置灰。
+    const playDisabled = isBusy || (isEnded && !canRestart);
     const seekDisabled = isBusy;
     const restartDisabled = isBusy || !canRestart;
 
@@ -121,7 +120,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                 type="button"
                 data-testid="expanded-play-button"
                 onClick={handlePrimary}
-                disabled={playDisabled && pauseDisabled}
+                disabled={playDisabled}
                 aria-label={actionLabel[primaryAction]}
             >
                 <PrimaryIcon size={28} aria-hidden="true" />

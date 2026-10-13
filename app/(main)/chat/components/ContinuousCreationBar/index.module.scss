@@ -111,24 +111,92 @@
 }
 
 .scopeHint {
-  flex: 1 1 100%;
+  flex: 0 1 auto;
   color: var(--text-secondary, rgba(255, 255, 255, 0.65));
   font-size: 11px;
 }
 
+.help {
+  flex: 0 1 100%;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.65));
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.help summary {
+  width: fit-content;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.72));
+  cursor: pointer;
+}
+
+.help p {
+  max-width: 72ch;
+  margin: 6px 0 0;
+}
+
 @media (max-width: 480px) {
+  .container {
+    gap: 6px;
+    padding: 8px 12px;
+  }
+
   .controlRow {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    gap: 6px 10px;
+  }
+
+  .statusCard {
+    grid-column: 1;
+    justify-self: start;
   }
 
   .budget {
     margin-left: 0;
+    grid-column: 2;
+    text-align: right;
   }
 
-  .directControls,
+  .collectionTitle {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .directControls {
+    grid-column: 1 / -1;
+    flex: 0 1 auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .toggleLabel {
+    justify-content: space-between;
+  }
+
   .durationControl {
     align-items: flex-start;
     flex-direction: column;
+    flex: 0 1 auto;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .help {
+    grid-column: 1 / -1;
+    flex: 0 1 auto;
+  }
+
+  .action {
+    grid-column: 1 / -1;
+    align-self: flex-start;
+  }
+
+  .scopeHint {
+    grid-column: 1 / -1;
   }
 }
 

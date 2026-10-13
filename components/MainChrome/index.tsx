@@ -49,33 +49,30 @@ export const MainChrome: React.FC<MainChromeProps> = ({ children }) => {
         : appStyles.app;
 
     /**
-     * 安全区真实高度：docked Mini 挂载时用 ResizeObserver 测量其真实高度，
-     * 写入 --mini-player-occupied-height（长标题换行撑高时仍足额避让）；
-     * 未 docked（无 session/Expanded/keyboard/floating）时清除内联值，
-     * 回落样式表 0px，不残留固定空白。SSR 无 ResizeObserver 时静默跳过。
+     * 安全带高度使用 Mini 的实际 border-box，覆盖浮动与 docked 两种宽屏形态；
+     * 长标题换行或主题字体变化时仍足额避让。无 Mini/Expanded/compact 时清除
+     * 内联值并回落 CSS token，不残留固定空白。SSR 无 ResizeObserver 时静默跳过。
      */
     useEffect(() => {
         const appEl = appRef.current;
-        if (!appEl || !state.hasDockedMini) {
+        if (!appEl || !state.visible || state.layoutMode === 'compact-floating') {
             appEl?.style.removeProperty('--mini-player-occupied-height');
             return undefined;
         }
         if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined') {
             return undefined;
         }
-        const applyHeight = (height: number): void => {
+        const miniEl = appEl.querySelector<HTMLElement>('[data-testid="mini-now-playing"]');
+        const applyHeight = (): void => {
+            const height = miniEl?.getBoundingClientRect().height ?? 0;
             if (Number.isFinite(height) && height > 0) {
                 appEl.style.setProperty('--mini-player-occupied-height', `${Math.ceil(height)}px`);
             }
         };
-        const miniEl = appEl.querySelector('[data-testid="mini-now-playing"]');
-        if (miniEl) {
-            applyHeight(miniEl.getBoundingClientRect().height);
-        }
+        applyHeight();
         const observer = new ResizeObserver((entries) => {
-            const entry = entries[0];
-            if (entry) {
-                applyHeight(entry.contentRect.height);
+            if (entries.length > 0) {
+                applyHeight();
             }
         });
         if (miniEl) {
@@ -85,7 +82,7 @@ export const MainChrome: React.FC<MainChromeProps> = ({ children }) => {
             observer.disconnect();
             appEl.style.removeProperty('--mini-player-occupied-height');
         };
-    }, [state.hasDockedMini]);
+    }, [state.layoutMode, state.visible]);
 
     return (
         <div

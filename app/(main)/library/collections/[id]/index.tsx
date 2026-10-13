@@ -14,6 +14,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { libraryReturnPath } from '@/components/Library/LibraryNavigationMemory';
 import { WorkManagement } from '@/components/Library/WorkManagement';
+import { ConversationSwitchConfirmation } from '@/components/Library/ConversationSwitchConfirmation';
+import { useConversationResume } from '@/components/Library/useConversationResume';
 import { conversationPath, workPath } from '@/lib/navigation/storyRoutes';
 import { playCollection } from '@/app/services/collectionPlaybackFlow';
 import { formatPlaybackTime } from '@/lib/playback/formatTime';
@@ -48,6 +50,7 @@ export interface CollectionDetailPageProps {
 }
 
 const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
+  const resumeFlow = useConversationResume();
   const isValidId = typeof id === 'string' && id.length > 0 && id.length <= 64;
   const router = useContext(AppRouterContext);
   const searchParams = useSearchParams();
@@ -198,6 +201,11 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
 
   return (
     <div className={styles.storyDetailPage} data-testid="collection-detail-page">
+      <ConversationSwitchConfirmation
+        open={resumeFlow.confirmationOpen}
+        collectionTitle={resumeFlow.confirmationTitle}
+        resolve={resumeFlow.resolveConfirmation}
+      />
       <header className={styles.detailHero}>
         <Link href={libraryReturnPath()} className={styles.backLink} data-testid="collection-back-btn">
           <ChevronLeft size={16} />
@@ -254,7 +262,17 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
           <div className={styles.collectionActions}>
             <button className={styles.primaryButton} disabled={!data.works.length} onClick={() => handlePlayCollection('resume')}>继续听整集</button>
             <button className={styles.secondaryButton} disabled={!data.works.length} onClick={() => handlePlayCollection('restart')}>从头听整集</button>
-            {data.conversationId && <Link className={styles.secondaryButton} href={conversationPath(data.conversationId)}>查看创作记录</Link>}
+            {data.conversationId && <>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                disabled={resumeFlow.busy}
+                onClick={() => void resumeFlow.resume(data.conversationId!, data.title)}
+              >
+                {resumeFlow.busy ? '正在准备创作…' : '续写这个故事集'}
+              </button>
+              <Link className={styles.secondaryButton} href={conversationPath(data.conversationId)}>查看创作记录</Link>
+            </>}
             <details className={styles.management}><summary>管理故事集</summary>
             {!isRenaming ? (
               <button
@@ -308,6 +326,11 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
         {actionError ? (
           <p className={styles.actionError} role="alert">
             {actionError}
+          </p>
+        ) : null}
+        {resumeFlow.error ? (
+          <p className={styles.actionError} role="alert">
+            {resumeFlow.error}
           </p>
         ) : null}
         {!membersOrdered ? (

@@ -13,6 +13,12 @@
   -webkit-backdrop-filter: var(--glass-blur);
 }
 
+/* Wide MainChrome already reserves the Mini + TabBar shelf outside this page. */
+:global([data-layoutmode='wide-floating'][data-mini-visible='true']) .container,
+:global([data-layoutmode='wide-docked'][data-mini-visible='true']) .container {
+  padding-bottom: var(--space-3);
+}
+
 .leftSlot {
   display: flex;
   align-items: center;

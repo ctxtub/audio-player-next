@@ -8,6 +8,35 @@
     color var(--duration-normal) var(--ease-default);
 }
 
+.previousConversationLink {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  transition: var(--transition-colors);
+}
+
+.previousConversationLink:visited {
+  color: var(--text-secondary);
+}
+
+.previousConversationLink:hover {
+  color: var(--accent-primary);
+  background: var(--bg-tertiary);
+}
+
+.previousConversationLink:focus-visible {
+  color: var(--text-primary);
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
 .messageArea {
   flex: 1;
   display: flex;

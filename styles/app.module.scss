@@ -47,12 +47,29 @@
 }
 
 .appWithDockedNowPlaying {
-  --mini-player-occupied-height: var(--size-mini-now-playing-height);
+  --mini-player-occupied-height: calc(var(--size-mini-now-playing-height) + var(--space-3));
   --bottom-chrome-gap: var(--space-2);
 }
 
-/* 桌面浮动 Mini 同样占用默认停靠区域，滚动定位须避让真实控制层。 */
+/* Wide Mini uses one real viewport-safe shelf across routes. Reducing the
+   scroll viewport keeps existing page controls out from behind fixed Chrome;
+   trailing padding alone only changes scroll extent and still permits overlap. */
+.app[data-layoutmode='wide-docked'][data-mini-visible='true'] .content {
+  margin-bottom: var(--bottom-chrome-safe-bottom);
+  padding-bottom: var(--space-3);
+  scroll-padding-bottom: var(--space-3);
+}
+
 .app[data-layoutmode='wide-floating'][data-mini-visible='true'] .content {
-  padding-bottom: calc(var(--main-tabbar-occupied-height) + var(--size-mini-now-playing-height) + var(--size-mini-now-playing-height) + var(--space-8));
-  scroll-padding-bottom: calc(var(--main-tabbar-occupied-height) + var(--size-mini-now-playing-height) + var(--size-mini-now-playing-height) + var(--space-8));
+  margin-bottom: var(--bottom-chrome-safe-bottom);
+  padding-bottom: var(--space-3);
+  scroll-padding-bottom: var(--space-3);
+}
+
+.app[data-layoutmode='wide-floating'][data-mini-visible='true'] {
+  /* Initial fallback includes chrome padding; ResizeObserver replaces it with
+     the exact border-box height once Mini mounts. Floating and docked share a
+     single shelf; floating changes horizontal placement and drag behavior. */
+  --mini-player-occupied-height: calc(var(--size-mini-now-playing-height) + var(--space-3));
+  --bottom-chrome-gap: var(--space-2);
 }

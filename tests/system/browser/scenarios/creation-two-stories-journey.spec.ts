@@ -46,7 +46,7 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         await page.setViewportSize(initialViewport);
 
         // 创作页控件与设置共用偏好：本次时长可在页面内调整并立即反映到预算。
-        const directToggle = page.getByRole("switch", { name: "连续创作开关" });
+        const directToggle = page.getByRole("switch", { name: "自动播放与连续创作开关" });
         const durationSlider = page.getByRole("slider", { name: "选择本次自动播放时长" });
         await expect(directToggle).toBeChecked();
         await expect(durationSlider).toHaveValue("30");
@@ -58,6 +58,8 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         await directToggle.press("Space");
         await expect(continuousStatusText(page)).toHaveText("连续创作已关闭");
         await expect(directToggle).not.toBeChecked();
+        await expect(page.getByTestId("continuous-remaining-budget")).toContainText("时长偏好");
+        await expect(page.getByTestId("continuous-remaining-budget")).not.toContainText("剩余");
         await directToggle.press("Space");
         await expect(continuousStatusText(page)).toHaveText("连续创作已开启");
         await expect(directToggle).toBeChecked();
@@ -66,7 +68,9 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         await setContinuousEnabled(page, false);
         await page.reload({ waitUntil: 'networkidle' });
         await expect(continuousStatusText(page)).toHaveText('连续创作已关闭');
-        await expect(page.getByRole('switch', { name: '连续创作开关' })).not.toBeChecked();
+        await expect(page.getByRole('switch', { name: '自动播放与连续创作开关' })).not.toBeChecked();
+        await expect(page.getByTestId('continuous-remaining-budget')).toContainText('时长偏好');
+        await expect(page.getByTestId('continuous-remaining-budget')).not.toContainText('剩余');
         await sendStory(page, "写一个关于山间小屋的短故事");
         const firstAction = cardActionButton(page, 0);
         await expect(firstAction).toHaveText("正在准备语音", { timeout: 90000 });

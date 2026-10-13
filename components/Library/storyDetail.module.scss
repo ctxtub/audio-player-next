@@ -28,6 +28,21 @@
   }
 }
 
+.recordLink,
+.recordLink:visited {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-touch-target, 44px);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  transition: color var(--duration-fast, 150ms) ease;
+
+  &:hover {
+    color: var(--accent-primary);
+  }
+}
+
 .idBadge {
   font-family: var(--font-mono, monospace);
   font-size: var(--text-xs, 12px);
@@ -164,6 +179,7 @@
 }
 
 .favoriteBtn {
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -189,6 +205,7 @@
 }
 
 .favoriteBtnActive {
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -209,6 +226,7 @@
 }
 
 .trashBtn {
+  min-height: 40px;
   display: inline-flex;
   align-items: center;
   gap: 6px;

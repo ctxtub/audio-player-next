@@ -324,6 +324,7 @@
   align-items: center;
   cursor: pointer;
   position: relative;
+  touch-action: none;
 }
 
 .body [data-testid='expanded-timeline-track']::before {
@@ -333,6 +334,7 @@
   height: var(--space-1);
   border-radius: var(--radius-full);
   background: var(--border-default);
+  transition: height var(--duration-fast);
 }
 
 .body [data-testid='expanded-timeline-fill'] {
@@ -342,6 +344,35 @@
   border-radius: var(--radius-full);
   background: var(--gradient-brand);
   box-shadow: var(--shadow-accent);
+  transition: height var(--duration-fast);
+}
+
+.body [data-testid='expanded-timeline-thumb'] {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: calc(var(--z-raised) + 1);
+  transition: width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease;
+}
+
+.body [data-testid='expanded-timeline-track']:hover::before,
+.body [data-testid='expanded-timeline-track'][data-dragging='true']::before,
+.body [data-testid='expanded-timeline-track']:hover [data-testid='expanded-timeline-fill'],
+.body [data-testid='expanded-timeline-track'][data-dragging='true'] [data-testid='expanded-timeline-fill'] {
+  height: 6px;
+}
+
+.body [data-testid='expanded-timeline-track']:hover [data-testid='expanded-timeline-thumb'],
+.body [data-testid='expanded-timeline-track'][data-dragging='true'] [data-testid='expanded-timeline-thumb'] {
+  width: 16px;
+  height: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
 .body [data-testid='expanded-timeline-times'] {
@@ -491,6 +522,13 @@
   cursor: pointer;
 }
 
+.body .playingWorkWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
 .body .playingWorkContextNav {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -521,6 +559,259 @@
 .body .playingWorkContextNav button:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
+}
+
+/* ==========================================================================
+   选集 / 集内播放列表 (Music Playlist Style)
+   ========================================================================== */
+.body .playlistCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--bg-tertiary) 70%, transparent);
+  border: 0.5px solid var(--border-default);
+  backdrop-filter: blur(var(--blur-md));
+}
+
+.body .playlistHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.body .playlistTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.body .playlistIcon {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.body .playlistTitle {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.body .playlistCounter {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body .playlistNavControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.body .playlistNavBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  border: 0.5px solid var(--border-default);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.body .playlistNavBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.body .playlistNavBtn:not(:disabled):hover {
+  background: var(--accent-primary-subtle);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.body .playlistTrackList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 220px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: var(--space-1);
+}
+
+.body .playlistTrackItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 0.5px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast);
+  width: 100%;
+}
+
+.body .playlistTrackItem:hover {
+  background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
+  color: var(--text-primary);
+}
+
+.body .playlistTrackItem[data-current='true'] {
+  background: var(--accent-primary-subtle);
+  color: var(--accent-primary);
+  border-color: color-mix(in srgb, var(--accent-primary) 30%, transparent);
+  font-weight: var(--weight-medium);
+}
+
+.body .trackNumberZone {
+  flex-shrink: 0;
+  width: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.body .trackNumber {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+}
+
+.body .playlistTrackItem[data-current='true'] .trackNumber {
+  color: var(--accent-primary);
+}
+
+.body .trackTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body .currentBadge {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.5px;
+}
+
+.body .soundWaveIndicator {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+
+.body .soundWaveIndicator span {
+  width: 2.5px;
+  border-radius: 1px;
+  background: var(--accent-primary);
+  animation: soundWaveJump 1.2s ease-in-out infinite;
+}
+
+.body .soundWaveIndicator span:nth-child(1) {
+  height: 50%;
+  animation-delay: 0.2s;
+}
+
+.body .soundWaveIndicator span:nth-child(2) {
+  height: 100%;
+  animation-delay: 0.4s;
+}
+
+.body .soundWaveIndicator span:nth-child(3) {
+  height: 35%;
+  animation-delay: 0s;
+}
+
+@keyframes soundWaveJump {
+  0%, 100% {
+    height: 30%;
+  }
+  50% {
+    height: 100%;
+  }
+}
+
+.body .playlistStatusLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  padding-inline: var(--space-1);
+}
+
+.body .playlistErrorAlert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--status-error) 15%, transparent);
+  color: var(--status-error);
+  font-size: var(--text-xs);
+}
+
+.body .playlistErrorAlert p {
+  margin: 0;
+}
+
+.body .playlistErrorActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.body .playlistErrorActions button {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 0.5px solid color-mix(in srgb, var(--status-error) 40%, transparent);
+  background: transparent;
+  color: var(--status-error);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.body .playlistCloseBtn {
+  align-self: flex-start;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: color var(--duration-fast);
+}
+
+.body .playlistCloseBtn:hover {
+  color: var(--text-secondary);
+  text-decoration: underline;
 }
 
 .body [data-testid='expanded-actions'] > :only-child {

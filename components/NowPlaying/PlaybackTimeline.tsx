@@ -14,7 +14,7 @@
  * 本组件仅做指针换算与键盘映射（Flow 侧二次 clamp 兜底）。
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { formatPlaybackTime } from '@/lib/playback/formatTime';
 
 /**  timeline 固定模式（ 前恒 segment，不伪装整篇）。 */
@@ -112,11 +112,28 @@ export const PlaybackTimeline: React.FC<PlaybackTimelineProps> = ({
         : 0;
     const safeCurrent = safeDuration > 0 ? Math.min(rawCurrent, safeDuration) : rawCurrent;
     const hasAudio = safeDuration > 0 && !disabled;
-    const progressPercent = safeDuration > 0 ? (safeCurrent / safeDuration) * 100 : 0;
+
+    const [isScrubbing, setIsScrubbing] = useState(false);
+    const [scrubTime, setScrubTime] = useState<number | null>(null);
+    const trackRef = useRef<HTMLDivElement | null>(null);
+
+    const displayCurrent = isScrubbing && scrubTime !== null ? scrubTime : safeCurrent;
+    const progressPercent = safeDuration > 0 ? (displayCurrent / safeDuration) * 100 : 0;
+
+    const calculateTarget = useCallback(
+        (clientX: number): number | null => {
+            if (!trackRef.current || safeDuration <= 0) return null;
+            const rect = trackRef.current.getBoundingClientRect();
+            if (rect.width <= 0) return null;
+            const percent = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+            return percent * safeDuration;
+        },
+        [safeDuration]
+    );
 
     const handleClick = useCallback(
         (event: React.MouseEvent<HTMLDivElement>) => {
-            if (!hasAudio) {
+            if (!hasAudio || isScrubbing) {
                 return;
             }
             const track = event.currentTarget;
@@ -132,8 +149,62 @@ export const PlaybackTimeline: React.FC<PlaybackTimelineProps> = ({
             }
             onSeek(target);
         },
-        [hasAudio, onSeek, safeDuration]
+        [hasAudio, isScrubbing, onSeek, safeDuration]
     );
+
+    const handlePointerDown = useCallback(
+        (event: React.PointerEvent<HTMLDivElement>) => {
+            if (!hasAudio) return;
+            try {
+                event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+                // Ignore capture failure in test/unsupported environments
+            }
+            setIsScrubbing(true);
+            const target = calculateTarget(event.clientX);
+            if (target !== null) {
+                setScrubTime(target);
+            }
+        },
+        [hasAudio, calculateTarget]
+    );
+
+    const handlePointerMove = useCallback(
+        (event: React.PointerEvent<HTMLDivElement>) => {
+            if (!isScrubbing || !hasAudio) return;
+            const target = calculateTarget(event.clientX);
+            if (target !== null) {
+                setScrubTime(target);
+            }
+        },
+        [isScrubbing, hasAudio, calculateTarget]
+    );
+
+    const handlePointerUp = useCallback(
+        (event: React.PointerEvent<HTMLDivElement>) => {
+            if (!isScrubbing) return;
+            try {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+            } catch {
+                // Ignore
+            }
+            setIsScrubbing(false);
+            const target = calculateTarget(event.clientX);
+            const finalTarget = target ?? scrubTime;
+            setScrubTime(null);
+            if (finalTarget !== null) {
+                onSeek(finalTarget);
+            }
+        },
+        [isScrubbing, calculateTarget, scrubTime, onSeek]
+    );
+
+    const handlePointerCancel = useCallback(() => {
+        setIsScrubbing(false);
+        setScrubTime(null);
+    }, []);
 
     const handleKeyDown = useCallback(
         (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -158,15 +229,21 @@ export const PlaybackTimeline: React.FC<PlaybackTimelineProps> = ({
         <div data-testid="expanded-timeline" data-mode={EXPANDED_TIMELINE_MODE}>
             <div data-testid="expanded-timeline-label">{label}</div>
             <div
+                ref={trackRef}
                 data-testid="expanded-timeline-track"
+                data-dragging={isScrubbing ? 'true' : 'false'}
                 onClick={handleClick}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerCancel={handlePointerCancel}
                 onKeyDown={handleKeyDown}
                 role="slider"
                 aria-label={label === '本段' ? EXPANDED_TIMELINE_ARIA_LABEL : label}
                 aria-valuemin={0}
                 aria-valuemax={Math.floor(safeDuration)}
-                aria-valuenow={safeDuration > 0 ? Math.floor(safeCurrent) : 0}
-                aria-valuetext={`${formatSegmentTime(safeCurrent)} / ${safeDuration > 0 ? formatSegmentTime(safeDuration) : '未知时长'}`}
+                aria-valuenow={safeDuration > 0 ? Math.floor(displayCurrent) : 0}
+                aria-valuetext={`${formatSegmentTime(displayCurrent)} / ${safeDuration > 0 ? formatSegmentTime(safeDuration) : '未知时长'}`}
                 aria-disabled={!hasAudio}
                 tabIndex={hasAudio ? 0 : -1}
             >
@@ -174,9 +251,13 @@ export const PlaybackTimeline: React.FC<PlaybackTimelineProps> = ({
                     data-testid="expanded-timeline-fill"
                     style={{ width: `${progressPercent}%` }}
                 />
+                <div
+                    data-testid="expanded-timeline-thumb"
+                    style={{ left: `${progressPercent}%` }}
+                />
             </div>
             <div data-testid="expanded-timeline-times">
-                <span data-testid="expanded-timeline-current">{formatSegmentTime(safeCurrent)}</span>
+                <span data-testid="expanded-timeline-current">{formatSegmentTime(displayCurrent)}</span>
                 <span data-testid="expanded-timeline-duration">{safeDuration > 0 ? formatSegmentTime(safeDuration) : '—:——'}</span>
             </div>
         </div>

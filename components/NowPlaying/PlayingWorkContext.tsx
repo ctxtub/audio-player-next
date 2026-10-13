@@ -1,40 +1,205 @@
 'use client';
+
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { BookOpen, ListMusic, Loader2, MessageCircle } from 'lucide-react';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
 import { useLibraryDetailQuery } from '@/lib/client/libraryQueries';
+import { useCollectionDetailQuery } from '@/lib/client/collectionQueries';
 import { collectionPath, conversationPath } from '@/lib/navigation/storyRoutes';
-import { refreshPlayingWorkMetadata } from '@/app/services/playbackSessionFlow';
-import { selectCollectionWork } from '@/app/services/collectionPlaybackFlow';
-import { BookOpen, MessageCircle } from 'lucide-react';
+import { playStoryWork, refreshPlayingWorkMetadata } from '@/app/services/playbackSessionFlow';
+import { prepareCollectionNextWork, selectCollectionWork } from '@/app/services/collectionPlaybackFlow';
 import GlassToast from '@/components/ui/GlassToast';
-import styles from '@/components/Library/storyControls.module.scss';
 import playerStyles from './ExpandedNowPlaying.module.scss';
-/** 播放内容导航和回听队列只消费正式归属及编排入口。 */
+
+/**
+ * 播放内容导航与选集列表（像音乐播放列表一样展示全集曲目并支持即点即播）。
+ */
 export function PlayingWorkContext({ close }: { close: () => void }) {
   const router = useRouter();
   const workId = usePlaybackSessionStore((state) => state.source?.kind === 'work' ? state.source.workId : null);
   const queue = useCollectionPlaybackStore();
   const { data } = useLibraryDetailQuery(workId ?? 0, { enabled: workId !== null });
-  useEffect(() => { if (data) refreshPlayingWorkMetadata(data); }, [data]);
+  const targetCollectionId = queue.collectionId ?? data?.collectionId ?? null;
+  const { data: collectionDetail } = useCollectionDetailQuery(targetCollectionId ?? '', {
+    enabled: Boolean(targetCollectionId),
+  });
+
+  useEffect(() => {
+    if (data) refreshPlayingWorkMetadata(data);
+  }, [data]);
+
   if (!workId) return null;
-  const navigate = (path: string) => { close(); router.push(path); };
-  const select = async (index: number) => { try { await selectCollectionWork(index); } catch { GlassToast.show({ icon: 'fail', content: '准备语音失败，请重试或跳过' }); } };
-  return <div className={styles.menuBody}>
-    {data?.collectionId || data?.conversationId ? <div className={playerStyles.playingWorkContextNav} data-testid="playing-work-context-nav">
-      {data?.collectionId && <button type="button" onClick={() => navigate(`${collectionPath(data.collectionId!)}?focusWork=${workId}`)}><BookOpen size={18} aria-hidden="true" /><span>查看故事集</span></button>}
-      {data?.conversationId && <button type="button" onClick={() => navigate(`${conversationPath(data.conversationId!)}${data.sourceMessageId ? `?focusMessage=${encodeURIComponent(data.sourceMessageId)}` : ''}`)}><MessageCircle size={18} aria-hidden="true" /><span>查看创作记录</span></button>}
-    </div> : null}
-    {queue.collectionId && <section aria-label="集内播放列表">
-      <p>整集回听 · 第 {queue.index + 1} / {queue.works.length} 篇</p>
-      {queue.preparingWorkId && <p role="status">正在准备下一篇语音…</p>}
-      {queue.readyWorkId && <p role="status">下一篇已准备好</p>}
-      <button disabled={queue.index <= 0} onClick={() => select(queue.index - 1)}>上一篇</button>
-      <button disabled={queue.index >= queue.works.length - 1} onClick={() => select(queue.index + 1)}>下一篇</button>
-      <details><summary>播放列表</summary>{queue.works.map((work, index) => <button key={work.id} aria-current={index === queue.index ? 'true' : undefined} onClick={() => select(index)}>{index === queue.index ? '当前：' : ''}{work.title}</button>)}</details>
-      {queue.error && <div role="alert"><p>下一篇准备失败</p><button onClick={() => select(queue.index)}>重试当前篇</button><button disabled={queue.index >= queue.works.length - 1} onClick={() => select(queue.index + 1)}>跳过</button></div>}
-      <button onClick={queue.clear}>关闭整集连播</button>
-    </section>}
-  </div>;
+
+  const navigate = (path: string) => {
+    close();
+    router.push(path);
+  };
+
+  // 计算有效的全集曲目列表
+  const effectiveWorks: Array<{ id: number; title: string }> = queue.collectionId && queue.works.length > 0
+    ? queue.works
+    : (collectionDetail?.works?.map((w) => ({ id: w.id, title: w.title })) ?? (data ? [{ id: data.id, title: data.title }] : []));
+
+  const effectiveIndex = queue.collectionId && queue.index >= 0
+    ? queue.index
+    : Math.max(0, effectiveWorks.findIndex((w) => w.id === workId));
+
+  const select = async (index: number) => {
+    if (index < 0 || index >= effectiveWorks.length) return;
+    try {
+      if (queue.collectionId) {
+        await selectCollectionWork(index);
+      } else if (targetCollectionId) {
+        useCollectionPlaybackStore.setState({
+          collectionId: targetCollectionId,
+          works: effectiveWorks,
+          index,
+          epoch: queue.epoch + 1,
+          error: null,
+          preparingWorkId: null,
+          readyWorkId: null,
+        });
+        await playStoryWork(effectiveWorks[index].id, { origin: 'queue' });
+        void prepareCollectionNextWork();
+      } else {
+        await playStoryWork(effectiveWorks[index].id, { origin: 'user' });
+      }
+    } catch {
+      GlassToast.show({ icon: 'fail', content: '准备语音失败，请重试或跳过' });
+    }
+  };
+
+  const hasPlaylist = effectiveWorks.length > 0;
+
+  return (
+    <div className={playerStyles.playingWorkWrapper}>
+      {(data?.collectionId || data?.conversationId) && (
+        <div className={playerStyles.playingWorkContextNav} data-testid="playing-work-context-nav">
+          {data?.collectionId && (
+            <button type="button" onClick={() => navigate(`${collectionPath(data.collectionId!)}?focusWork=${workId}`)}>
+              <BookOpen size={16} aria-hidden="true" />
+              <span>查看故事集</span>
+            </button>
+          )}
+          {data?.conversationId && (
+            <button type="button" onClick={() => navigate(`${conversationPath(data.conversationId!)}${data.sourceMessageId ? `?focusMessage=${encodeURIComponent(data.sourceMessageId)}` : ''}`)}>
+              <MessageCircle size={16} aria-hidden="true" />
+              <span>查看创作记录</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {hasPlaylist && (
+        <section className={playerStyles.playlistCard} aria-label="集内播放列表">
+          <div className={playerStyles.playlistHeader}>
+            <div className={playerStyles.playlistTitleGroup}>
+              <ListMusic size={16} className={playerStyles.playlistIcon} aria-hidden="true" />
+              <span className={playerStyles.playlistTitle}>选集</span>
+              <span className={playerStyles.playlistCounter}>
+                整集回听 · 第 {effectiveIndex + 1} / {effectiveWorks.length} 篇
+              </span>
+            </div>
+            <div className={playerStyles.playlistNavControls}>
+              <button
+                type="button"
+                className={playerStyles.playlistNavBtn}
+                disabled={effectiveIndex <= 0}
+                onClick={() => select(effectiveIndex - 1)}
+                aria-label="上一篇"
+              >
+                上一篇
+              </button>
+              <button
+                type="button"
+                className={playerStyles.playlistNavBtn}
+                disabled={effectiveIndex >= effectiveWorks.length - 1}
+                onClick={() => select(effectiveIndex + 1)}
+                aria-label="下一篇"
+              >
+                下一篇
+              </button>
+            </div>
+          </div>
+
+          <div className={playerStyles.playlistTrackList} role="list" aria-label="选集列表">
+            {effectiveWorks.map((work, idx) => {
+              const isCurrent = idx === effectiveIndex;
+              return (
+                <button
+                  key={work.id}
+                  type="button"
+                  className={playerStyles.playlistTrackItem}
+                  data-current={isCurrent ? 'true' : 'false'}
+                  aria-current={isCurrent ? 'true' : undefined}
+                  onClick={() => select(idx)}
+                >
+                  <span className={playerStyles.trackNumberZone}>
+                    {isCurrent ? (
+                      <span className={playerStyles.soundWaveIndicator} aria-label="正在播放">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                    ) : (
+                      <span className={playerStyles.trackNumber}>
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                    )}
+                  </span>
+                  <span className={playerStyles.trackTitle}>
+                    {work.title}
+                  </span>
+                  {isCurrent && (
+                    <span className={playerStyles.currentBadge}>正在播放</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {queue.preparingWorkId && (
+            <p className={playerStyles.playlistStatusLine} role="status">
+              <Loader2 className={playerStyles.spinner} size={13} aria-hidden="true" />
+              <span>正在准备下一篇语音…</span>
+            </p>
+          )}
+
+          {queue.readyWorkId && (
+            <p className={playerStyles.playlistStatusLine} role="status">
+              <span>下一篇已准备好</span>
+            </p>
+          )}
+
+          {queue.error && (
+            <div className={playerStyles.playlistErrorAlert} role="alert">
+              <p>下一篇准备失败</p>
+              <div className={playerStyles.playlistErrorActions}>
+                <button type="button" onClick={() => select(effectiveIndex)}>重试当前篇</button>
+                <button
+                  type="button"
+                  disabled={effectiveIndex >= effectiveWorks.length - 1}
+                  onClick={() => select(effectiveIndex + 1)}
+                >
+                  跳过
+                </button>
+              </div>
+            </div>
+          )}
+
+          {queue.collectionId && (
+            <button
+              type="button"
+              className={playerStyles.playlistCloseBtn}
+              onClick={queue.clear}
+            >
+              关闭整集连播
+            </button>
+          )}
+        </section>
+      )}
+    </div>
+  );
 }

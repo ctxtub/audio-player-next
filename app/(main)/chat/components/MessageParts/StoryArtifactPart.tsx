@@ -149,15 +149,6 @@ const StoryArtifactPartRenderer: FC<PartRendererProps<StoryArtifactPart>> = ({
           >
             {playback.statusText}
           </span>
-          <span
-            className={styles.playbackProgressTrack}
-            aria-hidden="true"
-          >
-            <span
-              className={styles.playbackProgressFill}
-              style={{ width: playback.progressRatio !== null ? `${Math.round(playback.progressRatio * 100)}%` : '0%' }}
-            />
-          </span>
         </div>
       )}
 

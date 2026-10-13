@@ -45,32 +45,31 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         await captureVisual(page, "1440-creation-bar-on");
         await page.setViewportSize(initialViewport);
 
-        // 创作页控件与设置共用偏好：本次时长可在页面内调整并立即反映到预算。
-        const directToggle = page.getByRole("switch", { name: "自动播放与连续创作开关" });
-        const durationSlider = page.getByRole("slider", { name: "选择本次自动播放时长" });
-        await expect(directToggle).toBeChecked();
+        // 创作卡只读展示；启停与播放时长由设置页配置。
+        const creationBar = page.getByRole("region", { name: "连续创作", exact: true });
+        await expect(creationBar.getByRole("switch")).toHaveCount(0);
+        await expect(creationBar.getByRole("slider")).toHaveCount(0);
+        await page.getByRole("tab", { name: "设置", exact: true }).click();
+        const durationSlider = page.getByRole("slider").first();
         await expect(durationSlider).toHaveValue("30");
         await durationSlider.press("ArrowRight");
         await expect(durationSlider).toHaveValue("40");
+        await page.getByRole("tab", { name: "创作", exact: true }).click();
         await expect(page.getByTestId("continuous-remaining-budget")).toContainText("自动播放时长 · 40分钟");
+        await page.getByRole("tab", { name: "设置", exact: true }).click();
         await durationSlider.press("ArrowLeft");
         await expect(durationSlider).toHaveValue("30");
-        await directToggle.press("Space");
-        await expect(continuousStatusText(page)).toHaveText("连续创作已关闭");
-        await expect(directToggle).not.toBeChecked();
-        await expect(page.getByTestId("continuous-remaining-budget")).toContainText("时长偏好");
-        await expect(page.getByTestId("continuous-remaining-budget")).not.toContainText("剩余");
-        await directToggle.press("Space");
-        await expect(continuousStatusText(page)).toHaveText("连续创作已开启");
-        await expect(directToggle).toBeChecked();
+        await page.getByRole("tab", { name: "创作", exact: true }).click();
+        await expect(page.getByTestId("continuous-remaining-budget")).toContainText("自动播放时长 · 30分钟");
 
         // ② 关开关，连续生成两篇（互不干扰，各自出现播放按钮）。
         await setContinuousEnabled(page, false);
         await page.reload({ waitUntil: 'networkidle' });
         await expect(continuousStatusText(page)).toHaveText('连续创作已关闭');
-        await expect(page.getByRole('switch', { name: '自动播放与连续创作开关' })).not.toBeChecked();
-        await expect(page.getByTestId('continuous-remaining-budget')).toContainText('时长偏好');
-        await expect(page.getByTestId('continuous-remaining-budget')).not.toContainText('剩余');
+        await expect(creationBar.getByRole('switch')).toHaveCount(0);
+        await expect(creationBar.getByRole('slider')).toHaveCount(0);
+        await expect(page.getByTestId('continuous-remaining-budget')).toContainText('自动播放时长');
+        await expect(page.getByTestId('continuous-remaining-budget')).toContainText('剩余');
         await sendStory(page, "写一个关于山间小屋的短故事");
         const firstAction = cardActionButton(page, 0);
         await expect(firstAction).toHaveText("正在准备语音", { timeout: 90000 });

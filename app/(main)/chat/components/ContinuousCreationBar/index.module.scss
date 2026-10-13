@@ -115,33 +115,31 @@
   }
 
   .controlRow {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
+    display: flex;
     align-items: center;
-    gap: 6px 10px;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
   .statusCard {
-    grid-column: 1;
-    justify-self: start;
+    flex-shrink: 0;
   }
 
   .budget {
-    margin-left: 0;
-    grid-column: 2;
-    text-align: right;
-  }
-
-  .collectionTitle {
-    overflow: visible;
-    overflow-wrap: anywhere;
-    text-overflow: clip;
-    white-space: normal;
+    margin-left: auto;
+    font-size: 12px;
+    white-space: nowrap;
   }
 
   .action {
-    grid-column: 1 / -1;
-    justify-self: start;
+    flex-shrink: 0;
+  }
+
+  .collectionTitle {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 

@@ -10,7 +10,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Star, Trash2, RotateCcw } from 'lucide-react';
+import { Star, Trash2, RotateCcw, Play } from 'lucide-react';
 import type { StoryCollectionSummaryDTO } from '@/lib/trpc/schemas/collection';
 import type { CollectionView } from '@/lib/trpc/schemas/collection';
 import { useCollectionMutations } from '@/lib/client/collectionMutations';
@@ -144,7 +144,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
 
       {collection.excerpt && <p className={styles.cardExcerpt}>{collection.excerpt}</p>}
       <div className={styles.cardActions}>
-        {!isTrash && collection.workCount > 0 && <button className={styles.playBtn} onClick={async () => { try { await playCollection(collection.id, collection.hasUnfinished ? 'resume' : 'restart'); } catch { GlassToast.show({ icon: 'fail', content: '暂时无法播放，请重试' }); } }}>{collection.hasUnfinished ? '继续听' : '重新听'}</button>}
+        {!isTrash && collection.workCount > 0 && <button className={styles.playBtn} onClick={async () => { try { await playCollection(collection.id, collection.hasUnfinished ? 'resume' : 'restart'); } catch { GlassToast.show({ icon: 'fail', content: '暂时无法播放，请重试' }); } }}><Play size={14} aria-hidden="true" />{collection.hasUnfinished ? '继续播放整集' : '从头播放整集'}</button>}
         {!isTrash ? (
           <details><summary>管理故事集</summary><button
             type="button"

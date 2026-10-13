@@ -125,7 +125,7 @@ test('整理故事并回到原集续写和收听', async ({ page, harnessEnv }) 
   await page.getByTestId('continuous-collection-title').getByRole('link').click();
   await expect(members).toHaveCount(3);
   await captureVisual(page, 'library-resumed-original-collection');
-  await page.getByRole('button', { name: '从头听整集', exact: true }).click();
+  await page.getByRole('button', { name: '从头播放整集', exact: true }).click();
   await openExpandedFromMini(page);
   await expect(page.getByRole('region', { name: '集内播放列表' })).toBeVisible();
   await expect(page.getByText('整集回听 · 第 1 / 3 篇')).toBeVisible();

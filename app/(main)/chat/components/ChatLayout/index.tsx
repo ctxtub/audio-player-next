@@ -281,7 +281,11 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         suggestions={defaultSuggestions}
         onSuggestionSelect={handleSuggestionSelect}
       />
-      <ContinuousCreationBar collectionTitle={collectionTitle} />
+      <ContinuousCreationBar
+        collectionTitle={collectionTitle}
+        onNewCreation={handleNewCreation}
+        newCreationDisabled={!isCreationReady || isSending || isStartingNewCreation}
+      />
       {previousConversationId && <Link className={styles.previousConversationLink} href={conversationPath(previousConversationId)}>返回上一份创作（已保留输入）</Link>}
       <MessageArea
         messages={messages}
@@ -295,8 +299,6 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
         isSending={isSending}
         value={inputValue}
         onChange={handleInputChange}
-        onClear={handleNewCreation}
-        clearText="新建故事集"
       />
     </div>
   );

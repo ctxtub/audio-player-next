@@ -29,6 +29,8 @@ export interface ComposerProps {
   clearText?: string;
   /** 清空回调，用于触发更广泛的重置逻辑。 */
   onClear?: () => void;
+  /** 是否显示输入区清空操作；创作页由顶部故事集入口负责新建。 */
+  showClear?: boolean;
 }
 
 /**
@@ -45,6 +47,7 @@ const Composer: React.FC<ComposerProps> = ({
   submitText = '发送',
   clearText = '清空',
   onClear,
+  showClear = true,
 }) => {
   /** 本地输入状态，受控时以 props value 为准。 */
   const [internalValue, setInternalValue] = useState(value ?? '');
@@ -227,7 +230,7 @@ const Composer: React.FC<ComposerProps> = ({
           />
 
           <div className={styles.actionButtons}>
-            <GlassButton
+            {showClear && <GlassButton
               variant="ghost"
               size="sm"
               onPress={handleClear}
@@ -235,7 +238,7 @@ const Composer: React.FC<ComposerProps> = ({
               className={styles.clearButton}
             >
               {clearText}
-            </GlassButton>
+            </GlassButton>}
             <GlassButton
               variant="primary"
               size="sm"

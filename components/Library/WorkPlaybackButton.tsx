@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { Play, Pause, RotateCcw, LoaderCircle } from 'lucide-react';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { playStoryWork } from '@/app/services/playbackSessionFlow';
@@ -14,8 +15,9 @@ export function WorkPlaybackButton({ workId, title, testId, progress }: { workId
   const playing = usePlaybackStore((state) => state.isPlaying);
   const busy = pending || (current && (status === 'hydrating' || status === 'synthesizing'));
   const label = busy ? '准备语音…' : current && playing ? '暂停' : current && status === 'ended' ? '重新播放' : current ? '继续播放' : progress?.positionMs ? progress.durationMs && progress.positionMs >= progress.durationMs - 1000 ? '重新播放' : '继续播放' : '播放';
+  const Icon = busy ? LoaderCircle : current && playing ? Pause : label === '重新播放' ? RotateCcw : Play;
   return <button type="button" className={styles.play} disabled={busy} data-testid={testId} aria-label={`${label}《${title}》`} onClick={async () => {
     setPending(true);
     try { await playStoryWork(workId); } catch { GlassToast.show({ icon: 'fail', content: '暂时无法播放，请重试' }); } finally { setPending(false); }
-  }}>{label}</button>;
+  }}><Icon size={14} aria-hidden="true" className={busy ? styles.spinner : undefined} />{label}</button>;
 }

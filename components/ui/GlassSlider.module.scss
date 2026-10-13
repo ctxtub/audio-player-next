@@ -102,3 +102,9 @@
   color: var(--accent-primary);
   font-weight: var(--weight-medium);
 }
+
+@media (max-width: 480px) {
+  .markLabels { height: calc(var(--text-xs) * 3 + var(--space-1)); }
+  .markLabel:nth-child(even) { top: calc(var(--text-xs) * 1.5 + var(--space-1)); }
+  .markLabel:last-child { transform: translateX(-100%); }
+}

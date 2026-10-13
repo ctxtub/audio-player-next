@@ -260,8 +260,8 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
             </p>
           </div>
           <div className={styles.collectionActions}>
-            <button className={styles.primaryButton} disabled={!data.works.length} onClick={() => handlePlayCollection('resume')}>继续听整集</button>
-            <button className={styles.secondaryButton} disabled={!data.works.length} onClick={() => handlePlayCollection('restart')}>从头听整集</button>
+            <button className={styles.primaryButton} disabled={!data.works.length} onClick={() => handlePlayCollection('resume')}><Play size={14} aria-hidden="true" />继续播放整集</button>
+            <button className={styles.secondaryButton} disabled={!data.works.length} onClick={() => handlePlayCollection('restart')}><RotateCcw size={14} aria-hidden="true" />从头播放整集</button>
             {data.conversationId && <>
               <button
                 type="button"

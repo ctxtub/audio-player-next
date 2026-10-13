@@ -5,6 +5,7 @@ import { resetContinuousCreationDuration } from '@/app/services/continuousCreati
 import { useChatStore } from '@/stores/chatStore';
 import { collectionPath } from '@/lib/navigation/storyRoutes';
 import React from 'react';
+import { Plus } from 'lucide-react';
 
 import {
   CONTINUOUS_CREATION_STATUS_LABEL,
@@ -20,6 +21,8 @@ import styles from './index.module.scss';
 export type ContinuousCreationBarProps = {
   /** 当前集合标题；null/缺省展示空闲态。 */
   collectionTitle?: string | null;
+  onNewCreation?: () => void;
+  newCreationDisabled?: boolean;
 };
 
 /**
@@ -29,7 +32,7 @@ export type ContinuousCreationBarProps = {
  * @param props.collectionTitle 当前集合标题。
  * @returns 状态卡 JSX。
  */
-const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectionTitle }) => {
+const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectionTitle, onNewCreation, newCreationDisabled }) => {
   const collectionId = useChatStore((state) => state.collectionId);
   const enabled = useContinuousCreationStore((state) => state.enabled);
   const status = useContinuousCreationStore((state) => state.status);
@@ -46,6 +49,9 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
         <span className={styles.collectionTitle} data-testid="continuous-collection-title">
           {collectionId ? <Link href={collectionPath(collectionId)}>{title}</Link> : title}
         </span>
+        {onNewCreation && <button type="button" className={styles.newCreation} onClick={onNewCreation} disabled={newCreationDisabled}>
+          <Plus size={16} aria-hidden="true" />新建故事集
+        </button>}
       </div>
 
       <div className={styles.controlRow}>

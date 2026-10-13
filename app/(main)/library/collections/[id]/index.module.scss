@@ -32,7 +32,8 @@
 
 .heroPanel {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: space-between;
   gap: var(--space-5);
   padding: var(--space-6);
@@ -85,6 +86,8 @@
   gap: var(--space-2);
 }
 
+.collectionActions { justify-content: flex-start; }
+
 .secondaryButton,
 .primaryButton,
 .dangerButton,
@@ -129,7 +132,9 @@
 }
 
 .primaryButton {
-  min-height: 44px;
+  min-height: var(--size-touch-target);
+  padding-inline: var(--space-4);
+  font-weight: var(--weight-semibold);
   color: var(--text-on-primary, #fff);
   border-color: transparent;
   background: var(--accent-primary);
@@ -275,7 +280,8 @@
   grid-column: 2;
   justify-self: start;
   min-width: 98px;
-  min-height: 44px;
+  min-height: var(--size-touch-target);
+  padding-inline: var(--space-4);
   color: var(--text-on-primary, #fff);
   font-weight: var(--weight-semibold);
   background: var(--accent-primary);
@@ -283,7 +289,7 @@
 
   &:hover:not(:disabled) {
     color: var(--text-on-primary, #fff);
-    background: color-mix(in srgb, var(--accent-primary) 88%, var(--bg-primary));
+    background: var(--accent-primary-hover);
     transform: scale(1.02);
   }
 }

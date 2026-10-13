@@ -51,14 +51,14 @@ test.describe("播放与准备中新创作强重置", () => {
 
         // 未发送草稿需要确认；取消后草稿、当前集合与播放都保持原样。
         await composerInput(page).fill("请把这个故事改成海边冒险");
-        await page.getByRole("button", { name: "新建故事集", exact: true }).click();
+        await page.getByRole("region", { name: "连续创作", exact: true }).getByRole("button", { name: "新建故事集", exact: true }).click();
         await expect(page.getByRole("dialog", { name: "新建故事集" })).toBeVisible();
         await page.keyboard.press("Escape");
         await expect(page.getByRole("dialog", { name: "新建故事集" })).toBeHidden();
         await expect(composerInput(page)).toHaveValue("请把这个故事改成海边冒险");
         await expect(page.getByTestId("mini-now-playing")).toBeVisible();
 
-        await page.getByRole("button", { name: "新建故事集", exact: true }).click();
+        await page.getByRole("region", { name: "连续创作", exact: true }).getByRole("button", { name: "新建故事集", exact: true }).click();
         await expect(page.getByRole("dialog", { name: "新建故事集" })).toBeVisible();
         await page.getByRole("button", { name: "继续当前创作", exact: true }).click();
         await expect(composerInput(page)).toHaveValue("请把这个故事改成海边冒险");

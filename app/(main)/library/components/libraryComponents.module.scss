@@ -309,7 +309,7 @@
     transform var(--duration-fast) var(--ease-default);
 
   &:hover {
-    background: color-mix(in srgb, var(--accent-primary) 88%, var(--bg-primary));
+    background: var(--accent-primary-hover);
     color: var(--text-on-primary, #fff);
   }
 

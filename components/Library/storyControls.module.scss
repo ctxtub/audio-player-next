@@ -8,7 +8,23 @@
   font-size: var(--text-sm);
   cursor: pointer;
 }
-.play { background: var(--accent-primary); color: var(--text-on-primary); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  border-color: transparent;
+  background: var(--accent-primary);
+  color: var(--text-on-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  &:hover:not(:disabled) { background: var(--accent-primary-hover); }
+  &:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+}
+.spinner { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .play:disabled { background: var(--bg-tertiary); color: var(--text-tertiary); cursor: progress; }
 .menu { position: relative; }
 .menu summary { list-style: none; }

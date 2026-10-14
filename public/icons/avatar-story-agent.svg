@@ -1,0 +1,14 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="story_grad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#EA580C"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="14" fill="url(#story_grad)"/>
+  <!-- Open Storybook & Creative Spark -->
+  <path d="M12 18C12 16.5 13.5 15.5 15.5 15.5H23V33H15.5C13.5 33 12 34 12 34V18Z" fill="white" fill-opacity="0.92"/>
+  <path d="M36 18C36 16.5 34.5 15.5 32.5 15.5H25V33H32.5C34.5 33 36 34 36 34V18Z" fill="white" fill-opacity="0.92"/>
+  <path d="M24 12V32" stroke="white" stroke-width="2" stroke-linecap="round" stroke-opacity="0.8"/>
+  <circle cx="24" cy="11" r="2.5" fill="white" fill-opacity="0.95"/>
+</svg>

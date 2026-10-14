@@ -1,51 +1,51 @@
-/* Light 语义色 — v2 Design Upgrade */
+/* Light 语义色 — Warm Amber 默认色板 (v2 Design Upgrade) */
 :root[data-theme="light"] {
   /* 背景层级 */
-  --bg-primary:   #F2F2F4;
+  --bg-primary:   #FAF7F2;
   --bg-secondary: #FFFFFF;
-  --bg-tertiary:  #F7F7F9;
-  --bg-elevated:  rgba(255, 255, 255, 0.78);
+  --bg-tertiary:  #F3EFEA;
+  --bg-elevated:  rgba(255, 255, 255, 0.82);
   --bg-overlay:   rgba(0, 0, 0, 0.35);
 
   /* Liquid Glass 表面 */
-  --glass-bg:           rgba(255, 255, 255, 0.55);
-  --glass-border:       rgba(0, 0, 0, 0.06);
+  --glass-bg:           rgba(255, 255, 255, 0.65);
+  --glass-border:       rgba(217, 119, 6, 0.12);
   --glass-border-bright:rgba(255, 255, 255, 0.90);
-  --glass-highlight:    inset 0 0.5px 0 rgba(255, 255, 255, 0.80), inset 0 -0.5px 0 rgba(0, 0, 0, 0.04);
+  --glass-highlight:    inset 0 0.5px 0 rgba(255, 255, 255, 0.85), inset 0 -0.5px 0 rgba(0, 0, 0, 0.04);
 
   /* 前景 / 文字 */
-  --text-primary:    #0B0B0E;
-  --text-secondary:  #4E4E56;
-  --text-tertiary:   #76767F;
+  --text-primary:    #1C1917;
+  --text-secondary:  #57534E;
+  --text-tertiary:   #8C827A;
   --text-inverse:    #FFFFFF;
   --text-on-primary: #FFFFFF;
 
-  /* 品牌 / 交互 */
-  --accent-primary:        var(--accent-500);
-  --accent-primary-hover:  var(--accent-400);
-  --accent-primary-subtle: var(--accent-tint);
-  --accent-secondary: oklch(68% 0.18 calc(var(--accent-h) + 60));
+  /* 品牌 / 交互 — Warm Amber 温暖羊皮纸米白与琥珀陶土 */
+  --accent-primary:        #D97706;
+  --accent-primary-hover:  #B45309;
+  --accent-primary-subtle: rgba(217, 119, 6, 0.12);
+  --accent-secondary:      #EA580C;
 
   /* 语义状态 */
-  --status-success: oklch(62% 0.18 152);
-  --status-warning: oklch(65% 0.16 72);
-  --status-error:   oklch(55% 0.22 25);
-  --status-info:    oklch(60% 0.16 220);
+  --status-success: #059669;
+  --status-warning: #D97706;
+  --status-error:   #DC2626;
+  --status-info:    #0284C7;
 
   /* 边框 */
   --border-default: rgba(0, 0, 0, 0.08);
   --border-subtle:  rgba(0, 0, 0, 0.04);
-  --border-strong:  rgba(0, 0, 0, 0.14);
-  --border-accent:  oklch(66% 0.18 var(--accent-h) / 0.40);
+  --border-strong:  rgba(217, 119, 6, 0.22);
+  --border-accent:  rgba(217, 119, 6, 0.40);
 
   /* 渐变 */
-  --gradient-brand:     linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  --gradient-surface:   linear-gradient(180deg, var(--bg-secondary), var(--bg-primary));
-  --gradient-fade-down: linear-gradient(180deg, var(--bg-secondary), transparent);
-  --gradient-fade-up:   linear-gradient(0deg, var(--bg-primary) 0%, transparent 100%);
-  --gradient-glow:      radial-gradient(circle, var(--accent-tint) 0%, transparent 70%);
+  --gradient-brand:     linear-gradient(135deg, #D97706 0%, #EA580C 100%);
+  --gradient-surface:   linear-gradient(180deg, #FFFFFF 0%, #FAF7F2 100%);
+  --gradient-fade-down: linear-gradient(180deg, #FFFFFF 0%, transparent 100%);
+  --gradient-fade-up:   linear-gradient(0deg, #FAF7F2 0%, transparent 100%);
+  --gradient-glow:      radial-gradient(circle, rgba(217, 119, 6, 0.16) 0%, transparent 70%);
 
-  /* Aurora 关闭（亮色模式无 aurora） */
+  /* Aurora 关闭 */
   --aurora-primary:   none;
   --aurora-secondary: none;
 }

@@ -51,51 +51,73 @@
 | `--color-violet-400` | `#BF8BFF` | `#BF8BFF` | 装饰/渐变 |
 | `--color-violet-500` | `#AF52DE` | `#AF52DE` | iOS systemPurple |
 
-#### 2.1.2 Semantic Colors
+#### 2.1.2 Semantic Colors (默认：暖琥珀 Warm Amber)
 
 | Token | Dark 值 | Light 值 | 用途 |
 |-------|---------|----------|------|
 | **背景 (Background)** | | | |
-| `--bg-primary` | `#000000` | `#F2F2F7` | 页面主背景（iOS systemGroupedBackground） |
-| `--bg-secondary` | `#1C1C1E` | `#ffffff` | 卡片/面板背景 |
-| `--bg-tertiary` | `#2C2C2E` | `#F9F9FB` | 输入框/嵌套区域背景 |
-| `--bg-elevated` | `rgba(44,44,46,0.75)` | `rgba(255,255,255,0.80)` | 毛玻璃浮层背景 |
-| `--bg-overlay` | `rgba(0,0,0,0.5)` | `rgba(0,0,0,0.3)` | 遮罩层 |
+| `--bg-primary` | `#0F0E0D` | `#FAF7F2` | 页面主背景（温润深焙暖黑 / 羊皮纸晨曦白） |
+| `--bg-secondary` | `#181614` | `#FFFFFF` | 卡片/面板背景 |
+| `--bg-tertiary` | `#23201C` | `#F3EFEA` | 输入框/嵌套区域背景 |
+| `--bg-elevated` | `rgba(24, 22, 20, 0.78)` | `rgba(255, 255, 255, 0.82)` | 毛玻璃浮层背景 |
+| `--bg-overlay` | `rgba(0, 0, 0, 0.65)` | `rgba(0, 0, 0, 0.35)` | 遮罩层 |
 | **Liquid Glass 表面** | | | |
-| `--glass-bg` | `rgba(38,38,40,0.50)` | `rgba(255,255,255,0.45)` | Liquid Glass 背景 |
-| `--glass-border` | `rgba(255,255,255,0.12)` | `rgba(255,255,255,0.60)` | 光泽发光边框 |
-| `--glass-highlight` | `inset 0 0.5px ... 0.15` | `inset 0 0.5px ... 0.70` | 顶部高光（模拟玻璃折射） |
+| `--glass-bg` | `rgba(28, 25, 22, 0.52)` | `rgba(255, 255, 255, 0.65)` | Liquid Glass 背景 |
+| `--glass-border` | `rgba(245, 158, 11, 0.12)` | `rgba(217, 119, 6, 0.12)` | 光泽发光边框 |
+| `--glass-border-bright` | `rgba(245, 158, 11, 0.22)` | `rgba(255, 255, 255, 0.90)` | 聚焦/高光强化边框 |
+| `--glass-highlight` | `inset 0 0.5px 0 rgba(254, 243, 199, 0.14), inset 0 -0.5px 0 rgba(0, 0, 0, 0.35)` | `inset 0 0.5px 0 rgba(255, 255, 255, 0.85), inset 0 -0.5px 0 rgba(0, 0, 0, 0.04)` | 顶部高光（模拟玻璃折射） |
 | **前景 (Foreground / Text)** | | | |
-| `--text-primary` | `#ffffff` | `#1C1C1E` | 主文本 |
-| `--text-secondary` | `#AEAEB2` | `#636366` | 次要文本、描述 |
-| `--text-tertiary` | `#8E8E93` | `#8E8E93` | 占位符、禁用文本 |
-| `--text-inverse` | `#000000` | `#ffffff` | 反色文本（如 primary 按钮文字） |
-| `--text-on-primary` | `#ffffff` | `#ffffff` | primary 色上的文字 |
+| `--text-primary` | `#FDFBF7` | `#1C1917` | 主文本 |
+| `--text-secondary` | `#B8AEA5` | `#57534E` | 次要文本、描述 |
+| `--text-tertiary` | `#7D756D` | `#8C827A` | 占位符、禁用文本 |
+| `--text-inverse` | `#0F0E0D` | `#FFFFFF` | 反色文本（如 primary 按钮文字） |
+| `--text-on-primary` | `#FFFFFF` | `#FFFFFF` | primary 色上的文字 |
 | **品牌 / 交互 (Brand / Interactive)** | | | |
-| `--accent-primary` | `#0A84FF` | `#007AFF` | iOS systemBlue（按钮、链接、进度条） |
-| `--accent-primary-hover` | `#409CFF` | `#0A84FF` | 主操作色 hover |
-| `--accent-primary-subtle` | `rgba(10,132,255,0.18)` | `rgba(0,122,255,0.12)` | 主色浅底（Tag、选中态背景） |
-| `--accent-secondary` | `#AF52DE` | `#AF52DE` | iOS systemPurple（渐变、装饰） |
+| `--accent-primary` | `#F59E0B` | `#D97706` | 暖琥珀主交互色（按钮、激活态、进度条） |
+| `--accent-primary-hover` | `#FBBF24` | `#B45309` | 主操作色 hover |
+| `--accent-primary-subtle` | `rgba(245, 158, 11, 0.16)` | `rgba(217, 119, 6, 0.12)` | 主色浅底（Tag、选中态背景） |
+| `--accent-secondary` | `#EA580C` | `#EA580C` | 温暖火光橙（渐变、aurora 装饰） |
 | **语义状态 (Status)** | | | |
-| `--status-success` | `#30D158` | `#34C759` | iOS systemGreen |
-| `--status-warning` | `#FFD60A` | `#FF9500` | iOS systemYellow / Orange |
-| `--status-error` | `#FF453A` | `#FF3B30` | iOS systemRed |
-| `--status-info` | `#64D2FF` | `#5AC8FA` | iOS systemCyan |
+| `--status-success` | `#10B981` | `#059669` | 成功/已完成 |
+| `--status-warning` | `#F59E0B` | `#D97706` | 警告/提示 |
+| `--status-error` | `#EF4444` | `#DC2626` | 失败/错误 |
+| `--status-info` | `#38BDF8` | `#0284C7` | 信息通知 |
 | **边框 (Border)** | | | |
-| `--border-default` | `rgba(255,255,255,0.10)` | `rgba(0,0,0,0.08)` | 默认边框 |
-| `--border-subtle` | `rgba(255,255,255,0.05)` | `rgba(0,0,0,0.04)` | 微弱分割线 |
-| `--border-strong` | `rgba(255,255,255,0.18)` | `rgba(0,0,0,0.15)` | 强调边框/聚焦框 |
-| `--border-accent` | `rgba(10,132,255,0.45)` | `rgba(0,122,255,0.40)` | 选中/聚焦态边框 |
+| `--border-default` | `rgba(255, 255, 255, 0.08)` | `rgba(0, 0, 0, 0.08)` | 默认边框 |
+| `--border-subtle` | `rgba(255, 255, 255, 0.05)` | `rgba(0, 0, 0, 0.04)` | 微弱分割线 |
+| `--border-strong` | `rgba(245, 158, 11, 0.28)` | `rgba(217, 119, 6, 0.22)` | 强调边框/聚焦框 |
+| `--border-accent` | `rgba(245, 158, 11, 0.45)` | `rgba(217, 119, 6, 0.40)` | 选中/聚焦态边框 |
 
-#### 2.1.3 渐变 (Gradient)
+#### 2.1.3 预制调性色板系统 (Theme Palettes)
+
+应用支持通过 `<html data-palette="...">` 切换 4 套专属调性色板，每套均提供 Dark（暗黑）与 Light（明亮）双模态：
+
+| 色板标识 (`data-palette`) | 风格定位 | 主色 (Dark / Light) | 辅色 (Dark / Light) | 主背景 (Dark / Light) |
+|---|---|---|---|---|
+| `amber` (默认) | 暖琥珀 · 壁炉暖灯 (温润治愈、助眠护眼) | `#F59E0B` / `#D97706` | `#EA580C` / `#EA580C` | `#0F0E0D` / `#FAF7F2` |
+| `midnight` | 静谧星夜 · 极光流金 (精装烫金童话、深邃典雅) | `#E2C374` / `#B45309` | `#38BDF8` / `#0284C7` | `#0A0E17` / `#F5F7FA` |
+| `forest` | 森林雨雾 · 鼠尾草松针绿 (呼吸治愈、自然松弛) | `#34D399` / `#059669` | `#059669` / `#10B981` | `#0A120E` / `#F4F7F5` |
+| `mocha` | 复古摩卡 · 羊皮纸书卷 (留声机质感、人文厚重) | `#E0AF82` / `#9A5B2D` | `#A46535` / `#C28B5B` | `#110E0C` / `#F9F6F0` |
+
+#### 2.1.4 渐变与光晕 (Gradient & Aurora)
 
 | Token | 值 | 用途 |
 |-------|----|------|
-| `--gradient-brand` | `linear-gradient(135deg, var(--accent-primary), var(--accent-secondary))` | 品牌渐变（按钮高亮、标题装饰） |
-| `--gradient-surface` | `linear-gradient(180deg, var(--bg-secondary), var(--bg-primary))` | 页面底部渐变 |
-| `--gradient-fade-down` | `linear-gradient(180deg, var(--bg-secondary), transparent)` | 内容区顶部渐隐 |
+| `--gradient-brand` | `linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%)` | 品牌主渐变（按钮高亮、标题装饰） |
+| `--gradient-surface` | `linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%)` | 页面底部渐变 |
+| `--gradient-fade-down` | `linear-gradient(180deg, var(--bg-secondary) 0%, transparent 100%)` | 内容区顶部渐隐 |
 | `--gradient-fade-up` | `linear-gradient(0deg, var(--bg-primary) 0%, transparent 100%)` | 内容区底部渐隐（如输入框上方） |
-| `--gradient-glow` | `radial-gradient(circle, var(--accent-primary-subtle) 0%, transparent 70%)` | 播放器光晕效果 |
+| `--gradient-glow` | `radial-gradient(circle, var(--accent-primary-subtle) 0%, transparent 70%)` | 播放器/卡片光晕效果 |
+| `--aurora-primary` | `radial-gradient(circle, ...)` (Dark 开启，Light 为 `none`) | 沉浸式极光漫射底纹 |
+| `--aurora-secondary` | `radial-gradient(circle, ...)` (Dark 开启，Light 为 `none`) | 辅助光晕漫射底纹 |
+
+#### 2.1.5 图标与矢量规范 (SVG & Icon Standards)
+
+1. **100% 矢量化 (Pure SVG)**：全站禁止使用任何位图格式（`.jpeg`、`.jpg`、`.png`、`.webp`）作为 UI 图标或头像。所有图标和 Agent 头像必须为纯 SVG 矢量资源。
+2. **主题色同步 (Theme Sync)**：
+   - 交互类与装饰类图标（Lucide 图标及 `public/icons/*.svg`）统一采用 `currentColor` 或绑定 `var(--accent-primary)`、`var(--text-primary)`。
+   - 头像类矢量图标通过设计系统统一梯度渐变，与整体 4 色板调性保持视觉和谐。
+3. **无硬编码色彩 (No Hardcoded Colors)**：禁止在组件 CSS/SCSS 中硬编码电光蓝（如 `#007AFF`、`#0A84FF`）或蓝紫荧光色，所有色彩引用必须走 Design Token。
 
 ---
 

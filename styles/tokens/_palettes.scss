@@ -1,0 +1,364 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   产品调性预制色板系统 (Design Token Palettes)
+   4 套专属主题预制，每套均支持 Dark 与 Light 双模态：
+   1. amber    — 暖琥珀 / 晨曦暖金 (默认推荐，温润治愈、壁炉暖灯、助眠护眼)
+   2. midnight — 静谧星夜 / 极光流金 (精装烫金童话、深邃探索感、典雅高级)
+   3. forest   — 森林雨雾 / 鼠尾草松针绿 (呼吸治愈、草木清香、自然松弛)
+   4. mocha    — 复古摩卡 / 羊皮纸书卷 (留声机质感、泛黄手稿、人文厚重)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────────────
+   1. 暖琥珀 / 晨曦暖金 (Warm Amber & Hearth)
+   ───────────────────────────────────────────────────────────────────── */
+:root[data-theme="dark"][data-palette="amber"] {
+  --bg-primary:   #0F0E0D;
+  --bg-secondary: #181614;
+  --bg-tertiary:  #23201C;
+  --bg-elevated:  rgba(24, 22, 20, 0.78);
+  --bg-overlay:   rgba(0, 0, 0, 0.65);
+
+  --glass-bg:           rgba(28, 25, 22, 0.52);
+  --glass-border:       rgba(245, 158, 11, 0.12);
+  --glass-border-bright:rgba(245, 158, 11, 0.22);
+  --glass-highlight:    inset 0 0.5px 0 rgba(254, 243, 199, 0.14), inset 0 -0.5px 0 rgba(0, 0, 0, 0.35);
+
+  --text-primary:    #FDFBF7;
+  --text-secondary:  #B8AEA5;
+  --text-tertiary:   #7D756D;
+  --text-inverse:    #0F0E0D;
+  --text-on-primary: #FFFFFF;
+
+  --accent-primary:        #F59E0B;
+  --accent-primary-hover:  #FBBF24;
+  --accent-primary-subtle: rgba(245, 158, 11, 0.16);
+  --accent-secondary:      #EA580C;
+
+  --status-success: #10B981;
+  --status-warning: #F59E0B;
+  --status-error:   #EF4444;
+  --status-info:    #38BDF8;
+
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-subtle:  rgba(255, 255, 255, 0.05);
+  --border-strong:  rgba(245, 158, 11, 0.28);
+  --border-accent:  rgba(245, 158, 11, 0.45);
+
+  --gradient-brand:     linear-gradient(135deg, #F59E0B 0%, #EA580C 100%);
+  --gradient-surface:   linear-gradient(180deg, #181614 0%, #0F0E0D 100%);
+  --gradient-fade-down: linear-gradient(180deg, #181614 0%, transparent 100%);
+  --gradient-fade-up:   linear-gradient(0deg, #0F0E0D 0%, transparent 100%);
+  --gradient-glow:      radial-gradient(circle, rgba(245, 158, 11, 0.25) 0%, transparent 70%);
+
+  --aurora-primary:   radial-gradient(circle, rgba(245, 158, 11, 0.18) 0%, transparent 70%);
+  --aurora-secondary: radial-gradient(circle, rgba(234, 88, 12, 0.14) 0%, transparent 70%);
+}
+
+:root[data-theme="light"][data-palette="amber"] {
+  --bg-primary:   #FAF7F2;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary:  #F3EFEA;
+  --bg-elevated:  rgba(255, 255, 255, 0.82);
+  --bg-overlay:   rgba(0, 0, 0, 0.35);
+
+  --glass-bg:           rgba(255, 255, 255, 0.65);
+  --glass-border:       rgba(217, 119, 6, 0.12);
+  --glass-border-bright:rgba(255, 255, 255, 0.90);
+  --glass-highlight:    inset 0 0.5px 0 rgba(255, 255, 255, 0.85), inset 0 -0.5px 0 rgba(0, 0, 0, 0.04);
+
+  --text-primary:    #1C1917;
+  --text-secondary:  #57534E;
+  --text-tertiary:   #8C827A;
+  --text-inverse:    #FFFFFF;
+  --text-on-primary: #FFFFFF;
+
+  --accent-primary:        #D97706;
+  --accent-primary-hover:  #B45309;
+  --accent-primary-subtle: rgba(217, 119, 6, 0.12);
+  --accent-secondary:      #EA580C;
+
+  --status-success: #059669;
+  --status-warning: #D97706;
+  --status-error:   #DC2626;
+  --status-info:    #0284C7;
+
+  --border-default: rgba(0, 0, 0, 0.08);
+  --border-subtle:  rgba(0, 0, 0, 0.04);
+  --border-strong:  rgba(217, 119, 6, 0.22);
+  --border-accent:  rgba(217, 119, 6, 0.40);
+
+  --gradient-brand:     linear-gradient(135deg, #D97706 0%, #EA580C 100%);
+  --gradient-surface:   linear-gradient(180deg, #FFFFFF 0%, #FAF7F2 100%);
+  --gradient-fade-down: linear-gradient(180deg, #FFFFFF 0%, transparent 100%);
+  --gradient-fade-up:   linear-gradient(0deg, #FAF7F2 0%, transparent 100%);
+  --gradient-glow:      radial-gradient(circle, rgba(217, 119, 6, 0.16) 0%, transparent 70%);
+
+  --aurora-primary:   none;
+  --aurora-secondary: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   2. 静谧星夜 / 极光流金 (Midnight Navy & Starlight Gold)
+   ───────────────────────────────────────────────────────────────────── */
+:root[data-theme="dark"][data-palette="midnight"] {
+  --bg-primary:   #0A0E17;
+  --bg-secondary: #121929;
+  --bg-tertiary:  #1B2438;
+  --bg-elevated:  rgba(18, 25, 41, 0.80);
+  --bg-overlay:   rgba(0, 0, 0, 0.65);
+
+  --glass-bg:           rgba(18, 25, 41, 0.52);
+  --glass-border:       rgba(226, 195, 116, 0.14);
+  --glass-border-bright:rgba(226, 195, 116, 0.25);
+  --glass-highlight:    inset 0 0.5px 0 rgba(226, 195, 116, 0.16), inset 0 -0.5px 0 rgba(0, 0, 0, 0.35);
+
+  --text-primary:    #F8FAFC;
+  --text-secondary:  #94A3B8;
+  --text-tertiary:   #64748B;
+  --text-inverse:    #0A0E17;
+  --text-on-primary: #0A0E17;
+
+  --accent-primary:        #E2C374;
+  --accent-primary-hover:  #F0D695;
+  --accent-primary-subtle: rgba(226, 195, 116, 0.18);
+  --accent-secondary:      #38BDF8;
+
+  --status-success: #34D399;
+  --status-warning: #FBBF24;
+  --status-error:   #F87171;
+  --status-info:    #38BDF8;
+
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-subtle:  rgba(255, 255, 255, 0.05);
+  --border-strong:  rgba(226, 195, 116, 0.28);
+  --border-accent:  rgba(226, 195, 116, 0.45);
+
+  --gradient-brand:     linear-gradient(135deg, #E2C374 0%, #C5A059 100%);
+  --gradient-surface:   linear-gradient(180deg, #121929 0%, #0A0E17 100%);
+  --gradient-fade-down: linear-gradient(180deg, #121929 0%, transparent 100%);
+  --gradient-fade-up:   linear-gradient(0deg, #0A0E17 0%, transparent 100%);
+  --gradient-glow:      radial-gradient(circle, rgba(226, 195, 116, 0.25) 0%, transparent 70%);
+
+  --aurora-primary:   radial-gradient(circle, rgba(226, 195, 116, 0.16) 0%, transparent 70%);
+  --aurora-secondary: radial-gradient(circle, rgba(56, 189, 248, 0.14) 0%, transparent 70%);
+}
+
+:root[data-theme="light"][data-palette="midnight"] {
+  --bg-primary:   #F5F7FA;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary:  #EBF0F7;
+  --bg-elevated:  rgba(255, 255, 255, 0.85);
+  --bg-overlay:   rgba(0, 0, 0, 0.35);
+
+  --glass-bg:           rgba(255, 255, 255, 0.70);
+  --glass-border:       rgba(180, 83, 9, 0.10);
+  --glass-border-bright:rgba(255, 255, 255, 0.90);
+  --glass-highlight:    inset 0 0.5px 0 rgba(255, 255, 255, 0.85), inset 0 -0.5px 0 rgba(0, 0, 0, 0.04);
+
+  --text-primary:    #0F172A;
+  --text-secondary:  #475569;
+  --text-tertiary:   #64748B;
+  --text-inverse:    #FFFFFF;
+  --text-on-primary: #FFFFFF;
+
+  --accent-primary:        #B45309;
+  --accent-primary-hover:  #92400E;
+  --accent-primary-subtle: rgba(180, 83, 9, 0.12);
+  --accent-secondary:      #0284C7;
+
+  --status-success: #059669;
+  --status-warning: #D97706;
+  --status-error:   #DC2626;
+  --status-info:    #0284C7;
+
+  --border-default: rgba(0, 0, 0, 0.08);
+  --border-subtle:  rgba(0, 0, 0, 0.04);
+  --border-strong:  rgba(180, 83, 9, 0.22);
+  --border-accent:  rgba(180, 83, 9, 0.40);
+
+  --gradient-brand:     linear-gradient(135deg, #B45309 0%, #D4AF37 100%);
+  --gradient-surface:   linear-gradient(180deg, #FFFFFF 0%, #F5F7FA 100%);
+  --gradient-fade-down: linear-gradient(180deg, #FFFFFF 0%, transparent 100%);
+  --gradient-fade-up:   linear-gradient(0deg, #F5F7FA 0%, transparent 100%);
+  --gradient-glow:      radial-gradient(circle, rgba(180, 83, 9, 0.15) 0%, transparent 70%);
+
+  --aurora-primary:   none;
+  --aurora-secondary: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   3. 森林雨雾 / 鼠尾草松针绿 (Sage Forest & Rain Mist)
+   ───────────────────────────────────────────────────────────────────── */
+:root[data-theme="dark"][data-palette="forest"] {
+  --bg-primary:   #0A120E;
+  --bg-secondary: #12211A;
+  --bg-tertiary:  #1B3026;
+  --bg-elevated:  rgba(18, 33, 26, 0.80);
+  --bg-overlay:   rgba(0, 0, 0, 0.65);
+
+  --glass-bg:           rgba(18, 33, 26, 0.52);
+  --glass-border:       rgba(52, 211, 153, 0.14);
+  --glass-border-bright:rgba(52, 211, 153, 0.25);
+  --glass-highlight:    inset 0 0.5px 0 rgba(52, 211, 153, 0.16), inset 0 -0.5px 0 rgba(0, 0, 0, 0.35);
+
+  --text-primary:    #F2FBF6;
+  --text-secondary:  #96B4A4;
+  --text-tertiary:   #658273;
+  --text-inverse:    #0A120E;
+  --text-on-primary: #0A120E;
+
+  --accent-primary:        #34D399;
+  --accent-primary-hover:  #6EE7B7;
+  --accent-primary-subtle: rgba(52, 211, 153, 0.18);
+  --accent-secondary:      #059669;
+
+  --status-success: #34D399;
+  --status-warning: #FBBF24;
+  --status-error:   #F87171;
+  --status-info:    #38BDF8;
+
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-subtle:  rgba(255, 255, 255, 0.05);
+  --border-strong:  rgba(52, 211, 153, 0.28);
+  --border-accent:  rgba(52, 211, 153, 0.45);
+
+  --gradient-brand:     linear-gradient(135deg, #34D399 0%, #059669 100%);
+  --gradient-surface:   linear-gradient(180deg, #12211A 0%, #0A120E 100%);
+  --gradient-fade-down: linear-gradient(180deg, #12211A 0%, transparent 100%);
+  --gradient-fade-up:   linear-gradient(0deg, #0A120E 0%, transparent 100%);
+  --gradient-glow:      radial-gradient(circle, rgba(52, 211, 153, 0.25) 0%, transparent 70%);
+
+  --aurora-primary:   radial-gradient(circle, rgba(52, 211, 153, 0.18) 0%, transparent 70%);
+  --aurora-secondary: radial-gradient(circle, rgba(5, 150, 105, 0.14) 0%, transparent 70%);
+}
+
+:root[data-theme="light"][data-palette="forest"] {
+  --bg-primary:   #F4F7F5;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary:  #EAF0EC;
+  --bg-elevated:  rgba(255, 255, 255, 0.85);
+  --bg-overlay:   rgba(0, 0, 0, 0.35);
+
+  --glass-bg:           rgba(255, 255, 255, 0.70);
+  --glass-border:       rgba(5, 150, 105, 0.10);
+  --glass-border-bright:rgba(255, 255, 255, 0.90);
+  --glass-highlight:    inset 0 0.5px 0 rgba(255, 255, 255, 0.85), inset 0 -0.5px 0 rgba(0, 0, 0, 0.04);
+
+  --text-primary:    #0F241A;
+  --text-secondary:  #3D5A4C;
+  --text-tertiary:   #688577;
+  --text-inverse:    #FFFFFF;
+  --text-on-primary: #FFFFFF;
+
+  --accent-primary:        #059669;
+  --accent-primary-hover:  #047857;
+  --accent-primary-subtle: rgba(5, 150, 105, 0.12);
+  --accent-secondary:      #10B981;
+
+  --status-success: #059669;
+  --status-warning: #D97706;
+  --status-error:   #DC2626;
+  --status-info:    #0284C7;
+
+  --border-default: rgba(0, 0, 0, 0.08);
+  --border-subtle:  rgba(0, 0, 0, 0.04);
+  --border-strong:  rgba(5, 150, 105, 0.22);
+  --border-accent:  rgba(5, 150, 105, 0.40);
+
+  --gradient-brand:     linear-gradient(135deg, #059669 0%, #10B981 100%);
+  --gradient-surface:   linear-gradient(180deg, #FFFFFF 0%, #F4F7F5 100%);
+  --gradient-fade-down: linear-gradient(180deg, #FFFFFF 0%, transparent 100%);
+  --gradient-fade-up:   linear-gradient(0deg, #F4F7F5 0%, transparent 100%);
+  --gradient-glow:      radial-gradient(circle, rgba(5, 150, 105, 0.15) 0%, transparent 70%);
+
+  --aurora-primary:   none;
+  --aurora-secondary: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   4. 复古摩卡 / 羊皮纸书卷 (Vintage Mocha & Parchment)
+   ───────────────────────────────────────────────────────────────────── */
+:root[data-theme="dark"][data-palette="mocha"] {
+  --bg-primary:   #110E0C;
+  --bg-secondary: #1C1714;
+  --bg-tertiary:  #29211D;
+  --bg-elevated:  rgba(28, 23, 20, 0.80);
+  --bg-overlay:   rgba(0, 0, 0, 0.65);
+
+  --glass-bg:           rgba(28, 23, 20, 0.52);
+  --glass-border:       rgba(224, 175, 130, 0.14);
+  --glass-border-bright:rgba(224, 175, 130, 0.25);
+  --glass-highlight:    inset 0 0.5px 0 rgba(224, 175, 130, 0.16), inset 0 -0.5px 0 rgba(0, 0, 0, 0.35);
+
+  --text-primary:    #FBF8F5;
+  --text-secondary:  #B8ACA5;
+  --text-tertiary:   #7D736D;
+  --text-inverse:    #110E0C;
+  --text-on-primary: #110E0C;
+
+  --accent-primary:        #E0AF82;
+  --accent-primary-hover:  #EBC4A0;
+  --accent-primary-subtle: rgba(224, 175, 130, 0.18);
+  --accent-secondary:      #A46535;
+
+  --status-success: #34D399;
+  --status-warning: #FBBF24;
+  --status-error:   #F87171;
+  --status-info:    #38BDF8;
+
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-subtle:  rgba(255, 255, 255, 0.05);
+  --border-strong:  rgba(224, 175, 130, 0.28);
+  --border-accent:  rgba(224, 175, 130, 0.45);
+
+  --gradient-brand:     linear-gradient(135deg, #E0AF82 0%, #A46535 100%);
+  --gradient-surface:   linear-gradient(180deg, #1C1714 0%, #110E0C 100%);
+  --gradient-fade-down: linear-gradient(180deg, #1C1714 0%, transparent 100%);
+  --gradient-fade-up:   linear-gradient(0deg, #110E0C 0%, transparent 100%);
+  --gradient-glow:      radial-gradient(circle, rgba(224, 175, 130, 0.25) 0%, transparent 70%);
+
+  --aurora-primary:   radial-gradient(circle, rgba(224, 175, 130, 0.18) 0%, transparent 70%);
+  --aurora-secondary: radial-gradient(circle, rgba(164, 101, 53, 0.14) 0%, transparent 70%);
+}
+
+:root[data-theme="light"][data-palette="mocha"] {
+  --bg-primary:   #F9F6F0;
+  --bg-secondary: #FFFDF9;
+  --bg-tertiary:  #F2ECE0;
+  --bg-elevated:  rgba(255, 253, 249, 0.85);
+  --bg-overlay:   rgba(0, 0, 0, 0.35);
+
+  --glass-bg:           rgba(255, 253, 249, 0.70);
+  --glass-border:       rgba(154, 91, 45, 0.10);
+  --glass-border-bright:rgba(255, 255, 255, 0.90);
+  --glass-highlight:    inset 0 0.5px 0 rgba(255, 255, 255, 0.85), inset 0 -0.5px 0 rgba(0, 0, 0, 0.04);
+
+  --text-primary:    #231811;
+  --text-secondary:  #5E4D43;
+  --text-tertiary:   #8C7C72;
+  --text-inverse:    #FFFFFF;
+  --text-on-primary: #FFFFFF;
+
+  --accent-primary:        #9A5B2D;
+  --accent-primary-hover:  #7D4720;
+  --accent-primary-subtle: rgba(154, 91, 45, 0.12);
+  --accent-secondary:      #C28B5B;
+
+  --status-success: #059669;
+  --status-warning: #D97706;
+  --status-error:   #DC2626;
+  --status-info:    #0284C7;
+
+  --border-default: rgba(0, 0, 0, 0.08);
+  --border-subtle:  rgba(0, 0, 0, 0.04);
+  --border-strong:  rgba(154, 91, 45, 0.22);
+  --border-accent:  rgba(154, 91, 45, 0.40);
+
+  --gradient-brand:     linear-gradient(135deg, #9A5B2D 0%, #C28B5B 100%);
+  --gradient-surface:   linear-gradient(180deg, #FFFDF9 0%, #F9F6F0 100%);
+  --gradient-fade-down: linear-gradient(180deg, #FFFDF9 0%, transparent 100%);
+  --gradient-fade-up:   linear-gradient(0deg, #F9F6F0 0%, transparent 100%);
+  --gradient-glow:      radial-gradient(circle, rgba(154, 91, 45, 0.15) 0%, transparent 70%);
+
+  --aurora-primary:   none;
+  --aurora-secondary: none;
+}

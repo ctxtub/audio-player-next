@@ -1,0 +1,14 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="chat_grad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="14" fill="url(#chat_grad)"/>
+  <!-- Chat Bubble Icon -->
+  <path d="M13 23C13 17.5 17.5 13 23.5 13C29.5 13 34 17.5 34 23C34 28.5 29.5 33 23.5 33C21.5 33 19.5 32.5 18 31.5L13 33.5L14.5 29C13.5 27.2 13 25.2 13 23Z" fill="white" fill-opacity="0.95"/>
+  <circle cx="20" cy="23" r="1.8" fill="#D97706"/>
+  <circle cx="24" cy="23" r="1.8" fill="#D97706"/>
+  <circle cx="28" cy="23" r="1.8" fill="#D97706"/>
+</svg>

@@ -1,0 +1,14 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="summary_grad" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E0AF82"/>
+      <stop offset="100%" stop-color="#9A5B2D"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="14" fill="url(#summary_grad)"/>
+  <!-- Parchment Summary Scroll / Notes Icon -->
+  <rect x="14" y="11" width="20" height="26" rx="4" fill="white" fill-opacity="0.95"/>
+  <line x1="18" y1="18" x2="30" y2="18" stroke="#9A5B2D" stroke-width="2" stroke-linecap="round"/>
+  <line x1="18" y1="24" x2="30" y2="24" stroke="#9A5B2D" stroke-width="2" stroke-linecap="round"/>
+  <line x1="18" y1="30" x2="25" y2="30" stroke="#9A5B2D" stroke-width="2" stroke-linecap="round"/>
+</svg>

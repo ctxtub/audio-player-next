@@ -4,7 +4,8 @@ import '@/styles/index.scss';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import {
   FALLBACK_THEME,
-  THEME_COLORS,
+  DEFAULT_PALETTE,
+  THEME_BG_COLORS,
   INITIAL_THEME_SCRIPT,
 } from '@/components/ThemeProvider/themeConfig';
 
@@ -51,13 +52,14 @@ export default function RootLayout({
     <html
       lang="zh"
       data-theme={FALLBACK_THEME}
+      data-palette={DEFAULT_PALETTE}
       className={fontClassName}
       suppressHydrationWarning
     >
       <head>
         <title>故事工坊</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-        <meta name="theme-color" content={THEME_COLORS[FALLBACK_THEME]} />
+        <meta name="theme-color" content={THEME_BG_COLORS[DEFAULT_PALETTE][FALLBACK_THEME]} />
         <script dangerouslySetInnerHTML={{ __html: INITIAL_THEME_SCRIPT }} />
       </head>
       <body>

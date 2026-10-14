@@ -1,19 +1,10 @@
 /**
  * 头像静态资源集中导出。
- * 使用 static import 让 Next.js 生成带 hash 的路径，浏览器可永久缓存（immutable）。
+ * 全量迁移为纯 SVG 矢量图标，保持与设计系统主题色深度融合。
  */
-import avatarAssistant from '@/public/icons/avatar-assistant.jpeg';
-import avatarUser from '@/public/icons/avatar-user.jpeg';
-import avatarStoryAgent from '@/public/icons/avatar-story-agent.jpeg';
-import avatarChatAgent from '@/public/icons/avatar-chat-agent.jpeg';
-import avatarGuidanceAgent from '@/public/icons/avatar-guidance-agent.jpeg';
-import avatarSummaryAgent from '@/public/icons/avatar-summary-agent.jpeg';
-
-export {
-  avatarAssistant,
-  avatarUser,
-  avatarStoryAgent,
-  avatarChatAgent,
-  avatarGuidanceAgent,
-  avatarSummaryAgent,
-};
+export const avatarAssistant = '/icons/avatar-assistant.svg';
+export const avatarUser = '/icons/avatar-user.svg';
+export const avatarStoryAgent = '/icons/avatar-story-agent.svg';
+export const avatarChatAgent = '/icons/avatar-chat-agent.svg';
+export const avatarGuidanceAgent = '/icons/avatar-guidance-agent.svg';
+export const avatarSummaryAgent = '/icons/avatar-summary-agent.svg';

@@ -10,6 +10,7 @@ import styles from './index.module.scss';
 import DefaultSleepTimerSection from './components/DefaultSleepTimerSection';
 import DesktopFloatingPlayerSection from './components/DesktopFloatingPlayerSection';
 import ThemeModeSection from './components/ThemeModeSection';
+import ThemePaletteSection from './components/ThemePaletteSection';
 import VoiceServiceSection from './components/VoiceServiceSection';
 import SpeedConfigSection from './components/SpeedConfigSection';
 import UserSection from './components/UserSection';
@@ -23,7 +24,7 @@ const ConfigPage: React.FC = () => {
   const updateConfig = useConfigStore(state => state.update);
   const isConfigLoaded = useConfigStore(state => state.isLoaded);
   const voiceOptions = useConfigStore(state => state.voiceOptions);
-  const { themeMode, setThemeMode } = useTheme();
+  const { themeMode, setThemeMode, palette, setPalette } = useTheme();
   const fetchAuthProfile = useAuthStore(state => state.fetchProfile);
 
   useEffect(() => {
@@ -172,6 +173,7 @@ const ConfigPage: React.FC = () => {
       <div className={styles.configForm}>
         <UserSection />
         <ThemeModeSection value={themeMode} onChange={handleThemeModeChange} />
+        <ThemePaletteSection value={palette} onChange={setPalette} />
         <DefaultSleepTimerSection
           enabled={defaultSleepTimerEnabled}
           minutes={defaultSleepTimerMinutes}

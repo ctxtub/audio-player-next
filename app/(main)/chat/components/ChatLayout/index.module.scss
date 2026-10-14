@@ -45,6 +45,16 @@
   justify-content: center;
 }
 
+.onboardingArea {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  min-height: 0;
+  width: 100%;
+}
+
 .inputArea {
   flex: 0 0 auto;
   display: flex;

@@ -1,51 +1,51 @@
-/* Dark 语义色 — v2 Design Upgrade */
+/* Dark 语义色 — Warm Amber 默认色板 (v2 Design Upgrade) */
 :root[data-theme="dark"] {
   /* 背景层级 */
-  --bg-primary:   #09090B;
-  --bg-secondary: #141417;
-  --bg-tertiary:  #1C1C20;
-  --bg-elevated:  rgba(28, 28, 32, 0.72);
-  --bg-overlay:   rgba(0, 0, 0, 0.55);
+  --bg-primary:   #0F0E0D;
+  --bg-secondary: #181614;
+  --bg-tertiary:  #23201C;
+  --bg-elevated:  rgba(24, 22, 20, 0.78);
+  --bg-overlay:   rgba(0, 0, 0, 0.65);
 
   /* Liquid Glass 表面 */
-  --glass-bg:           rgba(30, 30, 34, 0.45);
-  --glass-border:       rgba(255, 255, 255, 0.09);
-  --glass-border-bright:rgba(255, 255, 255, 0.16);
-  --glass-highlight:    inset 0 0.5px 0 rgba(255, 255, 255, 0.14), inset 0 -0.5px 0 rgba(0, 0, 0, 0.3);
+  --glass-bg:           rgba(28, 25, 22, 0.52);
+  --glass-border:       rgba(245, 158, 11, 0.12);
+  --glass-border-bright:rgba(245, 158, 11, 0.22);
+  --glass-highlight:    inset 0 0.5px 0 rgba(254, 243, 199, 0.14), inset 0 -0.5px 0 rgba(0, 0, 0, 0.35);
 
   /* 前景 / 文字 */
-  --text-primary:    #F5F5F7;
-  --text-secondary:  #A8A8B3;
-  --text-tertiary:   #76767F;
-  --text-inverse:    #09090B;
-  --text-on-primary: #ffffff;
+  --text-primary:    #FDFBF7;
+  --text-secondary:  #B8AEA5;
+  --text-tertiary:   #7D756D;
+  --text-inverse:    #0F0E0D;
+  --text-on-primary: #FFFFFF;
 
-  /* 品牌 / 交互 — 引用 oklch 动态变量 */
-  --accent-primary:        var(--accent-500);
-  --accent-primary-hover:  var(--accent-400);
-  --accent-primary-subtle: var(--accent-tint);
-  --accent-secondary: oklch(68% 0.18 calc(var(--accent-h) + 60));
+  /* 品牌 / 交互 — Warm Amber 温暖治愈 */
+  --accent-primary:        #F59E0B;
+  --accent-primary-hover:  #FBBF24;
+  --accent-primary-subtle: rgba(245, 158, 11, 0.16);
+  --accent-secondary:      #EA580C;
 
   /* 语义状态 */
-  --status-success: oklch(72% 0.16 152);
-  --status-warning: oklch(78% 0.14 72);
-  --status-error:   oklch(68% 0.20 25);
-  --status-info:    oklch(74% 0.14 220);
+  --status-success: #10B981;
+  --status-warning: #F59E0B;
+  --status-error:   #EF4444;
+  --status-info:    #38BDF8;
 
   /* 边框 */
   --border-default: rgba(255, 255, 255, 0.08);
   --border-subtle:  rgba(255, 255, 255, 0.05);
-  --border-strong:  rgba(255, 255, 255, 0.14);
-  --border-accent:  oklch(66% 0.18 var(--accent-h) / 0.45);
+  --border-strong:  rgba(245, 158, 11, 0.28);
+  --border-accent:  rgba(245, 158, 11, 0.45);
 
   /* 渐变 */
-  --gradient-brand:     linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  --gradient-surface:   linear-gradient(180deg, var(--bg-secondary), var(--bg-primary));
-  --gradient-fade-down: linear-gradient(180deg, var(--bg-secondary), transparent);
-  --gradient-fade-up:   linear-gradient(0deg, var(--bg-primary) 0%, transparent 100%);
-  --gradient-glow:      radial-gradient(circle, var(--accent-tint) 0%, transparent 70%);
+  --gradient-brand:     linear-gradient(135deg, #F59E0B 0%, #EA580C 100%);
+  --gradient-surface:   linear-gradient(180deg, #181614 0%, #0F0E0D 100%);
+  --gradient-fade-down: linear-gradient(180deg, #181614 0%, transparent 100%);
+  --gradient-fade-up:   linear-gradient(0deg, #0F0E0D 0%, transparent 100%);
+  --gradient-glow:      radial-gradient(circle, rgba(245, 158, 11, 0.25) 0%, transparent 70%);
 
-  /* Aurora 光晕（仅暗色，供 Player/Chat 背景使用） */
-  --aurora-primary:   radial-gradient(circle, var(--accent-500) 0%, transparent 70%);
-  --aurora-secondary: radial-gradient(circle, var(--accent2-500) 0%, transparent 70%);
+  /* Aurora 光晕（暖色漫射） */
+  --aurora-primary:   radial-gradient(circle, rgba(245, 158, 11, 0.18) 0%, transparent 70%);
+  --aurora-secondary: radial-gradient(circle, rgba(234, 88, 12, 0.14) 0%, transparent 70%);
 }

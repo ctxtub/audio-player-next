@@ -15,12 +15,13 @@ import { useChatStore } from '@/stores/chatStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 
-import HeaderArea from './HeaderArea';
-import OnboardingModal from '../OnboardingModal';
 import InputArea from './InputArea';
 import MessageArea from './MessageArea';
 import ContinuousCreationBar from '../ContinuousCreationBar';
 import ContinuousCreationCard from '../ContinuousCreationCard';
+import OnboardingCard from '../OnboardingCard';
+import { getSafeLocalStorage } from '@/utils/storage';
+import { markOnboardingSeen } from '@/utils/chatOnboarding';
 import styles from './index.module.scss';
 import type { ChatLayoutProps } from './types';
 
@@ -70,6 +71,13 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
   /** 当前 active Conversation 对应的集合 id。 */
   const collectionId = useChatStore((state) => state.collectionId);
   const previousConversationId = useChatStore((state) => state.previousConversationId);
+  const [isOnboardingDismissed, setIsOnboardingDismissed] = useState(false);
+
+  const handleDismissOnboarding = useCallback(() => {
+    setIsOnboardingDismissed(true);
+    markOnboardingSeen(getSafeLocalStorage());
+  }, []);
+
   /** 是否存在发送中的消息，用于控制输入区禁用状态 */
   const isSending = useMemo(
     () => messages.some((m) => m.status === 'sending'),
@@ -210,12 +218,6 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
     [isSending, setInputValue],
   );
 
-  /** 是否展示顶部欢迎区，根据是否存在历史消息决定。 */
-  const shouldShowHeader = useMemo(
-    () => messages.length === 0,
-    [messages.length],
-  );
-
   /**
    * 处理失败消息的重试逻辑，确保仅在待重试的消息上触发。
    * @param retryId 触发重试的消息 id。
@@ -263,6 +265,9 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
           GlassToast.show({ icon: 'fail', content: '新建创作失败，请重试' });
           return false;
         }
+        if (result.started) {
+          setIsOnboardingDismissed(false);
+        }
         return result.started;
       })
       .finally(() => {
@@ -274,25 +279,30 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
 
   return (
     <div className={styles.chatLayout}>
-      <OnboardingModal />
       <CreationConfirmation open={confirmNewCreation} resolve={(approved) => { setConfirmNewCreation(false); confirmResolver.current?.(approved); confirmResolver.current = null; }} />
 
-      <HeaderArea
-        visible={shouldShowHeader}
-        suggestions={defaultSuggestions}
-        onSuggestionSelect={handleSuggestionSelect}
-      />
       <ContinuousCreationBar
         collectionTitle={collectionTitle}
         onNewCreation={handleNewCreation}
         newCreationDisabled={!isCreationReady || isSending || isStartingNewCreation}
       />
       {previousConversationId && <Link className={styles.previousConversationLink} href={conversationPath(previousConversationId)}>返回上一份创作（已保留输入）</Link>}
-      <MessageArea
-        messages={messages}
-        isLoading={false}
-        onRetry={handleRetry}
-      />
+
+      {messages.length === 0 && !isOnboardingDismissed ? (
+        <div className={styles.onboardingArea}>
+          <OnboardingCard
+            suggestions={defaultSuggestions}
+            onSuggestionSelect={handleSuggestionSelect}
+            onDismiss={handleDismissOnboarding}
+          />
+        </div>
+      ) : (
+        <MessageArea
+          messages={messages}
+          isLoading={false}
+          onRetry={handleRetry}
+        />
+      )}
       <ContinuousCreationCard />
       <InputArea
         onSubmit={handleSubmit}

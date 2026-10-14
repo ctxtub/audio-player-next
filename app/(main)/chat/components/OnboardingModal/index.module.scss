@@ -81,7 +81,7 @@
 
   /* 三个 agent 图标不同色调 */
   &:nth-child(1) .icon {
-    background: linear-gradient(135deg, #0A84FF, #5AC8FA);
+    background: var(--gradient-brand);
   }
 
   &:nth-child(2) .icon {

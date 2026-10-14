@@ -8,23 +8,26 @@ import React, {
   useState,
   useCallback,
 } from 'react';
-import type { ThemeMode } from '@/types/theme';
+import type { ThemeMode, ThemePalette } from '@/types/theme';
 import {
   THEME_MODE_STORAGE_KEY,
+  THEME_PALETTE_STORAGE_KEY,
   THEME_SEQUENCE,
-  THEME_COLORS,
+  THEME_BG_COLORS,
   getInitialThemeState,
 } from './themeConfig';
 import type { ThemeValue, ThemeState } from './themeConfig';
 
 /**
- * 主题上下文的状态结构。
+ * 主题上下文的状态结构，包含模式与专属调性色板。
  */
 interface ThemeContextType {
   currentTheme: ThemeValue;
   themeMode: ThemeMode;
+  palette: ThemePalette;
   toggleTheme: () => void;
   setThemeMode: (mode: ThemeMode) => void;
+  setPalette: (palette: ThemePalette) => void;
 }
 
 /**
@@ -33,13 +36,15 @@ interface ThemeContextType {
 const INITIAL_THEME_STATE: ThemeState = getInitialThemeState();
 
 /**
- * 主题上下文实例，提供主题状态读写。
+ * 主题上下文实例，提供主题与调性色板状态读写。
  */
 const ThemeContext = createContext<ThemeContextType>({
   currentTheme: INITIAL_THEME_STATE.resolvedTheme,
   themeMode: INITIAL_THEME_STATE.themeMode,
+  palette: INITIAL_THEME_STATE.palette,
   toggleTheme: () => {},
   setThemeMode: () => {},
+  setPalette: () => {},
 });
 
 /**
@@ -49,12 +54,13 @@ const ThemeContext = createContext<ThemeContextType>({
 export const useTheme = () => useContext(ThemeContext);
 
 /**
- * 主题 Provider，负责管理主题状态并同步至文档。
+ * 主题 Provider，负责管理主题模式与预制色板状态，并同步至文档属性。
  * @param children 需要包裹的子节点
- * @returns 包裹 ConfigProvider 的主题上下文
+ * @returns 主题上下文 Provider
  */
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [themeMode, setThemeMode] = useState<ThemeMode>(INITIAL_THEME_STATE.themeMode);
+  const [palette, setPaletteState] = useState<ThemePalette>(INITIAL_THEME_STATE.palette);
   const [systemTheme, setSystemTheme] = useState<ThemeValue>(INITIAL_THEME_STATE.systemTheme);
 
   useEffect(() => {
@@ -100,13 +106,29 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [themeMode]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(THEME_PALETTE_STORAGE_KEY, palette);
+    } catch {
+      // ignore storage write failures
+    }
+  }, [palette]);
+
   const resolvedTheme: ThemeValue = useMemo(
-    () => themeMode === 'system' ? systemTheme : themeMode,
+    () => (themeMode === 'system' ? systemTheme : themeMode),
     [themeMode, systemTheme]
   );
 
   const handleSetThemeMode = useCallback((mode: ThemeMode) => {
     setThemeMode(mode);
+  }, []);
+
+  const handleSetPalette = useCallback((nextPalette: ThemePalette) => {
+    setPaletteState(nextPalette);
   }, []);
 
   const toggleTheme = useCallback(() => {
@@ -127,22 +149,27 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (docEl.getAttribute('data-theme') !== resolvedTheme) {
       docEl.setAttribute('data-theme', resolvedTheme);
     }
-
-    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-    if (metaThemeColor && THEME_COLORS[resolvedTheme]) {
-      metaThemeColor.setAttribute('content', THEME_COLORS[resolvedTheme]);
+    if (docEl.getAttribute('data-palette') !== palette) {
+      docEl.setAttribute('data-palette', palette);
     }
 
-  }, [resolvedTheme]);
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    const colorForTheme = THEME_BG_COLORS[palette]?.[resolvedTheme];
+    if (metaThemeColor && colorForTheme) {
+      metaThemeColor.setAttribute('content', colorForTheme);
+    }
+  }, [resolvedTheme, palette]);
 
   const contextValue = useMemo(
     () => ({
       currentTheme: resolvedTheme,
       themeMode,
+      palette,
       toggleTheme,
       setThemeMode: handleSetThemeMode,
+      setPalette: handleSetPalette,
     }),
-    [resolvedTheme, themeMode, toggleTheme, handleSetThemeMode]
+    [resolvedTheme, themeMode, palette, toggleTheme, handleSetThemeMode, handleSetPalette]
   );
 
   return (

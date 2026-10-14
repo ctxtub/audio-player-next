@@ -36,7 +36,7 @@ const UserSection: React.FC = () => {
 
   const statusText = useMemo(() => {
     if (isLogin) return '已登录';
-    if (isGuest) return '访客会话有效期 30 天；数据连续 30 天未更新后可能清理。访客会话仍有效时注册，数据会迁移到账号';
+    if (isGuest) return '访客模式（数据保留 30 天，注册账号可永久保存）';
     return initialized ? '登录后解锁全部功能' : '正在检查登录状态';
   }, [initialized, isGuest, isLogin]);
 

@@ -1,26 +1,16 @@
-/* 新手引导卡片 — Liquid Glass 单卡设计，与顶部/底部胶囊边距完全对齐 */
-.card {
-  position: relative;
+/* Agent 新手引导气泡 — 对齐对话流原生气泡，消除视觉语义冲突 */
+.row {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
   gap: var(--space-3);
-  width: calc(100% - var(--space-4));
-  max-width: 760px;
-  margin: var(--space-2) auto;
-  padding: var(--space-4);
-  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 0.5px solid var(--glass-border);
-  border-radius: 24px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25), var(--glass-highlight);
-  animation: fadeIn var(--duration-normal) var(--ease-default);
+  width: 100%;
+  animation: bubbleFadeIn var(--duration-normal) var(--ease-default);
 }
 
-@keyframes fadeIn {
+@keyframes bubbleFadeIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -28,104 +18,110 @@
   }
 }
 
+.avatar {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.bubbleWrapper {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .headerRow {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-}
-
-.iconBadge {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-lg);
-  background: var(--gradient-brand);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--text-on-primary);
-  box-shadow: 0 4px 14px var(--accent-glow);
-}
-
-.headerText {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: var(--text-lg);
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  background: var(--gradient-brand);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.subtitle {
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  line-height: var(--leading-normal);
-}
-
-/* 步骤网格：桌面 3 列，手机纵向 */
-.stepsGrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-2);
-  margin-top: var(--space-1);
 }
 
-.stepItem {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-lg);
-  background: var(--bg-tertiary);
-  border: 0.5px solid var(--border-default);
-}
-
-.stepIcon {
-  color: var(--accent-primary);
-  margin-top: 2px;
-  flex-shrink: 0;
-}
-
-.stepBody {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.stepName {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
+.displayName {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   color: var(--text-primary);
 }
 
-.stepDesc {
+.badge {
   font-size: 11px;
-  color: var(--text-tertiary);
-  line-height: 1.35;
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  color: var(--accent-primary);
+  border: 0.5px solid color-mix(in srgb, var(--accent-primary) 28%, transparent);
 }
 
-/* 推荐灵感部分 */
-.suggestionsSection {
+.bubble {
+  padding: var(--space-4);
+  border-radius: 4px var(--radius-xl) var(--radius-xl) var(--radius-xl);
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), var(--glass-highlight);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.greeting {
+  margin: 0;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+}
+
+/* 说明区域：纯排版清单，杜绝与可点胶囊混淆 */
+.guideBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-primary) 45%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--border-default) 60%, transparent);
+}
+
+.guideTitle {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+}
+
+.guideList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  color: var(--text-secondary);
+
+  li {
+    margin-bottom: 2px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  strong {
+    color: var(--text-primary);
+    font-weight: var(--weight-medium);
+  }
+}
+
+/* 交互点击区域：视觉鲜明的灵感胶囊 */
+.suggestionsBlock {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  margin-top: var(--space-1);
+  margin-top: 2px;
 }
 
-.suggestionsLabel {
+.suggestionsTitle {
   font-size: var(--text-xs);
   font-weight: var(--weight-medium);
   color: var(--text-secondary);
@@ -164,33 +160,24 @@
   margin-top: var(--space-1);
 }
 
-.dismissButton {
-  min-height: 36px !important;
+.startButton {
+  min-height: 32px !important;
   padding: 0 var(--space-4) !important;
   font-size: var(--text-xs) !important;
   border-radius: var(--radius-full) !important;
 }
 
 @media (max-width: 600px) {
-  .card {
+  .bubble {
     padding: var(--space-3);
     gap: var(--space-2);
-  }
-
-  .stepsGrid {
-    grid-template-columns: 1fr;
-    gap: 6px;
-  }
-
-  .stepItem {
-    padding: 6px 10px;
   }
 
   .footerRow {
     justify-content: stretch;
   }
 
-  .dismissButton {
+  .startButton {
     width: 100%;
   }
 }

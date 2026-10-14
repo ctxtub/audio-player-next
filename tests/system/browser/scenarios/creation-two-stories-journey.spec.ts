@@ -55,12 +55,12 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         await durationSlider.press("ArrowRight");
         await expect(durationSlider).toHaveValue("40");
         await page.getByRole("tab", { name: "创作", exact: true }).click();
-        await expect(page.getByTestId("continuous-remaining-budget")).toContainText("自动播放时长 · 40分钟");
+        await expect(page.getByTestId("continuous-remaining-budget")).toContainText("剩余 40:00");
         await page.getByRole("tab", { name: "设置", exact: true }).click();
         await durationSlider.press("ArrowLeft");
         await expect(durationSlider).toHaveValue("30");
         await page.getByRole("tab", { name: "创作", exact: true }).click();
-        await expect(page.getByTestId("continuous-remaining-budget")).toContainText("自动播放时长 · 30分钟");
+        await expect(page.getByTestId("continuous-remaining-budget")).toContainText("剩余 30:00");
 
         // ② 关开关，连续生成两篇（互不干扰，各自出现播放按钮）。
         await setContinuousEnabled(page, false);
@@ -68,7 +68,6 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         await expect(continuousStatusText(page)).toHaveText('连续创作已关闭');
         await expect(creationBar.getByRole('switch')).toHaveCount(0);
         await expect(creationBar.getByRole('slider')).toHaveCount(0);
-        await expect(page.getByTestId('continuous-remaining-budget')).toContainText('自动播放时长');
         await expect(page.getByTestId('continuous-remaining-budget')).toContainText('剩余');
         await sendStory(page, "写一个关于山间小屋的短故事");
         const firstAction = cardActionButton(page, 0);

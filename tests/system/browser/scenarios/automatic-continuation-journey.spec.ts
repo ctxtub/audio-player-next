@@ -33,7 +33,7 @@ test.describe("连续创作下一篇准备与自动续播", () => {
         // ① 连续创作默认开启；预算与默认自动播放时长一致。
         await expect(continuousStatusText(page)).toHaveText("连续创作已开启", { timeout: 15000 });
         const budget = page.getByTestId("continuous-remaining-budget");
-        await expect(budget).toHaveText("自动播放时长 · 30分钟 · 剩余 30:00", { timeout: 10000 });
+        await expect(budget).toHaveText("剩余 30:00", { timeout: 10000 });
 
         // ② 设置页把默认睡眠定时设为 10 分钟（可见滑块 Home 键直达最小值），
         // 回创作页新建会话使预算快照为有限值。
@@ -45,7 +45,7 @@ test.describe("连续创作下一篇准备与自动续播", () => {
         await page.waitForTimeout(1500);
         await page.goto(`${appUrl}/chat`, { waitUntil: "networkidle", timeout: 60000 });
         await startNewStoryCollection(page);
-        await expect(budget).toHaveText("自动播放时长 · 10分钟 · 剩余 10:00", { timeout: 15000 });
+        await expect(budget).toHaveText("剩余 10:00", { timeout: 15000 });
         await expect(composerInput(page)).toBeEnabled({ timeout: 15000 });
         await page.waitForTimeout(500);
 

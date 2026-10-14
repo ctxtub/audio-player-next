@@ -38,7 +38,6 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
   const status = useContinuousCreationStore((state) => state.status);
   const remainingMs = useContinuousCreationStore((state) => state.remainingMs);
   const ready = useContinuousCreationStore((state) => state.ready);
-  const budgetMs = useContinuousCreationStore((state) => state.budgetMs);
 
   const title = collectionTitle && collectionTitle.trim().length > 0 ? collectionTitle : '新作品集';
 
@@ -63,11 +62,10 @@ const ContinuousCreationBar: React.FC<ContinuousCreationBarProps> = ({ collectio
         </div>
 
         <span className={styles.budget} data-testid="continuous-remaining-budget">
-          自动播放时长 · {budgetMs ? `${Math.round(budgetMs / 60000)}分钟` : '加载中'} · 剩余 {ready ? formatRemainingMs(remainingMs) : '—'}
+          剩余 {ready ? formatRemainingMs(remainingMs) : '—'}
         </span>
 
         {ready && enabled && status === 'ended_budget' && <button type="button" className={styles.action} onClick={resetContinuousCreationDuration}>重置时长</button>}
-        <Link className={styles.action} href="/setting">前往设置</Link>
       </div>
     </section>
   );

@@ -63,8 +63,8 @@
 .controlRow {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  flex-wrap: wrap;
 }
 
 .statusCard {
@@ -132,7 +132,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .statusCard {

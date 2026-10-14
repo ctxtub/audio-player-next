@@ -44,28 +44,27 @@ const OnboardingCard: React.FC<OnboardingCardProps> = ({
           </p>
 
           <div className={styles.guideBlock}>
-            <span className={styles.guideTitle}>💡 创作指引：</span>
+            <span className={styles.guideTitle}>创作指引</span>
             <ol className={styles.guideList}>
-              <li><strong>挑选主题</strong>：点选下方灵感胶囊，或在底部直接写下你的想法</li>
-              <li><strong>互动创作</strong>：向我提出角色与情节构想，故事会逐步展开</li>
-              <li><strong>静心伴听</strong>：故事生成就绪后随时播放，伴你宁静入眠</li>
+              <li><strong>挑选主题</strong>：点选下方推荐主题，或在底部直接写下构想</li>
+              <li><strong>互动创作</strong>：向我提出角色与情节要求，故事逐步展开</li>
+              <li><strong>静心伴听</strong>：就绪后自动朗读播放，伴你宁静入眠</li>
             </ol>
           </div>
 
           {suggestions.length > 0 ? (
             <div className={styles.suggestionsBlock}>
-              <span className={styles.suggestionsTitle}>✨ 点击直接开启故事：</span>
-              <div className={styles.suggestionList}>
+              <span className={styles.suggestionsTitle}>推荐主题</span>
+              <div className={styles.suggestionGrid}>
                 {suggestions.map((item) => (
-                  <GlassButton
+                  <button
                     key={item.id}
-                    variant="outline"
-                    size="sm"
-                    onPress={() => onSuggestionSelect(item.value)}
+                    type="button"
+                    onClick={() => onSuggestionSelect(item.value)}
                     className={styles.suggestionButton}
                   >
                     {item.label}
-                  </GlassButton>
+                  </button>
                 ))}
               </div>
             </div>

@@ -42,9 +42,19 @@ const TABS: readonly TabConfig[] = MAIN_TABS.map(tab => ({
 }));
 
 /**
+ * 底部主导航栏组件入参定义。
+ */
+export interface MainTabBarProps {
+  /** 呈现形态：standalone 为独立悬浮胶囊（方案 B），embedded 为嵌入创作页一体化 Dock（方案 C）。 */
+  variant?: 'standalone' | 'embedded';
+  /** 自定义类名。 */
+  className?: string;
+}
+
+/**
  * 底部主导航栏组件，负责页面间跳转与全局导航指示。
  */
-const MainTabBar: React.FC = () => {
+const MainTabBar: React.FC<MainTabBarProps> = ({ variant = 'standalone', className }) => {
   const router = useRouter();
   const pathname = usePathname();
   const activeKey = resolveMainTabKey(pathname);
@@ -102,37 +112,78 @@ const MainTabBar: React.FC = () => {
 
   const hasUnviewedResponse = useChatStore(state => state.hasUnviewedResponse);
 
-  return (
-    <div className={styles.tabBarOuter}>
-      <nav className={styles.tabBar} role="tablist" aria-label="主导航" onKeyDown={handleKeyDown}>
-        {TABS.map(({ key, title, icon: Icon }) => {
-          const isActive = activeKey === key;
-          const isChat = key === 'chat';
-          const isChatActive = activeKey === 'chat';
-          const showBadge = isChat && !isChatActive && hasUnviewedResponse;
+  const isEmbedded = variant === 'embedded';
 
-          return (
-            <button
-              key={key}
-              role="tab"
-              type="button"
-              tabIndex={isActive ? 0 : -1}
-              aria-selected={isActive}
-              className={`${styles.tabItem} ${isActive ? styles.tabItemActive : ''}`}
-              onClick={() => handleTabClick(key)}
-            >
-              <span className={styles.iconWrapper}>
-                <Icon
-                  size={22}
-                  strokeWidth={isActive ? 2 : 1.5}
-                  className={isActive ? styles.iconActive : styles.icon}
-                />
-                {showBadge && <span className={styles.badge} aria-label="有新消息" />}
-              </span>
-              <span className={styles.tabLabel}>{title}</span>
-            </button>
-          );
-        })}
+  const tabListContent = TABS.map(({ key, title, icon: Icon }) => {
+    const isActive = activeKey === key;
+    const isChat = key === 'chat';
+    const isChatActive = activeKey === 'chat';
+    const showBadge = isChat && !isChatActive && hasUnviewedResponse;
+
+    if (isEmbedded) {
+      return (
+        <button
+          key={key}
+          role="tab"
+          type="button"
+          tabIndex={isActive ? 0 : -1}
+          aria-selected={isActive}
+          className={`${styles.tabItemEmbedded} ${isActive ? styles.tabItemEmbeddedActive : ''}`}
+          onClick={() => handleTabClick(key)}
+        >
+          <span className={styles.iconWrapperEmbedded}>
+            <Icon
+              size={18}
+              strokeWidth={isActive ? 2 : 1.5}
+              className={isActive ? styles.iconActive : styles.icon}
+            />
+            {showBadge && <span className={styles.badge} aria-label="有新消息" />}
+          </span>
+          <span className={styles.tabLabelEmbedded}>{title}</span>
+        </button>
+      );
+    }
+
+    return (
+      <button
+        key={key}
+        role="tab"
+        type="button"
+        tabIndex={isActive ? 0 : -1}
+        aria-selected={isActive}
+        className={`${styles.tabItem} ${isActive ? styles.tabItemActive : ''}`}
+        onClick={() => handleTabClick(key)}
+      >
+        <span className={styles.iconWrapper}>
+          <Icon
+            size={22}
+            strokeWidth={isActive ? 2 : 1.5}
+            className={isActive ? styles.iconActive : styles.icon}
+          />
+          {showBadge && <span className={styles.badge} aria-label="有新消息" />}
+        </span>
+        <span className={styles.tabLabel}>{title}</span>
+      </button>
+    );
+  });
+
+  if (isEmbedded) {
+    return (
+      <nav
+        className={`${styles.tabBarEmbedded} ${className ?? ''}`}
+        role="tablist"
+        aria-label="主导航"
+        onKeyDown={handleKeyDown}
+      >
+        {tabListContent}
+      </nav>
+    );
+  }
+
+  return (
+    <div className={`${styles.tabBarOuter} ${className ?? ''}`}>
+      <nav className={styles.tabBar} role="tablist" aria-label="主导航" onKeyDown={handleKeyDown}>
+        {tabListContent}
       </nav>
     </div>
   );

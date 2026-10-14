@@ -4,6 +4,7 @@ import { userFacingError } from '@/lib/client/userFacingError';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import GlassToast from '@/components/ui/GlassToast';
 import GlassButton from '@/components/ui/GlassButton';
+import MainTabBar from '@/components/MainTabBar';
 import styles from './Composer.module.scss';
 
 /**
@@ -213,43 +214,51 @@ const Composer: React.FC<ComposerProps> = ({
 
   return (
     <div ref={containerRef} className={styles.container} data-chat-composer="">
-      {leftSlot ? <div className={styles.leftSlot}>{leftSlot}</div> : null}
-      <div className={styles.editorArea}>
-        <div className={styles.textAreaWrapper}>
-          <textarea
-            ref={textareaRef}
-            value={internalValue}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            disabled={effectiveDisabled}
-            placeholder={placeholder}
-            maxLength={5000}
-            rows={1}
-            className={styles.textArea}
-          />
+      <div className={styles.inputDeck}>
+        {leftSlot ? <div className={styles.leftSlot}>{leftSlot}</div> : null}
+        <div className={styles.editorArea}>
+          <div className={styles.textAreaWrapper}>
+            <textarea
+              ref={textareaRef}
+              value={internalValue}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              disabled={effectiveDisabled}
+              placeholder={placeholder}
+              maxLength={5000}
+              rows={1}
+              className={styles.textArea}
+            />
 
-          <div className={styles.actionButtons}>
-            {showClear && <GlassButton
-              variant="ghost"
-              size="sm"
-              onPress={handleClear}
-              isDisabled={effectiveDisabled}
-              className={styles.clearButton}
-            >
-              {clearText}
-            </GlassButton>}
-            <GlassButton
-              variant="primary"
-              size="sm"
-              loading={isSending || isLocalSending}
-              isDisabled={sendDisabled}
-              onPress={() => { void handleSubmit(); }}
-              className={styles.sendButton}
-            >
-              {submitText}
-            </GlassButton>
+            <div className={styles.actionButtons}>
+              {showClear && <GlassButton
+                variant="ghost"
+                size="sm"
+                onPress={handleClear}
+                isDisabled={effectiveDisabled}
+                className={styles.clearButton}
+              >
+                {clearText}
+              </GlassButton>}
+              <GlassButton
+                variant="primary"
+                size="sm"
+                loading={isSending || isLocalSending}
+                isDisabled={sendDisabled}
+                onPress={() => { void handleSubmit(); }}
+                className={styles.sendButton}
+              >
+                {submitText}
+              </GlassButton>
+            </div>
           </div>
         </div>
+      </div>
+
+      <div className={styles.dockDivider} />
+
+      <div className={styles.navDeck}>
+        <MainTabBar variant="embedded" />
       </div>
     </div>
   );

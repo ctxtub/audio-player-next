@@ -16,6 +16,7 @@
  */
 
 import React from 'react';
+import { usePathname } from 'next/navigation';
 
 import MainTabBar from '@/components/MainTabBar';
 import { MiniNowPlaying } from '@/components/NowPlaying/MiniNowPlaying';
@@ -38,12 +39,18 @@ export type BottomChromeProps = {
  * display: contents（见样式）：不引入额外布局盒，Mini 仍为 viewport fixed，
  * TabBar 仍为原 fixed 胶囊；reservation 唯一由 .app 的
  * --bottom-chrome-safe-bottom 承担。
+ *
+ * 注：创作页（/chat）采用方案 C 一体化融合坞（输入框+导航内嵌于同一悬浮岛），
+ * 因此在 /chat 页面时不重复渲染外部独立的 TabBar 胶囊。
  */
 export const BottomChrome: React.FC<BottomChromeProps> = ({
     visible,
     hasDockedMini,
     layoutMode,
 }) => {
+    const pathname = usePathname();
+    const isChat = pathname === '/chat';
+
     return (
         <div
             className={styles.bottomChrome}
@@ -59,7 +66,7 @@ export const BottomChrome: React.FC<BottomChromeProps> = ({
             >
                 {visible ? <MiniNowPlaying /> : null}
             </div>
-            <MainTabBar />
+            {!isChat ? <MainTabBar variant="standalone" /> : null}
         </div>
     );
 };

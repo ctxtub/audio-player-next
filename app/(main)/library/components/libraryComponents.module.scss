@@ -202,6 +202,24 @@
   }
 }
 
+.clickableCard {
+  cursor: pointer;
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--accent-primary) 40%, var(--border-default));
+    transform: translateY(-1px);
+    box-shadow: var(--glass-highlight), var(--shadow-md);
+
+    .cardTitle {
+      color: var(--accent-primary);
+    }
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
 .cardHeader {
   display: flex;
   align-items: flex-start;

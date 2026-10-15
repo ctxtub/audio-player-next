@@ -8,7 +8,6 @@ import {
   Clock,
   Mic,
   FileText,
-  Bookmark,
   Sparkles,
   Pencil,
   Trash2,
@@ -58,7 +57,7 @@ function formatDateTime(isoString: string): string {
  * 故事作品详情展示与变更组件（ / 纯展示与事件驱动组件）
  *
  * 核心边界规范：
- * 1. 仅暴露 Rename / Favorite / Move to Trash 事件入口，mutation ownership 全归属 Page；
+ * 1. 仅暴露 Rename / Move to Trash 事件入口，mutation ownership 全归属 Page；
  * 2. 严禁暴露 Restore / Permanent Delete（回收站作品不可进入详情）；
  * 3. 字段保真：严格仅读取 StoryWorkDetail 已有字段，绝不跨越读取生成历史、播放进度或音频内部表；
  * 4. 播放进度缝隙：严格保持 work.progress === null（等待  进度系统接入）。
@@ -66,7 +65,6 @@ function formatDateTime(isoString: string): string {
 export const StoryDetail: React.FC<StoryDetailProps> = ({
   work,
   onRename,
-  onToggleFavorite,
   onMoveToTrash,
 }) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -74,7 +72,6 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameError, setRenameError] = useState<string | null>(null);
 
-  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [isMovingToTrash, setIsMovingToTrash] = useState(false);
 
   useEffect(() => {
@@ -118,20 +115,6 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
       setRenameError(userFacingError(err, '重命名失败'));
     } finally {
       setIsRenaming(false);
-    }
-  };
-
-  const handleToggleFavorite = async () => {
-    try {
-      setIsTogglingFavorite(true);
-      const nextFavorite = !work.favoritedAt;
-      if (onToggleFavorite) {
-        await onToggleFavorite(work.id, nextFavorite);
-      }
-    } catch (err) {
-      console.error('Toggle favorite failed:', err);
-    } finally {
-      setIsTogglingFavorite(false);
     }
   };
 
@@ -222,16 +205,6 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
               <h1 className={styles.title} data-testid="story-detail-title">
                 {work.title}
               </h1>
-              {work.favoritedAt ? (
-                <span
-                  className={styles.favoriteBadge}
-                  data-testid="story-detail-favorite-badge"
-                  title={`收藏于 ${formatDateTime(work.favoritedAt)}`}
-                >
-                  <Bookmark size={14} />
-                  <span>已收藏</span>
-                </span>
-              ) : null}
               <button
                 type="button"
                 className={styles.renameButton}
@@ -249,25 +222,18 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
             <WorkPlaybackButton workId={work.id} title={work.title} progress={work.progress} />
             <button
               type="button"
-              className={work.favoritedAt ? styles.favoriteBtnActive : styles.favoriteBtn}
-              onClick={handleToggleFavorite}
-              data-testid="story-detail-favorite-btn"
-              disabled={isTogglingFavorite}
-              title={work.favoritedAt ? '取消收藏' : '添加收藏'}
-            >
-              <Bookmark size={15} />
-              <span>{work.favoritedAt ? '已收藏' : '收藏'}</span>
-            </button>
-            <button
-              type="button"
               className={styles.trashBtn}
-              onClick={handleMoveToTrash}
+              onClick={() => {
+                if (window.confirm(`确定要彻底删除《${work.title}》吗？删除后无法恢复。`)) {
+                  void handleMoveToTrash();
+                }
+              }}
               data-testid="story-detail-trash-btn"
               disabled={isMovingToTrash}
-              title="移入回收站"
+              title="删除故事"
             >
               <Trash2 size={15} />
-              <span>{isMovingToTrash ? '处理中...' : '移入回收站'}</span>
+              <span>{isMovingToTrash ? '删除中...' : '删除故事'}</span>
             </button>
           </div>
         </div>

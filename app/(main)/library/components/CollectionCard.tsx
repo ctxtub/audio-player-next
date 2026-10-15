@@ -3,13 +3,14 @@
 /**
  * Collection 卡片（故事库顶层恒为集合）。
  *
- * - active/favorites 视图：标题为详情链接（/library/collections/{id}）；
- * - trash 视图：标题纯静态文本（零详情入口，防探测），仅恢复/永久删除；
- * - 收藏切换与删除经 useCollectionMutations（乐观补丁 + 串行 Undo 会话）。
+ * - active/favorites 视图：整张卡片为热区（点击跳转 /library/collections/{id}）；
+ * - 仅展示两个交互按钮：右上角「收藏」+ 底部主操作「从头开始」播放；
+ * - 不透出继续播放，彻底移除管理按钮；
+ * - trash 视图：卡片静态不可点，展示恢复/永久删除按钮。
  */
 
 import React, { useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Star, Trash2, RotateCcw, Play } from 'lucide-react';
 import type { StoryCollectionSummaryDTO } from '@/lib/trpc/schemas/collection';
 import type { CollectionView } from '@/lib/trpc/schemas/collection';
@@ -29,17 +30,24 @@ export interface CollectionCardProps {
 }
 
 export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view }) => {
+  const router = useRouter();
   const mutations = useCollectionMutations();
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
-  const [isTrashing, setIsTrashing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeletingPermanently, setIsDeletingPermanently] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   const isTrash = view === 'trash';
   const favorited = isCollectionFavorited(collection);
 
-  const handleToggleFavorite = async () => {
+  const handleCardClick = () => {
+    if (isTrash) return;
+    router.push(collectionPath(collection.id));
+  };
+
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (isTogglingFavorite) return;
     setIsTogglingFavorite(true);
     try {
@@ -51,19 +59,21 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
     }
   };
 
-  const handleMoveToTrash = async () => {
-    if (isTrashing) return;
-    setIsTrashing(true);
+  const handlePlayFromBeginning = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isPlaying || collection.workCount === 0) return;
+    setIsPlaying(true);
     try {
-      await mutations.moveToTrash(collection.id, collection.title);
-    } catch (err) {
-      console.error('Collection trash failed:', err);
+      await playCollection(collection.id, 'restart');
+    } catch {
+      GlassToast.show({ icon: 'fail', content: '暂时无法播放，请重试' });
     } finally {
-      setIsTrashing(false);
+      setIsPlaying(false);
     }
   };
 
-  const handleRestore = async () => {
+  const handleRestore = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (isRestoring) return;
     setIsRestoring(true);
     try {
@@ -75,7 +85,8 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
     }
   };
 
-  const handleDeleteForever = async () => {
+  const handleDeleteForever = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (isDeletingPermanently) return;
     setIsDeletingPermanently(true);
     try {
@@ -90,28 +101,25 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
 
   return (
     <article
-      className={styles.storyCard}
+      className={`${styles.storyCard} ${!isTrash ? styles.clickableCard : ''}`}
+      onClick={handleCardClick}
+      role={!isTrash ? 'button' : undefined}
+      tabIndex={!isTrash ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (!isTrash && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          handleCardClick();
+        }
+      }}
       data-testid={`collection-card-${collection.id}`}
       data-collection-id={collection.id}
     >
       <div className={styles.cardHeader}>
-        {isTrash ? (
-          <div className={styles.cardTitleStatic} data-testid="collection-title-static">
-            <h3 className={styles.cardTitle} data-testid="collection-title">
-              {collection.title}
-            </h3>
-          </div>
-        ) : (
-          <Link
-            href={collectionPath(collection.id)}
-            className={styles.cardTitleLink}
-            data-testid={`collection-link-${collection.id}`}
-          >
-            <h3 className={styles.cardTitle} data-testid="collection-title">
-              {collection.title}
-            </h3>
-          </Link>
-        )}
+        <div className={styles.cardTitleStatic} data-testid="collection-title-static">
+          <h3 className={styles.cardTitle} data-testid="collection-title">
+            {collection.title}
+          </h3>
+        </div>
         <div className={styles.cardHeaderRight}>
           {!isTrash ? (
             <button
@@ -125,7 +133,7 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
               title={favorited ? '取消收藏' : '收藏'}
             >
               <Star
-                size={16}
+                size={18}
                 fill={favorited ? '#f59e0b' : 'none'}
                 stroke={favorited ? '#f59e0b' : '#9ca3af'}
               />
@@ -143,20 +151,22 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
       </p>
 
       {collection.excerpt && <p className={styles.cardExcerpt}>{collection.excerpt}</p>}
+
       <div className={styles.cardActions}>
-        {!isTrash && collection.workCount > 0 && <button className={styles.playBtn} onClick={async () => { try { await playCollection(collection.id, collection.hasUnfinished ? 'resume' : 'restart'); } catch { GlassToast.show({ icon: 'fail', content: '暂时无法播放，请重试' }); } }}><Play size={14} aria-hidden="true" />{collection.hasUnfinished ? '继续播放整集' : '从头播放整集'}</button>}
         {!isTrash ? (
-          <details><summary>管理故事集</summary><button
-            type="button"
-            className={styles.trashBtn}
-            onClick={handleMoveToTrash}
-            disabled={isTrashing}
-            data-testid={`collection-trash-btn-${collection.id}`}
-            aria-label={`删除故事集《${collection.title}》`}
-          >
-            <Trash2 size={14} />
-            <span>移入回收站</span>
-          </button></details>
+          collection.workCount > 0 ? (
+            <button
+              type="button"
+              className={styles.playBtn}
+              onClick={handlePlayFromBeginning}
+              disabled={isPlaying}
+              data-testid={`collection-play-btn-${collection.id}`}
+              aria-label={`从头开始播放《${collection.title}》`}
+            >
+              <Play size={14} aria-hidden="true" />
+              <span>从头开始</span>
+            </button>
+          ) : null
         ) : (
           <>
             <button
@@ -173,7 +183,10 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
             <button
               type="button"
               className={styles.deletePermanentlyBtn}
-              onClick={() => setIsDeleteConfirmOpen(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsDeleteConfirmOpen(true);
+              }}
               data-testid="collection-permanent-delete-btn"
               aria-label={`永久删除故事集《${collection.title}》`}
             >
@@ -185,7 +198,10 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
       </div>
 
       {isDeleteConfirmOpen ? (
-        <div className={styles.confirmOverlay}>
+        <div
+          className={styles.confirmOverlay}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div
             className={styles.confirmDialog}
             role="dialog"
@@ -206,7 +222,10 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
               <button
                 type="button"
                 className={styles.cancelBtn}
-                onClick={() => setIsDeleteConfirmOpen(false)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsDeleteConfirmOpen(false);
+                }}
                 data-testid="collection-delete-confirm-cancel"
               >
                 取消
@@ -227,5 +246,3 @@ export const CollectionCard: React.FC<CollectionCardProps> = ({ collection, view
     </article>
   );
 };
-
-export default CollectionCard;

@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { useLibraryListInfiniteQuery } from '@/lib/client/libraryQueries';
-import { composeLibraryItemViewModel } from '@/lib/client/libraryViewModel';
 import { useLibraryFilters } from './useLibraryFilters';
 import { useCollectionListInfiniteQuery } from '@/lib/client/collectionQueries';
 import { flattenCollectionPages } from '@/lib/client/collectionViewModel';
@@ -13,44 +11,30 @@ import {
   LibraryLoadingSkeleton,
   LibraryErrorState,
   CollectionCard,
-  StoryWorkCard,
 } from './components';
 import styles from './index.module.scss';
 
 /**
- * 故事库主页列表视图组件（顶层恒为 Collection）。
- *
- * 核心数据链契约：
- * 1. useLibraryFilters() -> 获得 canonical { view, q } 及 draftQ / 视图操作；
- * 2. useCollectionListInfiniteQuery() -> 基于 React Query 拉取服务端 Collection 分页流；
- * 3. data.pages.flatMap(page.items) -> 打平 + 集合 id 防重（flattenCollectionPages）；
- * 4. 搜索命中集内 Work 时服务端已按 Collection 去重，UI 不二次聚合；
- * 5. 只做集合级读取与集合级生命周期（重命名/收藏/删除/恢复/永久删除归卡片与详情）。
+ * 故事库主页列表视图组件（顶层恒为 Collection，已移除单篇故事筛选）。
  */
 const LibraryPage: React.FC = () => {
-  // 1. URL 视图与搜索控制器接入（与作品库同枚举 active | favorites | trash）
+  // 1. URL 视图与搜索控制器接入（全部 active | 收藏 favorites | 回收站 trash）
   const {
     view,
-    scope,
-    scopeReady,
     q,
     draftQ,
     setDraftQ,
     setView,
-    setScope,
     clearSearch,
     onCompositionStart,
     onCompositionEnd,
   } = useLibraryFilters();
 
-  const isWorks = view !== 'active' && scope === 'works';
-  const collectionQuery = useCollectionListInfiniteQuery({ view, query: q }, { enabled: scopeReady && !isWorks });
-  const workQuery = useLibraryListInfiniteQuery({ view, query: q }, { enabled: scopeReady && isWorks });
-  const { error, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage, refetch } = isWorks ? workQuery : collectionQuery;
+  const collectionQuery = useCollectionListInfiniteQuery({ view, query: q });
+  const { error, isLoading, isError, isFetchingNextPage, hasNextPage, fetchNextPage, refetch } = collectionQuery;
   const data = collectionQuery.data;
-  const works = workQuery.data?.pages.flatMap((page) => page.items) ?? [];
 
-  // 3. 数据流水线：打平多页 -> 集合 id 防重
+  // 2. 数据流水线：打平多页 -> 集合 id 防重
   const collections = useMemo(() => {
     if (!data?.pages || data.pages.length === 0) {
       return [];
@@ -58,8 +42,8 @@ const LibraryPage: React.FC = () => {
     return flattenCollectionPages(data.pages);
   }, [data?.pages]);
 
-  // 4. UI 状态判定
-  const hasItems = isWorks ? works.length > 0 : collections.length > 0;
+  // 3. UI 状态判定
+  const hasItems = collections.length > 0;
   const isInitialLoading = isLoading && !hasItems;
   const isInitialError = isError && !hasItems;
   const isEmpty = !isLoading && !isError && !hasItems;
@@ -83,39 +67,35 @@ const LibraryPage: React.FC = () => {
         onCompositionEnd={onCompositionEnd}
       />
 
-      {view !== 'active' && <div className={styles.scopeSegment} role="group" aria-label="管理范围">
-        <button type="button" aria-pressed={!isWorks} className={!isWorks ? styles.scopeSegmentActive : ''} onClick={() => setScope('collections')}>故事集</button>
-        <button type="button" aria-pressed={isWorks} className={isWorks ? styles.scopeSegmentActive : ''} onClick={() => setScope('works')}>单篇故事</button>
-      </div>}
       {/* 内容区域状态渲染 */}
       <main
         className={styles.libraryContent}
         data-testid="library-collections-scroll"
       >
-        {/* 4.1 初始骨架屏加载状态 */}
+        {/* 初始骨架屏加载状态 */}
         {isInitialLoading ? (
           <LibraryLoadingSkeleton count={6} />
         ) : null}
 
-        {/* 4.2 初始全屏错误及重试状态 */}
+        {/* 初始全屏错误及重试状态 */}
         {isInitialError ? (
           <LibraryErrorState error={error} onRetry={() => refetch()} />
         ) : null}
 
-        {/* 4.3 各类型空状态 */}
+        {/* 空状态 */}
         {isEmpty ? (
           <LibraryEmptyState
             view={view}
-            scope={isWorks ? 'works' : 'collections'}
+            scope="collections"
             query={q}
             onClearSearch={clearSearch}
           />
         ) : null}
 
-        {/* 4.4 集合列表内容渲染（服务端顺序直出，禁止客户端重排） */}
+        {/* 集合列表内容渲染 */}
         {hasItems ? (
           <>
-            {isWorks ? works.map((work) => <StoryWorkCard key={work.id} work={composeLibraryItemViewModel(work)} view={view} />) : collections.map((collection) => (
+            {collections.map((collection) => (
               <CollectionCard
                 key={collection.id}
                 collection={collection}
@@ -123,7 +103,7 @@ const LibraryPage: React.FC = () => {
               />
             ))}
 
-            {/* 无限滚动哨兵（三重 Gate 守护与跨 query identity 锁隔离） */}
+            {/* 无限滚动哨兵 */}
             <InfiniteScrollSentinel
               key={JSON.stringify([view, q ?? null])}
               hasNextPage={Boolean(hasNextPage)}
@@ -131,7 +111,7 @@ const LibraryPage: React.FC = () => {
               onFetchNext={fetchNextPage}
             />
 
-            {/* 终端完结状态（已无更多） */}
+            {/* 终端完结状态 */}
             {!hasNextPage ? (
               <div
                 className={styles.terminalNoMore}

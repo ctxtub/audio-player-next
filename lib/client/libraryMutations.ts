@@ -31,7 +31,6 @@ import { refreshPlayingWorkMetadata, stopPlayback } from '@/app/services/playbac
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { useCollectionPlaybackStore } from '@/stores/collectionPlaybackStore';
 import { libraryKeys } from '@/lib/client/libraryQueries';
-import { useLibraryUndo } from '@/components/Library/LibraryUndoProvider';
 
 /**
  * 从 InfiniteData 的各页 items 中移除指定 ID 的作品。
@@ -774,6 +773,66 @@ export async function mutateMoveToTrash(
   }
 }
 
+export interface DeleteWorkOptions {
+  id: number;
+  title?: string;
+}
+
+/**
+ * 单篇故事物理删除（不进回收站）：
+ * - 物理直接删除；
+ * - 停止当前播放并更新播放队列；
+ * - 从各列表缓存中直接移除，清除详情缓存，失效关联查询。
+ */
+export async function mutateDeleteWork(
+  queryClient: QueryClient,
+  options: DeleteWorkOptions
+): Promise<StoryWorkDetailDTO> {
+  const { id } = options;
+
+  await queryClient.cancelQueries({ queryKey: libraryKeys.lists() });
+  await queryClient.cancelQueries({ queryKey: libraryKeys.detail(id) });
+
+  const current = usePlaybackSessionStore.getState();
+  if (current.source?.kind === 'work' && current.source.workId === id) {
+    await current.persistSingleTrackProgress({ force: true });
+  }
+
+  const result = await libraryClient.deleteWork({ id });
+
+  const currentSource = usePlaybackSessionStore.getState().source;
+  if (currentSource?.kind === 'work' && currentSource.workId === id) {
+    stopPlayback();
+    await usePlaybackSessionStore.getState().clearSession();
+  }
+  const queue = useCollectionPlaybackStore.getState();
+  if (queue.works.some((work) => work.id === id)) {
+    const works = queue.works.filter((work) => work.id !== id);
+    useCollectionPlaybackStore.setState({
+      works,
+      index: Math.max(0, queue.index - (queue.works.findIndex((work) => work.id === id) < queue.index ? 1 : 0)),
+      epoch: queue.epoch + 1,
+    });
+  }
+
+  // 成功后从已加载列表中移除
+  const listQueries = queryClient.getQueriesData<
+    InfiniteData<LibraryListOutput, string | undefined>
+  >({ queryKey: libraryKeys.lists() });
+
+  for (const [queryKey, oldData] of listQueries) {
+    if (oldData) {
+      queryClient.setQueryData(queryKey, removeItemFromInfiniteData(oldData, id));
+    }
+  }
+
+  queryClient.removeQueries({ queryKey: libraryKeys.detail(id) });
+  await queryClient.invalidateQueries({ queryKey: libraryKeys.lists() });
+  await queryClient.invalidateQueries({ queryKey: collectionKeys.all });
+
+  return result;
+}
+
 export interface RestoreOptions {
   id: number;
 }
@@ -850,6 +909,7 @@ export async function mutateDeletePermanently(
 export interface LibraryMutations {
   rename: (options: RenameOptions) => Promise<StoryWorkDetailDTO>;
   toggleFavorite: (options: ToggleFavoriteOptions) => Promise<StoryWorkDetailDTO>;
+  deleteWork: (options: { id: number; title: string }) => Promise<StoryWorkDetailDTO>;
   moveToTrash: (options: { id: number; title: string }) => Promise<StoryWorkDetailDTO>;
   restore: (options: RestoreOptions) => Promise<StoryWorkDetailDTO>;
   deletePermanently: (
@@ -865,7 +925,6 @@ export function useLibraryMutations(): LibraryMutations {
   if (!queryClient) {
     throw new Error('No QueryClient set, use QueryClientProvider to set one');
   }
-  const undo = useLibraryUndo();
 
   const rename = useCallback(
     (options: RenameOptions) => mutateRename(queryClient, options),
@@ -877,29 +936,14 @@ export function useLibraryMutations(): LibraryMutations {
     [queryClient]
   );
 
+  const deleteWork = useCallback(
+    (options: { id: number; title: string }) => mutateDeleteWork(queryClient, options),
+    [queryClient]
+  );
+
   const moveToTrash = useCallback(
-    (options: { id: number; title: string }) => {
-      let registeredToken: number | undefined;
-      return mutateMoveToTrash(queryClient, {
-        id: options.id,
-        workTitle: options.title,
-        onUndoRegistered: (session) => {
-          registeredToken = undo.showUndo({
-            workId: session.workId,
-            workTitle: session.workTitle,
-            movePromise: session.movePromise,
-          });
-          return registeredToken;
-        },
-        onMoveFailed: (_error, token) => {
-          const tokenToDismiss = token ?? registeredToken;
-          if (typeof tokenToDismiss === 'number') {
-            undo.dismissUndo(tokenToDismiss);
-          }
-        },
-      });
-    },
-    [queryClient, undo]
+    (options: { id: number; title: string }) => mutateDeleteWork(queryClient, options),
+    [queryClient]
   );
 
   const restore = useCallback(
@@ -916,6 +960,7 @@ export function useLibraryMutations(): LibraryMutations {
   return {
     rename,
     toggleFavorite,
+    deleteWork,
     moveToTrash,
     restore,
     deletePermanently,
@@ -927,7 +972,6 @@ export function useLibraryMutations(): LibraryMutations {
  */
 export function useLibraryMutationsSafe(): LibraryMutations | null {
   const queryClient = useContext(QueryClientContext);
-  const undo = useLibraryUndo();
 
   const rename = useCallback(
     (options: RenameOptions) => {
@@ -945,30 +989,20 @@ export function useLibraryMutationsSafe(): LibraryMutations | null {
     [queryClient]
   );
 
+  const deleteWork = useCallback(
+    (options: { id: number; title: string }) => {
+      if (!queryClient) throw new Error('QueryClient is required for library mutations');
+      return mutateDeleteWork(queryClient, options);
+    },
+    [queryClient]
+  );
+
   const moveToTrash = useCallback(
     (options: { id: number; title: string }) => {
       if (!queryClient) throw new Error('QueryClient is required for library mutations');
-      let registeredToken: number | undefined;
-      return mutateMoveToTrash(queryClient, {
-        id: options.id,
-        workTitle: options.title,
-        onUndoRegistered: (session) => {
-          registeredToken = undo.showUndo({
-            workId: session.workId,
-            workTitle: session.workTitle,
-            movePromise: session.movePromise,
-          });
-          return registeredToken;
-        },
-        onMoveFailed: (_error, token) => {
-          const tokenToDismiss = token ?? registeredToken;
-          if (typeof tokenToDismiss === 'number') {
-            undo.dismissUndo(tokenToDismiss);
-          }
-        },
-      });
+      return mutateDeleteWork(queryClient, options);
     },
-    [queryClient, undo]
+    [queryClient]
   );
 
   const restore = useCallback(
@@ -994,6 +1028,7 @@ export function useLibraryMutationsSafe(): LibraryMutations | null {
   return {
     rename,
     toggleFavorite,
+    deleteWork,
     moveToTrash,
     restore,
     deletePermanently,

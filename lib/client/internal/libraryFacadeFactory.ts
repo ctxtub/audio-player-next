@@ -13,6 +13,7 @@ import type {
   LibraryRenameInput,
   LibrarySetFavoriteInput,
   LibraryTrashInput,
+  LibraryDeleteWorkInput,
   LibraryRestoreInput,
   LibraryDeletePermanentlyInput,
   LibraryDeletePermanentlyOutput,
@@ -35,6 +36,9 @@ export interface MinimalLibraryTrpcClient {
     };
     setFavorite: {
       mutate: (input: LibrarySetFavoriteInput) => Promise<StoryWorkDetailDTO>;
+    };
+    deleteWork: {
+      mutate: (input: LibraryDeleteWorkInput) => Promise<StoryWorkDetailDTO>;
     };
     moveToTrash: {
       mutate: (input: LibraryTrashInput) => Promise<StoryWorkDetailDTO>;
@@ -100,6 +104,15 @@ export function createLibraryFacade<TClient extends MinimalLibraryTrpcClient>(cl
   };
 
   /**
+   * 单篇故事直接物理删除（纯结构体入参，不进回收站）
+   */
+  const deleteWork = async (
+    input: LibraryDeleteWorkInput
+  ): Promise<StoryWorkDetailDTO> => {
+    return client.library.deleteWork.mutate(input);
+  };
+
+  /**
    * 将故事作品移入回收站（软删除，纯结构体入参，canonical 命名）
    */
   const moveToTrash = async (
@@ -127,7 +140,7 @@ export function createLibraryFacade<TClient extends MinimalLibraryTrpcClient>(cl
   };
 
   /**
-   * 聚合 Client 对象（8 个 Canonical Procedure 入口）
+   * 聚合 Client 对象（Canonical Procedure 入口）
    */
   const libraryClient = {
     list,
@@ -135,6 +148,7 @@ export function createLibraryFacade<TClient extends MinimalLibraryTrpcClient>(cl
     create,
     rename,
     setFavorite,
+    deleteWork,
     moveToTrash,
     restore,
     deletePermanently,
@@ -146,6 +160,7 @@ export function createLibraryFacade<TClient extends MinimalLibraryTrpcClient>(cl
     create,
     rename,
     setFavorite,
+    deleteWork,
     moveToTrash,
     restore,
     deletePermanently,

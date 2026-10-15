@@ -21,6 +21,7 @@ export type {
   LibraryRenameInput,
   LibrarySetFavoriteInput,
   LibraryTrashInput,
+  LibraryDeleteWorkInput,
   LibraryRestoreInput,
   LibraryDeletePermanentlyInput,
   LibraryDeletePermanentlyOutput,
@@ -38,6 +39,7 @@ export const get = defaultFacade.get;
 export const create = defaultFacade.create;
 export const rename = defaultFacade.rename;
 export const setFavorite = defaultFacade.setFavorite;
+export const deleteWork = defaultFacade.deleteWork;
 export const moveToTrash = defaultFacade.moveToTrash;
 export const restore = defaultFacade.restore;
 export const deletePermanently = defaultFacade.deletePermanently;

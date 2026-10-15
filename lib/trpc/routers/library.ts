@@ -28,6 +28,7 @@ import {
   libraryRenameInputSchema,
   librarySetFavoriteInputSchema,
   libraryTrashInputSchema,
+  libraryDeleteWorkInputSchema,
   libraryRestoreInputSchema,
   libraryDeletePermanentlyInputSchema,
 } from '../schemas/library';
@@ -38,6 +39,7 @@ import {
   renameStoryWorkForSubject,
   setStoryWorkFavoriteForSubject,
   trashStoryWorkForSubject,
+  deleteStoryWorkForSubject,
   restoreStoryWorkForSubject,
   permanentlyDeleteStoryWorkForSubject,
 } from '@/lib/server/storyWork';
@@ -63,6 +65,10 @@ export const LIBRARY_RATE_LIMITS = {
     authedLimit: 120,
   },
   setFavorite: {
+    guestLimit: 60,
+    authedLimit: 120,
+  },
+  deleteWork: {
     guestLimit: 60,
     authedLimit: 120,
   },
@@ -231,7 +237,27 @@ export const libraryRouter = router({
     }),
 
   /**
-   * 移入回收站（软删除，canonical 命名）
+   * 单篇作品物理删除（直接物理删除并清理音频，不进回收站）
+   */
+  deleteWork: guardedProcedure
+    .input(libraryDeleteWorkInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      try {
+        enforceProcedureRateLimit(
+          'library:deleteWork',
+          ctx,
+          LIBRARY_RATE_LIMITS.deleteWork,
+          getLibraryRateLimiter()
+        );
+        const subject = resolveSubject(ctx);
+        return await deleteStoryWorkForSubject(subject, input.id);
+      } catch (error) {
+        handleLibraryError(error);
+      }
+    }),
+
+  /**
+   * 移入回收站（软删除兼容入口，单篇直接物理删除）
    */
   moveToTrash: guardedProcedure
     .input(libraryTrashInputSchema)

@@ -927,175 +927,13 @@ export async function renameStoryWorkForSubject(
  * @param testHooks 测试注入钩子（可选，供并发回归测试使用）
  */
 export async function setStoryWorkFavoriteForSubject(
-  subject: Subject,
-  workId: number,
-  favorite: boolean,
-  testHooks?: StoryWorkMutationTestHooks
+  ..._args: unknown[]
 ): Promise<StoryWorkDetailDTO> {
-  const validId = assertValidWorkId(workId);
-
-  if (typeof favorite !== 'boolean') {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: '收藏状态必须为布尔值',
-    });
-  }
-
-  if (testHooks?.__testBeforeMutationHook) {
-    await testHooks.__testBeforeMutationHook();
-  }
-
-  if (subject.type === 'user') {
-    if (favorite) {
-      // 1. 尝试原子更新未收藏的活跃作品
-      const updateRes = await prisma.storyWork.updateMany({
-        where: {
-          id: validId,
-          userId: subject.id,
-          deletedAt: null,
-          favoritedAt: null,
-        },
-        data: {
-          favoritedAt: new Date(),
-        },
-      });
-
-      if (updateRes.count > 0) {
-        const updated = await prisma.storyWork.findUnique({
-          where: { id: validId },
-        });
-        if (!updated) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: '作品不存在',
-          });
-        }
-        return toDetailDto(updated);
-      }
-
-      // count === 0: 检查是否已是活跃且已收藏（幂等：保持原 favoritedAt）
-      const current = await prisma.storyWork.findFirst({
-        where: {
-          id: validId,
-          userId: subject.id,
-        },
-      });
-
-      if (current && current.deletedAt === null && current.favoritedAt !== null) {
-        return toDetailDto(current);
-      }
-
-      // 处于回收站、跨主体、不存在统一 NOT_FOUND
-      throw new TRPCError({
-        code: 'NOT_FOUND',
-        message: '作品不存在',
-      });
-    } else {
-      // 取消收藏：原子置空 favoritedAt（仅限活跃作品）
-      const updateRes = await prisma.storyWork.updateMany({
-        where: {
-          id: validId,
-          userId: subject.id,
-          deletedAt: null,
-        },
-        data: {
-          favoritedAt: null,
-        },
-      });
-
-      if (updateRes.count === 0) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: '作品不存在',
-        });
-      }
-
-      const updated = await prisma.storyWork.findUnique({
-        where: { id: validId },
-      });
-      if (!updated) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: '作品不存在',
-        });
-      }
-
-      return toDetailDto(updated);
-    }
-  } else {
-    if (favorite) {
-      const updateRes = await prisma.guestStoryWork.updateMany({
-        where: {
-          id: validId,
-          guestId: subject.id,
-          deletedAt: null,
-          favoritedAt: null,
-        },
-        data: {
-          favoritedAt: new Date(),
-        },
-      });
-
-      if (updateRes.count > 0) {
-        const updated = await prisma.guestStoryWork.findUnique({
-          where: { id: validId },
-        });
-        if (!updated) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: '作品不存在',
-          });
-        }
-        return toDetailDto(updated);
-      }
-
-      const current = await prisma.guestStoryWork.findFirst({
-        where: {
-          id: validId,
-          guestId: subject.id,
-        },
-      });
-
-      if (current && current.deletedAt === null && current.favoritedAt !== null) {
-        return toDetailDto(current);
-      }
-
-      throw new TRPCError({
-        code: 'NOT_FOUND',
-        message: '作品不存在',
-      });
-    } else {
-      const updateRes = await prisma.guestStoryWork.updateMany({
-        where: {
-          id: validId,
-          guestId: subject.id,
-          deletedAt: null,
-        },
-        data: {
-          favoritedAt: null,
-        },
-      });
-
-      if (updateRes.count === 0) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: '作品不存在',
-        });
-      }
-
-      const updated = await prisma.guestStoryWork.findUnique({
-        where: { id: validId },
-      });
-      if (!updated) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: '作品不存在',
-        });
-      }
-
-      return toDetailDto(updated);
-    }
-  }
+  void _args;
+  throw new TRPCError({
+    code: 'BAD_REQUEST',
+    message: '单篇故事已不再支持收藏',
+  });
 }
 
 /**
@@ -1123,92 +961,25 @@ export async function trashStoryWorkForSubject(
     await testHooks.__testBeforeMutationHook();
   }
 
-  if (subject.type === 'user') {
-    // 1. 原子软删除活跃作品
-    const updateRes = await prisma.storyWork.updateMany({
-      where: {
-        id: validId,
-        userId: subject.id,
-        deletedAt: null,
-      },
-      data: {
-        deletedAt: new Date(),
-        collectionDeletionBatch: null,
-      },
-    });
+  // 1. 获取当前作品快照（以构建返回值）
+  const work = await getStoryWorkForSubject(subject, validId);
 
-    if (updateRes.count > 0) {
-      const updated = await prisma.storyWork.findUnique({
-        where: { id: validId },
-      });
-      if (!updated) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: '作品不存在',
-        });
-      }
-      return toDetailDto(updated);
-    }
+  // 2. 单篇故事删除直接物理删除与音频清理，不进回收站
+  await executeStoryWorkPhysicalDelete({
+    target: subject.type,
+    reason: 'direct',
+    where: {
+      id: validId,
+      ...(subject.type === 'user' ? { userId: subject.id } : { guestId: subject.id }),
+    },
+    testHooks,
+  });
 
-    // count === 0: 检查是否已在回收站（幂等：保留原始 deletedAt）
-    const current = await prisma.storyWork.findFirst({
-      where: {
-        id: validId,
-        userId: subject.id,
-      },
-    });
-
-    if (current && current.deletedAt !== null) {
-      return toDetailDto(current);
-    }
-
-    throw new TRPCError({
-      code: 'NOT_FOUND',
-      message: '作品不存在',
-    });
-  } else {
-    const updateRes = await prisma.guestStoryWork.updateMany({
-      where: {
-        id: validId,
-        guestId: subject.id,
-        deletedAt: null,
-      },
-      data: {
-        deletedAt: new Date(),
-        collectionDeletionBatch: null,
-      },
-    });
-
-    if (updateRes.count > 0) {
-      const updated = await prisma.guestStoryWork.findUnique({
-        where: { id: validId },
-      });
-      if (!updated) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: '作品不存在',
-        });
-      }
-      return toDetailDto(updated);
-    }
-
-    const current = await prisma.guestStoryWork.findFirst({
-      where: {
-        id: validId,
-        guestId: subject.id,
-      },
-    });
-
-    if (current && current.deletedAt !== null) {
-      return toDetailDto(current);
-    }
-
-    throw new TRPCError({
-      code: 'NOT_FOUND',
-      message: '作品不存在',
-    });
-  }
+  return work;
 }
+
+/** 单篇物理删除契约 alias */
+export const deleteStoryWorkForSubject = trashStoryWorkForSubject;
 
 /**
  * 从回收站恢复故事作品（）
@@ -1347,27 +1118,27 @@ export async function restoreStoryWorkForSubject(
 export type PhysicalDeleteStoryWorkOptions =
   | {
       target: 'user';
-      reason: 'trash';
+      reason: 'trash' | 'direct';
       where: {
         id?: number | { in: number[] };
         userId?: number;
-        deletedAt: {
+        deletedAt?: {
           not: null;
           lt?: Date;
-        };
+        } | null;
       };
       testHooks?: StoryWorkMutationTestHooks;
     }
   | {
       target: 'guest';
-      reason: 'trash';
+      reason: 'trash' | 'direct';
       where: {
         id?: number | { in: number[] };
         guestId?: string;
-        deletedAt: {
+        deletedAt?: {
           not: null;
           lt?: Date;
-        };
+        } | null;
       };
       testHooks?: StoryWorkMutationTestHooks;
     }
@@ -1479,7 +1250,7 @@ type GuestTrashDeleteTx = {
  */
 async function deleteUserTrashWorksInTx(
   tx: UserTrashDeleteTx,
-  where: { id?: number | { in: number[] }; userId?: number; deletedAt: { not: null; lt?: Date } },
+  where: { id?: number | { in: number[] }; userId?: number; deletedAt?: { not: null; lt?: Date } | null },
   testHooks?: StoryWorkMutationTestHooks,
 ): Promise<TrashDeleteTxResult> {
   const matched = await tx.storyWork.findMany({ where, select: { id: true } });
@@ -1563,7 +1334,7 @@ async function deleteUserTrashWorksInTx(
  */
 async function deleteGuestTrashWorksInTx(
   tx: GuestTrashDeleteTx,
-  where: { id?: number | { in: number[] }; guestId?: string; deletedAt: { not: null; lt?: Date } },
+  where: { id?: number | { in: number[] }; guestId?: string; deletedAt?: { not: null; lt?: Date } | null },
   testHooks?: StoryWorkMutationTestHooks,
 ): Promise<TrashDeleteTxResult> {
   const matched = await tx.guestStoryWork.findMany({ where, select: { id: true } });
@@ -1657,9 +1428,8 @@ async function deleteGuestTrashWorksInTx(
  *     冻结引擎不检查 key 是否被 live Segment 引用，stale-tombstone 残留
  *    会致 bounded cleanup 误删存活 Work 的 canonical object，故事务内 prune 不得 best-effort。
  * 3. 安全规则与显式 Discriminated Contract：
- *    - User 物理删除只能来自 Trash（deletedAt IS NOT NULL）；
- *    - Guest manual delete 只能来自 Trash（deletedAt IS NOT NULL）；
- *    - Guest retention GC 严格按 updatedAt < threshold 清理；
+ *    - User 物理删除支持 trash（deletedAt IS NOT NULL）与 direct（单篇直接物理删除）；
+ *    - Guest 物理删除支持 trash、direct 与 retention；
  *    三者最终都经此同一  tombstone seam 唯一挂载点执行。
  *    contract 保持窄契约，绝不接受任意自由 Prisma where，杜绝退化为危险的通用 delete helper。
  * 4. Trash / Restore 零 Audio side effect：本 primitive 之外的 trash/restore 仅写 deletedAt，
@@ -1676,31 +1446,17 @@ export async function executeStoryWorkPhysicalDelete(
   let deletedCount = 0;
 
   if (options.target === 'user') {
-    // User 作品物理删除仅支持 reason: 'trash'（audio-aware transaction）
     const where = {
       ...(options.where.id !== undefined ? { id: options.where.id } : {}),
       ...(options.where.userId !== undefined ? { userId: options.where.userId } : {}),
-      deletedAt: options.where.deletedAt,
+      ...(options.where.deletedAt !== undefined ? { deletedAt: options.where.deletedAt } : {}),
     };
-    // 事务内核收敛于 deleteUserTrashWorksInTx（与 collection seam 共用，禁止第二套逻辑）
     const result = await prisma.$transaction((tx) =>
       deleteUserTrashWorksInTx(tx as unknown as UserTrashDeleteTx, where, options.testHooks),
     );
     committedKeys = result.committedKeys;
     deletedCount = result.deletedCount;
-  } else if (options.reason === 'trash') {
-    // Guest manual trash（audio-aware transaction；与 collection seam 共用内核）
-    const where = {
-      ...(options.where.id !== undefined ? { id: options.where.id } : {}),
-      ...(options.where.guestId !== undefined ? { guestId: options.where.guestId } : {}),
-      deletedAt: options.where.deletedAt,
-    };
-    const result = await prisma.$transaction((tx) =>
-      deleteGuestTrashWorksInTx(tx as unknown as GuestTrashDeleteTx, where, options.testHooks),
-    );
-    committedKeys = result.committedKeys;
-    deletedCount = result.deletedCount;
-  } else {
+  } else if (options.reason === 'retention') {
     // reason === 'retention'（Guest GC 统一 seam；primitive audio-aware 后自然获得正确 lifecycle）
     const where = {
       ...(options.where.id !== undefined ? { id: options.where.id } : {}),
@@ -1790,6 +1546,18 @@ export async function executeStoryWorkPhysicalDelete(
         committedKeys = allKeys;
       }
     });
+  } else {
+    // Guest manual trash / direct
+    const where = {
+      ...(options.where.id !== undefined ? { id: options.where.id } : {}),
+      ...(options.where.guestId !== undefined ? { guestId: options.where.guestId } : {}),
+      ...(options.where.deletedAt !== undefined ? { deletedAt: options.where.deletedAt } : {}),
+    };
+    const result = await prisma.$transaction((tx) =>
+      deleteGuestTrashWorksInTx(tx as unknown as GuestTrashDeleteTx, where, options.testHooks),
+    );
+    committedKeys = result.committedKeys;
+    deletedCount = result.deletedCount;
   }
 
   // COMMIT 后 best-effort cleanup 本批 tombstones（失败吞掉，由 tombstone retry 接管）

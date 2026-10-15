@@ -202,6 +202,12 @@ export const libraryTrashInputSchema = libraryIdInputSchema;
 export type LibraryTrashInput = z.infer<typeof libraryTrashInputSchema>;
 
 /**
+ * library.deleteWork 入参契约（单篇物理直接删除）
+ */
+export const libraryDeleteWorkInputSchema = libraryIdInputSchema;
+export type LibraryDeleteWorkInput = z.infer<typeof libraryDeleteWorkInputSchema>;
+
+/**
  * library.restore 入参契约
  */
 export const libraryRestoreInputSchema = libraryIdInputSchema;

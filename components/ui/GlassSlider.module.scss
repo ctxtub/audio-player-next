@@ -82,7 +82,7 @@
   }
 }
 
-/* 刻度标签 */
+/* 刻度标签 — 保持单行优雅对齐，避免锯齿状交错 */
 .markLabels {
   position: relative;
   height: 20px;
@@ -93,9 +93,18 @@
   position: absolute;
   transform: translateX(-50%);
   font-size: var(--text-xs);
+  line-height: 20px;
   color: var(--text-tertiary);
   white-space: nowrap;
   user-select: none;
+
+  &:first-child {
+    transform: translateX(0);
+  }
+
+  &:last-child {
+    transform: translateX(-100%);
+  }
 }
 
 .markLabelActive {
@@ -104,7 +113,13 @@
 }
 
 @media (max-width: 480px) {
-  .markLabels { height: calc(var(--text-xs) * 3 + var(--space-1)); }
-  .markLabel:nth-child(even) { top: calc(var(--text-xs) * 1.5 + var(--space-1)); }
-  .markLabel:last-child { transform: translateX(-100%); }
+  .markLabels {
+    height: 18px;
+  }
+
+  .markLabel {
+    font-size: 11px;
+    line-height: 18px;
+    letter-spacing: -0.02em;
+  }
 }

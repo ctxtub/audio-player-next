@@ -80,43 +80,51 @@
 .viewTabs {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-1);
   width: 100%;
-  padding: 3px;
-  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+  padding: 4px;
+  background: color-mix(in srgb, var(--bg-secondary) 65%, transparent);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-}
-
-.tabGroup {
-  display: flex;
-  gap: var(--space-1);
+  border: 0.5px solid var(--glass-border);
+  border-radius: var(--radius-full);
+  box-shadow: var(--glass-highlight);
 }
 
 .tabBtn {
-  padding: var(--space-1) var(--space-4);
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: var(--space-1) var(--space-2);
   font-size: var(--text-sm);
   font-weight: var(--weight-medium);
   color: var(--text-secondary);
   background: transparent;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-full);
   cursor: pointer;
+  white-space: nowrap;
   transition:
     background-color var(--duration-fast) var(--ease-default),
-    color var(--duration-fast) var(--ease-default);
+    color var(--duration-fast) var(--ease-default),
+    transform var(--duration-fast) var(--ease-default);
 
   &:hover {
     color: var(--text-primary);
+  }
+
+  &:active {
+    transform: scale(0.97);
   }
 }
 
 .tabBtnActive {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-primary) 90%, transparent);
-  box-shadow: var(--shadow-sm);
+  font-weight: var(--weight-semibold);
+  background: color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-primary));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25), var(--glass-highlight);
 }
 
 .trashTabBtn {
@@ -129,8 +137,9 @@
 
 .trashTabBtnActive {
   color: var(--status-error);
-  background: color-mix(in srgb, var(--bg-primary) 90%, transparent);
-  box-shadow: var(--shadow-sm);
+  font-weight: var(--weight-semibold);
+  background: color-mix(in srgb, var(--status-error) 15%, var(--bg-primary));
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
 /* 2. 时间分组 (Time Group) */
@@ -538,19 +547,20 @@
   color: var(--text-tertiary);
 }
 
-/* 4. 空状态 (Empty States) */
+/* 4. 空状态 (Empty States) — Liquid Glass 质感卡片 */
 .emptyContainer {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: var(--space-10) var(--space-4);
-  border-radius: var(--radius-lg);
-  border: 1px dashed var(--border-default);
-  background: color-mix(in srgb, var(--bg-secondary) 50%, transparent);
+  padding: var(--space-8) var(--space-4);
+  border-radius: var(--radius-xl);
+  border: 0.5px solid var(--glass-border);
+  background: color-mix(in srgb, var(--bg-secondary) 75%, transparent);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-highlight), var(--shadow-sm);
   margin-top: var(--space-4);
 }
 
@@ -561,8 +571,9 @@
   width: 52px;
   height: 52px;
   border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--bg-tertiary) 70%, transparent);
-  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  color: var(--accent-primary);
+  border: 0.5px solid color-mix(in srgb, var(--accent-primary) 25%, transparent);
   margin-bottom: var(--space-3);
 }
 

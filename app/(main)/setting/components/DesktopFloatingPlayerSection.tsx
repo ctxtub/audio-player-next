@@ -29,7 +29,7 @@ const DesktopFloatingPlayerSection: React.FC<DesktopFloatingPlayerSectionProps> 
     <div className={styles.configSection}>
       <h3><Layers className={styles.rowIcon} strokeWidth={1.8} />桌面悬浮播放</h3>
       <div className={styles.configActionRow}>
-        <p className={styles.configDescription}>在桌面宽屏上启用可自由拖拽的迷你播放器。</p>
+        <p className={styles.configDescription}>在桌面宽屏启用可自由拖拽的迷你播放器（仅桌面端生效）。</p>
         <GlassSwitch
           isSelected={value}
           onChange={handleChange}

@@ -58,30 +58,28 @@ export const LibraryToolbar: React.FC<LibraryToolbarProps> = ({
         ) : null}
       </div>
 
-      {/* 视图切换器：全部 / 收藏 / 回收站 */}
+      {/* 视图切换器：全部 / 收藏 / 回收站 3 等分平衡胶囊 */}
       <div className={styles.viewTabs} role="tablist" aria-label="故事库视图筛选">
-        <div className={styles.tabGroup}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === 'active'}
-            className={`${styles.tabBtn} ${view === 'active' ? styles.tabBtnActive : ''}`}
-            onClick={() => onViewChange('active')}
-            data-testid="view-tab-active"
-          >
-            全部
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === 'favorites'}
-            className={`${styles.tabBtn} ${view === 'favorites' ? styles.tabBtnActive : ''}`}
-            onClick={() => onViewChange('favorites')}
-            data-testid="view-tab-favorites"
-          >
-            收藏
-          </button>
-        </div>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'active'}
+          className={`${styles.tabBtn} ${view === 'active' ? styles.tabBtnActive : ''}`}
+          onClick={() => onViewChange('active')}
+          data-testid="view-tab-active"
+        >
+          全部
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'favorites'}
+          className={`${styles.tabBtn} ${view === 'favorites' ? styles.tabBtnActive : ''}`}
+          onClick={() => onViewChange('favorites')}
+          data-testid="view-tab-favorites"
+        >
+          收藏
+        </button>
         <button
           type="button"
           role="tab"

@@ -35,12 +35,11 @@ const DefaultSleepTimerSection: React.FC<DefaultSleepTimerSectionProps> = ({
 }) => {
     const marks = useMemo<Record<number, string>>(
         () => ({
-            [SLEEP_TIMER_MIN_MINUTES]: `${SLEEP_TIMER_MIN_MINUTES}分钟`,
-            [SLEEP_TIMER_MIN_MINUTES + SLEEP_TIMER_STEP_MINUTES]: `${SLEEP_TIMER_MIN_MINUTES + SLEEP_TIMER_STEP_MINUTES}分钟`,
-            [SLEEP_TIMER_MIN_MINUTES + SLEEP_TIMER_STEP_MINUTES * 2]: `${SLEEP_TIMER_MIN_MINUTES + SLEEP_TIMER_STEP_MINUTES * 2}分钟`,
-            60: '60分钟',
-            90: '90分钟',
-            [SLEEP_TIMER_MAX_MINUTES]: `${SLEEP_TIMER_MAX_MINUTES}分钟`,
+            [SLEEP_TIMER_MIN_MINUTES]: `${SLEEP_TIMER_MIN_MINUTES}分`,
+            30: '30分',
+            60: '60分',
+            90: '90分',
+            [SLEEP_TIMER_MAX_MINUTES]: `${SLEEP_TIMER_MAX_MINUTES}分`,
         }),
         []
     );
@@ -76,7 +75,6 @@ const DefaultSleepTimerSection: React.FC<DefaultSleepTimerSectionProps> = ({
             </div>
             {enabled ? (
                 <div className={styles.configField}>
-                    <p className={styles.configDescription}>自动播放时长 · {minutes}分钟</p>
                     <GlassSlider
                         min={SLEEP_TIMER_MIN_MINUTES}
                         max={SLEEP_TIMER_MAX_MINUTES}

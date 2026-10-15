@@ -53,7 +53,7 @@
   align-items: stretch;
   overflow-y: auto;
   min-height: 0;
-  width: calc(100% - var(--space-4));
+  width: calc(100% - var(--space-4) * 2);
   max-width: 760px;
   margin: 0 auto;
   padding: var(--space-3) 0 var(--space-2);

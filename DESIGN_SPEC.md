@@ -193,7 +193,7 @@
 | `--card-padding` | `var(--space-5)` = 20px | 卡片内边距 |
 | `--card-padding-sm` | `var(--space-3)` = 12px | 小卡片内边距 |
 | `--tab-bar-height` | `56px` | 底部 TabBar 参考高度 |
-| `--tab-bar-safe-bottom` | `calc(64px + env(safe-area-inset-bottom, 0px))` | 浮动 Tab Bar 底部安全距离（内容区 padding-bottom） |
+| `--tab-bar-safe-bottom` | `calc(88px + env(safe-area-inset-bottom, 0px))` | 浮动 Tab Bar 底部安全距离（内容区 padding-bottom） |
 
 ---
 

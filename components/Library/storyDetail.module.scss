@@ -271,10 +271,19 @@
 }
 
 .excerptSection {
-  padding: var(--space-4, 16px);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-lg, 12px);
   background: color-mix(in srgb, var(--accent-primary) 8%, var(--glass-bg));
   border-left: 3px solid var(--accent-primary);
+
+  > summary {
+    padding-block: var(--space-2);
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    cursor: pointer;
+  }
+
+  &[open] > summary { margin-bottom: var(--space-2); }
 }
 
 .excerptText {
@@ -348,3 +357,37 @@
 .topNav { flex-wrap: wrap; gap: var(--space-2); }
 .backLink, .recordLink { min-height: var(--size-touch-target); }
 .renameError { overflow-wrap: anywhere; }
+
+.managementMenu {
+  position: relative;
+  > summary { @include controls.action; list-style: none; cursor: pointer; }
+  > summary::-webkit-details-marker { display: none; }
+}
+.managementActions {
+  position: absolute;
+  z-index: var(--z-popover);
+  right: 0;
+  top: calc(100% + var(--space-2));
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 160px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  > button { width: 100%; }
+}
+
+@media (max-width: 767px) {
+  .detailContainer { gap: var(--space-3); padding: var(--space-4); }
+  .title {
+    font-size: var(--text-lg);
+    line-height: var(--leading-lg);
+    overflow-wrap: anywhere;
+  }
+  .titleWrapper { gap: var(--space-2); }
+  .metaRow { gap: var(--space-2) var(--space-3); }
+  .storyText { font-size: var(--text-input); }
+}

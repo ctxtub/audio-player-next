@@ -41,7 +41,9 @@ const AuthPage: React.FC = () => {
   const storeError = useAuthStore(state => state.error);
   const resetError = useAuthStore(state => state.resetError);
 
-  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
+  const [activeTab, setActiveTab] = useState<'login' | 'register'>(
+    searchParams.get('mode') === 'register' ? 'register' : 'login',
+  );
   const [apiError, setApiError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 

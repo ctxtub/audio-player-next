@@ -70,10 +70,12 @@ export async function resumePlayback(): Promise<void> {
 /** 播放指定段落（带 session guard，TTS 晚到丢弃见 store）。 */
 export async function playParagraph(
   paragraphIndex: number,
-  options?: { explicit?: boolean },
+  options?: { explicit?: boolean; signal?: AbortSignal },
 ): Promise<void> {
+  if (options?.signal?.aborted) return;
   if (isCreationPlayback() && useContinuousCreationStore.getState().status === 'ended_budget') return;
   await synchronizeCreationTimer();
+  if (options?.signal?.aborted) return;
   await usePlaybackSessionStore.getState().playParagraph(paragraphIndex, options);
 }
 
@@ -219,8 +221,8 @@ function planSameSourceIntent(
  * 临界区外的起播（二次校验）：
  * 期间若有更新请求接管 Session（sessionId/source 已变），本计划作废，不得起播。
  */
-async function playPlanned(planned: PlannedPlay): Promise<void> {
-  if (!planned || planned.nextIndex === null) return;
+async function playPlanned(planned: PlannedPlay, signal?: AbortSignal): Promise<void> {
+  if (!planned || planned.nextIndex === null || signal?.aborted) return;
   if (
     planned.sessionId !== null &&
     usePlaybackSessionStore.getState().sessionId !== planned.sessionId
@@ -228,8 +230,10 @@ async function playPlanned(planned: PlannedPlay): Promise<void> {
     return;
   }
   if (!isCurrentSource(planned.source)) return;
-  await playParagraph(planned.nextIndex, { explicit: true });
+  await playParagraph(planned.nextIndex, { explicit: true, signal });
 }
+
+type StoryWorkPlaybackOptions = { context?: 'creation'; origin?: 'user' | 'autoplay' | 'queue'; mode?: 'resume' | 'restart'; timer?: { remaining: number; total: number | null } };
 
 /**
  * 正式 Work 播放入口（中性命名：Chat 创作卡、作品集详情、连续创作共用）。
@@ -244,9 +248,30 @@ async function playPlanned(planned: PlannedPlay): Promise<void> {
  */
 export async function playStoryWork(
   workId: number,
-  options?: { context?: 'creation'; origin?: 'user' | 'autoplay' | 'queue'; mode?: 'resume' | 'restart'; timer?: { remaining: number; total: number | null } },
+  options?: StoryWorkPlaybackOptions,
 ): Promise<void> {
-  if (!isValidWorkId(workId)) return;
+  if (options?.origin !== 'autoplay') return executeStoryWorkPlayback(workId, options);
+  const config = useConfigStore.getState();
+  if (!config.isLoaded || !config.apiConfig.defaultSleepTimerEnabled) return;
+
+  // 关闭即永久作废本次自动请求；重新开启不能让旧请求恢复起播。
+  const controller = new AbortController();
+  const unsubscribe = useConfigStore.subscribe((state) => {
+    if (!state.apiConfig.defaultSleepTimerEnabled) controller.abort();
+  });
+  try {
+    await executeStoryWorkPlayback(workId, options, controller.signal);
+  } finally {
+    unsubscribe();
+  }
+}
+
+async function executeStoryWorkPlayback(
+  workId: number,
+  options?: StoryWorkPlaybackOptions,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!isValidWorkId(workId) || signal?.aborted) return;
   if (options?.origin !== 'autoplay') usePlaybackIntentStore.getState().clearAutoplay();
   const source: PlaybackSourceRef = { kind: 'work', workId };
   const creation = options?.context === 'creation' || options?.origin === 'autoplay';
@@ -270,7 +295,7 @@ export async function playStoryWork(
   }
   const token = ++playRequestSeq;
   const planned = await runSerialized(async (): Promise<PlannedPlay> => {
-    if (token !== playRequestSeq) return null;
+    if (token !== playRequestSeq || signal?.aborted) return null;
     const session = usePlaybackSessionStore.getState();
     const transport = usePlaybackStore.getState();
     if (isSameSource(session, source)) {
@@ -308,10 +333,10 @@ export async function playStoryWork(
       // 缺省 1.0。
     }
     const detail = await getWorkDetail({ id: workId });
-    if (token !== playRequestSeq) return null;
+    if (token !== playRequestSeq || signal?.aborted) return null;
     const finished = detail.progress?.durationMs && detail.progress.positionMs >= detail.progress.durationMs - 1000;
     await beginPlayback({ source, mode: options?.mode === 'restart' || finished ? 'restart' : 'resume', speed });
-    if (token !== playRequestSeq) return null;
+    if (token !== playRequestSeq || signal?.aborted) return null;
     if (!isCurrentSource(source)) return null;
     if (options?.timer) {
       await usePlaybackSessionStore.getState().setSleepTimer('minutes', Math.max(10, Math.ceil(options.timer.remaining / 60000)));
@@ -322,7 +347,7 @@ export async function playStoryWork(
     const live = usePlaybackSessionStore.getState();
     return { source, sessionId: live.sessionId, nextIndex: live.nextParagraphIndex };
   });
-  await playPlanned(planned);
+  await playPlanned(planned, signal);
   if (token === playRequestSeq && options?.origin !== 'autoplay' && options?.origin !== 'queue' && useCollectionPlaybackStore.getState().collectionId) {
     void import('./collectionPlaybackFlow').then((flow) => { if (token === playRequestSeq) void flow.prepareCollectionNextWork(); });
   }

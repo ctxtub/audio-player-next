@@ -25,7 +25,7 @@ async function waitForReadyStoryWork(
 ): Promise<number | null> {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
-    if (expectedStreamSeq !== streamSeq) return null;
+    if (expectedStreamSeq !== streamSeq || usePlaybackIntentStore.getState().pendingAutoplayMessageId !== messageId) return null;
     const message = useChatStore.getState().messages.find((item) => item.id === messageId);
     if (!message) return null;
     const artifact = message.parts?.find(isStoryArtifactPart)?.artifact;
@@ -256,6 +256,8 @@ export const beginChatStream = async (
   // 3. 执行流（预载续写抑制 Draft autoplay，走正式 Work 续播链）
   if (assistantMsgId) {
     const shouldAutoplayFirstWork =
+      useConfigStore.getState().isLoaded &&
+      useConfigStore.getState().apiConfig.defaultSleepTimerEnabled &&
       options?.origin !== 'preload' &&
       !useChatStore.getState().selectors.hasStoryMessages(assistantMsgId);
     const expectedStreamSeq = streamSeq + 1;

@@ -31,6 +31,15 @@ test.describe("集合详情起播跨页播放", () => {
         const appUrl = harnessEnv.appUrl;
         const initialViewport = page.viewportSize() ?? { width: 1280, height: 720 };
 
+        // 欢迎说明收起后仍可选主题；访客注册入口直接显示注册表单。
+        await expect(page.getByRole('region', { name: '创作引导' }).getByRole('button', { name: '星际冒险' })).toBeVisible();
+        await page.getByRole('tab', { name: '设置', exact: true }).click();
+        await expect(page.getByText('关闭后，新故事只保存，点击播放才会朗读，也不会自动续写。', { exact: false })).toBeVisible();
+        await page.getByRole('button', { name: '去注册', exact: true }).click();
+        await expect(page.getByRole('textbox', { name: '确认密码', exact: true })).toBeVisible();
+        await page.goBack({ waitUntil: 'networkidle' });
+        await page.getByRole('tab', { name: '创作', exact: true }).click();
+
         // ① 安静建两篇（关开关，避免系统续写干扰成员顺序）。
         await setContinuousEnabled(page, false);
         await sendStory(page, "写一个关于雾中山城的故事");
@@ -49,7 +58,7 @@ test.describe("集合详情起播跨页播放", () => {
         const card = page.getByTestId(/^collection-card-/).filter({ hasText: collectionTitle }).first();
         await expect(card).toBeVisible({ timeout: 15000 });
         expect(((await card.getByTestId("collection-title").innerText()).trim())).toBe(collectionTitle);
-        await card.getByTestId(/^collection-link-/).click();
+        await card.getByRole('heading', { name: collectionTitle, exact: true }).click();
         await page.waitForURL("**/library/collections/**", { timeout: 15000 });
 
         // ③ 详情页：标题一致，两名成员，动态记下首篇标题。
@@ -59,6 +68,7 @@ test.describe("集合详情起播跨页播放", () => {
         await expect(memberTitles).toHaveCount(2, { timeout: 15000 });
         const firstWorkTitle = ((await memberTitles.first().innerText()).trim());
         expect(firstWorkTitle.length).toBeGreaterThan(0);
+        const secondWorkTitle = (await memberTitles.nth(1).innerText()).trim();
 
         // ④ 起播首篇后快速切到第二篇、再切回首篇：任何时刻只允许最新目标
         // 显示准备中，旧请求不得清理新目标状态或迟到起播。
@@ -71,9 +81,9 @@ test.describe("集合详情起播跨页播放", () => {
         await expect(secondPlay).toContainText("准备语音", { timeout: 15000 });
         await expect(firstPlay).not.toContainText("准备语音");
         await firstPlay.click();
-        await expect(firstPlay).toContainText("准备语音", { timeout: 15000 });
-        await expect(secondPlay).not.toContainText("准备语音");
+        // 首篇已有音频，可立即恢复；验证最终目标，不要求缓存命中时闪现加载态。
         await expect(firstPlay).toContainText("暂停", { timeout: 60000 });
+        await expect(secondPlay).not.toContainText("准备语音");
 
         // latest-wins 后 Mini 主标题为集合标题，副标题仍是最终首篇。
         await expect(page.getByTestId("mini-title")).toHaveText(collectionTitle, { timeout: 15000 });
@@ -84,6 +94,30 @@ test.describe("集合详情起播跨页播放", () => {
         expect(mini.title).toBe(collectionTitle);
         expect(mini.secondary).not.toBeNull();
         expect(mini.secondary as string).toContain(firstWorkTitle);
+
+        // 暂停与播放由动作按钮表达；选集保留当前项高亮，不再重复状态文案。
+        const firstMember = page.getByTestId(/^member-work-/).first();
+        await firstPlay.click();
+        await expect(firstPlay).toContainText('继续播放');
+        await expect(firstMember.getByText('已暂停', { exact: true })).toHaveCount(0);
+        await expect(page.getByTestId('mini-secondary-label')).toHaveText(firstWorkTitle);
+        await openExpandedFromMini(page);
+        const playlist = page.getByRole('region', { name: '集内播放列表' });
+        await expect(page.getByTestId('expanded-play-button')).toHaveAttribute('aria-label', '播放');
+        await expect(playlist.getByText('已暂停', { exact: true })).toHaveCount(0);
+        await expect(page.getByText('当前已暂停', { exact: true })).toHaveCount(0);
+        await expect(playlist.getByText('正在播放', { exact: true })).toHaveCount(0);
+        await expect(page.getByTestId('expanded-playback-controls').getByRole('button')).toHaveCount(3);
+        const currentSeconds = async () => (await page.getByTestId('expanded-timeline-current').innerText()).trim().split(':').map(Number).reduce((total, part) => total * 60 + part, 0);
+        const beforeSeek = await currentSeconds();
+        await page.getByRole('button', { name: '前进 5 秒', exact: true }).click();
+        await expect.poll(currentSeconds).toBeGreaterThanOrEqual(beforeSeek + 4);
+        await page.getByRole('button', { name: '后退 5 秒', exact: true }).click();
+        await expect.poll(currentSeconds).toBeLessThanOrEqual(beforeSeek + 1);
+        await closeExpanded(page);
+        await firstPlay.click();
+        await expect(firstPlay).toContainText('暂停');
+        await expect(firstMember).toContainText('时长');
 
         // Wide floating Mini occupies a shared Chrome shelf; it must not cover
         // settings actions while a story is active.
@@ -106,7 +140,7 @@ test.describe("集合详情起播跨页播放", () => {
         const collectionCardForReturn = page.getByTestId(/^collection-card-/)
             .filter({ hasText: collectionTitle }).first();
         await expect(collectionCardForReturn).toBeVisible();
-        await collectionCardForReturn.getByTestId(/^collection-link-/).click();
+        await collectionCardForReturn.getByRole('heading', { name: collectionTitle, exact: true }).click();
         await page.waitForURL("**/library/collections/**", { timeout: 15000 });
         await expect(page.getByTestId("collection-detail-page")).toBeVisible();
 
@@ -149,10 +183,11 @@ test.describe("集合详情起播跨页播放", () => {
         // ⑤-B 重命名集合（用户可见改名）：作品标题不变；reload 后 Mini 显示新
         // 集合标题，证明 Mini 一级标题取自集合（hydrate 活读）而非作品标题。
         const renamedTitle = "月光穿过很长很长的山谷，照亮归途上每一座安静的小屋与仍在等待故事的人";
-        await page.getByTestId("collection-more-btn").click();
+        await page.getByRole('button', { name: '管理故事集', exact: true }).click();
         await page.getByTestId("collection-rename-btn").click();
         await page.getByTestId("collection-rename-input").fill(renamedTitle);
         await page.getByTestId("collection-rename-save").click();
+        await expect(page.getByRole('dialog', { name: '重命名故事集', exact: true })).not.toBeVisible();
         await expect(page.getByTestId("collection-title")).toHaveText(renamedTitle, {
             timeout: 15000,
         });
@@ -188,6 +223,9 @@ test.describe("集合详情起播跨页播放", () => {
         await page.reload({ waitUntil: "networkidle", timeout: 60000 });
         const miniAfterReload = await readMiniTitles(page);
         expect(miniAfterReload.title).toBe(renamedTitle);
+        await expect(firstPlay).toContainText('继续播放');
+        await expect(firstMember.getByText('已暂停', { exact: true })).toHaveCount(0);
+        await expect(firstMember.getByText('正在播放', { exact: true })).toHaveCount(0);
         await page.getByTestId("mini-playback-button").click();
         await openExpandedFromMini(page);
         await expectExpandedTimelineAdvancing(page);
@@ -198,8 +236,7 @@ test.describe("集合详情起播跨页播放", () => {
         await expect(page.getByTestId("mini-now-playing")).toHaveAttribute("data-status", "playing");
         await page.getByRole("tab", { name: "创作" }).click();
         await page.waitForURL("**/chat", { timeout: 15000 });
-        await expect(page.getByTestId("mini-now-playing")).toHaveAttribute("data-status", "playing");
-        await expect(page.getByTestId("mini-secondary-label")).toContainText("正在播放");
+        await expect(page.getByTestId("mini-secondary-label")).toHaveText(firstWorkTitle);
         await expect(page.getByTestId("mini-playback-button")).toHaveAttribute("aria-label", "暂停播放");
         const miniOnChat = await readMiniTitles(page);
         expect(miniOnChat.title).toBe(renamedTitle);
@@ -241,6 +278,34 @@ test.describe("集合详情起播跨页播放", () => {
         expect(controlBox!.y).toBeGreaterThanOrEqual(sheetBox!.y);
         expect(controlBox!.y + controlBox!.height).toBeLessThanOrEqual(sheetBox!.y + sheetBox!.height);
         await captureVisual(page, "375-player-half-sheet");
+        const mobilePlayerNav = page.getByRole('navigation', { name: '播放器操作' });
+        await expect(mobilePlayerNav.getByRole('button', { name: '播放设置', exact: true })).toBeInViewport();
+        await mobilePlayerNav.getByRole('button', { name: '播放设置', exact: true }).click();
+        await expect(page.getByRole('button', { name: '播放速度', exact: true })).toBeInViewport();
+        await expect(page.getByRole('button', { name: '睡眠定时：已关闭', exact: true })).toBeInViewport();
+        await captureVisual(page, '375-player-settings');
+        await mobilePlayerNav.getByRole('button', { name: '选集', exact: true }).click();
+        await expect(page.getByRole('button', { name: '查看故事集', exact: true })).toBeInViewport();
+        await expect(page.getByRole('button', { name: '查看创作记录', exact: true })).toBeInViewport();
+        await captureVisual(page, '375-player-playlist');
+        await expect(playlist.getByRole('button', { name: '上一篇', exact: true })).toHaveCount(0);
+        await expect(playlist.getByRole('button', { name: '下一篇', exact: true })).toHaveCount(0);
+        await playlist.getByRole('button').filter({ hasText: secondWorkTitle }).click();
+        await expect(page.getByTestId('expanded-subtitle')).toHaveText(secondWorkTitle);
+        await expect(page.getByTestId('expanded-play-button')).toBeInViewport();
+        await expect(page.getByTestId('expanded-play-button')).toHaveAttribute('aria-label', '暂停');
+        await mobilePlayerNav.getByRole('button', { name: '选集', exact: true }).click();
+        await playlist.getByRole('button').filter({ hasText: firstWorkTitle }).click();
+        await expect(page.getByTestId('expanded-subtitle')).toHaveText(firstWorkTitle);
+        await expect(page.getByTestId('expanded-play-button')).toBeInViewport();
+        await mobilePlayerNav.getByRole('button', { name: '选集', exact: true }).click();
+        await playlist.getByRole('button', { name: '关闭整集连播', exact: true }).click();
+        await mobilePlayerNav.getByRole('button', { name: '正在听', exact: true }).click();
+        await page.setViewportSize({ width: 375, height: 667 });
+        await expect(page.getByTestId('expanded-play-button')).toBeInViewport();
+        await expect(mobilePlayerNav).toBeInViewport();
+        await captureVisual(page, '375-short-player-controls');
+        await page.setViewportSize({ width: 375, height: 812 });
         await closeExpanded(page);
         await expect(page.getByTestId("mini-playback-button")).toHaveAttribute("aria-label", "暂停播放");
         await openExpandedFromMini(page);
@@ -281,6 +346,24 @@ test.describe("集合详情起播跨页播放", () => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await captureVisual(page, "1440-mini-library-bottom");
         await page.setViewportSize(initialViewport);
+
+        // 播完后主按钮承担重播，不再并列展示第二个重播按钮或完成徽标。
+        await lastCard.getByRole('heading', { name: renamedTitle, exact: true }).click();
+        await openExpandedFromMini(page);
+        if (await page.getByTestId('expanded-play-button').getAttribute('aria-label') === '重新播放') {
+            await page.getByTestId('expanded-play-button').click();
+        } else {
+            await page.getByRole('button', { name: '从头播放', exact: true }).click();
+        }
+        await expect(page.getByTestId('expanded-play-button')).toHaveAttribute('aria-label', '暂停');
+        await expect(page.getByTestId('expanded-play-button')).toHaveAttribute('aria-label', '重新播放', { timeout: 60000 });
+        await expect(page.getByRole('button', { name: '从头播放', exact: true })).toHaveCount(0);
+        await expect(page.getByText('播放完成', { exact: true })).toHaveCount(0);
+        await captureVisual(page, 'completed-single-replay');
+        await expect(playlist.getByText('正在播放', { exact: true })).toHaveCount(0);
+        await closeExpanded(page);
+        await expect(firstPlay).toContainText('重新播放');
+        await captureVisual(page, 'completed-playback-consistency');
 
         // ⑨ /player 已退役：进故事库。
         await page.goto(`${appUrl}/player`, { waitUntil: "networkidle", timeout: 60000 });

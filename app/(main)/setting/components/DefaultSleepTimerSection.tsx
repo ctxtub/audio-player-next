@@ -66,7 +66,7 @@ const DefaultSleepTimerSection: React.FC<DefaultSleepTimerSectionProps> = ({
         <div className={styles.configSection}>
             <h3><MoonStar className={styles.rowIcon} strokeWidth={1.8} />自动播放与连续创作</h3>
             <div className={styles.configActionRow}>
-                <p className={styles.configDescription}>开启后按设定时长连续创作与播放，到期自动暂停并作为默认睡眠定时。</p>
+                <p className={styles.configDescription}>开启后自动朗读首篇并连续创作、播放，到设定时长后暂停。关闭后，新故事只保存，点击播放才会朗读，也不会自动续写。</p>
                 <GlassSwitch
                     isSelected={enabled}
                     onChange={handleEnabledChange}

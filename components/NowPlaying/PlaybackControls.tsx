@@ -15,7 +15,8 @@
  */
 
 import React from 'react';
-import { Pause, Play, RotateCcw, RotateCw, Rewind, FastForward } from 'lucide-react';
+import { Loader2, Pause, Play, RotateCcw, RotateCw } from 'lucide-react';
+import styles from './ExpandedNowPlaying.module.scss';
 
 /**
  * Expanded 主动作（与 Mini primaryAction 同映射，保证 Mini/Expanded 同 Session
@@ -86,7 +87,6 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
     // ended 时主播放键执行同一重播回调；仅准备中或不可重启的异常态置灰。
     const playDisabled = isBusy || (isEnded && !canRestart);
     const seekDisabled = isBusy;
-    const restartDisabled = isBusy || !canRestart;
 
     const handlePrimary = (): void => {
         if (primaryAction === 'pause') {
@@ -102,7 +102,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         }
     };
 
-    const PrimaryIcon = primaryAction === 'pause' ? Pause : primaryAction === 'restart' ? RotateCcw : primaryAction === 'retry' ? RotateCw : Play;
+    const PrimaryIcon = isBusy ? Loader2 : primaryAction === 'pause' ? Pause : primaryAction === 'restart' ? RotateCcw : primaryAction === 'retry' ? RotateCw : Play;
 
     return (
         <div data-testid="expanded-playback-controls">
@@ -114,7 +114,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                 aria-label="后退 5 秒"
                 title="后退 5 秒"
             >
-                <Rewind size={20} aria-hidden="true" />
+                <span className={styles.seekIcon} aria-hidden="true"><RotateCcw size={26} /><span>5</span></span>
             </button>
             <button
                 type="button"
@@ -123,7 +123,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                 disabled={playDisabled}
                 aria-label={actionLabel[primaryAction]}
             >
-                <PrimaryIcon size={28} aria-hidden="true" />
+                <PrimaryIcon size={28} className={isBusy ? styles.spinner : undefined} aria-hidden="true" />
             </button>
             <button
                 type="button"
@@ -133,17 +133,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
                 aria-label="前进 5 秒"
                 title="前进 5 秒"
             >
-                <FastForward size={20} aria-hidden="true" />
-            </button>
-            <button
-                type="button"
-                data-testid="expanded-restart-button"
-                onClick={onRestart}
-                disabled={restartDisabled}
-                aria-label="从头播放"
-                title="从头播放"
-            >
-                <RotateCcw size={20} aria-hidden="true" />
+                <span className={styles.seekIcon} aria-hidden="true"><RotateCw size={26} /><span>5</span></span>
             </button>
         </div>
     );

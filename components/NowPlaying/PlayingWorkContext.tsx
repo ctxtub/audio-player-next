@@ -16,9 +16,10 @@ import playerStyles from './ExpandedNowPlaying.module.scss';
 /**
  * 播放内容导航与选集列表（像音乐播放列表一样展示全集曲目并支持即点即播）。
  */
-export function PlayingWorkContext({ close }: { close: () => void }) {
+export function PlayingWorkContext({ close, onSelect }: { close: () => void; onSelect?: () => void }) {
   const router = useRouter();
   const workId = usePlaybackSessionStore((state) => state.source?.kind === 'work' ? state.source.workId : null);
+  const playbackStatus = usePlaybackSessionStore((state) => state.status);
   const queue = useCollectionPlaybackStore();
   const { data } = useLibraryDetailQuery(workId ?? 0, { enabled: workId !== null });
   const targetCollectionId = queue.collectionId ?? data?.collectionId ?? null;
@@ -66,6 +67,7 @@ export function PlayingWorkContext({ close }: { close: () => void }) {
       } else {
         await playStoryWork(effectiveWorks[index].id, { origin: 'user' });
       }
+      onSelect?.();
     } catch {
       GlassToast.show({ icon: 'fail', content: '准备语音失败，请重试或跳过' });
     }
@@ -75,23 +77,6 @@ export function PlayingWorkContext({ close }: { close: () => void }) {
 
   return (
     <div className={playerStyles.playingWorkWrapper}>
-      {(data?.collectionId || data?.conversationId) && (
-        <div className={playerStyles.playingWorkContextNav} data-testid="playing-work-context-nav">
-          {data?.collectionId && (
-            <button type="button" onClick={() => navigate(`${collectionPath(data.collectionId!)}?focusWork=${workId}`)}>
-              <BookOpen size={16} aria-hidden="true" />
-              <span>查看故事集</span>
-            </button>
-          )}
-          {data?.conversationId && (
-            <button type="button" onClick={() => navigate(`${conversationPath(data.conversationId!)}${data.sourceMessageId ? `?focusMessage=${encodeURIComponent(data.sourceMessageId)}` : ''}`)}>
-              <MessageCircle size={16} aria-hidden="true" />
-              <span>查看创作记录</span>
-            </button>
-          )}
-        </div>
-      )}
-
       {hasPlaylist && (
         <section className={playerStyles.playlistCard} aria-label="集内播放列表">
           <div className={playerStyles.playlistHeader}>
@@ -99,34 +84,15 @@ export function PlayingWorkContext({ close }: { close: () => void }) {
               <ListMusic size={16} className={playerStyles.playlistIcon} aria-hidden="true" />
               <span className={playerStyles.playlistTitle}>选集</span>
               <span className={playerStyles.playlistCounter}>
-                整集回听 · 第 {effectiveIndex + 1} / {effectiveWorks.length} 篇
+                {effectiveWorks.length} 篇
               </span>
-            </div>
-            <div className={playerStyles.playlistNavControls}>
-              <button
-                type="button"
-                className={playerStyles.playlistNavBtn}
-                disabled={effectiveIndex <= 0}
-                onClick={() => select(effectiveIndex - 1)}
-                aria-label="上一篇"
-              >
-                上一篇
-              </button>
-              <button
-                type="button"
-                className={playerStyles.playlistNavBtn}
-                disabled={effectiveIndex >= effectiveWorks.length - 1}
-                onClick={() => select(effectiveIndex + 1)}
-                aria-label="下一篇"
-              >
-                下一篇
-              </button>
             </div>
           </div>
 
           <div className={playerStyles.playlistTrackList} role="list" aria-label="选集列表">
             {effectiveWorks.map((work, idx) => {
-              const isCurrent = idx === effectiveIndex;
+              const isCurrent = work.id === workId;
+              const isPlaying = isCurrent && playbackStatus === 'playing';
               return (
                 <button
                   key={work.id}
@@ -137,7 +103,7 @@ export function PlayingWorkContext({ close }: { close: () => void }) {
                   onClick={() => select(idx)}
                 >
                   <span className={playerStyles.trackNumberZone}>
-                    {isCurrent ? (
+                    {isPlaying ? (
                       <span className={playerStyles.soundWaveIndicator} aria-label="正在播放">
                         <span />
                         <span />
@@ -152,9 +118,6 @@ export function PlayingWorkContext({ close }: { close: () => void }) {
                   <span className={playerStyles.trackTitle}>
                     {work.title}
                   </span>
-                  {isCurrent && (
-                    <span className={playerStyles.currentBadge}>正在播放</span>
-                  )}
                 </button>
               );
             })}
@@ -199,6 +162,22 @@ export function PlayingWorkContext({ close }: { close: () => void }) {
             </button>
           )}
         </section>
+      )}
+      {(data?.collectionId || data?.conversationId) && (
+        <div className={playerStyles.playingWorkContextNav} data-testid="playing-work-context-nav">
+          {data?.collectionId && (
+            <button type="button" onClick={() => navigate(`${collectionPath(data.collectionId!)}?focusWork=${workId}`)}>
+              <BookOpen size={16} aria-hidden="true" />
+              <span>查看故事集</span>
+            </button>
+          )}
+          {data?.conversationId && (
+            <button type="button" onClick={() => navigate(`${conversationPath(data.conversationId!)}${data.sourceMessageId ? `?focusMessage=${encodeURIComponent(data.sourceMessageId)}` : ''}`)}>
+              <MessageCircle size={16} aria-hidden="true" />
+              <span>查看创作记录</span>
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

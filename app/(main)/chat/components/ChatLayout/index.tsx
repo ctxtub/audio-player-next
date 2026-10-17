@@ -288,12 +288,13 @@ const ChatLayout: React.FC<ChatLayoutProps> = () => {
       />
       {previousConversationId && <Link className={styles.previousConversationLink} href={conversationPath(previousConversationId)}>返回上一份创作（已保留输入）</Link>}
 
-      {messages.length === 0 && !isOnboardingDismissed ? (
+      {messages.length === 0 ? (
         <div className={styles.onboardingArea}>
           <OnboardingCard
             suggestions={defaultSuggestions}
             onSuggestionSelect={handleSuggestionSelect}
-            onDismiss={handleDismissOnboarding}
+            compact={isOnboardingDismissed}
+            onDismiss={isOnboardingDismissed ? undefined : handleDismissOnboarding}
           />
         </div>
       ) : (

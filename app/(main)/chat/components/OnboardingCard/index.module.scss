@@ -62,7 +62,7 @@
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 0.5px solid var(--glass-border);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), var(--glass-highlight);
+  box-shadow: var(--shadow-sm), var(--glass-highlight);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -141,8 +141,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 32px;
-  height: 32px;
+  min-height: var(--size-touch-target);
   padding: 0 6px;
   border-radius: var(--radius-full);
   border: 0.5px solid color-mix(in srgb, var(--accent-primary) 32%, transparent);
@@ -184,10 +183,9 @@
 }
 
 .startButton {
-  min-height: 28px !important;
-  height: 28px !important;
-  padding: 0 14px !important;
-  font-size: 12px !important;
+  min-height: var(--size-touch-target) !important;
+  padding: 0 var(--space-4) !important;
+  font-size: var(--text-sm) !important;
   border-radius: var(--radius-full) !important;
 }
 
@@ -212,13 +210,13 @@
   }
 
   .suggestionGrid {
-    gap: 6px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
   }
 
   .suggestionButton {
-    min-height: 29px;
-    height: 29px;
-    font-size: 11.5px;
+    min-height: var(--size-touch-target);
+    font-size: var(--text-sm);
   }
 
   .footerRow {

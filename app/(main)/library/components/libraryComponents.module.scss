@@ -256,6 +256,10 @@
   transition: color var(--duration-fast) var(--ease-default);
 }
 
+@media (max-width: 767px) {
+  .cardTitle { display: block; overflow: visible; overflow-wrap: anywhere; -webkit-line-clamp: unset; }
+}
+
 .cardHeaderRight {
   display: flex;
   align-items: center;

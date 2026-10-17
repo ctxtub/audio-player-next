@@ -5,6 +5,7 @@ import { useContinuousCreationStore } from '@/stores/continuousCreationStore';
 import { resolveContinuousCreationBudgetMinutes } from '@/lib/continuous-creation/budget';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
+import { usePlaybackIntentStore } from '@/stores/playbackIntentStore';
 import { cancelPendingNextWork } from './continuousCreationFlow';
 
 const prefix = 'creation-duration:';
@@ -36,7 +37,10 @@ function bind(): void {
   restoring = true;
   try { current.restoreSession({ conversationId: chat.conversationId, collectionId: chat.collectionId, enabled, budgetMs, remainingMs: saved?.exhausted ? 0 : Math.max(0, budgetMs - spent), creationWorkId: saved?.creationWorkId ?? null, exhausted: saved?.exhausted ?? false }); } finally { restoring = false; }
   save();
-  if (!enabled) cancelPendingNextWork();
+  if (!enabled) {
+    usePlaybackIntentStore.getState().clearAutoplay();
+    cancelPendingNextWork();
+  }
   const source = usePlaybackSessionStore.getState().source;
   if (source?.kind === 'work' && source.workId === saved?.creationWorkId) {
     if (enabled) void import('./playbackSessionFlow').then((flow) => {

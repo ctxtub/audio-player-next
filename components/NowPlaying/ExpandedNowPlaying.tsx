@@ -134,6 +134,8 @@ export const ExpandedNowPlaying: React.FC = () => {
     //  Expanded 内部局部 view state（spec §35：不进 global UI Store；
     // 只按 sessionId 与 Expanded 开关重置，promotion 同 sessionId 保持打开）。
     const [expandedView, setExpandedView] = useState<ExpandedLocalView>('controls');
+    const [mobilePanel, setMobilePanel] = useState<'playback' | 'settings' | 'playlist'>('playback');
+    const bodyRef = useRef<HTMLDivElement | null>(null);
     const dragOffsetRef = useRef(0);
     dragOffsetRef.current = dragOffsetY;
     // Escape 兜底的事实判断锚点（：用真实 overlay/dialog ref 做 contains，
@@ -145,6 +147,7 @@ export const ExpandedNowPlaying: React.FC = () => {
         // 只关闭 UI，不暂停/不 clear Session（spec §9：播放继续）。
         // 关闭即回落 controls（下次打开从控制面进入）。
         setExpandedView('controls');
+        setMobilePanel('playback');
         setDragOffsetY(0);
         setIsDragging(false);
         closeExpanded();
@@ -203,12 +206,18 @@ export const ExpandedNowPlaying: React.FC = () => {
     const sessionIdForView = viewModel.sessionId;
     useEffect(() => {
         setExpandedView('controls');
+        setMobilePanel('playback');
     }, [sessionIdForView]);
     useEffect(() => {
         if (!isExpanded) {
             setExpandedView('controls');
+            setMobilePanel('playback');
         }
     }, [isExpanded]);
+
+    useEffect(() => {
+        bodyRef.current?.scrollTo({ top: 0 });
+    }, [mobilePanel]);
 
     const handleOverlayOpenChange = useCallback(
         (open: boolean) => {
@@ -292,9 +301,9 @@ export const ExpandedNowPlaying: React.FC = () => {
         return null;
     }
 
-    const subtitle =
-        viewModel.workSubtitle ??
-        formatExpandedSubtitle(
+    const subtitle = viewModel.source?.kind === 'work'
+        ? (viewModel.workSubtitle?.trim() !== viewModel.title.trim() ? viewModel.workSubtitle : null)
+        : formatExpandedSubtitle(
             viewModel.voiceLabel,
             viewModel.paragraph.current,
             viewModel.paragraph.total
@@ -349,6 +358,7 @@ export const ExpandedNowPlaying: React.FC = () => {
                             isDragging={isDragging}
                         />
                         <div
+                            ref={bodyRef}
                             className={styles.body}
                             data-testid="expanded-body"
                             // 内容区滚动手势不触发 dismiss（spec §10.2/§78）：
@@ -374,9 +384,6 @@ export const ExpandedNowPlaying: React.FC = () => {
                                     <Headphones size={40} strokeWidth={1.5} />
                                 </div>
                             </div>
-                            <div className={styles.statusLine} data-testid="expanded-status">
-                                {viewModel.isEnded ? '播放完成' : subtitle}
-                            </div>
                             {viewModel.source?.kind === 'draft' ? (
                                 <>
                                     <div
@@ -392,6 +399,12 @@ export const ExpandedNowPlaying: React.FC = () => {
                                 </>
                             ) : null}
                             {/* Work 为完整音频时间轴；只有 legacy Draft 保留当前段时间轴。 */}
+                            <div className={styles.mobilePanel} data-mobile-active={mobilePanel === 'playback'}>
+                            {['hydrating', 'synthesizing', 'error'].includes(viewModel.sessionStatus) && (
+                                <p className={styles.playbackFeedback} role={viewModel.sessionStatus === 'error' ? 'alert' : 'status'}>
+                                    {viewModel.sessionStatus === 'error' ? '播放遇到问题，请重试' : viewModel.sessionStatus === 'hydrating' ? '正在恢复播放进度…' : '正在准备语音…'}
+                                </p>
+                            )}
                             <PlaybackTimeline
                                 label={viewModel.source?.kind === 'work' ? '播放进度' : '本段'}
                                 currentTime={viewModel.timeline.currentTime}
@@ -413,6 +426,17 @@ export const ExpandedNowPlaying: React.FC = () => {
                                     controls.seekRelative(EXPANDED_TIMELINE_KEYBOARD_STEP_SECONDS)
                                 }
                             />
+                            <NowPlayingActions
+                                source={viewModel.source}
+                                onViewStory={handleViewStory}
+                                storyText={viewModel.transcriptText}
+                                status={viewModel.sessionStatus}
+                                onViewTranscript={handleViewTranscript}
+                                onBackToCreation={handleBackToCreation}
+                                disabled={!viewModel.hasSession}
+                            />
+                            </div>
+                            <div className={styles.mobilePanel} data-mobile-active={mobilePanel === 'settings'}>
                             {/*   Session 级倍速（七档，不写回 UserConfig，不触发新 TTS）。 */}
                             <PlaybackRateControl
                                 currentRate={viewModel.playbackRate}
@@ -441,6 +465,12 @@ export const ExpandedNowPlaying: React.FC = () => {
                                     disabled={!viewModel.hasSession}
                                 />
                             )}
+                            {viewModel.canRestart && viewModel.timeline.currentTime > 0 && !viewModel.isEnded && viewModel.primaryAction !== 'disabled' && (
+                                <button type="button" className={styles.restartAction} data-testid="expanded-restart-button" onClick={controls.restart}>
+                                    从头播放
+                                </button>
+                            )}
+                            </div>
                             {/*  Work 查看正文（spec §34：Work 导航口冻结）+
                                  Draft 查看正文（spec §35：Transcript 口，
                                 同文案独立 testid，点击只切局部 view，不导航）+
@@ -449,36 +479,19 @@ export const ExpandedNowPlaying: React.FC = () => {
                                 Work 继续创作隐藏（spec §36.2 fail-closed：本文件不传
                                 onContinueCreation，不拼 continuation Prompt）。
                                 transcript view 下不渲染（互斥，与「打开作品详情」不并存）。 */}
-                            <PlayingWorkContext close={handleClose} />
-                            <NowPlayingActions
-                                source={viewModel.source}
-                                onViewStory={handleViewStory}
-                                storyText={viewModel.transcriptText}
-                                status={viewModel.sessionStatus}
-                                onViewTranscript={handleViewTranscript}
-                                onBackToCreation={handleBackToCreation}
-                                disabled={!viewModel.hasSession}
-                            />
-                            {viewModel.isEnded ? (
-                                <div
-                                    className={styles.endedBadge}
-                                    data-testid="expanded-ended-badge"
-                                >
-                                    播放完成
-                                </div>
-                            ) : null}
-                            {viewModel.isPlaying ? (
-                                <div className={styles.hintLine} data-testid="expanded-hint">
-                                    关闭后播放继续
-                                </div>
-                            ) : viewModel.sessionStatus === 'paused' ? (
-                                <div className={styles.hintLine} data-testid="expanded-hint">
-                                    当前已暂停
-                                </div>
-                            ) : null}
+                            <div className={styles.mobilePanel} data-mobile-active={mobilePanel === 'playlist'}>
+                                <PlayingWorkContext close={handleClose} onSelect={() => setMobilePanel('playback')} />
+                            </div>
                                 </>
                             )}
                         </div>
+                        {expandedView === 'controls' && (
+                            <nav className={styles.mobilePanelNav} aria-label="播放器操作">
+                                <button type="button" aria-pressed={mobilePanel === 'playback'} onClick={() => setMobilePanel('playback')}>正在听</button>
+                                <button type="button" aria-pressed={mobilePanel === 'settings'} onClick={() => setMobilePanel('settings')}>播放设置</button>
+                                {viewModel.source?.kind === 'work' && <button type="button" aria-pressed={mobilePanel === 'playlist'} onClick={() => setMobilePanel('playlist')}>选集</button>}
+                            </nav>
+                        )}
                     </div>
                 </Dialog>
             </AriaModal>

@@ -40,7 +40,7 @@ const SummaryPartRenderer: FC<SummaryPartRendererProps> = ({ part }) => {
             >
                 <div className={styles.summaryIcon}><FileText size={20} strokeWidth={1.8} /></div>
                 <div className={styles.summaryContent}>
-                    <div className={styles.summaryTitle}>上下文总结</div>
+                    <div className={styles.summaryTitle}>故事回顾</div>
                     <div className={styles.summaryText}>{displayText}</div>
                 </div>
             </div>
@@ -49,7 +49,7 @@ const SummaryPartRenderer: FC<SummaryPartRendererProps> = ({ part }) => {
                 isOpen={showFull}
                 onClose={() => setShowFull(false)}
                 content={content}
-                title="摘要文本"
+                title="故事回顾"
             />
         </>
     );

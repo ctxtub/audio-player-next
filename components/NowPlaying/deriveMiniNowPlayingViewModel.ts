@@ -16,6 +16,7 @@
  * Mini 自身只做 presentation + Flow action delegation（见 MiniNowPlaying.tsx）。
  */
 
+import { playbackStatusLabel } from '@/lib/playback/statusLabel';
 import {
     MINI_NOW_PLAYING_FALLBACK_TITLE,
     type MiniNowPlayingLayoutMode,
@@ -80,33 +81,24 @@ export const mapSessionStatusToMiniStatus = (
 
 /**
  * Secondary Label 纯派生（spec §6 + 标题一致性）：
- * synthesizing → 正在准备语音；error → 播放遇到问题；ended → 播放完成；
+ * synthesizing/error 保留必要反馈；常规状态由播放按钮和进度表达；
  * 多段 → 第 X / Y 段（X = nextParagraphIndex+1，钳制 1..total）；
- * 单段 playing → 正在播放；单段 paused/ready → 已暂停。
- * Draft / Work 不做视觉分叉（spec §33）；work 会话统一后缀作品短标题
- * （副标题表达作品位置或短标题），draft 会话（workTitle null）保持原样。
+ * Work 优先展示与主标题不同的作品名；单段 Draft 不重复状态。
  */
 export const deriveMiniSecondaryLabel = (session: MiniSessionSnapshot): string | null => {
     const status = mapSessionStatusToMiniStatus(session.status);
-    const workSuffix =
+    const workTitle =
         session.source?.kind === 'work' &&
         typeof session.workTitle === 'string' &&
-        session.workTitle.trim().length > 0
-            ? ` · ${session.workTitle}`
+        session.workTitle.trim() !== deriveMiniTitle(session).trim()
+            ? session.workTitle.trim()
             : '';
-    const withWork = (base: string): string => `${base}${workSuffix}`;
-    if (status === 'synthesizing') {
-        return withWork('正在准备语音');
-    }
-    if (status === 'error') {
-        return withWork('播放遇到问题');
-    }
-    if (status === 'ended') {
-        return withWork('播放完成');
+    if (status === 'synthesizing' || status === 'error') {
+        return [playbackStatusLabel(session.status), workTitle].filter(Boolean).join(' · ');
     }
     // 正式 Work 是一条完整音频，正文段落只用于内容身份，不能再作为播放轨道 UI。
     if (session.source?.kind === 'work') {
-        return withWork(status === 'playing' ? '正在播放' : '已暂停');
+        return workTitle || null;
     }
     const total = Number.isFinite(session.totalParagraphs) && session.totalParagraphs > 0
         ? Math.floor(session.totalParagraphs)
@@ -116,12 +108,9 @@ export const deriveMiniSecondaryLabel = (session: MiniSessionSnapshot): string |
             ? Math.floor(session.nextParagraphIndex)
             : 0;
         const display = Math.min(Math.max(rawNext + 1, 1), total);
-        return withWork(`第 ${display} / ${total} 段`);
+        return `第 ${display} / ${total} 段`;
     }
-    if (status === 'playing') {
-        return withWork('正在播放');
-    }
-    return withWork('已暂停');
+    return null;
 };
 
 /**

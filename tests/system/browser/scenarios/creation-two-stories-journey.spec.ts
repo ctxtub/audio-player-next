@@ -10,6 +10,7 @@ import {
     openExpandedFromMini,
     readMiniTitles,
     sendStory,
+    startNewStoryCollection,
     setContinuousEnabled,
     verifyCardPlayPauseResume,
     waitAutoplayedCardActive,
@@ -26,7 +27,7 @@ import {
  */
 test.describe("同一会话两篇故事播放与连续开关交接", () => {
     test("同一会话两篇故事播放与连续开关交接", async ({ page, harnessEnv }) => {
-        test.setTimeout(240000);
+        test.setTimeout(300000);
         await enterGuestChat(page, harnessEnv.appUrl);
         const appUrl = harnessEnv.appUrl;
 
@@ -71,11 +72,14 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         await expect(page.getByTestId('continuous-remaining-budget')).toContainText('剩余');
         await sendStory(page, "写一个关于山间小屋的短故事");
         const firstAction = cardActionButton(page, 0);
-        await expect(firstAction).toHaveText("正在准备语音", { timeout: 90000 });
-        await expect(firstAction).toBeDisabled();
+        await waitStoryCardReady(page, 0);
+        await expect(firstAction).toHaveText('播放');
+        await expect(firstAction).toBeEnabled();
         await expect(composerInput(page)).toBeEnabled();
         await expect(page.getByRole("button", { name: "发送" })).toBeDisabled();
-        await waitStoryCardReady(page, 0);
+        await page.waitForTimeout(5000);
+        await expect(firstAction).toHaveText('播放');
+        await expect(page.getByTestId('mini-now-playing')).toBeHidden();
 
         // 首作晋升后作品集标题落地创作头（晋升成功回写后收敛，无需 reload）：
         // 动态读取，后续跨表面一致性以此为准。
@@ -87,9 +91,7 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         expect(collectionTitle).toBe("山间小屋故事集");
         expect(Array.from(collectionTitle).length).toBeLessThanOrEqual(18);
 
-        // ③ 第一篇：草稿自动播会起播（Mini 现身即证明），卡片随晋升落定
-        // 「播放」后做用户三态验证（重播入口，整轨在前，确定性）。
-        await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 60000 });
+        // 关闭自动播放后，用户仍可主动播放、暂停和继续。
         await verifyCardPlayPauseResume(page, 0);
 
         // 重播推进后整页刷新：页面隐藏会保存本次新进度；刷新后再次播放并打开
@@ -157,5 +159,26 @@ test.describe("同一会话两篇故事播放与连续开关交接", () => {
         expect((await page.getByTestId("continuous-collection-title").innerText()).trim()).toBe(
             collectionTitle,
         );
+
+        // 在生成期间关闭开关：首篇保存后保持静默，重新开启也不补播旧请求。
+        await startNewStoryCollection(page);
+        await setContinuousEnabled(page, true);
+        await sendStory(page, '写一个关于风中花园的温柔故事');
+        await setContinuousEnabled(page, false);
+        await waitStoryCardReady(page, 0);
+        await page.waitForTimeout(5000);
+        await expect(cardActionButton(page, 0)).toHaveText('播放');
+        // 会话可能已经准备好并显示暂停入口，但不能出现播放中的控件。
+        await expect(page.getByRole('button', { name: '暂停播放', exact: true })).toHaveCount(0);
+        await setContinuousEnabled(page, true);
+        await page.waitForTimeout(2000);
+        await expect(page.getByRole('button', { name: '暂停播放', exact: true })).toHaveCount(0);
+
+        // 开启后的新故事集首篇仍应自动起播。
+        await startNewStoryCollection(page);
+        await sendStory(page, '写一个关于星星邮局的温柔故事');
+        await waitAutoplayedCardActive(page, 0);
+        await expect(page.getByTestId('mini-playback-button')).toHaveAttribute('aria-label', '暂停播放');
+        await setContinuousEnabled(page, false);
     });
 });

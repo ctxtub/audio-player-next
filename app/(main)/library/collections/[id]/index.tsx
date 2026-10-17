@@ -34,7 +34,7 @@ import {
   areMemberPositionsOrdered,
   formatCollectionWorkCount,
 } from '@/lib/client/collectionViewModel';
-import { playStoryWork, pausePlayback, resumePlayback } from '@/app/services/playbackSessionFlow';
+import { playStoryWork } from '@/app/services/playbackSessionFlow';
 import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { LibraryUnavailable, isUnavailableError } from '@/components/Library/LibraryUnavailable';
@@ -73,6 +73,9 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
   const playbackStatus = usePlaybackSessionStore((state) => state.status);
   const isPlaying = usePlaybackStore((state) => state.isPlaying);
   const currentTime = usePlaybackStore((state) => state.currentTime);
+  const duration = usePlaybackStore((state) => state.duration);
+  const savedPositionMs = usePlaybackSessionStore((state) => state.savedWorkPositionMs);
+  const savedDurationMs = usePlaybackSessionStore((state) => state.savedWorkDurationMs);
 
   const { data, isLoading, isError, error, refetch } = useCollectionDetailQuery(id, {
     enabled: isValidId,
@@ -222,21 +225,6 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
         setStartingWorkId(null);
         void refetch();
       }
-    }
-  };
-
-  const handleTrackClick = async (
-    workId: number,
-    isCurrentPlaying: boolean,
-    isCurrent: boolean,
-    status: string
-  ) => {
-    if (isCurrentPlaying) {
-      pausePlayback();
-    } else if (isCurrent && (status === 'ready' || status === 'paused')) {
-      resumePlayback();
-    } else {
-      await handlePlayWork(workId);
     }
   };
 
@@ -493,7 +481,14 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
           <div className={styles.trackList}>
             {data.works.map((work, visibleIndex) => {
               const isCurrent = currentWorkId === work.id;
-              const heardSeconds = isCurrent ? currentTime : (work.progress?.positionMs ?? 0) / 1000;
+              const hasLiveDuration = isCurrent && Number.isFinite(duration) && duration > 0;
+              const durationSeconds = hasLiveDuration
+                ? duration
+                : ((isCurrent ? savedDurationMs : null) ?? work.audio.durationMs ?? work.progress?.durationMs ?? 0) / 1000;
+              const positionSeconds = isCurrent
+                ? hasLiveDuration ? currentTime : (savedPositionMs ?? work.progress?.positionMs ?? 0) / 1000
+                : (work.progress?.positionMs ?? 0) / 1000;
+              const heardSeconds = durationSeconds > 0 ? Math.min(positionSeconds, durationSeconds) : positionSeconds;
               const isPreparing =
                 startingWorkId === work.id ||
                 (startingWorkId === null &&
@@ -531,7 +526,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                   data-playback-state={
                     isPreparing ? 'preparing' : isCurrentPlaying ? 'playing' : isCurrent ? playbackStatus : 'idle'
                   }
-                  onClick={() => void handleTrackClick(work.id, isCurrentPlaying, isCurrent, playbackStatus)}
+                  onClick={() => void handlePlayWork(work.id)}
                 >
                   <div className={styles.trackLeading}>
                     <span className={styles.trackIndex} aria-hidden="true">
@@ -549,15 +544,20 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                           {work.title}
                         </Link>
                       </h3>
-                      {isCurrent ? <span className={styles.currentBadge}>播放中</span> : null}
                     </div>
                     <p className={styles.trackMeta}>
                       {heardSeconds > 0
                         ? `听到 ${formatPlaybackTime(Math.floor(heardSeconds))}`
                         : '未听'}
-                      {work.audio.durationMs && work.audio.durationMs > 0
-                        ? ` · 时长 ${formatPlaybackTime(Math.floor(work.audio.durationMs / 1000))}`
-                        : ' · 准备语音'}
+                      {durationSeconds > 0
+                        ? ` · 时长 ${formatPlaybackTime(Math.floor(durationSeconds))}`
+                        : isPreparing || work.audio.status === 'preparing'
+                          ? ' · 正在准备语音'
+                          : work.audio.status === 'failed'
+                            ? ' · 语音准备失败'
+                            : work.audio.status === 'ready'
+                              ? ' · 时长未知'
+                              : ' · 播放时准备语音'}
                     </p>
                   </div>
 
@@ -568,7 +568,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                       data-testid={`member-play-${work.id}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        void handleTrackClick(work.id, isCurrentPlaying, isCurrent, playbackStatus);
+                        void handlePlayWork(work.id);
                       }}
                       disabled={isPreparing}
                       aria-label={`${buttonLabel}《${work.title}》`}

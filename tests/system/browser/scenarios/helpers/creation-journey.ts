@@ -151,6 +151,7 @@ export async function waitCardEnded(page: Page, index: number, timeoutMs = 60000
  */
 export async function setContinuousEnabled(page: Page, enabled: boolean): Promise<void> {
     await page.getByRole('tab', { name: '设置', exact: true }).click();
+    await page.waitForURL('**/setting');
     const toggle = page.getByRole('switch', { name: '自动播放与连续创作开关', exact: true });
     await expect(toggle).toBeVisible();
     if ((await toggle.isChecked()) !== enabled) {
@@ -161,7 +162,10 @@ export async function setContinuousEnabled(page: Page, enabled: boolean): Promis
     else await expect(toggle).not.toBeChecked();
     // 云端设置按现有500ms防抖保存；完成保存窗口后再测试整页刷新。
     await page.waitForTimeout(1000);
-    await page.getByRole('tab', { name: '创作', exact: true }).click();
+    // 离开创作页时生成完成，导航会增加可见的“有新消息”提示。
+    await page.getByRole('tab', { name: /^(有新消息 )?创作$/ }).click();
+    await page.waitForURL('**/chat');
+    await expect(continuousStatusText(page)).toBeVisible();
     if (!enabled) await expect(continuousStatusText(page)).toHaveText('连续创作已关闭');
     else await expect(continuousStatusText(page)).not.toHaveText('连续创作已关闭');
 }
@@ -322,4 +326,7 @@ export async function startNewStoryCollection(page: Page): Promise<void> {
   await page.getByRole('button', { name: '新建故事集', exact: true }).click();
   const confirm = page.getByRole('button', { name: '开始新故事集', exact: true });
   if (await confirm.waitFor({ state: 'visible', timeout: 1500 }).then(() => true, () => false)) await confirm.click();
+  await expect(page.getByTestId('continuous-collection-title')).toHaveText('新作品集');
+  await expect(cardActionButtons(page)).toHaveCount(0);
+  await expect(composerInput(page)).toBeEnabled();
 }

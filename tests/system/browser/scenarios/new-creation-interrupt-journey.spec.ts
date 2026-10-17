@@ -42,9 +42,8 @@ test.describe("播放与准备中新创作强重置", () => {
         const collectionTitle = (await barTitle.innerText()).trim();
         expect(collectionTitle.length).toBeGreaterThan(0);
 
-        // ② 播放中重置：草稿自动播起播（Mini 现身）后重播作品（Mini 显示集合标题），
-        // 看到暂停（播放中）即新建创作。
-        await expect(page.getByTestId("mini-now-playing")).toBeVisible({ timeout: 60000 });
+        // 关闭后首篇保持静默；手动播放后再验证新建创作中断。
+        await expect(page.getByTestId("mini-now-playing")).toBeHidden();
         await playCardWhenSettled(page, 0);
         const miniBefore = await readMiniTitles(page);
         expect(miniBefore.title).toBe(collectionTitle);
@@ -70,7 +69,7 @@ test.describe("播放与准备中新创作强重置", () => {
         // ③ 立即回到空对话初始态：无 Mini、无卡片按钮、空态文案、输入框清空可用，
         // 空内容不能发送；设置仍关闭、新作品集占位。
         await expect(page.getByTestId("mini-now-playing")).toBeHidden({ timeout: 10000 });
-        await expect(page.getByText("暂未开始任何对话")).toBeVisible({ timeout: 10000 });
+        await expect(page.getByRole("region", { name: "创作引导" })).toBeVisible({ timeout: 10000 });
         await expect(composerInput(page)).toHaveValue("");
         await expect(composerInput(page)).toBeEnabled();
         await expect(page.getByRole("button", { name: "发送" })).toBeDisabled();
@@ -83,7 +82,7 @@ test.describe("播放与准备中新创作强重置", () => {
         await page.waitForTimeout(8000);
         expect(await cardActionButtons(page).count()).toBe(0);
         await expect(page.getByTestId("mini-now-playing")).toBeHidden();
-        await expect(page.getByText("暂未开始任何对话")).toBeVisible();
+        await expect(page.getByRole("region", { name: "创作引导" })).toBeVisible();
 
         // ⑤ 已入库旧作不受影响：故事库仍可见旧集合与原标题。
         await page.goto(`${appUrl}/library`, { waitUntil: "networkidle", timeout: 60000 });
@@ -93,7 +92,7 @@ test.describe("播放与准备中新创作强重置", () => {
             collectionTitle,
         );
         await page.goto(`${appUrl}/chat`, { waitUntil: "networkidle", timeout: 60000 });
-        await expect(page.getByText("暂未开始任何对话")).toBeVisible({ timeout: 15000 });
+        await expect(page.getByRole("region", { name: "创作引导" })).toBeVisible({ timeout: 15000 });
 
         // ⑥ 下一篇准备中重置：重置后的连续创作默认开启；首篇正式播放后，
         // 等页面明确展示下一篇正在生成/保存/准备语音，再新建创作。
@@ -111,7 +110,7 @@ test.describe("播放与准备中新创作强重置", () => {
         await expect(page.getByTestId("mini-now-playing")).toBeHidden({ timeout: 10000 });
         expect(await cardActionButtons(page).count()).toBe(0);
         await expect(page.getByTestId("continuous-next-card")).toBeHidden();
-        await expect(page.getByText("暂未开始任何对话")).toBeVisible();
+        await expect(page.getByRole("region", { name: "创作引导" })).toBeVisible();
 
         // ⑦ 生成中重置：发送后看到用户气泡（旧会话消息已落定，确认框必弹）
         // 即新建创作，旧流被中断，不留半截卡片。
@@ -123,7 +122,7 @@ test.describe("播放与准备中新创作强重置", () => {
         await page.waitForTimeout(10000);
         expect(await cardActionButtons(page).count()).toBe(0);
         await expect(page.getByTestId("mini-now-playing")).toBeHidden();
-        await expect(page.getByText("暂未开始任何对话")).toBeVisible();
+        await expect(page.getByRole("region", { name: "创作引导" })).toBeVisible();
         expect(page.url()).toContain(`${appUrl}/chat`);
     });
 });

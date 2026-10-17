@@ -67,6 +67,11 @@
   scroll-padding-bottom: var(--space-3);
 }
 
+/* 列表和设置页的默认悬浮位置必须避让可操作内容；创作页由输入坞自行布局。 */
+.app[data-layoutmode='wide-floating'][data-mini-visible='true'] .content:not(:has([data-chat-composer])) {
+  margin-bottom: var(--bottom-chrome-safe-bottom);
+}
+
 .app[data-layoutmode='wide-floating'][data-mini-visible='true'] {
   /* Initial fallback includes chrome padding; ResizeObserver replaces it with
      the exact border-box height once Mini mounts. Floating and docked share a

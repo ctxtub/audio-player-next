@@ -10,6 +10,7 @@ export interface OnboardingCardProps {
   suggestions: Array<{ id: string; label: string; value: string }>;
   onSuggestionSelect: (value: string) => void;
   onDismiss?: () => void;
+  compact?: boolean;
 }
 
 /**
@@ -21,36 +22,37 @@ const OnboardingCard: React.FC<OnboardingCardProps> = ({
   suggestions,
   onSuggestionSelect,
   onDismiss,
+  compact = false,
 }) => {
   return (
     <div className={styles.row} role="region" aria-label="创作引导">
       <Image
         className={styles.avatar}
         src={avatarAssistant}
-        alt="Agent助手头像"
+        alt="故事伙伴头像"
         width={36}
         height={36}
         unoptimized
       />
       <div className={styles.bubbleWrapper}>
         <div className={styles.headerRow}>
-          <span className={styles.displayName}>Agent助手</span>
+          <span className={styles.displayName}>故事伙伴</span>
           <span className={styles.badge}>故事工坊</span>
         </div>
 
         <div className={styles.bubble}>
           <p className={styles.greeting}>
-            你好呀！我是你的故事伙伴。告诉我你感兴趣的主题，我来为你编织并朗读专属故事。
+            {compact ? '想听什么故事？选一个主题，或在下方写下你的想法。' : '你好呀！我是你的故事伙伴。告诉我你感兴趣的主题，我来为你编织并朗读专属故事。'}
           </p>
 
-          <div className={styles.guideBlock}>
+          {!compact && <div className={styles.guideBlock}>
             <span className={styles.guideTitle}>创作指引</span>
             <ol className={styles.guideList}>
               <li><strong>挑选主题</strong>：点选下方推荐主题，或在底部直接写下构想</li>
               <li><strong>互动创作</strong>：向我提出角色与情节要求，故事逐步展开</li>
               <li><strong>静心伴听</strong>：就绪后自动朗读播放，伴你宁静入眠</li>
             </ol>
-          </div>
+          </div>}
 
           {suggestions.length > 0 ? (
             <div className={styles.suggestionsBlock}>

@@ -58,7 +58,7 @@ const roleBubbleClassMap: Record<ChatMessageRole, string> = {
  * 角色对应的默认展示信息，避免缺失头像或昵称。
  */
 const fallbackPersonaMap: Record<ChatMessageRole, { name: string; avatar: StaticImageData | string }> = {
-  assistant: { name: 'Agent助手', avatar: avatarAssistant },
+  assistant: { name: '故事伙伴', avatar: avatarAssistant },
   user: { name: '我', avatar: avatarUser },
   system: { name: '系统提示', avatar: avatarAssistant },
   developer: { name: '系统提示', avatar: avatarAssistant },
@@ -78,10 +78,10 @@ const shouldHideAvatar = (role: ChatMessageRole) =>
  * Agent 身份配置表
  */
 const agentPersonaMap: Record<string, { name: string; avatar: StaticImageData | string }> = {
-  'story_agent': { name: '创作Agent', avatar: avatarStoryAgent },
-  'chat_agent': { name: '聊天Agent', avatar: avatarChatAgent },
-  'guidance_agent': { name: '指令Agent', avatar: avatarGuidanceAgent },
-  'summary_agent': { name: '摘要Agent', avatar: avatarSummaryAgent },
+  'story_agent': { name: '故事伙伴', avatar: avatarStoryAgent },
+  'chat_agent': { name: '故事伙伴', avatar: avatarChatAgent },
+  'guidance_agent': { name: '创作建议', avatar: avatarGuidanceAgent },
+  'summary_agent': { name: '故事回顾', avatar: avatarSummaryAgent },
 };
 
 /**

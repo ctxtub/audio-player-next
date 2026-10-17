@@ -150,10 +150,15 @@
   }
 
   .collectionTitle {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
+
+  .titleRow { display: grid; grid-template-columns: 1fr auto; }
+  .newCreation { grid-column: 2; grid-row: 1; }
 }
 
 /* 集名链接延续标题视觉，不使用浏览器默认蓝色。 */

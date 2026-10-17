@@ -1,7 +1,7 @@
 'use client';
 import { userFacingError } from '@/lib/client/userFacingError';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -21,6 +21,7 @@ import styles from './storyDetail.module.scss';
 
 export interface StoryDetailProps {
   work: LibraryDetailViewModel;
+  playbackDurationMs?: number | null;
   onRename?: (id: number, newTitle: string) => Promise<void>;
   onToggleFavorite?: (id: number, favorite: boolean) => Promise<void>;
   onMoveToTrash?: (id: number, title: string) => Promise<void>;
@@ -64,6 +65,7 @@ function formatDateTime(isoString: string): string {
  */
 export const StoryDetail: React.FC<StoryDetailProps> = ({
   work,
+  playbackDurationMs,
   onRename,
   onMoveToTrash,
 }) => {
@@ -73,12 +75,15 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
   const [renameError, setRenameError] = useState<string | null>(null);
 
   const [isMovingToTrash, setIsMovingToTrash] = useState(false);
+  const managementRef = useRef<HTMLDetailsElement | null>(null);
+  const durationMs = playbackDurationMs ?? work.audio?.durationMs;
 
   useEffect(() => {
     setTitleDraft(work.title);
   }, [work.title]);
 
   const handleOpenRename = () => {
+    if (managementRef.current) managementRef.current.open = false;
     setTitleDraft(work.title);
     setRenameError(null);
     setIsEditingTitle(true);
@@ -205,21 +210,17 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
               <h1 className={styles.title} data-testid="story-detail-title">
                 {work.title}
               </h1>
-              <button
-                type="button"
-                className={styles.renameButton}
-                onClick={handleOpenRename}
-                data-testid="story-detail-rename-btn"
-                title="重命名故事标题"
-              >
-                <Pencil size={15} />
-                <span>重命名</span>
-              </button>
             </div>
           )}
 
           <div className={styles.actionsGroup}>
             <WorkPlaybackButton workId={work.id} title={work.title} progress={work.progress} />
+            <details ref={managementRef} className={styles.managementMenu}>
+              <summary>管理故事</summary>
+              <div className={styles.managementActions}>
+                <button type="button" className={styles.renameButton} onClick={handleOpenRename} data-testid="story-detail-rename-btn">
+                  <Pencil size={15} /><span>重命名</span>
+                </button>
             <button
               type="button"
               className={styles.trashBtn}
@@ -235,6 +236,8 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
               <Trash2 size={15} />
               <span>{isMovingToTrash ? '删除中...' : '删除故事'}</span>
             </button>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -250,20 +253,13 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
           </span>
           <span className={styles.metaItem} data-testid="story-detail-audio-status">
             <span>音频: {{ ready: '语音已就绪', preparing: '准备语音中', failed: '语音准备失败', missing: '播放时准备语音' }[work.audio?.status ?? 'missing']}</span>
-            {work.audio?.durationMs ? (
-              <span> ({formatDuration(work.audio.durationMs)})</span>
+            {durationMs ? (
+              <span> ({formatDuration(durationMs)})</span>
             ) : null}
           </span>
 
         </div>
       </header>
-
-      {/* 摘要与导读 */}
-      {work.excerpt ? (
-        <section className={styles.excerptSection} data-testid="story-detail-excerpt">
-          <p className={styles.excerptText}>{work.excerpt}</p>
-        </section>
-      ) : null}
 
       {/* 正文内容区 */}
       <section className={styles.textSection}>
@@ -275,6 +271,13 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
           {work.storyText}
         </div>
       </section>
+
+      {work.excerpt ? (
+        <details className={styles.excerptSection} data-testid="story-detail-excerpt">
+          <summary>故事简介</summary>
+          <p className={styles.excerptText}>{work.excerpt}</p>
+        </details>
+      ) : null}
 
       {/* 原始生成提示词 Prompt */}
       {work.prompt ? (

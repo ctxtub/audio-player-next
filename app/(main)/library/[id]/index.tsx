@@ -12,6 +12,8 @@ import { StoryDetail } from '@/components/Library/StoryDetail';
 import { LibraryUnavailable, isUnavailableError } from '@/components/Library/LibraryUnavailable';
 import { usePathname } from 'next/navigation';
 import { workPath, collectionPath } from '@/lib/navigation/storyRoutes';
+import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
+import { usePlaybackStore } from '@/stores/playbackStore';
 import styles from './index.module.scss';
 
 export interface StoryDetailPageProps {
@@ -40,6 +42,12 @@ const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id, expectedCollectio
 
   const router = useContext(AppRouterContext);
   const pathname = usePathname();
+  const isCurrentWork = usePlaybackSessionStore((state) => state.source?.kind === 'work' && state.source.workId === numericId);
+  const savedDurationMs = usePlaybackSessionStore((state) => state.savedWorkDurationMs);
+  const duration = usePlaybackStore((state) => state.duration);
+  const playbackDurationMs = isCurrentWork
+    ? Number.isFinite(duration) && duration > 0 ? duration * 1000 : savedDurationMs
+    : null;
 
   const mutations = useLibraryMutationsSafe();
 
@@ -150,6 +158,7 @@ const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id, expectedCollectio
   return (
     <StoryDetail
       work={viewModel}
+      playbackDurationMs={playbackDurationMs}
       onRename={handleRename}
       onToggleFavorite={handleToggleFavorite}
       onMoveToTrash={handleMoveToTrash}

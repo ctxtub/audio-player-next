@@ -615,14 +615,7 @@
   font-weight: var(--weight-semibold);
 }
 
-.currentBadge {
-  padding: 2px 7px;
-  border-radius: var(--radius-full);
-  color: var(--accent-primary);
-  background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
-  font-size: 11px;
-  white-space: nowrap;
-}
+
 
 .trackMeta {
   margin: 0;
@@ -945,7 +938,7 @@
   }
 }
 
-@media (max-width: 440px) {
+@media (max-width: 767px) {
   .storyDetailPage {
     padding-inline: var(--space-3);
   }
@@ -956,19 +949,38 @@
   }
 
   .trackItem {
-    grid-template-columns: 22px minmax(0, 1fr) auto;
-    padding: 10px 12px;
+    grid-template-columns: var(--space-6) minmax(0, 1fr);
+    padding: var(--space-3);
     gap: var(--space-2);
+    align-items: start;
+  }
+
+  .trackTitleRow {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .trackTitle {
-    font-size: var(--text-xs);
+    font-size: var(--text-base);
+    line-height: var(--leading-base);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .trackActions {
+    grid-column: 2;
+    justify-content: space-between;
   }
 
   .trackPlayBtn {
-    padding: 3px 8px;
-    font-size: 11px;
-    min-height: 28px;
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
+    min-height: var(--size-touch-target);
+  }
+
+  .trackDeleteBtn {
+    width: var(--size-touch-target);
+    height: var(--size-touch-target);
   }
 
   .dangerButton {

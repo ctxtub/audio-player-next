@@ -109,6 +109,8 @@
     flex-wrap: wrap;
   }
 
+  .title { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+
   .actions {
     width: 100%;
     justify-content: flex-end;
@@ -121,5 +123,5 @@
 
 /* 移动端紧凑 Mini 悬浮于右侧时，为下一篇提示卡避让出安全空间，避免文字和状态被覆盖 */
 :global([data-layoutmode='compact-floating'][data-mini-visible='true']) .card {
-  margin-right: calc(var(--size-mini-now-playing-compact) + var(--space-4));
+  margin-right: var(--space-4);
 }

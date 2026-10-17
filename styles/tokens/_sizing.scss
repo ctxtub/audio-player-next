@@ -29,6 +29,7 @@
   /* Expanded Now Playing（spec §12）：Sheet 最大高度 / Panel 宽度 / Handle 命中尺寸。
    * 响应式：compact → bottom sheet；wide → side panel（断点 768px 与 Mini 同契约）。 */
   --size-now-playing-sheet-max-height: 60dvh;
+  --size-now-playing-sheet-min-height: 480px;
   --size-now-playing-panel-width: 400px;
   --size-now-playing-handle: 36px;
   --size-now-playing-artwork: 168px;

@@ -1,5 +1,6 @@
 /** Formal Work audio uses a single authorized Asset; Draft audio is separate. */
 import { trpc } from '@/lib/trpc/client';
+import { getQueryClient } from '@/lib/client/queryClient';
 
 /**
  *  单轨 ensure（`{ workId, sessionId }`，无 segmentIndex）。
@@ -9,7 +10,15 @@ export const ensureAsset = async (input: {
   workId: number;
   sessionId: string;
 }, signal?: AbortSignal): Promise<import('@/lib/trpc/schemas/storyAudio').EnsureStoryAudioOutput> => {
-  return trpc.storyAudio.ensure.mutate(input, { signal });
+  const result = await trpc.storyAudio.ensure.mutate(input, { signal });
+  // 准备完成后让当前可见列表和正文读取正式音频投影；不改变播放身份或队列。
+  if (result.status === 'ready' && !signal?.aborted) {
+    const queryClient = getQueryClient();
+    // 只依赖查询族前缀，避免 API 门面反向依赖包含 Store 的 React 查询 hooks。
+    void queryClient.invalidateQueries({ queryKey: ['library'] });
+    void queryClient.invalidateQueries({ queryKey: ['collections'] });
+  }
+  return result;
 };
 
 /**  单轨投影读取（只读）。 */

@@ -58,8 +58,8 @@ const UserSection: React.FC = () => {
   }, [doLogout, router]);
 
   const handleGoAuth = useCallback(() => {
-    router.push('/auth?from=/setting');
-  }, [router]);
+    router.push(isGuest ? '/auth?mode=register&from=/setting' : '/auth?from=/setting');
+  }, [isGuest, router]);
 
   return (
     <div className={styles.userSection}>

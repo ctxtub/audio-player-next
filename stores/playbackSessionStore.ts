@@ -154,7 +154,7 @@ interface PlaybackSessionActions {
    */
   setSpeed: (rate: number) => Promise<void>;
   resumeRehydratedPlayback: () => Promise<void>;
-  playParagraph: (paragraphIndex: number, options?: { explicit?: boolean }) => Promise<void>;
+  playParagraph: (paragraphIndex: number, options?: { explicit?: boolean; signal?: AbortSignal }) => Promise<void>;
   prefetchNextParagraph: (paragraphIndex: number) => Promise<void>;
   handleParagraphEnded: () => Promise<boolean>;
   handleExplicitPause: () => void;
@@ -331,8 +331,10 @@ async function fetchCanonicalAudioUrlWithRetry(
 ): Promise<string> {
   let singleAttempts = 0;
   for (;;) {
+    options?.signal?.throwIfAborted();
     singleAttempts += 1;
-    const output = await ensureCanonicalAsset({ workId, sessionId });
+    const output = await ensureCanonicalAsset({ workId, sessionId }, options?.signal);
+    options?.signal?.throwIfAborted();
     if (usePlaybackSessionStore.getState().sessionId !== sessionId) throw new Error('播放目标已变化');
     if (output.status === 'ready') {
       // 服务端 positionMs 作为待恢复位，等 duration 已知后一次性 seek。
@@ -731,6 +733,7 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
   },
 
   playParagraph: async (paragraphIndex, options) => {
+    if (options?.signal?.aborted) return;
     const state = get();
     const originatingSessionId = state.sessionId;
     if (paragraphIndex >= state.paragraphs.length) {
@@ -783,10 +786,12 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
             singleTrackWorkId,
             paragraphIndex,
             singleTrackSessionId,
+            { signal: options?.signal },
           );
         } catch (err) {
           // §50 session guard：失败也须确认仍是同一 session 才置 error，避免旧结果覆盖新会话。
           if (get().sessionId !== originatingSessionId) return;
+          if (options?.signal?.aborted) { set({ status: 'paused' }); return; }
           set({ status: 'error' });
           GlassToast.show({ icon: 'fail', content: '语音生成稍有延迟，请重试' });
           throw err;
@@ -808,6 +813,12 @@ const playbackSessionStoreCreator: StateCreator<PlaybackSessionStore> = (set, ge
     // stale：A ensure 慢、切到 B 后 A 资产可完成保留，但回客户端时 session 失配 → 绝不播放 A。
     if (get().sessionId !== originatingSessionId) {
       revokeAudioUrlIfBlob(audioUrl);
+      return;
+    }
+
+    if (options?.signal?.aborted) {
+      revokeAudioUrlIfBlob(audioUrl);
+      set({ status: 'paused' });
       return;
     }
 

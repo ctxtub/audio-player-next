@@ -1,7 +1,7 @@
 'use client';
 
 import { userFacingError } from '@/lib/client/userFacingError';
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { libraryReturnPath } from '@/components/Library/LibraryNavigationMemory';
@@ -15,7 +15,7 @@ import {
   AlertCircle,
   BookOpen,
   ChevronLeft,
-  FileText,
+  History,
   LoaderCircle,
   MoreVertical,
   Pause,
@@ -29,7 +29,6 @@ import {
 } from 'lucide-react';
 import { useCollectionDetailQuery } from '@/lib/client/collectionQueries';
 import { useCollectionMutations } from '@/lib/client/collectionMutations';
-import { useLibraryMutationsSafe } from '@/lib/client/libraryMutations';
 import {
   areMemberPositionsOrdered,
   formatCollectionWorkCount,
@@ -39,6 +38,7 @@ import { usePlaybackSessionStore } from '@/stores/playbackSessionStore';
 import { usePlaybackStore } from '@/stores/playbackStore';
 import { LibraryUnavailable, isUnavailableError } from '@/components/Library/LibraryUnavailable';
 import GlassToast from '@/components/ui/GlassToast';
+import { CollectionCoverArt } from '../../components/CollectionCoverArt';
 import styles from './index.module.scss';
 
 export interface CollectionDetailPageProps {
@@ -52,7 +52,6 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
   const searchParams = useSearchParams();
   const focusWork = searchParams?.get('focusWork');
   const mutations = useCollectionMutations();
-  const libraryMutations = useLibraryMutationsSafe();
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
@@ -61,8 +60,6 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [deletingWork, setDeletingWork] = useState<{ id: number; title: string } | null>(null);
-  const [isDeletingWork, setIsDeletingWork] = useState(false);
 
   const [startingWorkId, setStartingWorkId] = useState<number | null>(null);
   const playRequestSeqRef = useRef(0);
@@ -99,6 +96,19 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isMenuOpen]);
+
+  const totalDurationSeconds = useMemo(() => {
+    if (!data?.works?.length) return 0;
+    return data.works.reduce((acc, work) => {
+      const ms = work.audio?.durationMs ?? work.progress?.durationMs ?? 0;
+      return acc + Math.max(0, ms / 1000);
+    }, 0);
+  }, [data?.works]);
+
+  const isCollectionPlaying = useMemo(() => {
+    if (!isPlaying || !currentWorkId || !data?.works) return false;
+    return data.works.some((work) => work.id === currentWorkId);
+  }, [isPlaying, currentWorkId, data?.works]);
 
   const handlePlayCollection = async (mode: 'resume' | 'restart') => {
     setActionError(null);
@@ -228,22 +238,6 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
     }
   };
 
-  const handleConfirmDeleteWork = async () => {
-    if (!deletingWork || isDeletingWork || !libraryMutations) return;
-    setIsDeletingWork(true);
-    try {
-      await libraryMutations.deleteWork({ id: deletingWork.id, title: deletingWork.title });
-      GlassToast.show({ icon: 'success', content: '故事已彻底删除' });
-      setDeletingWork(null);
-      void refetch();
-    } catch (err) {
-      console.error('Delete work failed:', err);
-      GlassToast.show({ icon: 'fail', content: '删除失败，请重试' });
-    } finally {
-      setIsDeletingWork(false);
-    }
-  };
-
   return (
     <div className={styles.storyDetailPage} data-testid="collection-detail-page">
       <ConversationSwitchConfirmation
@@ -259,6 +253,17 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
           <span>返回故事库</span>
         </Link>
         <div className={styles.navActions}>
+          {data.conversationId ? (
+            <Link
+              className={styles.navHistoryLink}
+              href={conversationPath(data.conversationId)}
+              data-testid="collection-view-history-btn"
+            >
+              <History size={14} aria-hidden="true" />
+              <span>查看创作记录</span>
+            </Link>
+          ) : null}
+
           <button
             type="button"
             className={`${styles.navIconBtn} ${favorited ? styles.favoriteActive : ''}`}
@@ -269,7 +274,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
             aria-label={favorited ? '取消收藏' : '收藏'}
             title={favorited ? '取消收藏' : '收藏'}
           >
-            <Star size={18} fill={favorited ? '#f59e0b' : 'none'} stroke={favorited ? '#f59e0b' : 'currentColor'} />
+            <Star size={17} fill={favorited ? '#f59e0b' : 'none'} stroke={favorited ? '#f59e0b' : 'currentColor'} />
           </button>
 
           <div className={styles.menuWrapper} ref={menuRef}>
@@ -281,7 +286,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
               data-testid="collection-menu-trigger"
               title="更多操作"
             >
-              <MoreVertical size={18} />
+              <MoreVertical size={17} />
             </button>
 
             {isMenuOpen && (
@@ -317,20 +322,32 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
         </div>
       </div>
 
-      {/* 英雄卡片区 */}
+      {/* 专辑英雄卡片区（SVG 矢量封面 + 标题统计 + 统一操作栏） */}
       <header className={styles.detailHero}>
         <div className={styles.heroPanel}>
-          <div className={styles.titleArea}>
-            <p className={styles.eyebrow}>故事集</p>
-            <h1 className={styles.detailTitle} data-testid="collection-title">
-              {data.title}
-            </h1>
-            <p className={styles.workCount} data-testid="collection-work-count">
-              {formatCollectionWorkCount(data.workCount)} · 按创作顺序排列
-            </p>
+          <div className={styles.heroTopRow}>
+            <CollectionCoverArt
+              title={data.title}
+              collectionId={data.id}
+              size="lg"
+              isPlaying={isCollectionPlaying}
+            />
+            <div className={styles.titleArea}>
+              <p className={styles.eyebrow}>STORY COLLECTION · 故事集</p>
+              <h1 className={styles.detailTitle} data-testid="collection-title">
+                {data.title}
+              </h1>
+              <p className={styles.workCount} data-testid="collection-work-count">
+                {formatCollectionWorkCount(data.workCount)}
+                {totalDurationSeconds > 0
+                  ? ` · 总时长 ${formatPlaybackTime(Math.floor(totalDurationSeconds))}`
+                  : ''}
+                {' · 按创作顺序排列'}
+              </p>
+            </div>
           </div>
 
-          {/* 核心播放主操作 */}
+          {/* 核心播放与续写主操作栏 */}
           <div className={styles.playbackActions}>
             <button
               type="button"
@@ -344,6 +361,20 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
               <Play size={14} fill="currentColor" aria-hidden="true" />
               <span>继续播放</span>
             </button>
+
+            {data.conversationId ? (
+              <button
+                type="button"
+                className={styles.continueCreateButton}
+                disabled={resumeFlow.busy}
+                onClick={() => void resumeFlow.resume(data.conversationId!, data.title)}
+                data-testid="collection-resume-creation-btn"
+              >
+                <Sparkles size={14} aria-hidden="true" />
+                <span>{resumeFlow.busy ? '正在准备创作…' : '续写新章节'}</span>
+              </button>
+            ) : null}
+
             <button
               type="button"
               className={styles.secondaryPlayButton}
@@ -451,11 +482,11 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
 
       <main className={styles.membersSection} data-testid="collection-members">
         <div className={styles.sectionHeading}>
-          <div>
-            <p className={styles.eyebrow}>播放列表</p>
-            <h2>集内故事</h2>
+          <div className={styles.sectionHeadingLeft}>
+            <h2>章节目录</h2>
+            <span className={styles.sectionHint}>点击标题或「正文」阅读全文</span>
           </div>
-          <span>{data.workCount} 篇</span>
+          <span className={styles.sectionCountBadge}>{data.workCount} 篇</span>
         </div>
         {actionError ? (
           <p className={styles.actionError} role="alert">
@@ -489,6 +520,10 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                 ? hasLiveDuration ? currentTime : (savedPositionMs ?? work.progress?.positionMs ?? 0) / 1000
                 : (work.progress?.positionMs ?? 0) / 1000;
               const heardSeconds = durationSeconds > 0 ? Math.min(positionSeconds, durationSeconds) : positionSeconds;
+              const progressPercent =
+                durationSeconds > 0 && heardSeconds > 0
+                  ? Math.min(100, Math.round((heardSeconds / durationSeconds) * 100))
+                  : 0;
               const isPreparing =
                 startingWorkId === work.id ||
                 (startingWorkId === null &&
@@ -529,9 +564,17 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                   onClick={() => void handlePlayWork(work.id)}
                 >
                   <div className={styles.trackLeading}>
-                    <span className={styles.trackIndex} aria-hidden="true">
-                      {String(visibleIndex + 1).padStart(2, '0')}
-                    </span>
+                    {isCurrentPlaying ? (
+                      <span className={styles.trackEqualizer} aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                    ) : (
+                      <span className={styles.trackIndex} aria-hidden="true">
+                        {String(visibleIndex + 1).padStart(2, '0')}
+                      </span>
+                    )}
                   </div>
 
                   <div className={styles.trackBody}>
@@ -545,23 +588,43 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                         </Link>
                       </h3>
                     </div>
-                    <p className={styles.trackMeta}>
-                      {heardSeconds > 0
-                        ? `听到 ${formatPlaybackTime(Math.floor(heardSeconds))}`
-                        : '未听'}
-                      {durationSeconds > 0
-                        ? ` · 时长 ${formatPlaybackTime(Math.floor(durationSeconds))}`
-                        : isPreparing || work.audio.status === 'preparing'
-                          ? ' · 正在准备语音'
-                          : work.audio.status === 'failed'
-                            ? ' · 语音准备失败'
-                            : work.audio.status === 'ready'
-                              ? ' · 时长未知'
-                              : ' · 播放时准备语音'}
-                    </p>
+                    <div className={styles.trackMetaRow}>
+                      <p className={styles.trackMeta}>
+                        {heardSeconds > 0
+                          ? `听到 ${formatPlaybackTime(Math.floor(heardSeconds))}`
+                          : '未听'}
+                        {durationSeconds > 0
+                          ? ` · 时长 ${formatPlaybackTime(Math.floor(durationSeconds))}`
+                          : isPreparing || work.audio.status === 'preparing'
+                            ? ' · 正在准备语音'
+                            : work.audio.status === 'failed'
+                              ? ' · 语音准备失败'
+                              : work.audio.status === 'ready'
+                                ? ' · 时长未知'
+                                : ' · 播放时准备语音'}
+                      </p>
+                      {progressPercent > 0 ? (
+                        <span className={styles.trackMiniProgress} aria-hidden="true">
+                          <span
+                            className={styles.trackMiniProgressFill}
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className={styles.trackActions}>
+                    <Link
+                      href={workPath(work.id, id)}
+                      className={styles.trackReadLink}
+                      onClick={(e) => e.stopPropagation()}
+                      title={`阅读《${work.title}》正文`}
+                      aria-label={`阅读《${work.title}》正文`}
+                    >
+                      <BookOpen size={13} aria-hidden="true" />
+                      <span>正文</span>
+                    </Link>
                     <button
                       type="button"
                       className={`${styles.trackPlayBtn} ${isCurrentPlaying ? styles.trackPlayBtnActive : ''}`}
@@ -574,23 +637,11 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
                       aria-label={`${buttonLabel}《${work.title}》`}
                     >
                       <ButtonIcon
-                        size={14}
+                        size={13}
                         fill={ButtonIcon === Play ? 'currentColor' : 'none'}
                         className={isPreparing ? styles.spinning : undefined}
                       />
                       <span>{buttonLabel}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.trackDeleteBtn}
-                      title="删除单篇故事"
-                      aria-label={`删除《${work.title}》`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setDeletingWork({ id: work.id, title: work.title });
-                      }}
-                    >
-                      <Trash2 size={15} />
                     </button>
                   </div>
                 </article>
@@ -598,79 +649,7 @@ const CollectionDetailPage: React.FC<CollectionDetailPageProps> = ({ id }) => {
             })}
           </div>
         )}
-
-        {/* 列表末尾：顺畅心智引导续写 */}
-        {data.conversationId && (
-          <div className={styles.continuationCard} data-testid="collection-continuation-card">
-            <div className={styles.continuationLeft}>
-              <div className={styles.continuationIcon}>
-                <Sparkles size={20} />
-              </div>
-              <div className={styles.continuationText}>
-                <h4>续写新章节</h4>
-                <p>听完了？与 AI 一起延伸《{data.title}》的奇妙旅程</p>
-              </div>
-            </div>
-            <div className={styles.continuationActions}>
-              <button
-                type="button"
-                className={styles.continuationPrimaryBtn}
-                disabled={resumeFlow.busy}
-                onClick={() => void resumeFlow.resume(data.conversationId!, data.title)}
-                data-testid="collection-resume-creation-btn"
-              >
-                <Sparkles size={14} />
-                <span>{resumeFlow.busy ? '正在准备创作…' : '续写这个故事集'}</span>
-              </button>
-              <Link
-                className={styles.continuationSecondaryBtn}
-                href={conversationPath(data.conversationId)}
-                data-testid="collection-view-history-btn"
-              >
-                <FileText size={14} />
-                <span>查看创作记录</span>
-              </Link>
-            </div>
-          </div>
-        )}
       </main>
-
-      {/* 单篇删除确认弹窗 Modal */}
-      {deletingWork && (
-        <div className={styles.modalOverlay} onClick={() => setDeletingWork(null)}>
-          <div
-            className={styles.modalDialog}
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="work-delete-dialog-title"
-          >
-            <h3 id="work-delete-dialog-title" className={styles.modalTitle}>
-              删除单篇故事？
-            </h3>
-            <p className={styles.modalMessage}>
-              单篇故事《{deletingWork.title}》将被彻底删除，不进入回收站，此操作不可恢复。
-            </p>
-            <div className={styles.modalActions}>
-              <button
-                type="button"
-                className={styles.modalCancelBtn}
-                onClick={() => setDeletingWork(null)}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className={styles.modalDangerBtn}
-                disabled={isDeletingWork}
-                onClick={handleConfirmDeleteWork}
-              >
-                {isDeletingWork ? '删除中…' : '彻底删除'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

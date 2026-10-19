@@ -176,7 +176,7 @@ export async function listCollectionsForSubject(
       const recent = [...works].filter((work) => isUnfinished(work.progress)).sort((a, b) => (b.progress?.lastPlayedAt ?? '').localeCompare(a.progress?.lastPlayedAt ?? ''))[0];
       const target = recent ?? works.find(incomplete) ?? works[0];
       const match = query ? works.find((work) => work.title.includes(query) || work.excerpt.includes(query)) : null;
-      return { ...summary, excerpt: match ? `命中故事：${match.title} · ${match.excerpt}` : works[0]?.excerpt ?? '', resumeWorkId: target?.id ?? null, hasUnfinished: works.some(incomplete) };
+      return { ...summary, excerpt: match ? `命中故事：${match.title} · ${match.excerpt}` : works[0]?.excerpt ?? '', resumeWorkId: target?.id ?? null, hasUnfinished: Boolean(recent) };
     }),
     nextCursor,
     hasMore: nextCursor !== null,

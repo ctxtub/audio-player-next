@@ -1,19 +1,25 @@
 'use client';
 import { userFacingError } from '@/lib/client/userFacingError';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
   Clock,
   Mic,
-  FileText,
   Sparkles,
   Pencil,
   Trash2,
+  MoreHorizontal,
+  ChevronLeft,
+  ChevronRight,
+  BookOpen,
+  History,
+  Headphones,
 } from 'lucide-react';
 import type { LibraryDetailViewModel } from '@/lib/client/libraryViewModel';
-import { collectionPath, conversationPath } from '@/lib/navigation/storyRoutes';
+import type { CollectionWorkSummaryDTO } from '@/lib/trpc/schemas/collection';
+import { collectionPath, conversationPath, workPath } from '@/lib/navigation/storyRoutes';
 import { libraryReturnPath } from './LibraryNavigationMemory';
 import { WorkPlaybackButton } from './WorkPlaybackButton';
 import { formatPlaybackTime } from '@/lib/playback/formatTime';
@@ -22,6 +28,7 @@ import styles from './storyDetail.module.scss';
 export interface StoryDetailProps {
   work: LibraryDetailViewModel;
   playbackDurationMs?: number | null;
+  collectionWorks?: CollectionWorkSummaryDTO[];
   onRename?: (id: number, newTitle: string) => Promise<void>;
   onToggleFavorite?: (id: number, favorite: boolean) => Promise<void>;
   onMoveToTrash?: (id: number, title: string) => Promise<void>;
@@ -54,18 +61,33 @@ function formatDateTime(isoString: string): string {
   }
 }
 
+const FRIENDLY_VOICE_LABELS: Record<string, string> = {
+  'zh-CN-YunxiNeural': '云希 · 温暖男声',
+  'zh-CN-XiaoxiaoNeural': '晓晓 · 温柔女声',
+  'zh-CN-YunjianNeural': '云健 · 沉稳男声',
+  'zh-CN-XiaoyiNeural': '晓伊 · 清甜女声',
+  'zh-CN-YunyangNeural': '云扬 · 播音男声',
+  'zh-CN-XiaohanNeural': '晓涵 · 柔和女声',
+  alloy: 'Alloy · 平衡中性',
+  echo: 'Echo · 沉稳男声',
+  fable: 'Fable · 叙事音色',
+  onyx: 'Onyx · 深沉男声',
+  nova: 'Nova · 活力女声',
+  shimmer: 'Shimmer · 轻柔女声',
+};
+
+function formatFriendlyVoiceName(voiceId?: string): string {
+  if (!voiceId) return '默认伴读音色';
+  return FRIENDLY_VOICE_LABELS[voiceId] ?? voiceId;
+}
+
 /**
- * 故事作品详情展示与变更组件（ / 纯展示与事件驱动组件）
- *
- * 核心边界规范：
- * 1. 仅暴露 Rename / Move to Trash 事件入口，mutation ownership 全归属 Page；
- * 2. 严禁暴露 Restore / Permanent Delete（回收站作品不可进入详情）；
- * 3. 字段保真：严格仅读取 StoryWorkDetail 已有字段，绝不跨越读取生成历史、播放进度或音频内部表；
- * 4. 播放进度缝隙：严格保持 work.progress === null（等待  进度系统接入）。
+ * 故事作品沉浸式阅读与伴听详情组件
  */
 export const StoryDetail: React.FC<StoryDetailProps> = ({
   work,
   playbackDurationMs,
+  collectionWorks,
   onRename,
   onMoveToTrash,
 }) => {
@@ -81,6 +103,22 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
   useEffect(() => {
     setTitleDraft(work.title);
   }, [work.title]);
+
+  const chapterNavigation = useMemo(() => {
+    if (!collectionWorks || collectionWorks.length === 0) {
+      return { index: -1, total: 0, prev: null, next: null };
+    }
+    const idx = collectionWorks.findIndex((item) => item.id === work.id);
+    if (idx === -1) {
+      return { index: -1, total: collectionWorks.length, prev: null, next: null };
+    }
+    return {
+      index: idx + 1,
+      total: collectionWorks.length,
+      prev: idx > 0 ? collectionWorks[idx - 1] : null,
+      next: idx < collectionWorks.length - 1 ? collectionWorks[idx + 1] : null,
+    };
+  }, [collectionWorks, work.id]);
 
   const handleOpenRename = () => {
     if (managementRef.current) managementRef.current.open = false;
@@ -131,11 +169,17 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
       }
     } catch (err) {
       console.error('Move to trash failed:', err);
-      // 失败时留在详情页且数据由 mutation engine 局部 rollback
     } finally {
       setIsMovingToTrash(false);
     }
   };
+
+  const audioStatusText = {
+    ready: '语音已就绪',
+    preparing: '准备语音中',
+    failed: '语音准备失败',
+    missing: '播放时准备语音',
+  }[work.audio?.status ?? 'missing'];
 
   return (
     <div
@@ -144,7 +188,7 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
       data-work-id={work.id}
       data-has-progress={work.progress !== null}
     >
-      {/* 顶部导航与返回 */}
+      {/* 顶部导航栏：左侧返回故事集/库，右侧查看创作记录 + 管理故事菜单 */}
       <nav className={styles.topNav}>
         <Link
           href={work.collectionId ? collectionPath(work.collectionId) : libraryReturnPath()}
@@ -154,11 +198,64 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
           <ArrowLeft size={16} />
           <span>{work.collectionTitle ? `返回《${work.collectionTitle}》` : '返回故事库'}</span>
         </Link>
-        {work.conversationId && <Link className={styles.recordLink} href={`${conversationPath(work.conversationId)}${work.sourceMessageId ? `?focusMessage=${encodeURIComponent(work.sourceMessageId)}` : ''}`}>查看创作记录</Link>}
+
+        <div className={styles.topNavRight}>
+          {work.conversationId ? (
+            <Link
+              className={styles.recordLink}
+              href={`${conversationPath(work.conversationId)}${work.sourceMessageId ? `?focusMessage=${encodeURIComponent(work.sourceMessageId)}` : ''}`}
+            >
+              <History size={14} aria-hidden="true" />
+              <span>查看创作记录</span>
+            </Link>
+          ) : null}
+
+          <details ref={managementRef} className={styles.managementMenu}>
+            <summary>
+              <MoreHorizontal size={15} aria-hidden="true" />
+              <span>管理故事</span>
+            </summary>
+            <div className={styles.managementActions}>
+              <button
+                type="button"
+                className={styles.renameButton}
+                onClick={handleOpenRename}
+                data-testid="story-detail-rename-btn"
+              >
+                <Pencil size={15} />
+                <span>重命名</span>
+              </button>
+              <button
+                type="button"
+                className={styles.trashBtn}
+                onClick={() => {
+                  if (window.confirm(`确定要彻底删除《${work.title}》吗？删除后无法恢复。`)) {
+                    void handleMoveToTrash();
+                  }
+                }}
+                data-testid="story-detail-trash-btn"
+                disabled={isMovingToTrash}
+                title="删除故事"
+              >
+                <Trash2 size={15} />
+                <span>{isMovingToTrash ? '删除中...' : '删除故事'}</span>
+              </button>
+            </div>
+          </details>
+        </div>
       </nav>
 
-      {/* 标题与元信息 Hero */}
+      {/* 紧凑阅读器头部与内嵌伴听控制条 */}
       <header className={styles.detailHero}>
+        {chapterNavigation.index > 0 ? (
+          <p className={styles.chapterEyebrow}>
+            CHAPTER {String(chapterNavigation.index).padStart(2, '0')} / {String(chapterNavigation.total).padStart(2, '0')}
+            {work.collectionTitle ? ` · 选自《${work.collectionTitle}》` : ''}
+          </p>
+        ) : work.collectionTitle ? (
+          <p className={styles.chapterEyebrow}>选自故事集《{work.collectionTitle}》</p>
+        ) : null}
+
         <div className={styles.titleRow}>
           {isEditingTitle ? (
             <form
@@ -212,88 +309,129 @@ export const StoryDetail: React.FC<StoryDetailProps> = ({
               </h1>
             </div>
           )}
-
-          <div className={styles.actionsGroup}>
-            <WorkPlaybackButton workId={work.id} title={work.title} progress={work.progress} />
-            <details ref={managementRef} className={styles.managementMenu}>
-              <summary>管理故事</summary>
-              <div className={styles.managementActions}>
-                <button type="button" className={styles.renameButton} onClick={handleOpenRename} data-testid="story-detail-rename-btn">
-                  <Pencil size={15} /><span>重命名</span>
-                </button>
-            <button
-              type="button"
-              className={styles.trashBtn}
-              onClick={() => {
-                if (window.confirm(`确定要彻底删除《${work.title}》吗？删除后无法恢复。`)) {
-                  void handleMoveToTrash();
-                }
-              }}
-              data-testid="story-detail-trash-btn"
-              disabled={isMovingToTrash}
-              title="删除故事"
-            >
-              <Trash2 size={15} />
-              <span>{isMovingToTrash ? '删除中...' : '删除故事'}</span>
-            </button>
-              </div>
-            </details>
-          </div>
         </div>
 
-        {/* 元数据标签组 */}
+        {/* 友好化元数据行 */}
         <div className={styles.metaRow}>
-          <span className={styles.metaItem} data-testid="story-detail-created-at">
-            <Clock size={14} />
-            <span>创建于 {formatDateTime(work.createdAt)}</span>
-          </span>
           <span className={styles.metaItem} data-testid="story-detail-voice">
-            <Mic size={14} />
-            <span>音色: {work.voiceId}</span>
+            <Mic size={13} aria-hidden="true" />
+            <span>朗读音色：{formatFriendlyVoiceName(work.voiceId)}</span>
           </span>
-          <span className={styles.metaItem} data-testid="story-detail-audio-status">
-            <span>音频: {{ ready: '语音已就绪', preparing: '准备语音中', failed: '语音准备失败', missing: '播放时准备语音' }[work.audio?.status ?? 'missing']}</span>
-            {durationMs ? (
-              <span> ({formatDuration(durationMs)})</span>
-            ) : null}
+          <span className={styles.metaItem} data-testid="story-detail-created-at">
+            <Clock size={13} aria-hidden="true" />
+            <span>{formatDateTime(work.createdAt)}</span>
           </span>
+        </div>
 
+        {/* 内嵌伴读音频控制条 */}
+        <div className={styles.readerAudioBar}>
+          <div className={styles.readerAudioLeft}>
+            <WorkPlaybackButton workId={work.id} title={work.title} progress={work.progress} />
+            <div className={styles.readerAudioInfo}>
+              <span className={styles.readerAudioStatus} data-testid="story-detail-audio-status">
+                <Headphones size={13} aria-hidden="true" />
+                <span>音频：{audioStatusText}</span>
+                {durationMs ? <span> ({formatDuration(durationMs)})</span> : null}
+              </span>
+            </div>
+          </div>
+
+          <svg
+            className={styles.readerWaveformSvg}
+            viewBox="0 0 120 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            {[6, 12, 8, 16, 20, 10, 14, 18, 8, 15, 22, 12, 9, 17, 13, 7, 14, 19, 11, 8].map((h, idx) => (
+              <rect
+                key={idx}
+                x={idx * 6}
+                y={(24 - h) / 2}
+                width="3"
+                height={h}
+                rx="1.5"
+                fill="currentColor"
+                fillOpacity={idx < 8 ? '0.65' : '0.28'}
+              />
+            ))}
+          </svg>
         </div>
       </header>
 
-      {/* 正文内容区 */}
-      <section className={styles.textSection}>
-        <h2 className={styles.sectionHeading}>
-          <FileText size={18} />
-          <span>故事正文</span>
-        </h2>
+      {/* 沉浸式正文内容区 */}
+      <section className={styles.textSection} aria-label="故事正文">
         <div className={styles.storyText} data-testid="story-detail-text">
           {work.storyText}
         </div>
       </section>
 
-      {work.excerpt ? (
-        <details className={styles.excerptSection} data-testid="story-detail-excerpt">
-          <summary>故事简介</summary>
-          <p className={styles.excerptText}>{work.excerpt}</p>
-        </details>
+      {/* 集合内上下章快速切换条 */}
+      {work.collectionId && (chapterNavigation.prev || chapterNavigation.next) ? (
+        <nav className={styles.chapterSwitcher} aria-label="章节切换">
+          {chapterNavigation.prev ? (
+            <Link
+              href={workPath(chapterNavigation.prev.id, work.collectionId)}
+              className={styles.chapterSwitchBtn}
+            >
+              <ChevronLeft size={16} aria-hidden="true" />
+              <div className={styles.chapterSwitchText}>
+                <span className={styles.chapterSwitchLabel}>上一章</span>
+                <span className={styles.chapterSwitchTitle}>{chapterNavigation.prev.title}</span>
+              </div>
+            </Link>
+          ) : (
+            <div className={styles.chapterSwitchPlaceholder} />
+          )}
+
+          <Link
+            href={collectionPath(work.collectionId)}
+            className={styles.chapterDirectoryLink}
+            title="查看全部章节目录"
+          >
+            <BookOpen size={14} aria-hidden="true" />
+            <span>目录</span>
+          </Link>
+
+          {chapterNavigation.next ? (
+            <Link
+              href={workPath(chapterNavigation.next.id, work.collectionId)}
+              className={`${styles.chapterSwitchBtn} ${styles.chapterSwitchNext}`}
+            >
+              <div className={styles.chapterSwitchText}>
+                <span className={styles.chapterSwitchLabel}>下一章</span>
+                <span className={styles.chapterSwitchTitle}>{chapterNavigation.next.title}</span>
+              </div>
+              <ChevronRight size={16} aria-hidden="true" />
+            </Link>
+          ) : (
+            <div className={styles.chapterSwitchPlaceholder} />
+          )}
+        </nav>
       ) : null}
 
-      {/* 原始生成提示词 Prompt */}
-      {work.prompt ? (
-        <details className={styles.promptSection}>
-          <summary>创作提示词</summary>
-          <h2 className={styles.sectionHeading}>
-            <Sparkles size={18} />
-            <span>创作提示词</span>
-          </h2>
-          <div className={styles.promptBox} data-testid="story-detail-prompt">
-            {work.prompt}
-          </div>
-        </details>
-      ) : null}
+      {/* 折叠式简介与原始创作提示词 */}
+      <div className={styles.collapsibleMetaGroup}>
+        {work.excerpt ? (
+          <details className={styles.excerptSection} data-testid="story-detail-excerpt">
+            <summary>故事简介</summary>
+            <p className={styles.excerptText}>{work.excerpt}</p>
+          </details>
+        ) : null}
 
-
+        {work.prompt ? (
+          <details className={styles.promptSection}>
+            <summary>创作提示词</summary>
+            <div className={styles.promptBox} data-testid="story-detail-prompt">
+              <div className={styles.promptHeading}>
+                <Sparkles size={14} aria-hidden="true" />
+                <span>原始生成提示词</span>
+              </div>
+              {work.prompt}
+            </div>
+          </details>
+        ) : null}
+      </div>
     </div>
   );
 };

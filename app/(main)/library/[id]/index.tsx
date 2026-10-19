@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { useLibraryDetailQuery } from '@/lib/client/libraryQueries';
+import { useCollectionDetailQuery } from '@/lib/client/collectionQueries';
 import { composeLibraryDetailViewModel } from '@/lib/client/libraryViewModel';
 import { useLibraryMutationsSafe } from '@/lib/client/libraryMutations';
 import { StoryDetail } from '@/components/Library/StoryDetail';
@@ -22,19 +23,7 @@ export interface StoryDetailPageProps {
 }
 
 /**
- * 故事详情页客户端 Shell 组件（）
- *
- * 核心生命周期与状态：
- * 1. loading：展示骨架占位态；
- * 2. unavailable：NOT_FOUND / UNAUTHORIZED / foreign-owned / trashed / 缺失，渲染统一不可用视图（LibraryUnavailable）；
- * 3. error：非不可用的系统级/网络级瞬态异常，展示重试机制；
- * 4. success：由 composeLibraryDetailViewModel 包装注入 progress=null 缝隙，纯净呈现 StoryDetail；
- * 5. mutations：接入详情侧 Rename / Favorite / Move to Trash，共享  mutation 引擎与跨缓存一致性。
- *
- * 严格防护与边界约束：
- * - 绝不发起针对回收站视图的列表或额外探测查询；
- * - 仅支持 Rename / Favorite / Move to Trash，严禁在详情暴露 Restore / Permanent Delete；
- * - progress 经由 VM seam 严格注入为 null，为  留出干净接入点。
+ * 故事详情页客户端 Shell 组件
  */
 const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id, expectedCollectionId }) => {
   const numericId = /^[1-9]\d*$/.test(id) ? Number(id) : NaN;
@@ -50,6 +39,22 @@ const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id, expectedCollectio
     : null;
 
   const mutations = useLibraryMutationsSafe();
+
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useLibraryDetailQuery(numericId, {
+    enabled: isValidId,
+    collectionId: expectedCollectionId,
+  });
+
+  const resolvedCollectionId = data?.collectionId ?? expectedCollectionId ?? '';
+  const collectionQuery = useCollectionDetailQuery(resolvedCollectionId, {
+    enabled: Boolean(resolvedCollectionId),
+  });
 
   const handleRename = async (workId: number, title: string) => {
     if (!mutations) return;
@@ -70,21 +75,15 @@ const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id, expectedCollectio
     }
   };
 
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useLibraryDetailQuery(numericId, {
-    enabled: isValidId,
-    collectionId: expectedCollectionId,
-  });
-
   useEffect(() => {
-    if (data && !expectedCollectionId && pathname !== workPath(data.id, data.collectionId)) router?.replace(workPath(data.id, data.collectionId));
+    if (data && !expectedCollectionId && pathname !== workPath(data.id, data.collectionId)) {
+      router?.replace(workPath(data.id, data.collectionId));
+    }
   }, [data, expectedCollectionId, router, pathname]);
-  if (data && expectedCollectionId && data.collectionId !== expectedCollectionId) return <LibraryUnavailable />;
+
+  if (data && expectedCollectionId && data.collectionId !== expectedCollectionId) {
+    return <LibraryUnavailable />;
+  }
 
   // 非法 ID 直接统一渲染不可用视图
   if (!isValidId) {
@@ -159,6 +158,7 @@ const StoryDetailPage: React.FC<StoryDetailPageProps> = ({ id, expectedCollectio
     <StoryDetail
       work={viewModel}
       playbackDurationMs={playbackDurationMs}
+      collectionWorks={collectionQuery.data?.works}
       onRename={handleRename}
       onToggleFavorite={handleToggleFavorite}
       onMoveToTrash={handleMoveToTrash}
